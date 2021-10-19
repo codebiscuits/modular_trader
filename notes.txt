@@ -1,0 +1,23 @@
+TODO
+
+try incorporating a 200 period sma/ema to the entry conditions
+
+change the volatility condition so that volatility is measured at the moment 
+the trade entry is triggered, not at the start of the test period
+
+rewrite the minimum price condition so it's based on volatility, that way it 
+will be equally effective on all timeframes (lower vol requires higher min price)
+
+re-test all the other strats i wrote now that profit is being calculated properly
+
+code up all the entry / exit conditions on google keep and test them
+
+code up a sortino / sqn metric for optimising
+
+try optimising rsi lookback length (maybe 3, 4, 6, 9, 14)
+
+try optimising the supertrend inputs (10, 3)
+
+get pnl evolution plotted on the single test plot
+
+incorporate get_historical_klines into get_data so i can do longer tests if needed
