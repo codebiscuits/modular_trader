@@ -1,13 +1,11 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from binance.client import Client
 import keys
 import talib
 import statistics as stats
 import time
 client = Client(keys.bPkey, keys.bSkey)
-from pprint import pprint
 import json
 from pathlib import Path
 
@@ -204,12 +202,25 @@ def volatility(df, lookback):
     df[f'volatil{lookback}'] = df['close'].rolling(lookback).stdev()
 
 def get_signals(df, buy_thresh, sell_thresh):
-    '''during an uptrend as defined by price being above 200ema, when price 
-    closes above st line after previously closing below, set 'trade ready'. if 
-    rsi subsequently drops below and then crosses back above x, trigger a buy.
+    '''during an uptrend as defined by 20ema being above 200ema and price 
+    being above st line, set 'trade ready'. if rsi subsequently drops below and 
+    then crosses back above x, trigger a buy.
     if rsi subsequently prints a value greater than y OR if price closes below 
-    st line, trigger a sell'''
+    st line, trigger a sell
+    * only conditions that actually trigger a trade need to be defined as a 
+    specific moment in time (eg a cross up or down), other conditions which set 
+    the stage should be more diffuse (eg price is above supertrend line). if 
+    there are several conditions which are only true on individual moments, 
+    the chances of them lining up are much lower, ie good trades will be missed.
+    im not looking for price crossing above the st line because that is not what 
+    triggers a buy, i only care whether it is above or below, but a cross BELOW
+    the st line will trigger a stop, so that condition must be a cross, not 
+    just a simple less-than'''
     signals = [np.nan]
+    s_buy = [np.nan]
+    s_sell = [np.nan]
+    s_stop = [np.nan]
+    stop_price = 0
     trade_ready = 0
     in_pos = 0
     buys = 0
@@ -217,40 +228,100 @@ def get_signals(df, buy_thresh, sell_thresh):
     stops = 0
     for i in range(1, len(df)):
         trend_up = (df.loc[i, '20ema'] > df.loc[i, '200ema'])
-        cross_up = (df.close[i] > df.st[i]) and(df.close[i-1] <= df.st[i-1])
-        cross_down = (df.close[i] < df.st[i]) and (df.close[i-1] >= df.st[i-1])
+        st_up = (df.close[i] > df.st[i]) # not a trigger so doesnt need to be a cross
+        cross_down = (df.close[i] < df.st[i]) and (df.close[i-1] >= df.st[i-1]) # this is a trigger so does need to be a cross
         rsi_buy = (df.rsi[i] >= buy_thresh) and (df.rsi[i-1] < buy_thresh)
         rsi_sell = (df.rsi[i] <= sell_thresh) and (df.rsi[i-1] > sell_thresh)
-        if cross_down and in_pos == 1:
+            
+        if trend_up and st_up and in_pos == 0:
+            trade_ready = 1
+        else:
+            trade_ready = 0
+        
+        if trade_ready == 1 and rsi_buy:
+            signals.append(f'buy, init stop @ {df.st[i]}')
+            stop_price = df.st[i]
+            s_buy.append(df.close[i])
+            s_sell.append(np.nan)
+            s_stop.append(np.nan)
+            in_pos = 1
+            buys += 1
+        elif in_pos and cross_down:
             signals.append('stop')
+            s_buy.append(np.nan)
+            s_sell.append(np.nan)
+            s_stop.append(df.st[i-1])
             in_pos = 0
             stops += 1
-        elif trend_up and cross_up:
-            signals.append(np.nan)
-            trade_ready = 1
-        elif trade_ready == 1 and in_pos == 0 and rsi_buy:
-            signals.append('buy, init stop @ {df.st[i]}')
-            in_pos = 1
-            trade_ready = 0
-            buys += 1
-        elif in_pos == 1 and rsi_sell:
+        elif in_pos and rsi_sell:
             signals.append('sell')
+            s_buy.append(np.nan)
+            s_sell.append(df.close[i])
+            s_stop.append(np.nan)
             in_pos = 0
             sells += 1
-            trade_ready = 1
-        elif cross_down and trade_ready == 1:
-            trade_ready = 0
-            signals.append(np.nan)
         else:
             signals.append(np.nan)
+            s_buy.append(np.nan)
+            s_sell.append(np.nan)
+            s_stop.append(np.nan)
+
+        if in_pos == 1 and (df.st[i] > stop_price):
+            stop_price = df.st[i]
+            
     
     
     df['signals'] = signals
-    # print('buys:', buys, 'sells:', sells, 'stops:', stops)
-    return buys, sells, stops
+    
+    # create a new column 'in_pos', which has a 1 or 0 to represent whether a 
+    # trade is on or not. then use that and the roc column to calculate a 
+    # pnl_evo column.
+    
+    pos_list = [0, 0]
+    for p in range(1, len(df.index)):
+        if pd.isnull(df.at[p, 'signals']):
+            pos_list.append(pos_list[-1])
+        elif df.at[p, 'signals'][:3] == 'buy':
+            pos_list.append(1)
+        elif df.at[p, 'signals'] == 'sell':
+            pos_list.append(0)
+        elif df.at[p, 'signals'] == 'stop':
+            pos_list.append(0)
+        else:
+            pos_list.append(pos_list[-1])
+    
+    df['in_pos'] = pos_list[:-1]
+    
+    exe_price = []
+    for e in range(len(df.index)):
+        if pd.isnull(df.at[e, 'signals']):
+            exe_price.append(df.at[e, 'close'])
+        elif df.at[e, 'signals'] == 'stop':
+            exe_price.append(df.at[e-1, 'st'])
+        else:
+            exe_price.append(df.at[e, 'close'])
+    df['exe_price'] = exe_price
+    df['exe_roc'] = df['exe_price'].pct_change()
+    df['roc'] = df['close'].pct_change()
+    
+    evo = [1]
+    hodl_evo = [1]
+    for e in range(1, len(df.index)):
+        evo.append(evo[-1] * (1 + (df.at[e, 'exe_roc'] * df.at[e, 'in_pos'])))
+        hodl_evo.append(hodl_evo[-1] * (1 + (df.at[e, 'roc'])))
+    df['pnl_evo'] = evo
+    df['hodl_evo'] = hodl_evo
+    
+    # print(df.drop(['open', 'high', 'low', 'volume', 'st_u', 'st_d', 
+    #                '20ema', '200ema', 'rsi'], axis=1).tail())
+        
+    
+    sb, sse, sst = pd.Series(s_buy), pd.Series(s_sell), pd.Series(s_stop)
+    sb.index, sse.index, sst.index = df.index, df.index, df.index
+    return buys, sells, stops, sb, sse, sst
 
 def get_results(df):
-    results = df.loc[df['signals'].notna(), ['close', 'signals']]
+    results = df.loc[df['signals'].notna(), ['timestamp', 'close', 'signals']]
     results.reset_index(drop=True, inplace=True)
     
     results['roc'] = results['close'].pct_change()
@@ -272,77 +343,83 @@ def get_results(df):
     pnl_list = list(results['pnl'])
     return bal, pnl_list
 
-# assign variables
-# pair = 'SOLUSDT'
-timeframe = '4h'
-# agg_vol = 500
-lookback = 10
-multiplier = 3
-comm = 0.00075
-
-#TODO make it record risk factor
-
-pairs = get_pairs('usdt') + get_pairs('btc')
-done_pairs = [x.stem for x in Path('rsi_results/').glob('*.*')]
-not_pairs = ['BUSDUSDT', 'EURUSDT', 'TUSDUSDT', 'USDCUSDT', 'PAXUSDT']
-
-for pair in pairs:
-    if pair in done_pairs:
-        continue
-    if pair in not_pairs:
-        continue
-    # download data
-    df = get_ohlc(pair, timeframe)
-    if len(df) == 0:
-        continue
-    all_results = [df.volume.sum()]
-    print(f'{pair} num ohlc periods: {len(df)}, total volume: {df.volume.sum()}')
-    for rsi_len in [2, 3, 4, 6, 8, 11, 14]:
-        start = time.perf_counter()
-        # compute indicators
-        df['st'], df['st_u'], df['st_d'] = get_supertrend(df.high, df.low, df.close, lookback, multiplier)
-        df['dist_u'], df['dist_d'] = st_dist(df.close, df.st, df.st_u, df.st_d)
-        df['20ema'] = talib.EMA(df.close, 20)
-        df['200ema'] = talib.EMA(df.close, 200)
-        df['rsi'] = talib.RSI(df.close, rsi_len)
-        # volatility(df, 20)
-        # volatility(df, 50)
-        # volatility(df, 100)
-        # volatility(df, 200)
-        
-        # backtest
-        # avg_pnl_list = []
-        
-        os = [(x**2) for x in range(1, 9)]
-        ob = [(100 - x**2) for x in range(1, 9)]
-
-        for x in os:
-            for y in ob:
-                try:
-                    buys, sells, stops = get_signals(df, x, y)
-                    bal, pnl_list = get_results(df)
-                    pnl = (bal - 1) * 100
-                    num_trades = (sells + stops)
-                    res_dict = {'pair': pair, 'rsi_len': rsi_len, 
-                                'rsi_ob': x, 'rsi_os': y, 
-                                'tot_pnl': pnl, 'pnl_list': pnl_list,
-                                'buys': buys, 'sells': sells, 'stops': stops, 
-                                'tot_volu': df.volume.sum(), 
-                                'tot_stdev': stats.stdev(df.close), 
-                                'ohlc_len': len(df), 
-                                'v_cand_len': len(df)
-                                }
-                    all_results.append(res_dict)
-                    # print(f'{x}-{y}: total profit {pnl:.3}%, buys {buys}, sells {sells}, stops {stops}')
-                except:
-                    continue        
-        end = time.perf_counter()
-        elapsed = f'{round((end - start) // 60)}m {(end - start) % 60:.3}s'
-        # print(f'{pair}, rsi {rsi_len}, num candles: {len(df)}, time taken: {elapsed}')
+if __name__ == '__main__':
     
-    with open(f'rsi_results/{pair}.txt', 'w') as outfile:
-        json.dump(all_results, outfile)
-
-all_end = time.perf_counter()
-all_time = all_end - all_start
-print(f'Total time taken: {round((all_time) // 60)}m {(all_time) % 60:.3}s')
+    # assign variables
+    timeframe = '4h'
+    lookback = 10
+    multiplier = 3
+    comm = 0.00075
+    
+    #TODO make it record risk factor
+    
+    pairs = get_pairs('usdt') + get_pairs('btc')
+    done_pairs = [x.stem for x in Path('rsi_results/').glob('*.*')]
+    not_pairs = ['BUSDUSDT', 'EURUSDT', 'TUSDUSDT', 'USDCUSDT', 'PAXUSDT', 'COCOSUSDT']
+    
+    for pair in pairs:
+        if pair in done_pairs:
+            continue
+        if pair in not_pairs:
+            continue
+        # download data
+        df = get_ohlc(pair, timeframe)
+        if len(df) == 0:
+            continue
+        all_results = [df.volume.sum()]
+        print(f'{pair} num ohlc periods: {len(df)}, total volume: {df.volume.sum()}')
+        for rsi_len in [3, 4, 5, 6]:
+            start = time.perf_counter()
+            # compute indicators
+            df['st'], df['st_u'], df['st_d'] = get_supertrend(df.high, df.low, df.close, lookback, multiplier)
+            df['dist_u'], df['dist_d'] = st_dist(df.close, df.st, df.st_u, df.st_d)
+            df['20ema'] = talib.EMA(df.close, 20)
+            df['200ema'] = talib.EMA(df.close, 200)
+            df['rsi'] = talib.RSI(df.close, rsi_len)
+            df = df.iloc[200:,]
+            df.reset_index(inplace=True)
+            hodl = df['close'].iloc[-1] / df['close'].iloc[0]
+            # volatility(df, 20)
+            # volatility(df, 50)
+            # volatility(df, 100)
+            # volatility(df, 200)
+            
+            # backtest
+            # avg_pnl_list = []
+            
+            os = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90]
+            ob = [100, 96, 92, 88, 84, 80, 76, 72, 68, 64, 60]
+    
+            for x in os:
+                for y in ob:
+                    try:
+                        buys, sells, stops, _, _, _ = get_signals(df, x, y)
+                        bal, pnl_list = get_results(df)
+                        pnl = (bal - 1) * 100
+                        pnl_bth = pnl / hodl
+                        num_trades = (sells + stops)
+                        # calculate sqn here
+                        res_dict = {'pair': pair, 'rsi_len': rsi_len, 
+                                    'rsi_os': x, 'rsi_ob': y, 
+                                    'tot_pnl': pnl, 'pnl_bth': pnl_bth, 
+                                    'pnl_list': pnl_list,# 'sqn': sqn, 
+                                    'buys': buys, 'sells': sells, 'stops': stops, 
+                                    'tot_volu': df.volume.sum(), 
+                                    'tot_stdev': stats.stdev(df.close), 
+                                    'ohlc_len': len(df), 
+                                    'v_cand_len': len(df)
+                                    }
+                        all_results.append(res_dict)
+                        # print(f'{x}-{y}: total profit {pnl:.3}%, buys {buys}, sells {sells}, stops {stops}')
+                    except:
+                        continue        
+            end = time.perf_counter()
+            elapsed = f'{round((end - start) // 60)}m {(end - start) % 60:.3}s'
+            # print(f'{pair}, rsi {rsi_len}, num candles: {len(df)}, time taken: {elapsed}')
+        
+        with open(f'rsi_results/{pair}.txt', 'w') as outfile:
+            json.dump(all_results, outfile)
+    
+    all_end = time.perf_counter()
+    all_time = all_end - all_start
+    print(f'Total time taken: {round((all_time) // 60)}m {(all_time) % 60:.3}s')
