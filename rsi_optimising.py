@@ -28,7 +28,7 @@ def get_pairs(quote):
     elif quote == 'btc':
         return btc_pairs
 
-def get_ohlc(pair, timeframe):
+def get_ohlc(pair, timeframe, span="1 year ago UTC"):
     client = Client(keys.bPkey, keys.bSkey)
     tf = {'1m': Client.KLINE_INTERVAL_1MINUTE, 
           '5m': Client.KLINE_INTERVAL_5MINUTE, 
@@ -43,7 +43,7 @@ def get_ohlc(pair, timeframe):
           '3d': Client.KLINE_INTERVAL_3DAY,
           '1w': Client.KLINE_INTERVAL_1WEEK,
           }
-    klines = client.get_historical_klines(pair, tf.get(timeframe), "1 year ago UTC")
+    klines = client.get_historical_klines(pair, tf.get(timeframe), span)
     cols = ['timestamp', 'open', 'high', 'low', 'close', 'base vol', 'close time', 
                 'volume', 'num trades', 'taker buy base vol', 'taker buy quote vol', 'ignore']
     df = pd.DataFrame(klines, columns=cols)
@@ -54,21 +54,6 @@ def get_ohlc(pair, timeframe):
              'taker buy quote vol', 'ignore'], axis=1, inplace=True)
 
     return df
-
-def v_candles(df, v):
-    df['vol_group'] = df['volume'].cumsum().floordiv(v)
-    
-    df_v = df.groupby('vol_group').agg(
-        timestamp=pd.NamedAgg(column='timestamp', aggfunc='last'),
-        open=pd.NamedAgg(column='open', aggfunc='first'),
-        high=pd.NamedAgg(column='high', aggfunc=max),
-        low=pd.NamedAgg(column='low', aggfunc=min),
-        close=pd.NamedAgg(column='close', aggfunc='last')  
-        )
-    
-    df_v.reset_index(drop=True, inplace=True)
-    
-    return df_v
 
 def get_supertrend(high, low, close, lookback, multiplier):
     # ATR
@@ -162,42 +147,6 @@ def get_supertrend(high, low, close, lookback, multiplier):
     
     return st, upt, dt
     
-def st_dist(close, supertrend, upt, dt):
-    # ST Multiple / ST Distance
-    
-    dist_u = [0]
-    dist_d = [0]
-    
-    nonzero = 1 # this is updated with the most recent nonzero value of upt so
-    # it can be used as a substitute when upt[j] == 0
-    for j in range(1, len(supertrend)):
-        if close[j] > supertrend.iloc[j]:
-            if upt[j] == 0:
-                dist_u.append(close[j] - upt[j] / nonzero)
-            else:
-                dist_u.append((close[j] - upt[j]) / upt[j])
-                dist_d.append(np.nan)
-                nonzero = upt[j]
-        elif close[j] < supertrend.iloc[j]:
-            dist_u.append(np.nan)
-            dist_d.append(abs(close[j] - dt[j]) / dt[j])
-        else:
-            dist_u.append(np.nan)
-            dist_d.append(np.nan)
-    
-    st_dist_u, st_dist_d = pd.Series(dist_u), pd.Series(dist_d)
-    
-    # st_mult_u = (close - upt) / upt
-    # st_mult_d = (close - dt) / dt
-    # st_dist_u = st_mult_u.abs()
-    # st_dist_d = st_mult_d.abs()
-
-    st_dist_u.index, st_dist_d.index = supertrend.index, supertrend.index
-    
-    
-    
-    return st_dist_u, st_dist_d
-
 def volatility(df, lookback):
     df[f'volatil{lookback}'] = df['close'].rolling(lookback).stdev()
 
@@ -355,7 +304,9 @@ if __name__ == '__main__':
     
     pairs = get_pairs('usdt') + get_pairs('btc')
     done_pairs = [x.stem for x in Path('rsi_results/').glob('*.*')]
-    not_pairs = ['BUSDUSDT', 'EURUSDT', 'TUSDUSDT', 'USDCUSDT', 'PAXUSDT', 'COCOSUSDT']
+    not_pairs = ['GBPUSDT', 'BUSDUSDT', 'EURUSDT', 'TUSDUSDT', 'USDCUSDT', 
+                 'PAXUSDT', 'COCOSUSDT', 'ADADOWNUSDT', 'LINKDOWNUSDT', 
+                 'BNBDOWNUSDT', 'ETHDOWNUSDT']
     
     for pair in pairs:
         if pair in done_pairs:
@@ -364,7 +315,7 @@ if __name__ == '__main__':
             continue
         # download data
         df = get_ohlc(pair, timeframe)
-        if len(df) == 0:
+        if len(df) == 200:
             continue
         all_results = [df.volume.sum()]
         print(f'{pair} num ohlc periods: {len(df)}, total volume: {df.volume.sum()}')
@@ -377,7 +328,7 @@ if __name__ == '__main__':
             df['200ema'] = talib.EMA(df.close, 200)
             df['rsi'] = talib.RSI(df.close, rsi_len)
             df = df.iloc[200:,]
-            df.reset_index(inplace=True)
+            df.reset_index(drop=True, inplace=True)
             hodl = df['close'].iloc[-1] / df['close'].iloc[0]
             # volatility(df, 20)
             # volatility(df, 50)

@@ -1,6 +1,23 @@
 TODO
 
-try incorporating a 200 period sma/ema to the entry conditions
+
+rsi/ema supertrend strat
+in analysis, once all usdt pairs have been tested, plot out the heatmaps again 
+for all rsi lengths, and try to make a decision on which settings (length, ob and os)
+are optimal. then start forward testing with those settings
+
+* trying to decide how to define a reliable result. a lot of the time when i 
+filter out results with less than 30 trades, i am left with lots of settings 
+combos with only one or two results to represent them (albeit with more than 
+30 trades). so i cant really say that those settings perform well when only one 
+pair actually did perform well at those settings. when i reduce the requirement
+for min number of trades, i get more results per settings combo, but then of 
+course those results are more prone to bias from one or two outlier trades.
+there does seem to be a certain part of the spectrum of settings that always
+produces the best results, so i might have to start paper trading with those 
+settings and go from there. and if i implement fixed risk sizing into the paper 
+trading, that should further improve results
+
 
 change the volatility condition so that volatility is measured at the moment 
 the trade entry is triggered, not at the start of the test period
@@ -14,10 +31,4 @@ code up all the entry / exit conditions on google keep and test them
 
 code up a sortino / sqn metric for optimising
 
-try optimising rsi lookback length (maybe 3, 4, 6, 9, 14)
-
-try optimising the supertrend inputs (10, 3)
-
 get pnl evolution plotted on the single test plot
-
-incorporate get_historical_klines into get_data so i can do longer tests if needed

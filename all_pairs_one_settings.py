@@ -51,7 +51,7 @@ for pair in pairs:
     df['200ema'] = talib.EMA(df.close, 200)
     df['rsi'] = talib.RSI(df.close, rsi_length)
     df = df.iloc[200:,]
-    df.reset_index(inplace=True)
+    df.reset_index(drop=True, inplace=True)
     hodl = df['close'].iloc[-1] / df['close'].iloc[0]
     # generate signals
     buys, sells, stops, df['s_buy'], df['s_sell'], df['s_stop'] = get_signals(df, oversold, overbought)
