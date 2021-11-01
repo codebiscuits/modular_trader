@@ -10,9 +10,8 @@ import mplfinance as mpf
 import keys
 import talib
 import time
-import pickle
 from pathlib import Path
-from rsi_optimising import get_pairs, get_ohlc, get_supertrend, get_signals, get_results
+from rsi_optimising import get_pairs, get_ohlc, update_ohlc, get_supertrend, get_signals, get_results
 from binance.client import Client
 
 plt.style.use('fivethirtyeight')
@@ -34,7 +33,7 @@ rsi_length = 4
 oversold = 45
 overbought = 96
 
-max_length = 201
+max_length = 250
 
 
 # pairs = ['BTCUSDT']
@@ -46,11 +45,12 @@ for pair in pairs:
     filepath = Path(f'ohlc_data/{pair}.pkl')
     if filepath.exists():
         df = pd.read_pickle(filepath)
-        # download new data
+        df = update_ohlc(pair, '4h', df)
     else:
         df = get_ohlc(pair, '4h', '35 days ago UTC')
     if len(df) <= 200:
         continue
+    print(len(df))
     if len(df) > max_length:
         df = df.iloc[-1*max_length:,]
     
@@ -69,7 +69,10 @@ for pair in pairs:
     print(df.drop(['open', 'high', 'low', 'volume', 'st_u', 'st_d', 
                     '20ema', '200ema', 'rsi'], axis=1).tail(1))
     pnl_bth = pnl / hodl
+    print('---')
     print(f'{pair} trades: {sells+stops}, pnl: {pnl:.1f}x, hodl returns: {hodl:.1f}x, pnl compared to hodl: {pnl_bth:.1f}x')
+    
+    print('-' * 100)
     
     df = df.iloc[:-1,]
     df.to_pickle(filepath)

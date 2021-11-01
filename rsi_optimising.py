@@ -55,6 +55,37 @@ def get_ohlc(pair, timeframe, span="1 year ago UTC"):
 
     return df
 
+def update_ohlc(pair, timeframe, old_df):
+    client = Client(keys.bPkey, keys.bSkey)
+    tf = {'1m': Client.KLINE_INTERVAL_1MINUTE, 
+          '5m': Client.KLINE_INTERVAL_5MINUTE, 
+          '15m': Client.KLINE_INTERVAL_15MINUTE,
+          '30m': Client.KLINE_INTERVAL_30MINUTE,
+          '1h': Client.KLINE_INTERVAL_1HOUR,
+          '4h': Client.KLINE_INTERVAL_4HOUR,
+          '6h': Client.KLINE_INTERVAL_6HOUR,
+          '8h': Client.KLINE_INTERVAL_8HOUR,
+          '12h': Client.KLINE_INTERVAL_12HOUR,
+          '1d': Client.KLINE_INTERVAL_1DAY,
+          '3d': Client.KLINE_INTERVAL_3DAY,
+          '1w': Client.KLINE_INTERVAL_1WEEK,
+          }
+    
+    old_end = int(old_df.at[len(old_df)-1, 'timestamp'].timestamp()) * 1000
+    klines = client.get_klines(symbol=pair, interval=tf.get(timeframe), 
+                               startTime=old_end)
+    cols = ['timestamp', 'open', 'high', 'low', 'close', 'base vol', 'close time', 
+                'volume', 'num trades', 'taker buy base vol', 'taker buy quote vol', 'ignore']
+    df = pd.DataFrame(klines, columns=cols)
+    df['timestamp'] = df['timestamp'] * 1000000
+    df = df.astype(float)
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    df.drop(['base vol', 'close time', 'num trades', 'taker buy base vol', 
+             'taker buy quote vol', 'ignore'], axis=1, inplace=True)
+
+    df_new = pd.concat([old_df[:-1], df], copy=True, ignore_index=True)
+    return df_new
+
 def get_supertrend(high, low, close, lookback, multiplier):
     # ATR
     
@@ -302,8 +333,7 @@ if __name__ == '__main__':
     
     #TODO make it record risk factor
     
-    # pairs = get_pairs('usdt') + get_pairs('btc')
-    pairs = get_pairs('btc')
+    pairs = get_pairs('usdt') + get_pairs('btc')
     done_pairs = [x.stem for x in Path('rsi_results/').glob('*.*')]
     not_pairs = ['GBPUSDT', 'BUSDUSDT', 'EURUSDT', 'TUSDUSDT', 'USDCUSDT', 
                  'PAXUSDT', 'COCOSUSDT', 'ADADOWNUSDT', 'LINKDOWNUSDT', 
@@ -315,7 +345,7 @@ if __name__ == '__main__':
         if pair in not_pairs:
             continue
         # download data
-        df_full = get_ohlc(pair, timeframe, '2 months ago UTC')
+        df_full = get_ohlc(pair, timeframe)
         if len(df_full) <= 200:
             continue
         if pair[-3:] == 'BTC' and df_full.loc[-200:, 'close'].mean() < 0.000001:
