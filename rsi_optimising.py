@@ -324,7 +324,6 @@ if __name__ == '__main__':
             start = time.perf_counter()
             # compute indicators
             df['st'], df['st_u'], df['st_d'] = get_supertrend(df.high, df.low, df.close, lookback, multiplier)
-            df['dist_u'], df['dist_d'] = st_dist(df.close, df.st, df.st_u, df.st_d)
             df['20ema'] = talib.EMA(df.close, 20)
             df['200ema'] = talib.EMA(df.close, 200)
             df['rsi'] = talib.RSI(df.close, rsi_len)
