@@ -302,7 +302,8 @@ if __name__ == '__main__':
     
     #TODO make it record risk factor
     
-    pairs = get_pairs('usdt') + get_pairs('btc')
+    # pairs = get_pairs('usdt') + get_pairs('btc')
+    pairs = get_pairs('btc')
     done_pairs = [x.stem for x in Path('rsi_results/').glob('*.*')]
     not_pairs = ['GBPUSDT', 'BUSDUSDT', 'EURUSDT', 'TUSDUSDT', 'USDCUSDT', 
                  'PAXUSDT', 'COCOSUSDT', 'ADADOWNUSDT', 'LINKDOWNUSDT', 
@@ -314,8 +315,10 @@ if __name__ == '__main__':
         if pair in not_pairs:
             continue
         # download data
-        df_full = get_ohlc(pair, timeframe)
+        df_full = get_ohlc(pair, timeframe, '2 months ago UTC')
         if len(df_full) <= 200:
+            continue
+        if pair[-3:] == 'BTC' and df_full.loc[-200:, 'close'].mean() < 0.000001:
             continue
         all_results = [df_full.volume.sum()]
         print(f'{pair} num ohlc periods: {len(df_full)}, total volume: {df_full.volume.sum()}')
