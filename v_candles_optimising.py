@@ -315,7 +315,7 @@ comm = 0.00075
 #TODO make it save to file after every pair, and record risk factor
 
 pairs = get_pairs('usdt')
-done_pairs = [x.stem for x in Path('results/').glob('*.*')]
+done_pairs = [x.stem for x in Path('vol_results/').glob('*.*')]
 not_pairs = ['TUSDUSDT', 'USDCUSDT', 'PAXUSDT']
 
 for pair in pairs:

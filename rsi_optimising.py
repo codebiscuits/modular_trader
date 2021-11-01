@@ -314,16 +314,16 @@ if __name__ == '__main__':
         if pair in not_pairs:
             continue
         # download data
-        df = get_ohlc(pair, timeframe)
-        if len(df) == 200:
+        df_full = get_ohlc(pair, timeframe)
+        if len(df_full) <= 200:
             continue
-        all_results = [df.volume.sum()]
-        print(f'{pair} num ohlc periods: {len(df)}, total volume: {df.volume.sum()}')
+        all_results = [df_full.volume.sum()]
+        print(f'{pair} num ohlc periods: {len(df_full)}, total volume: {df_full.volume.sum()}')
         for rsi_len in [3, 4, 5, 6]:
+            df = df_full.copy()
             start = time.perf_counter()
             # compute indicators
             df['st'], df['st_u'], df['st_d'] = get_supertrend(df.high, df.low, df.close, lookback, multiplier)
-            df['dist_u'], df['dist_d'] = st_dist(df.close, df.st, df.st_u, df.st_d)
             df['20ema'] = talib.EMA(df.close, 20)
             df['200ema'] = talib.EMA(df.close, 200)
             df['rsi'] = talib.RSI(df.close, rsi_len)
