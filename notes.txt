@@ -29,6 +29,8 @@ re-test all the other strats i wrote now that profit is being calculated properl
 
 code up all the entry / exit conditions on google keep and test them
 
-code up a sortino / sqn metric for optimising
-
-get pnl evolution plotted on the single test plot
+when an rsi trigger signal is imminent, it should be possible to calculate what
+price move would be required to get there. this would make it possile to set 
+limit orders instead of market orders. it would be difficult to code and would 
+change the way i calculate risk, but it might improve the slippage if/when that 
+becomes a problem
