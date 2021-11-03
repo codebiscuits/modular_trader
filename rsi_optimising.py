@@ -219,7 +219,8 @@ def get_signals(df, buy_thresh, sell_thresh):
             trade_ready = 0
         
         if trade_ready == 1 and rsi_buy:
-            signals.append(f'buy, init stop @ {df.st[i]:.5}')
+            sl = df.st[i] * 0.995
+            signals.append(f'buy, init stop @ {sl}')
             stop_price = df.st[i]
             s_buy.append(df.close[i])
             s_sell.append(np.nan)

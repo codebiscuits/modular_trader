@@ -33,4 +33,35 @@ def get_size(price, fr, balance, risk):
     usdt_size = balance / trade_risk
     asset_quantity = usdt_size / price
     
-    return asset_quantity
+    return asset_quantity, usdt_size
+
+def current_positions(fr):
+    total_bal = account_bal()
+    threshold_bal = total_bal * fr
+    
+    info = client.get_account()
+    bals = info.get('balances')
+    
+    prices = client.get_all_tickers()
+    price_dict = {x.get('symbol') : float(x.get('price')) for x in prices}
+    
+    pos_dict = {}
+    for b in bals:        
+        asset = b.get('asset')
+        if asset == 'USDT':
+            continue
+        pair = asset + 'USDT'
+        price = price_dict.get(pair)
+        if price == None:
+            continue
+        quant = float(b.get('free')) + float(b.get('locked'))
+        value = price * quant
+        if value >= threshold_bal:
+            pos_dict[pair] = 1
+        else:
+            pos_dict[pair] = 0
+            
+    return pos_dict
+        
+    
+    

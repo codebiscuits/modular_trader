@@ -1,8 +1,8 @@
 TODO
 
+analysis
 
-rsi/ema supertrend strat
-in analysis, once all usdt pairs have been tested, plot out the heatmaps again 
+once all usdt pairs have been tested, plot out the heatmaps again 
 for all rsi lengths, and try to make a decision on which settings (length, ob and os)
 are optimal. then start forward testing with those settings
 
@@ -18,6 +18,8 @@ produces the best results, so i might have to start paper trading with those
 settings and go from there. and if i implement fixed risk sizing into the paper 
 trading, that should further improve results
 
+
+strategy logic / execution
 
 change the volatility condition so that volatility is measured at the moment 
 the trade entry is triggered, not at the start of the test period

@@ -11,7 +11,7 @@ plt.rcParams['figure.figsize'] = (20,10)
 pd.set_option('display.max_rows', None) 
 pd.set_option('display.expand_frame_repr', False)
 
-folder = 'rsi_results'
+folder = 'results/rsi_results_1h'
 
 quote = 'USDT'
 rsi_length = 4
