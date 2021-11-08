@@ -14,10 +14,10 @@ pd.set_option('display.expand_frame_repr', False)
 folder = 'results/rsi_results_1h'
 
 quote = 'USDT'
-rsi_length = 4
+rsi_length = 3
 oversold = 45
 overbought = 96
-min_trades = 20
+min_trades = 30
 
 usdt_results = []
 

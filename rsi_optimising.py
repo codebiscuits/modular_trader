@@ -110,14 +110,17 @@ def get_supertrend(high, low, close, lookback, multiplier):
     
     # FINAL UPPER BAND
     
-    for i in range(len(final_bands)):
-        if i == 0:
-            final_bands.iloc[i,0] = 0
-        else:
-            if (upper_band[i] < final_bands.iloc[i-1,0]) | (close[i-1] > final_bands.iloc[i-1,0]):
-                final_bands.iloc[i,0] = upper_band[i]
+    try:
+        for i in range(len(final_bands)):
+            if i == 0:
+                final_bands.iloc[i,0] = 0
             else:
-                final_bands.iloc[i,0] = final_bands.iloc[i-1,0]
+                if (upper_band[i] < final_bands.iloc[i-1,0]) | (close[i-1] > final_bands.iloc[i-1,0]):
+                    final_bands.iloc[i,0] = upper_band[i]
+                else:
+                    final_bands.iloc[i,0] = final_bands.iloc[i-1,0]
+    except KeyError as e:
+        print(final_bands.head())
     
     # FINAL LOWER BAND
     

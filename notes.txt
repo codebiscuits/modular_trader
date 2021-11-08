@@ -1,6 +1,6 @@
 TODO
 
-analysis
+*analysis*
 
 once all usdt pairs have been tested, plot out the heatmaps again 
 for all rsi lengths, and try to make a decision on which settings (length, ob and os)
@@ -18,8 +18,23 @@ produces the best results, so i might have to start paper trading with those
 settings and go from there. and if i implement fixed risk sizing into the paper 
 trading, that should further improve results
 
+try to make a chart with each trade's individual pnl evo plotted and all aligned 
+by the moment they were opened. 
+look for: 
+how much drawdown is normal
+if there is a length of time in which winning trades have usually won by (so i 
+could set a time-based stop-loss)
 
-strategy logic / execution
+try grouping trades by the distance they were from st line at entry, to see if 
+certain distances are more likely to produce winning/losing trades
+
+
+*strategy logic / execution*
+
+try adding obv into the entry conditions to filter out some more bad trades. 
+maybe do a 10/20 ema ratio of obv
+
+also try filtering by 24h volume
 
 change the volatility condition so that volatility is measured at the moment 
 the trade entry is triggered, not at the start of the test period

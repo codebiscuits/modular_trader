@@ -6,9 +6,7 @@ insight into why so few pairs are producing 30+ trades in a year'''
 
 import sys
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
-import mplfinance as mpf
 import keys
 import talib
 import time
@@ -16,9 +14,12 @@ import json
 from datetime import datetime
 from pathlib import Path
 from rsi_optimising import get_pairs, get_ohlc, update_ohlc, get_supertrend, get_signals, get_results
-from binance_funcs import account_bal, get_size, current_positions
+from binance_funcs import account_bal, get_size, current_positions, free_usdt, get_depth
+from execution import buy_asset, sell_asset, set_stop, clear_stop
 from binance.client import Client
 from pushbullet import Pushbullet
+
+# TODO need to sort out error handling
 
 plt.style.use('fivethirtyeight')
 plt.rcParams['figure.figsize'] = (20,10)
@@ -38,7 +39,7 @@ not_pairs = ['GPBUSDT', 'AUDUSDT', 'BUSDUSDT', 'EURUSDT', 'TUSDUSDT', 'USDCUSDT'
 rsi_length = 4
 oversold = 45
 overbought = 96
-fixed_risk = 0.01
+fixed_risk = 0.004
 
 max_length = 250
 
@@ -46,11 +47,13 @@ positions = current_positions(fixed_risk)
 
 # pairs = ['BTCUSDT']
 
-quick_start = time.perf_counter()
-short_pairs = []
 
 while True:
     # quicker check every 4 hours just for ema uptrend
+    curr = datetime.now().strftime('%d/%m/%y %H:%M')
+    print(f'Current time: {curr}, rsi: {rsi_length}-{oversold}-{overbought}, fixed risk: {fixed_risk}')
+    short_pairs = []
+    quick_start = time.perf_counter()
     dropped = 0
     for pair in pairs:
         if pair in not_pairs:
@@ -66,6 +69,8 @@ while True:
         df['20ema'] = talib.EMA(df.close, 20)
         df['200ema'] = talib.EMA(df.close, 200)
         ema_ratio = df.at[len(df)-1, '20ema'] / df.at[len(df)-1, '200ema']
+        #TODO might be worth adding in a check for spread here, so any pairs with 
+        # unusually large spread get dropped from the list
         if ema_ratio < 0.9:
             dropped += 1
             continue
@@ -73,6 +78,7 @@ while True:
             short_pairs.append(pair)
     for p in positions:
         if positions.get(p) == 1 and p not in short_pairs:
+            # TODO instead of appending to short_pairs, perhaps i should be market selling
             short_pairs.append(p)
             print(f'added {p} to shortlist')
     
@@ -94,88 +100,134 @@ while True:
     
     
     # full check on shortlisted pairs that loops
-    for i in range(50):    
+    for i in range(50):
+        
+        #TODO if there's less than $10 free usdt, there's no point constantly checking 
+        # for new setups, only monitoring open positions, so in this case, reassign 
+        # the shortlist to a new list with just the open positions in it, until
+        # such time that some more usdt has been freed up, then go back to the 
+        # main shortlist
+        
         all_start = time.perf_counter()
-        try:
-            positions = current_positions(fixed_risk)
-            for pair in short_pairs:
-                in_pos = positions.get(pair)
-                if pair in not_pairs:
-                    continue
-                # get data
-                filepath = Path(f'ohlc_data/{pair}.pkl')
-                if filepath.exists():
-                    df = pd.read_pickle(filepath)
-                    df = update_ohlc(pair, '4h', df)
+        # try:
+        positions = current_positions(fixed_risk)
+        #TODO might be worth having a check here to see if any open positions 
+        # should not still be open and need to be closed immediately
+        for pair in short_pairs:
+            in_pos = positions.get(pair)
+            if pair in not_pairs:
+                continue
+            # get data
+            filepath = Path(f'ohlc_data/{pair}.pkl')
+            if filepath.exists():
+                df = pd.read_pickle(filepath)
+                df = update_ohlc(pair, '4h', df)
+            else:
+                df = get_ohlc(pair, '4h', '35 days ago UTC')
+            if len(df) <= 200:
+                continue
+            if len(df) > max_length:
+                df = df.iloc[-1*max_length:,]
+                df.reset_index(drop=True, inplace=True)
+            
+            # compute indicators
+            df['20ema'] = talib.EMA(df.close, 20)
+            df['200ema'] = talib.EMA(df.close, 200)
+            if df.at[len(df)-1, '20ema'] < df.at[len(df)-1, '200ema']:
+                continue
+            # print(df)
+            df['st'], df['st_u'], df['st_d'] = get_supertrend(df.high, df.low, df.close, 10, 3)
+            df['rsi'] = talib.RSI(df.close, rsi_length)
+            hodl = df['close'].iloc[-1] / df['close'].iloc[0]
+            
+            #TODO run a function here which checks recorded position against
+            # whether the asset's price is below st line. if position is 1 and 
+            
+            # generate signals
+            buys, sells, stops, df['s_buy'], df['s_sell'], df['s_stop'] = get_signals(df, oversold, overbought)
+            
+            # calculate results
+            # TODO these two lines might be fine to delete
+            pnl, pnl_list = get_results(df)
+            pnl_bth = pnl / hodl
+            
+            
+            # TODO need to integrate ALL binance filters into order calculations
+            if not pd.isna(df.at[len(df)-1, 'signals']):
+                buy_sig = df.at[len(df)-1, 'signals'][:3] == 'buy'
+                sell_sig = df.at[len(df)-1, 'signals'] == 'sell'
+                stop_sig = df.at[len(df)-1, 'signals'] == 'stop'
+                now = datetime.now().strftime('%d/%m/%y %H:%M')
+                price = df.at[len(df)-1, 'close']
+                balance = account_bal()
+                if in_pos:
+                    orders = client.get_open_orders(symbol=pair)
+                    if sell_sig:
+                        note = f"*** {now} sell {pair} @ {price}"
+                        print(note)
+                        # push = pb.push_note(now, note)
+                        clear_stop(pair)
+                        sell_asset(pair)
+                    elif stop_sig:
+                        note = f"*** {now} sell (stop) {pair} @ {price}"
+                        print(note)
+                        # push = pb.push_note(now, note)
+                        clear_stop(pair)
+                        sell_asset(pair)
                 else:
-                    df = get_ohlc(pair, '4h', '35 days ago UTC')
-                if len(df) <= 200:
-                    continue
-                if len(df) > max_length:
-                    df = df.iloc[-1*max_length:,]
-                
-                # compute indicators
-                df['20ema'] = talib.EMA(df.close, 20)
-                df['200ema'] = talib.EMA(df.close, 200)
-                if df.at[len(df)-1, '20ema'] < df.at[len(df)-1, '200ema']:
-                    continue
-                df['st'], df['st_u'], df['st_d'] = get_supertrend(df.high, df.low, df.close, 10, 3)
-                df['rsi'] = talib.RSI(df.close, rsi_length)
-                hodl = df['close'].iloc[-1] / df['close'].iloc[0]
-                
-                # run a function here which checks recorded position against
-                # whether the asset's price is below st line. if position is 1 and 
-                
-                # generate signals
-                buys, sells, stops, df['s_buy'], df['s_sell'], df['s_stop'] = get_signals(df, oversold, overbought)
-                
-                # calculate results
-                pnl, pnl_list = get_results(df)
-                pnl_bth = pnl / hodl
-                if not pd.isna(df.at[len(df)-1, 'signals']):
-                    buy_sig = df.at[len(df)-1, 'signals'][:3] == 'buy'
-                    sell_sig = df.at[len(df)-1, 'signals'] == 'sell'
-                    stop_sig = df.at[len(df)-1, 'signals'] == 'stop'
-                    now = datetime.now().strftime('%d/%m/%y %H:%M')
-                    price = df.at[len(df)-1, 'close']
-                    balance = account_bal()
-                    if in_pos:
-                        if sell_sig:
-                            positions[pair] = 0
-                            note = f"{now} sell {pair} @ {price}"
-                            push = pb.push_note(now, note)
+                    if buy_sig:
+                        print(f'potential {pair} buy signal')
+                        stp = float(df.at[len(df)-1, 'signals'][17:24])
+                        risk = (price - stp) / price
+                        if risk > 0.2:
+                            print(f'{now} {pair} signal, too far from invalidation ({risk * 100}%)')
+                        size, usdt_size = get_size(price, fixed_risk, balance, risk)
+                        usdt_bal = free_usdt()
+                        usdt_depth = get_depth(pair)
+                        enough_depth = usdt_depth >= usdt_size
+                        enough_usdt = usdt_bal > usdt_size
+                        enough_size = usdt_size > (10 * (1 + risk)) # this ensures size will be big enough for init stop to be set
+                        if not enough_depth:
+                            print(f'{now} {pair} signal, books too thin for {usdt_size}USDT buy')
+                        if not enough_usdt:
+                            print(f'{now} {pair} signal, not enough free usdt for {usdt_size}USDT buy')
+                        if not enough_size:
+                            print(f'{now} {pair} signal, size too small to trade ({usdt_size}USDT)')
+                        if enough_usdt and enough_size and enough_depth:
+                            note = f"buy {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, init stop @ {stp}"
+                            # push = pb.push_note(now, note)
                             print(note)
-                        elif stop_sig:
-                            positions[pair] = 0
-                            note = f"{now} sell (stop) {pair} @ {price}"
-                            push = pb.push_note(now, note)
-                            print(note)
-                    else:
-                        if buy_sig:
-                            stp = float(df.at[len(df)-1, 'signals'][17:24])
-                            risk = (price - stp) / price
-                            size, usdt_size = get_size(price, fixed_risk, balance, risk)
-                            positions[pair] = 1                    
-                            note = f"buy {size:.5} {pair} ({usdt_size:.5} usdt) @ {price},\ninit stop @ {stp}"
-                            push = pb.push_note(now, note)
-                            print(note)
+                            # TODO these try/except blocks could maybe go inside the functions
+                            try:
+                                buy_asset(pair, usdt_size)
+                            except 'BinanceAPIException' as e:
+                                print(f'problem with buy order for {pair}')
+                                print(e)
+                            try:
+                                set_stop(pair, stp)
+                            except 'BinanceAPIException' as e:
+                                print(f'problem with stop order for {pair}')
+                                print(e)
+                                
+                            # TODO maybe have a plot rendered and saved every time a trade is triggered
+                            
+                
                     
-                        
-                
-                df = df.iloc[:-1,]
-                df.to_pickle(filepath)
             
-            
-            all_end = time.perf_counter()
-            all_time = all_end - all_start
-            print(f'Round {i+1} time taken: {round((all_time) // 60)}m {(all_time) % 60:.3}s')
-        except KeyboardInterrupt:
-            break
-        except:
-            exc = f'{sys.exc_info()[0]} exception occured'
-            push = pb.push_note(now, exc)
-            print(exc)
-            continue          
+            df = df.iloc[:-1,]
+            df.to_pickle(filepath)
+        
+        
+        all_end = time.perf_counter()
+        all_time = all_end - all_start
+        # print(f'Round {i+1} time taken: {round((all_time) // 60)}m {(all_time) % 60:.3}s')
+        # except:
+        #     print('*-' * 30)
+        #     exc = f'{sys.exc_info()} exception occured'
+        #     # push = pb.push_note(now, exc)
+        #     print(exc)
+        #     print('*-' * 30)
+        #     continue          
 
     
     print('\n----------------------------------\n')

@@ -62,6 +62,18 @@ def current_positions(fr):
             pos_dict[pair] = 0
             
     return pos_dict
+
+def free_usdt():
+    usdt_bals = client.get_asset_balance(asset='USDT')
+    return float(usdt_bals.get('free'))
         
-    
-    
+def get_depth(pair):
+    usdt_depth = 0
+    tickers = client.get_orderbook_tickers()
+    for t in tickers:
+        if t.get('symbol') == pair:
+            usdt_price = float(t.get('askPrice'))
+            asset_qty = float(t.get('askQty'))
+            usdt_depth = usdt_price * asset_qty
+            
+    return usdt_depth
