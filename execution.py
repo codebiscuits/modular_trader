@@ -4,6 +4,8 @@ import time
 import statistics as stats
 from binance.client import Client
 from binance.enums import *
+from binance.exceptions import BinanceAPIException
+from binance.helpers import round_step_size
 
 client = Client(keys.bPkey, keys.bSkey)
 
@@ -53,9 +55,11 @@ def get_depth(pair):
 def to_precision(num, base):
     '''a rounding function which takes in the number to be rounded and the 
     step-size which the output must conform to.'''
+    
     decimal_places = str(base)[::-1].find('.')
     precise = base * round(num / base)
     mult = 10 ** decimal_places
+    print(f'to_precision - base: {base}, dec places: {decimal_places}, precise: {precise}, mult: {mult}')
     return math.floor(precise * mult) / mult
 
 def buy_asset(pair, usdt_size):
@@ -67,13 +71,16 @@ def buy_asset(pair, usdt_size):
     
     # make sure order size has the right number of decimal places
     info = client.get_symbol_info(pair)
+    print('calculating buy order size precision')
     step_size = float(info.get('filters')[2].get('stepSize'))
-    order_size = to_precision(size, step_size)
+    order_size = round_step_size(size, step_size)
+    print(f'Buy Order - raw size: {size}, step size: {step_size}, final size: {order_size}')
     
     order = client.create_order(symbol=pair, 
                                 side=SIDE_BUY, 
                                 type=ORDER_TYPE_MARKET,
                                 quantity=order_size)
+    print('-')
     return order
 
 def sell_asset(pair):
@@ -93,12 +100,15 @@ def sell_asset(pair):
     # make sure order size has the right number of decimal places
     info = client.get_symbol_info(pair)
     step_size = float(info.get('filters')[2].get('stepSize'))
-    order_size = to_precision(asset_bal, step_size)
+    print('calculating sell order size precision')
+    order_size = round_step_size(asset_bal, step_size)
+    print(f'Sell Order - raw size: {asset_bal}, step size: {step_size}, final size: {order_size}')
     
     order = client.create_order(symbol=pair, 
                                 side=SIDE_SELL, 
                                 type=ORDER_TYPE_MARKET,
                                 quantity=order_size)
+    print('-')
     return order
 
 def set_stop(pair, price):
@@ -107,6 +117,8 @@ def set_stop(pair, price):
     
     info = client.get_symbol_info(pair)
     tick_size = float(info.get('filters')[0].get('tickSize'))
+    step_size = float(info.get('filters')[2].get('stepSize'))
+    print(f'from binance - tick size: {tick_size}, step size: {step_size}')
     
     info = client.get_account()
     bals = info.get('balances')
@@ -118,12 +130,16 @@ def set_stop(pair, price):
                 asset_bal = float(b.get('free'))
     
     info = client.get_symbol_info(pair)
-    step_size = float(info.get('filters')[2].get('stepSize'))
-    order_size = to_precision(asset_bal, step_size)
+    print('calculating stop order size precision')
+    order_size = round_step_size(asset_bal, step_size)
     spread = get_spread(pair)
     lower_price = price * (1 - (spread * 10))
-    trigger_price = to_precision(price, tick_size)
-    limit_price = to_precision(lower_price, tick_size)
+    print('calculating stop order trigger price precision')
+    trigger_price = round_step_size(price, tick_size)
+    print('calculating stop order limit price precision')
+    limit_price = round_step_size(lower_price, tick_size)
+    print(f'Stop Order - trigger: {trigger_price}, limit: {limit_price}')
+    print(f'Stop Order - raw size: {asset_bal}, step size: {step_size}, final size: {order_size}')
     
     order = client.create_order(symbol=pair, 
                                 side=SIDE_SELL, 
@@ -132,6 +148,7 @@ def set_stop(pair, price):
                                 stopPrice=trigger_price,
                                 quantity=order_size, 
                                 price=limit_price)
+    print('-')
     return order
 
 def clear_stop(pair):
@@ -140,3 +157,4 @@ def clear_stop(pair):
     ord_id = orders[0].get('orderId')
     result = client.cancel_order(symbol=pair, orderId=ord_id)
     print(result.get('status'))
+    print('-')

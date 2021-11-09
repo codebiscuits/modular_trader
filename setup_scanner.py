@@ -17,6 +17,7 @@ from rsi_optimising import get_pairs, get_ohlc, update_ohlc, get_supertrend, get
 from binance_funcs import account_bal, get_size, current_positions, free_usdt, get_depth
 from execution import buy_asset, sell_asset, set_stop, clear_stop
 from binance.client import Client
+from binance.exceptions import BinanceAPIException
 from pushbullet import Pushbullet
 
 # TODO need to sort out error handling
@@ -101,6 +102,9 @@ while True:
     
     # full check on shortlisted pairs that loops
     for i in range(50):
+        now = datetime.now().strftime('%d/%m/%y %H:%M')
+        if i%10 == 0:
+            print(now)
         
         #TODO if there's less than $10 free usdt, there's no point constantly checking 
         # for new setups, only monitoring open positions, so in this case, reassign 
@@ -176,7 +180,7 @@ while True:
                         sell_asset(pair)
                 else:
                     if buy_sig:
-                        print(f'potential {pair} buy signal')
+                        print(f'{now} potential {pair} buy signal')
                         stp = float(df.at[len(df)-1, 'signals'][17:24])
                         risk = (price - stp) / price
                         if risk > 0.2:
@@ -188,11 +192,11 @@ while True:
                         enough_usdt = usdt_bal > usdt_size
                         enough_size = usdt_size > (10 * (1 + risk)) # this ensures size will be big enough for init stop to be set
                         if not enough_depth:
-                            print(f'{now} {pair} signal, books too thin for {usdt_size}USDT buy')
+                            print(f'{now} {pair} signal, books too thin for {usdt_size:.3}USDT buy')
                         if not enough_usdt:
-                            print(f'{now} {pair} signal, not enough free usdt for {usdt_size}USDT buy')
+                            print(f'{now} {pair} signal, not enough free usdt for {usdt_size:.3}USDT buy')
                         if not enough_size:
-                            print(f'{now} {pair} signal, size too small to trade ({usdt_size}USDT)')
+                            print(f'{now} {pair} signal, size too small to trade ({usdt_size:.3}USDT)')
                         if enough_usdt and enough_size and enough_depth:
                             note = f"buy {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, init stop @ {stp}"
                             # push = pb.push_note(now, note)
