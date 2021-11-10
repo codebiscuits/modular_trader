@@ -12,21 +12,20 @@ from pathlib import Path
 all_start = time.perf_counter()
 
 # functions
-def get_pairs(quote):
+def get_pairs(quote='USDT', market='SPOT'):
+    '''possible values for quote are USDT, BTC, BNB etc. possible values for 
+    market are SPOT or MARGIN'''
     info = client.get_exchange_info()
     symbols = info.get('symbols')
-    btc_pairs = []
-    usdt_pairs = []
+    pairs = []
     for sym in symbols:
-        if sym.get('symbol')[-3:] == 'BTC':
-            btc_pairs.append(sym.get('symbol'))
-        elif sym.get('symbol')[-4:] == 'USDT':
-            usdt_pairs.append(sym.get('symbol'))
+        right_quote = sym.get('quoteAsset') == quote
+        right_market = market in sym.get('permissions')
+        trading = sym.get('status') == 'TRADING'
+        if right_quote and right_market and trading:
+            pairs.append(sym.get('symbol'))
     
-    if quote == 'usdt':
-        return usdt_pairs
-    elif quote == 'btc':
-        return btc_pairs
+    return pairs
 
 def get_ohlc(pair, timeframe, span="1 year ago UTC"):
     client = Client(keys.bPkey, keys.bSkey)
@@ -337,7 +336,7 @@ if __name__ == '__main__':
     
     #TODO make it record risk factor
     
-    pairs = get_pairs('usdt') + get_pairs('btc')
+    pairs = get_pairs('USDT') + get_pairs('BTC')
     done_pairs = [x.stem for x in Path('rsi_results/').glob('*.*')]
     not_pairs = ['GBPUSDT', 'BUSDUSDT', 'EURUSDT', 'TUSDUSDT', 'USDCUSDT', 
                  'PAXUSDT', 'COCOSUSDT', 'ADADOWNUSDT', 'LINKDOWNUSDT', 

@@ -23,19 +23,26 @@ def get_spread(pair):
     pair in question'''
     
     spreads = []
+    mids = []
     for j in range(3):
         tickers = client.get_orderbook_tickers()    
         for t in tickers:
             if t.get('symbol') == pair:
                 bid = float(t.get('bidPrice'))
                 ask = float(t.get('askPrice'))
-                spreads.append((ask - bid) / ((bid + ask) / 2))
+                spreads.append(ask - bid)
+                mids.append((bid + ask) / 2)
         time.sleep(1)
         
-    avg_spread = stats.mean(spreads)
-    return avg_spread
+    avg_abs_spread = stats.median(spreads)
+    avg_mid = stats.median(mids)
     
-def get_depth(pair):
+    if avg_mid > 0:
+        return avg_abs_spread / avg_mid
+    else:
+        return 'na'
+    
+def get_depth(pair, side):
     '''returns the quantities of the first bid and ask for the pair in question'''
     
     bids = []
@@ -48,9 +55,13 @@ def get_depth(pair):
                 asks.append(float(t.get('askQTY')))
         time.sleep(1)
     
-    avg_bid = stats.mean(bids)
-    avg_ask = stats.mean(asks)
-    return avg_bid, avg_ask
+    avg_bid = stats.median(bids)
+    avg_ask = stats.median(asks)
+    print(f'avg_bid: {avg_bid}, avg_ask: {avg_ask}')
+    if side == 'buy':
+        return avg_ask
+    elif side == 'sell':
+        return avg_bid
     
 def to_precision(num, base):
     '''a rounding function which takes in the number to be rounded and the 
@@ -101,7 +112,9 @@ def sell_asset(pair):
     info = client.get_symbol_info(pair)
     step_size = float(info.get('filters')[2].get('stepSize'))
     print('calculating sell order size precision')
-    order_size = round_step_size(asset_bal, step_size)
+    # TODO this rounding function needs to always round down here, i have 
+    # subtracted step_size as a temporary fix
+    order_size = round_step_size(asset_bal, step_size) - step_size
     print(f'Sell Order - raw size: {asset_bal}, step size: {step_size}, final size: {order_size}')
     
     order = client.create_order(symbol=pair, 
@@ -131,7 +144,9 @@ def set_stop(pair, price):
     
     info = client.get_symbol_info(pair)
     print('calculating stop order size precision')
-    order_size = round_step_size(asset_bal, step_size)
+    # TODO this rounding function needs to always round down here, i have 
+    # subtracted step_size as a temporary fix
+    order_size = round_step_size(asset_bal, step_size) - step_size
     spread = get_spread(pair)
     lower_price = price * (1 - (spread * 10))
     print('calculating stop order trigger price precision')

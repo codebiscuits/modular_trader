@@ -27,7 +27,7 @@ client = Client(keys.bPkey, keys.bSkey)
 all_start = time.perf_counter()
 
 
-pairs = get_pairs('usdt')
+pairs = get_pairs('USDT', 'SPOT')
 not_pairs = ['GPBUSDT', 'BUSDUSDT', 'EURUSDT', 'TUSDUSDT', 'USDCUSDT', 'PAXUSDT', 'COCOSUSDT',
              'ADADOWNUSDT', 'LINKDOWNUSDT', 'BNBDOWNUSDT', 'ETHDOWNUSDT']
 
