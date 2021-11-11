@@ -8,7 +8,7 @@ import time
 client = Client(keys.bPkey, keys.bSkey)
 import json
 from pathlib import Path
-from execution import get_spread
+from execution import binance_spreads
 from config import not_pairs
 
 all_start = time.perf_counter()
@@ -333,16 +333,18 @@ if __name__ == '__main__':
     
     #TODO make it record risk factor
     
-    pairs = get_pairs('USDT') + get_pairs('BTC')
+    pairs_usdt = get_pairs('USDT')
+    spreads_usdt = binance_spreads('USDT')
+    pairs_u = [p for p in pairs_usdt if spreads_usdt.get(p) < 0.01]
+    pairs_btc = get_pairs('BTC')
+    spreads_btc = binance_spreads('BTC')
+    pairs_b = [p for p in pairs_btc if spreads_btc.get(p) < 0.01]
+    all_pairs = pairs_u + pairs_b
     done_pairs = [x.stem for x in Path(results_folder).glob('*.*')]
+    bad_pairs = done_pairs + not_pairs
+    pairs = [p for p in all_pairs if not p in bad_pairs]
     
     for pair in pairs:
-        if pair in done_pairs:
-            continue
-        if pair in not_pairs:
-            continue
-        if get_spread(pair) > 1:
-            continue
         # download data
         df_full = get_ohlc(pair, timeframe)
         if len(df_full) <= 200:

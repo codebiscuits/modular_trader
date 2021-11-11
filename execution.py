@@ -2,6 +2,7 @@ import keys
 import math
 import time
 import statistics as stats
+from pprint import pprint
 from binance.client import Client
 from binance.enums import *
 from binance.exceptions import BinanceAPIException
@@ -63,6 +64,104 @@ def get_depth(pair, side):
     elif side == 'sell':
         return avg_bid
     
+def binance_spreads(quote='USDT'):
+    length = len(quote)
+    avg_spreads = {}
+    
+    s_1 = {}
+    tickers = client.get_orderbook_tickers()
+    for t in tickers:
+        if t.get('symbol')[-1*length:] == quote:
+            pair = t.get('symbol')
+            bid = float(t.get('bidPrice'))
+            ask = float(t.get('askPrice'))
+            if bid and ask:
+                spread = ask - bid
+                mid = (ask + bid) / 2
+                s_1[pair] = spread / mid
+    
+    time.sleep(1)
+    
+    s_2 = {}
+    tickers = client.get_orderbook_tickers()
+    for t in tickers:
+        if t.get('symbol')[-1*length:] == quote:
+            pair = t.get('symbol')
+            bid = float(t.get('bidPrice'))
+            ask = float(t.get('askPrice'))
+            if bid and ask:
+                spread = ask - bid
+                mid = (ask + bid) / 2
+                s_2[pair] = spread / mid
+    
+    time.sleep(1)
+    
+    s_3 = {}
+    tickers = client.get_orderbook_tickers()
+    for t in tickers:
+        if t.get('symbol')[-1*length:] == quote:
+            pair = t.get('symbol')
+            bid = float(t.get('bidPrice'))
+            ask = float(t.get('askPrice'))
+            if bid and ask:
+                spread = ask - bid
+                mid = (ask + bid) / 2
+                s_3[pair] = spread / mid
+    
+    for k in s_1:
+        avg_spreads[k] = stats.median([s_1.get(k), s_2.get(k), s_3.get(k)])
+    
+    return avg_spreads
+
+def binance_depths(quote='USDT', side='BUY'):
+    length = len(quote)
+    avg_depths = {}
+    
+    d_1 = {}
+    tickers = client.get_orderbook_tickers()
+    for t in tickers:
+        if t.get('symbol')[-1*length:] == quote:
+            pair = t.get('symbol')
+            bid = float(t.get('bidQTY'))
+            ask = float(t.get('askQTY'))
+            if side == 'BUY':
+                d_1[pair] = ask
+            elif side == 'SELL':
+                d_1[pair] = bid
+    
+    time.sleep(1)
+    
+    d_2 = {}
+    tickers = client.get_orderbook_tickers()
+    for t in tickers:
+        if t.get('symbol')[-1*length:] == quote:
+            pair = t.get('symbol')
+            bid = float(t.get('bidQTY'))
+            ask = float(t.get('askQTY'))
+            if side == 'BUY':
+                d_2[pair] = ask
+            elif side == 'SELL':
+                d_2[pair] = bid
+    
+    time.sleep(1)
+    
+    d_3 = {}
+    tickers = client.get_orderbook_tickers()
+    for t in tickers:
+        if t.get('symbol')[-1*length:] == quote:
+            pair = t.get('symbol')
+            bid = float(t.get('bidQTY'))
+            ask = float(t.get('askQTY'))
+            if side == 'BUY':
+                d_3[pair] = ask
+            elif side == 'SELL':
+                d_3[pair] = bid
+    
+    for k in d_1:
+        avg_depths[k] = stats.median([d_1.get(k), d_2.get(k), d_3.get(k)])
+    
+    return avg_depths
+
 def to_precision(num, base):
     '''a rounding function which takes in the number to be rounded and the 
     step-size which the output must conform to.'''

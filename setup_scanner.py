@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from rsi_optimising import get_pairs, get_ohlc, update_ohlc, get_supertrend, get_signals
 from binance_funcs import account_bal, get_size, current_positions, free_usdt
-from execution import buy_asset, sell_asset, set_stop, clear_stop, get_depth, get_spread
+from execution import buy_asset, sell_asset, set_stop, clear_stop, get_depth, get_spread, binance_spreads
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 from pushbullet import Pushbullet
@@ -35,9 +35,6 @@ client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 
-pairs = get_pairs('USDT', 'SPOT')
-
-
 rsi_length = 4
 oversold = 45
 overbought = 96
@@ -45,7 +42,11 @@ fixed_risk = 0.004
 
 max_length = 250
 
+
+all_pairs = get_pairs('USDT', 'SPOT') # list
+spreads = binance_spreads('USDT') # dict
 positions = current_positions(fixed_risk)
+pairs = [p for p in all_pairs if spreads.get(p) < 0.01 or positions.get(p) == 1]
 
 # check total balance and record it in a file for analysis
 now = datetime.now().strftime('%d/%m/%y %H:%M')
@@ -64,8 +65,6 @@ positions = current_positions(fixed_risk)
 for pair in pairs:
     in_pos = positions.get(pair)
     if pair in not_pairs and positions.get(pair) == 0:
-        continue
-    if get_spread(pair) > 1 and positions.get(pair) == 0:
         continue
     # get data
     filepath = Path(f'ohlc_data/{pair}.pkl')
