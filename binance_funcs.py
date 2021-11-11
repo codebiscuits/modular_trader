@@ -56,7 +56,7 @@ def current_positions(fr):
             continue
         quant = float(b.get('free')) + float(b.get('locked'))
         value = price * quant
-        if value >= threshold_bal:
+        if value >= threshold_bal and value > 10:
             pos_dict[pair] = 1
         else:
             pos_dict[pair] = 0

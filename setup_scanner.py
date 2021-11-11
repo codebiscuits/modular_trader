@@ -1,7 +1,6 @@
 '''this script scans all pairs for a particular quote asset looking for setups 
 which match the criteria for a trade, then executes the trade if possible'''
 
-import sys
 import pandas as pd
 import matplotlib.pyplot as plt
 import keys
@@ -10,12 +9,13 @@ import time
 import json
 from datetime import datetime
 from pathlib import Path
-from rsi_optimising import get_pairs, get_ohlc, update_ohlc, get_supertrend, get_signals, get_results
+from rsi_optimising import get_pairs, get_ohlc, update_ohlc, get_supertrend, get_signals
 from binance_funcs import account_bal, get_size, current_positions, free_usdt
 from execution import buy_asset, sell_asset, set_stop, clear_stop, get_depth, get_spread
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 from pushbullet import Pushbullet
+from config import not_pairs
 
 # TODO need to sort out error handling
 
@@ -36,9 +36,7 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 
 pairs = get_pairs('USDT', 'SPOT')
-not_pairs = ['GPBUSDT', 'AUDUSDT', 'BUSDUSDT', 'EURUSDT', 'TUSDUSDT', 
-             'USDCUSDT', 'PAXUSDT', 'COCOSUSDT',
-             'ADADOWNUSDT', 'LINKDOWNUSDT', 'BNBDOWNUSDT', 'ETHDOWNUSDT']
+
 
 rsi_length = 4
 oversold = 45
@@ -129,7 +127,11 @@ for pair in pairs:
                     continue
                 size, usdt_size = get_size(price, fixed_risk, balance, risk)
                 usdt_bal = free_usdt()
-                usdt_depth = get_depth(pair, 'buy')
+                try:
+                    usdt_depth = get_depth(pair, 'buy')
+                except TypeError as e:
+                    print(e)
+                    continue
                 print(f'usdt depth: {usdt_depth}')
                 enough_depth = usdt_depth >= usdt_size
                 enough_usdt = usdt_bal > usdt_size
@@ -168,10 +170,3 @@ for pair in pairs:
 all_end = time.perf_counter()
 all_time = all_end - all_start
 print(f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s')
-# except:
-#     print('*-' * 30)
-#     exc = f'{sys.exc_info()} exception occured'
-#     # push = pb.push_note(now, exc)
-#     print(exc)
-#     print('*-' * 30)
-#     continue

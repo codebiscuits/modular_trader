@@ -8,6 +8,8 @@ import time
 client = Client(keys.bPkey, keys.bSkey)
 import json
 from pathlib import Path
+from execution import get_spread
+from config import not_pairs
 
 all_start = time.perf_counter()
 
@@ -180,14 +182,11 @@ def get_supertrend(high, low, close, lookback, multiplier):
     
     return st, upt, dt
     
-def volatility(df, lookback):
-    df[f'volatil{lookback}'] = df['close'].rolling(lookback).stdev()
-
 def get_signals(df, buy_thresh, sell_thresh):
     '''during an uptrend as defined by 20ema being above 200ema and price 
     being above st line, set 'trade ready'. if rsi subsequently drops below and 
     then crosses back above x, trigger a buy.
-    if rsi subsequently prints a value greater than y OR if price closes below 
+    if rsi goes above y and then crosses back below OR if price closes below 
     st line, trigger a sell
     * only conditions that actually trigger a trade need to be defined as a 
     specific moment in time (eg a cross up or down), other conditions which set 
@@ -209,6 +208,7 @@ def get_signals(df, buy_thresh, sell_thresh):
     sells = 0
     stops = 0
     for i in range(1, len(df)):
+        ### trade conditions
         trend_up = (df.loc[i, '20ema'] > df.loc[i, '200ema'])
         st_up = (df.close[i] > df.st[i]) # not a trigger so doesnt need to be a cross
         cross_down = (df.close[i] < df.st[i]) and (df.close[i-1] >= df.st[i-1]) # this is a trigger so does need to be a cross
@@ -233,7 +233,7 @@ def get_signals(df, buy_thresh, sell_thresh):
             signals.append('stop')
             s_buy.append(np.nan)
             s_sell.append(np.nan)
-            s_stop.append(df.st[i-1])
+            s_stop.append(df.close[i-1])
             in_pos = 0
             stops += 1
         elif in_pos and rsi_sell:
@@ -255,10 +255,6 @@ def get_signals(df, buy_thresh, sell_thresh):
     
     
     df['signals'] = signals
-    
-    # create a new column 'in_pos', which has a 1 or 0 to represent whether a 
-    # trade is on or not. then use that and the roc column to calculate a 
-    # pnl_evo column.
     
     pos_list = [0, 0]
     for p in range(1, len(df.index)):
@@ -333,43 +329,39 @@ if __name__ == '__main__':
     lookback = 10
     multiplier = 3
     comm = 0.00075
+    results_folder = 'results/smoothed_rsi_4h'
     
     #TODO make it record risk factor
     
     pairs = get_pairs('USDT') + get_pairs('BTC')
-    done_pairs = [x.stem for x in Path('rsi_results/').glob('*.*')]
-    not_pairs = ['GBPUSDT', 'BUSDUSDT', 'EURUSDT', 'TUSDUSDT', 'USDCUSDT', 
-                 'PAXUSDT', 'COCOSUSDT', 'ADADOWNUSDT', 'LINKDOWNUSDT', 
-                 'BNBDOWNUSDT', 'ETHDOWNUSDT']
+    done_pairs = [x.stem for x in Path(results_folder).glob('*.*')]
     
     for pair in pairs:
         if pair in done_pairs:
             continue
         if pair in not_pairs:
             continue
+        if get_spread(pair) > 1:
+            continue
         # download data
         df_full = get_ohlc(pair, timeframe)
         if len(df_full) <= 200:
             continue
-        if pair[-3:] == 'BTC' and df_full.loc[-200:, 'close'].mean() < 0.000001:
-            continue
         all_results = [df_full.volume.sum()]
         print(f'{pair} num ohlc periods: {len(df_full)}, total volume: {df_full.volume.sum()}')
-        for rsi_len in [3, 4, 5, 6]:
+        for rsi_len in [3, 4, 5, 6, 7]:
             df = df_full.copy()
             start = time.perf_counter()
             # compute indicators
             df['st'], df['st_u'], df['st_d'] = get_supertrend(df.high, df.low, df.close, lookback, multiplier)
             df['20ema'] = talib.EMA(df.close, 20)
             df['200ema'] = talib.EMA(df.close, 200)
-            df['rsi'] = talib.RSI(df.close, rsi_len)
+            df['k_close'] = talib.EMA(df.close, 2)
+            df['rsi'] = talib.RSI(df.k_close, rsi_len)
+            # df[f'volatil20'] = df['close'].rolling(20).stdev()
             df = df.iloc[200:,]
             df.reset_index(drop=True, inplace=True)
             hodl = df['close'].iloc[-1] / df['close'].iloc[0]
-            # volatility(df, 20)
-            # volatility(df, 50)
-            # volatility(df, 100)
-            # volatility(df, 200)
             
             # backtest
             # avg_pnl_list = []
@@ -404,7 +396,7 @@ if __name__ == '__main__':
             elapsed = f'{round((end - start) // 60)}m {(end - start) % 60:.3}s'
             # print(f'{pair}, rsi {rsi_len}, num candles: {len(df)}, time taken: {elapsed}')
         
-        with open(f'rsi_results/{pair}.txt', 'w') as outfile:
+        with open(f'{results_folder}/{pair}.txt', 'w') as outfile:
             json.dump(all_results, outfile)
     
     all_end = time.perf_counter()

@@ -32,7 +32,7 @@ def get_spread(pair):
                 ask = float(t.get('askPrice'))
                 spreads.append(ask - bid)
                 mids.append((bid + ask) / 2)
-        time.sleep(1)
+        time.sleep(0.5)
         
     avg_abs_spread = stats.median(spreads)
     avg_mid = stats.median(mids)
@@ -53,7 +53,7 @@ def get_depth(pair, side):
             if t.get('symbol') == pair:
                 bids.append(float(t.get('bidQTY')))
                 asks.append(float(t.get('askQTY')))
-        time.sleep(1)
+        time.sleep(0.5)
     
     avg_bid = stats.median(bids)
     avg_ask = stats.median(asks)
