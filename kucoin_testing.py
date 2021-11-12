@@ -1,6 +1,7 @@
 import ccxt
 import pandas as pd
 from pprint import pprint
+from pathlib import Path
 
 exchange = ccxt.kucoin ()
 exchange.load_markets() # this caches the dict of markets in the exchange object
@@ -17,8 +18,6 @@ def kucoin_pairs(quote='USDT'):
         if v.get('quote') == quote and v.get('active') == True:
             pairs.append(k)
     return pairs
-
-# print(kucoin_pairs('BTC'))
 
 def kucoin_list_quotes():
     markets = exchange.markets
@@ -41,16 +40,23 @@ def compare_kucoin_markets():
             vol_sum += vol
         print(f'{quote}: {len(pairs)} pairs, {int(vol_sum)} total volume')
         
-# compare_kucoin_markets()
-
-# pprint(exchange.fetch_ticker('BTC/USDT'))
-
-# data = exchange.fetchOHLCV('BTC/USDT', '4h')
-# cols = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
-# df = pd.DataFrame(data, columns=cols)
-# df.timestamp = df.timestamp * 1000000
-# df.timestamp = pd.to_datetime(df.timestamp)
-# print(df.head())
+def kucoin_ohlc(pair, timeframe):
+    start = # '1 Year ago UTC'
+    filepath = Path(f'kucoin_ohlc/{pair}.pkl')
+    if filepath.exists():
+        old_df = pd.read_pickle(filepath)
+        start = old_df.at[len(old_df-1), 'timestamp']
+    
+    data = exchange.fetchOHLCV(pair, timeframe, since=start)
+    cols = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+    new_df = pd.DataFrame(data, columns=cols)
+    new_df.timestamp = new_df.timestamp * 1000000
+    new_df.timestamp = pd.to_datetime(new_df.timestamp)
+    
+    if old_df:
+        df = pd.concat([old_df, new_df], ignore_index=True)
+    
+    return df
 
 def kucoin_spreads(quote):
     pairs = kucoin_pairs(quote)
@@ -71,7 +77,18 @@ def kucoin_spreads(quote):
             print(f'{pair}: {spread}')
     
     return spreads_dict
+
+# print(kucoin_pairs('BTC'))
         
-spreads = kucoin_spreads('BTC')
+# compare_kucoin_markets()
+
+kucoin_ohlc('BTC/USDT', '4h')
+
+# pprint(exchange.fetch_ticker('BTC/USDT'))
+
+# spreads = kucoin_spreads('BTC')
 
 # pprint(spreads)
+
+# 1605124800000
+# 1615075200000

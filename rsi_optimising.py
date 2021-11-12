@@ -329,7 +329,9 @@ if __name__ == '__main__':
     lookback = 10
     multiplier = 3
     comm = 0.00075
-    results_folder = 'results/smoothed_rsi_4h'
+    abs_folder = Path('/home/ross/Documents/backtester_2021/results')
+    results_folder = Path('smoothed_rsi_4h')
+    res_path = Path(abs_folder / results_folder)
     
     #TODO make it record risk factor
     
@@ -340,7 +342,7 @@ if __name__ == '__main__':
     spreads_btc = binance_spreads('BTC')
     pairs_b = [p for p in pairs_btc if spreads_btc.get(p) < 0.01]
     all_pairs = pairs_u + pairs_b
-    done_pairs = [x.stem for x in Path(results_folder).glob('*.*')]
+    done_pairs = [x.stem for x in res_path.glob('*.*')]
     bad_pairs = done_pairs + not_pairs
     pairs = [p for p in all_pairs if not p in bad_pairs]
     
@@ -396,9 +398,9 @@ if __name__ == '__main__':
                         continue        
             end = time.perf_counter()
             elapsed = f'{round((end - start) // 60)}m {(end - start) % 60:.3}s'
-            # print(f'{pair}, rsi {rsi_len}, num candles: {len(df)}, time taken: {elapsed}')
+            print(f'{pair}, rsi {rsi_len}, time taken: {elapsed}')
         
-        with open(f'{results_folder}/{pair}.txt', 'w') as outfile:
+        with open(f'{res_path}/{pair}.txt', 'w') as outfile:
             json.dump(all_results, outfile)
     
     all_end = time.perf_counter()

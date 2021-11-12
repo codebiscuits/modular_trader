@@ -35,12 +35,16 @@ client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 
+all_start = time.perf_counter()
+
 rsi_length = 4
 oversold = 45
 overbought = 96
 fixed_risk = 0.004
 
 max_length = 250
+
+abs_folder = Path('/home/ross/Documents/backtester_2021/')
 
 
 all_pairs = get_pairs('USDT', 'SPOT') # list
@@ -53,13 +57,12 @@ now = datetime.now().strftime('%d/%m/%y %H:%M')
 total_bal = account_bal()
 bal_record = {'timestamp': now, 'balance': total_bal}
 new_line = json.dumps(bal_record)
-with open("total_bal_history.txt", "a") as file:
+with open("/home/ross/Documents/backtester_2021/total_bal_history.txt", "a") as file:
     file.write(new_line)
     file.write('\n')
 
 print(f'Current time: {now}, rsi: {rsi_length}-{oversold}-{overbought}, fixed risk: {fixed_risk}')
 
-all_start = time.perf_counter()
 # try:
 positions = current_positions(fixed_risk)
 for pair in pairs:
@@ -67,7 +70,8 @@ for pair in pairs:
     if pair in not_pairs and positions.get(pair) == 0:
         continue
     # get data
-    filepath = Path(f'ohlc_data/{pair}.pkl')
+    rel_path = Path(f'ohlc_data/{pair}.pkl')
+    filepath = abs_folder / rel_path
     if filepath.exists():
         df = pd.read_pickle(filepath)
         df = update_ohlc(pair, '4h', df)
