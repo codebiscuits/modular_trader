@@ -10,7 +10,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from rsi_optimising import get_pairs, get_ohlc, update_ohlc, get_supertrend, get_signals
-from binance_funcs import account_bal, get_size, current_positions, free_usdt
+from binance_funcs import account_bal, get_size, current_positions, current_sizing, free_usdt
 from execution import buy_asset, sell_asset, set_stop, clear_stop, get_depth, get_spread, binance_spreads
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
@@ -52,16 +52,9 @@ spreads = binance_spreads('USDT') # dict
 positions = current_positions(fixed_risk)
 pairs = [p for p in all_pairs if spreads.get(p) < 0.01 or positions.get(p) == 1]
 
-# check total balance and record it in a file for analysis
-now = datetime.now().strftime('%d/%m/%y %H:%M')
-total_bal = account_bal()
-bal_record = {'timestamp': now, 'balance': total_bal}
-new_line = json.dumps(bal_record)
-with open("/home/ross/Documents/backtester_2021/total_bal_history.txt", "a") as file:
-    file.write(new_line)
-    file.write('\n')
+now_start = datetime.now().strftime('%d/%m/%y %H:%M')
 
-print(f'Current time: {now}, rsi: {rsi_length}-{oversold}-{overbought}, fixed risk: {fixed_risk}')
+print(f'Current time: {now_start}, rsi: {rsi_length}-{oversold}-{overbought}, fixed risk: {fixed_risk}')
 
 # try:
 positions = current_positions(fixed_risk)
@@ -169,6 +162,18 @@ for pair in pairs:
     df = df.iloc[:-1,]
     df.to_pickle(filepath)
 
+
+# check total balance and record it in a file for analysis
+params = {'strat': '20/200ema cross and supertrend with rsi triggers', 
+          'rsi length': rsi_length, 'oversold': oversold, 
+          'overbought': overbought, 'fixed risk': fixed_risk}
+total_bal = account_bal()
+sizing = current_sizing(fixed_risk)
+bal_record = {'timestamp': now_start, 'balance': round(total_bal, 2), 'positions': sizing, 'params': params}
+new_line = json.dumps(bal_record)
+with open("/home/ross/Documents/backtester_2021/total_bal_history.txt", "a") as file:
+    file.write(new_line)
+    file.write('\n')
 
 all_end = time.perf_counter()
 all_time = all_end - all_start

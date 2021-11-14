@@ -63,6 +63,32 @@ def current_positions(fr):
             
     return pos_dict
 
+def current_sizing(fr):
+    total_bal = account_bal()
+    threshold_bal = total_bal * fr
+    
+    info = client.get_account()
+    bals = info.get('balances')
+    
+    prices = client.get_all_tickers()
+    price_dict = {x.get('symbol') : float(x.get('price')) for x in prices}
+    
+    size_dict = {}
+    for b in bals:        
+        asset = b.get('asset')
+        if asset == 'USDT':
+            continue
+        pair = asset + 'USDT'
+        price = price_dict.get(pair)
+        if price == None:
+            continue
+        quant = float(b.get('free')) + float(b.get('locked'))
+        value = price * quant
+        if value >= threshold_bal:
+            size_dict[pair] = round(value / total_bal, 5)
+            
+    return size_dict
+
 def free_usdt():
     usdt_bals = client.get_asset_balance(asset='USDT')
     return float(usdt_bals.get('free'))
