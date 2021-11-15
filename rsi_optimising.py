@@ -329,9 +329,12 @@ if __name__ == '__main__':
     lookback = 10
     multiplier = 3
     comm = 0.00075
-    abs_folder = Path('/home/ross/Documents/backtester_2021/results')
-    results_folder = Path('smoothed_rsi_4h')
-    res_path = Path(abs_folder / results_folder)
+    abs_folder = Path('/home/ross/Documents/backtester_2021')
+    results_folder = Path('results/smoothed_rsi_4h')
+    if abs_folder.exists():
+        res_path = Path(abs_folder / results_folder)
+    else:
+        res_path = results_folder
     
     #TODO make it record risk factor
     

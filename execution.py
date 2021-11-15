@@ -45,24 +45,29 @@ def get_spread(pair):
     
 def get_depth(pair, side):
     '''returns the quantities of the first bid and ask for the pair in question'''
-    
-    bids = []
-    asks = []
-    for i in range(3):    
-        tickers = client.get_orderbook_tickers()        
-        for t in tickers:
-            if t.get('symbol') == pair:
-                bids.append(float(t.get('bidQTY')))
-                asks.append(float(t.get('askQTY')))
-        time.sleep(0.5)
-    
-    avg_bid = stats.median(bids)
-    avg_ask = stats.median(asks)
-    print(f'avg_bid: {avg_bid}, avg_ask: {avg_ask}')
-    if side == 'buy':
-        return avg_ask
-    elif side == 'sell':
-        return avg_bid
+    try:    
+        bids = []
+        asks = []
+        for i in range(3):    
+            tickers = client.get_orderbook_tickers()
+            # pprint(tickers)
+            for t in tickers:
+                if t.get('symbol') == pair:
+                    bids.append(float(t.get('bidQty')))
+                    asks.append(float(t.get('askQty')))
+            time.sleep(0.5)
+        
+        avg_bid = stats.median(bids)
+        avg_ask = stats.median(asks)
+        print(f'avg_bid: {avg_bid}, avg_ask: {avg_ask}')
+        if side == 'buy':
+            return avg_ask
+        elif side == 'sell':
+            return avg_bid
+    except TypeError as e:
+        print(e)
+        print('Skipping trade - binance returned book depth of None ')
+        return 0.0
     
 def binance_spreads(quote='USDT'):
     length = len(quote)

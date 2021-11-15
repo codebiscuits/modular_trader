@@ -35,6 +35,7 @@ def get_size(price, fr, balance, risk):
     
     return asset_quantity, usdt_size
 
+
 def current_positions(fr):
     total_bal = account_bal()
     threshold_bal = total_bal * fr
@@ -90,10 +91,12 @@ def current_sizing(fr):
     return size_dict
 
 def free_usdt():
+    print('runnung free_usdt')
     usdt_bals = client.get_asset_balance(asset='USDT')
     return float(usdt_bals.get('free'))
         
 def get_depth(pair):
+    print('runnung funcs get_depth')
     usdt_depth = 0
     tickers = client.get_orderbook_tickers()
     for t in tickers:

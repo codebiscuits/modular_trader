@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from rsi_optimising import get_pairs, get_ohlc, update_ohlc, get_supertrend, get_signals
 from binance_funcs import account_bal, get_size, current_positions, current_sizing, free_usdt
-from execution import buy_asset, sell_asset, set_stop, clear_stop, get_depth, get_spread, binance_spreads
+from execution import buy_asset, sell_asset, set_stop, clear_stop, get_spread, get_depth, binance_spreads
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 from pushbullet import Pushbullet
@@ -57,7 +57,7 @@ now_start = datetime.now().strftime('%d/%m/%y %H:%M')
 print(f'Current time: {now_start}, rsi: {rsi_length}-{oversold}-{overbought}, fixed risk: {fixed_risk}')
 
 # try:
-positions = current_positions(fixed_risk)
+# positions = current_positions(fixed_risk)
 for pair in pairs:
     in_pos = positions.get(pair)
     if pair in not_pairs and positions.get(pair) == 0:
@@ -116,18 +116,14 @@ for pair in pairs:
         else:
             if buy_sig:
                 print(f'{now} potential {pair} buy signal')
-                stp = float(df.at[len(df)-1, 'signals'][17:24])
+                stp = df.at[len(df)-1, 'st']
                 risk = (price - stp) / price
                 if risk > 0.1:
-                    print(f'{now} {pair} signal, too far from invalidation ({risk * 100}%)')
+                    print(f'{now} {pair} signal, too far from invalidation ({risk * 100:.1f}%)')
                     continue
                 size, usdt_size = get_size(price, fixed_risk, balance, risk)
                 usdt_bal = free_usdt()
-                try:
-                    usdt_depth = get_depth(pair, 'buy')
-                except TypeError as e:
-                    print(e)
-                    continue
+                usdt_depth = get_depth(pair, 'buy')
                 print(f'usdt depth: {usdt_depth}')
                 enough_depth = usdt_depth >= usdt_size
                 enough_usdt = usdt_bal > usdt_size

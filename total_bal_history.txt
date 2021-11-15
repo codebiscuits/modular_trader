@@ -112,3 +112,7 @@
 {"timestamp": "14/11/21 12:00", "balance": 284.7769083004}
 {"timestamp": "14/11/21 16:00", "balance": 284.33630600519996}
 {"timestamp": "14/11/21 20:00", "balance": 283.9938744956}
+{"timestamp": "15/11/21 00:00", "balance": 284.98, "positions": {"BNBUSDT": 0.05162, "HNTUSDT": 0.05922, "UTKUSDT": 0.05108, "FORUSDT": 0.03835, "PONDUSDT": 0.05927}, "params": {"strat": "20/200ema cross and supertrend with rsi triggers", "rsi length": 4, "oversold": 45, "overbought": 96, "fixed risk": 0.004}}
+{"timestamp": "15/11/21 04:00", "balance": 283.81, "positions": {"BNBUSDT": 0.05188, "HNTUSDT": 0.0568, "UTKUSDT": 0.0515, "FORUSDT": 0.03757, "PONDUSDT": 0.05883}, "params": {"strat": "20/200ema cross and supertrend with rsi triggers", "rsi length": 4, "oversold": 45, "overbought": 96, "fixed risk": 0.004}}
+{"timestamp": "15/11/21 08:00", "balance": 284.26, "positions": {"BNBUSDT": 0.0516, "HNTUSDT": 0.05712, "UTKUSDT": 0.05142, "FORUSDT": 0.03865, "PONDUSDT": 0.05899}, "params": {"strat": "20/200ema cross and supertrend with rsi triggers", "rsi length": 4, "oversold": 45, "overbought": 96, "fixed risk": 0.004}}
+{"timestamp": "15/11/21 12:00", "balance": 285.24, "positions": {"BNBUSDT": 0.05102, "HNTUSDT": 0.05644, "UTKUSDT": 0.05567, "FORUSDT": 0.03838, "PONDUSDT": 0.05878}, "params": {"strat": "20/200ema cross and supertrend with rsi triggers", "rsi length": 4, "oversold": 45, "overbought": 96, "fixed risk": 0.004}}
