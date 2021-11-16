@@ -99,7 +99,6 @@ def current_sizing(fr):
     return size_dict
 
 def free_usdt():
-    print('runnung free_usdt')
     usdt_bals = client.get_asset_balance(asset='USDT')
     return float(usdt_bals.get('free'))
         
@@ -119,7 +118,7 @@ def top_up_bnb(size):
     bnb_bal = client.get_asset_balance(asset='BNB')
     free_bnb = float(bnb_bal.get('free'))
     avg_price = client.get_avg_price(symbol='BNBUSDT')
-    price = avg_price.get('price')
+    price = float(avg_price.get('price'))
     bnb_value = free_bnb * price
     
     usdt_bal = client.get_asset_balance(asset='BNB')
@@ -130,4 +129,6 @@ def top_up_bnb(size):
                                     side=SIDE_BUY, 
                                     type=ORDER_TYPE_MARKET,
                                     quantity=size)
+    else:
+        order = None
     return order

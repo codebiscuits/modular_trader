@@ -55,7 +55,7 @@ def get_depth(pair, side):
                 if t.get('symbol') == pair:
                     bids.append(float(t.get('bidQty')))
                     asks.append(float(t.get('askQty')))
-            time.sleep(0.5)
+            time.sleep(2)
         
         avg_bid = stats.median(bids)
         avg_ask = stats.median(asks)
@@ -118,49 +118,50 @@ def binance_spreads(quote='USDT'):
     return avg_spreads
 
 def binance_depths(quotes=['USDT', 'BTC']):
-    length = len(quote)
     avg_depths = {}
-    
-    bd_1 = {}
-    sd_1 = {}
-    tickers = client.get_orderbook_tickers()
-    for t in tickers:
-        if t.get('symbol')[-1*length:] in quotes:
-            pair = t.get('symbol')
-            bid = float(t.get('bidQTY'))
-            ask = float(t.get('askQTY'))
-            bd_1[pair] = ask
-            sd_1[pair] = bid
-    
-    time.sleep(1)
-    
-    bd_2 = {}
-    sd_2 = {}
-    tickers = client.get_orderbook_tickers()
-    for t in tickers:
-        if t.get('symbol')[-1*length:] in quotes:
-            pair = t.get('symbol')
-            bid = float(t.get('bidQTY'))
-            ask = float(t.get('askQTY'))
-            bd_2[pair] = ask
-            sd_2[pair] = bid
-    
-    time.sleep(1)
-    
-    bd_3 = {}
-    sd_3 = {}
-    tickers = client.get_orderbook_tickers()
-    for t in tickers:
-        if t.get('symbol')[-1*length:] in quotes:
-            pair = t.get('symbol')
-            bid = float(t.get('bidQTY'))
-            ask = float(t.get('askQTY'))
-            bd_3[pair] = ask
-            sd_3[pair] = bid
-    
-    for k in bd_1:
-        avg_depths[k] = {'asks': stats.median([bd_1.get(k), bd_2.get(k), bd_3.get(k)]), 
-                         'bids': stats.median([sd_1.get(k), sd_2.get(k), sd_3.get(k)])}
+
+    for quote in quotes:  
+        length = len(quote)
+        bd_1 = {}
+        sd_1 = {}
+        tickers = client.get_orderbook_tickers()
+        for t in tickers:
+            if t.get('symbol')[-1*length:] == quote:
+                pair = t.get('symbol')
+                bid = float(t.get('bidQty'))
+                ask = float(t.get('askQty'))
+                bd_1[pair] = ask
+                sd_1[pair] = bid
+        
+        time.sleep(1)
+        
+        bd_2 = {}
+        sd_2 = {}
+        tickers = client.get_orderbook_tickers()
+        for t in tickers:
+            if t.get('symbol')[-1*length:] == quote:
+                pair = t.get('symbol')
+                bid = float(t.get('bidQty'))
+                ask = float(t.get('askQty'))
+                bd_2[pair] = ask
+                sd_2[pair] = bid
+        
+        time.sleep(1)
+        
+        bd_3 = {}
+        sd_3 = {}
+        tickers = client.get_orderbook_tickers()
+        for t in tickers:
+            if t.get('symbol')[-1*length:] == quote:
+                pair = t.get('symbol')
+                bid = float(t.get('bidQty'))
+                ask = float(t.get('askQty'))
+                bd_3[pair] = ask
+                sd_3[pair] = bid
+        
+        for k in bd_1:
+            avg_depths[k] = {'asks': stats.median([bd_1.get(k), bd_2.get(k), bd_3.get(k)]), 
+                             'bids': stats.median([sd_1.get(k), sd_2.get(k), sd_3.get(k)])}
     
     return avg_depths
 

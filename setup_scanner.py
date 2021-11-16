@@ -10,7 +10,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from rsi_optimising import get_pairs, get_ohlc, update_ohlc, get_supertrend, get_signals
-from binance_funcs import account_bal, get_size, current_positions, current_sizing, free_usdt
+from binance_funcs import account_bal, get_size, current_positions, current_sizing, free_usdt, top_up_bnb
 from execution import buy_asset, sell_asset, set_stop, clear_stop, get_depth, binance_spreads, binance_depths
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
@@ -37,16 +37,28 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 all_start = time.perf_counter()
 
+# constants
 rsi_length = 4
 oversold = 45
 overbought = 96
 fixed_risk = 0.004
-
 max_length = 250
 
-abs_folder = Path('/home/ross/Documents/backtester_2021/')
+# absolute paths
+pi_ohlc_bin = Path('/mnt/2tb_ssd/coding/ohlc_binance_4h')
+lap_ohlc_bin = Path('/home/ross/Documents/backtester_2021/ohlc_data')
+desk_ohlc_bin = Path('/home/projects/ohlc_binance_4h')
+for ohlc_path in [pi_ohlc_bin, lap_ohlc_bin, desk_ohlc_bin]:
+    if ohlc_path.exists():
+        ohlc_data = ohlc_path
+pi_md = Path('/mnt/2tb_ssd/coding/market_data')
+lap_md = Path('/home/ross/Documents/market_data')
+desk_md = Path('/home/projects/market_data')
+for md_path in [pi_md, lap_md, desk_md]:
+    if md_path.exists():
+        market_data = md_path
 
-
+# create pairs list
 all_pairs = get_pairs('USDT', 'SPOT') # list
 spreads = binance_spreads('USDT') # dict
 positions = current_positions(fixed_risk)
@@ -65,8 +77,7 @@ for pair in pairs:
     if pair in not_pairs and positions.get(pair) == 0:
         continue
     # get data
-    rel_path = Path(f'ohlc_data/{pair}.pkl')
-    filepath = abs_folder / rel_path
+    filepath = Path(f'{ohlc_data}/{pair}.pkl')
     if filepath.exists():
         df = pd.read_pickle(filepath)
         df = update_ohlc(pair, '4h', df)
@@ -169,19 +180,21 @@ total_bal = account_bal()
 sizing = current_sizing(fixed_risk)
 bal_record = {'timestamp': now_start, 'balance': round(total_bal, 2), 'positions': sizing, 'params': params}
 new_line = json.dumps(bal_record)
-with open("/home/ross/Documents/backtester_2021/total_bal_history.txt", "a") as file:
+with open(f"{market_data}/rsi-st-ema_bal_history.txt", "a") as file:
     file.write(new_line)
     file.write('\n')
 
+# TODO save a json of any trades that have happened with relevant data
+
 # record spreads and depths for other analysis
 stamped_spreads = {'timestamp': now_start, 'spreads': spreads}
-with open("/home/ross/Documents/backtester_2021/binance_spreads_history.txt", "a") as file:
+with open(f"{market_data}/binance_spreads_history.txt", "a") as file:
     file.write(json.dumps(stamped_spreads))
     file.write('\n')
 
 depths = binance_depths()
 stamped_depths = {'timestamp': now_start, 'depths': depths}
-with open("/home/ross/Documents/backtester_2021/binance_depths_history.txt", "a") as file:
+with open(f"{market_data}/binance_depths_history.txt", "a") as file:
     file.write(json.dumps(stamped_depths))
     file.write('\n')
 
