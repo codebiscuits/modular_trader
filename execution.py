@@ -59,7 +59,6 @@ def get_depth(pair, side):
         
         avg_bid = stats.median(bids)
         avg_ask = stats.median(asks)
-        print(f'avg_bid: {avg_bid}, avg_ask: {avg_ask}')
         if side == 'buy':
             return avg_ask
         elif side == 'sell':
@@ -174,7 +173,6 @@ def to_precision(num, base):
     decimal_places = str(base)[::-1].find('.')
     precise = base * round(num / base)
     mult = 10 ** decimal_places
-    print(f'to_precision - base: {base}, dec places: {decimal_places}, precise: {precise}, mult: {mult}')
     return math.floor(precise * mult) / mult
 
 def buy_asset(pair, usdt_size):
@@ -186,7 +184,6 @@ def buy_asset(pair, usdt_size):
     
     # make sure order size has the right number of decimal places
     info = client.get_symbol_info(pair)
-    print('calculating buy order size precision')
     step_size = float(info.get('filters')[2].get('stepSize'))
     order_size = round_step_size(size, step_size)
     print(f'Buy Order - raw size: {size}, step size: {step_size}, final size: {order_size}')
@@ -215,7 +212,6 @@ def sell_asset(pair):
     # make sure order size has the right number of decimal places
     info = client.get_symbol_info(pair)
     step_size = float(info.get('filters')[2].get('stepSize'))
-    print('calculating sell order size precision')
     # TODO this rounding function needs to always round down here, i have 
     # subtracted step_size as a temporary fix
     order_size = round_step_size(asset_bal, step_size) - step_size
@@ -235,7 +231,6 @@ def set_stop(pair, price):
     info = client.get_symbol_info(pair)
     tick_size = float(info.get('filters')[0].get('tickSize'))
     step_size = float(info.get('filters')[2].get('stepSize'))
-    print(f'from binance - tick size: {tick_size}, step size: {step_size}')
     
     info = client.get_account()
     bals = info.get('balances')
@@ -247,18 +242,14 @@ def set_stop(pair, price):
                 asset_bal = float(b.get('free'))
     
     info = client.get_symbol_info(pair)
-    print('calculating stop order size precision')
     # TODO this rounding function needs to always round down here, i have 
     # subtracted step_size as a temporary fix
     order_size = round_step_size(asset_bal, step_size) - step_size
     spread = get_spread(pair)
     lower_price = price * (1 - (spread * 10))
-    print('calculating stop order trigger price precision')
     trigger_price = round_step_size(price, tick_size)
-    print('calculating stop order limit price precision')
     limit_price = round_step_size(lower_price, tick_size)
-    print(f'Stop Order - trigger: {trigger_price}, limit: {limit_price}')
-    print(f'Stop Order - raw size: {asset_bal}, step size: {step_size}, final size: {order_size}')
+    print(f'Stop Order - trigger: {trigger_price}, limit: {limit_price}, size: {order_size}')
     
     order = client.create_order(symbol=pair, 
                                 side=SIDE_SELL, 

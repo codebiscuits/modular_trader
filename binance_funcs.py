@@ -1,5 +1,6 @@
 import keys
 from binance.client import Client
+from binance.enums import *
 
 client = Client(keys.bPkey, keys.bSkey)
 
@@ -57,10 +58,16 @@ def current_positions(fr):
             continue
         quant = float(b.get('free')) + float(b.get('locked'))
         value = price * quant
-        if value >= threshold_bal and value > 10:
-            pos_dict[pair] = 1
+        if asset == 'BNB':
+            if value >= threshold_bal and value > 15:
+                pos_dict[pair] = 1
+            else:
+                pos_dict[pair] = 0
         else:
-            pos_dict[pair] = 0
+            if value >= threshold_bal and value > 10:
+                pos_dict[pair] = 1
+            else:
+                pos_dict[pair] = 0
             
     return pos_dict
 
@@ -77,16 +84,17 @@ def current_sizing(fr):
     size_dict = {}
     for b in bals:        
         asset = b.get('asset')
-        if asset == 'USDT':
-            continue
-        pair = asset + 'USDT'
-        price = price_dict.get(pair)
-        if price == None:
-            continue
-        quant = float(b.get('free')) + float(b.get('locked'))
-        value = price * quant
+        if asset in ['USDT', 'USDC', 'BUSD']:
+            value = float(b.get('free')) + float(b.get('locked'))
+        else:
+            pair = asset + 'USDT'
+            price = price_dict.get(pair)
+            if price == None:
+                continue
+            quant = float(b.get('free')) + float(b.get('locked'))
+            value = price * quant
         if value >= threshold_bal:
-            size_dict[pair] = round(value / total_bal, 5)
+            size_dict[asset] = round(value / total_bal, 5)
             
     return size_dict
 
@@ -106,3 +114,20 @@ def get_depth(pair):
             usdt_depth = usdt_price * asset_qty
             
     return usdt_depth
+
+def top_up_bnb(size):
+    bnb_bal = client.get_asset_balance(asset='BNB')
+    free_bnb = float(bnb_bal.get('free'))
+    avg_price = client.get_avg_price(symbol='BNBUSDT')
+    price = avg_price.get('price')
+    bnb_value = free_bnb * price
+    
+    usdt_bal = client.get_asset_balance(asset='BNB')
+    free_usdt = float(usdt_bal.get('free'))
+    if bnb_value < 5 and free_usdt > size:
+        print('Topping up BNB')
+        order = client.create_order(symbol='BNBUSDT', 
+                                    side=SIDE_BUY, 
+                                    type=ORDER_TYPE_MARKET,
+                                    quantity=size)
+    return order

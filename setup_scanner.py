@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from rsi_optimising import get_pairs, get_ohlc, update_ohlc, get_supertrend, get_signals
 from binance_funcs import account_bal, get_size, current_positions, current_sizing, free_usdt
-from execution import buy_asset, sell_asset, set_stop, clear_stop, get_spread, get_depth, binance_spreads
+from execution import buy_asset, sell_asset, set_stop, clear_stop, get_depth, binance_spreads
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 from pushbullet import Pushbullet
@@ -56,6 +56,8 @@ now_start = datetime.now().strftime('%d/%m/%y %H:%M')
 
 print(f'Current time: {now_start}, rsi: {rsi_length}-{oversold}-{overbought}, fixed risk: {fixed_risk}')
 
+top_up_info = top_up_bnb(10)
+
 # try:
 # positions = current_positions(fixed_risk)
 for pair in pairs:
@@ -87,70 +89,70 @@ for pair in pairs:
     df['rsi'] = talib.RSI(df.close, rsi_length)
     hodl = df['close'].iloc[-1] / df['close'].iloc[0]
     
-    # generate signals
-    buys, sells, stops, df['s_buy'], df['s_sell'], df['s_stop'] = get_signals(df, oversold, overbought)
-    
-    
+    # execute orders
     # TODO need to integrate ALL binance filters into order calculations
-    if not pd.isna(df.at[len(df)-1, 'signals']):
-        buy_sig = df.at[len(df)-1, 'signals'][:3] == 'buy'
-        sell_sig = df.at[len(df)-1, 'signals'] == 'sell'
-        stop_sig = df.at[len(df)-1, 'signals'] == 'stop'
-        now = datetime.now().strftime('%d/%m/%y %H:%M')
-        price = df.at[len(df)-1, 'close']
-        balance = account_bal()
-        if in_pos:
-            orders = client.get_open_orders(symbol=pair)
-            if sell_sig:
-                note = f"*** {now} sell {pair} @ {price}"
-                print(note)
+    now = datetime.now().strftime('%d/%m/%y %H:%M')
+    price = df.at[len(df)-1, 'close']
+    balance = account_bal()
+    
+    trend_up = df.at[len(df)-1, '20ema'] > df.at[len(df)-1, '200ema']
+    st_up = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st'] # not a trigger so doesnt need to be a cross
+    st_down = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st'] # this is a trigger so does need to be a cross
+    rsi_buy = (df.at[len(df)-1, 'rsi'] >= oversold) and (df.at[len(df)-2, 'rsi'] < oversold)
+    rsi_sell = (df.at[len(df)-1, 'rsi'] <= overbought) and (df.at[len(df)-2, 'rsi'] > overbought)
+    
+    if in_pos:
+        orders = client.get_open_orders(symbol=pair)
+        if rsi_sell:
+            note = f"*** {now} sell {pair} @ {price}"
+            print(note)
+            # push = pb.push_note(now, note)
+            clear_stop(pair)
+            sell_asset(pair)
+        elif st_down:
+            note = f"*** {now} sell (stop) {pair} @ {price}"
+            print(note)
+            # push = pb.push_note(now, note)
+            clear_stop(pair)
+            sell_asset(pair)
+    else:
+        if trend_up and st_up and rsi_buy:
+            print(f'{now} potential {pair} buy signal')
+            stp = df.at[len(df)-1, 'st']
+            risk = (price - stp) / price
+            # if risk > 0.1:
+            #     print(f'{now} {pair} signal, too far from invalidation ({risk * 100:.1f}%)')
+            #     continue
+            size, usdt_size = get_size(price, fixed_risk, balance, risk)
+            usdt_bal = free_usdt()
+            usdt_depth = get_depth(pair, 'buy')
+            print(f'usdt depth: {usdt_depth}')
+            enough_depth = usdt_depth >= usdt_size
+            enough_usdt = usdt_bal > usdt_size
+            enough_size = usdt_size > (10 * (1 + risk)) # this ensures size will be big enough for init stop to be set
+            if not enough_depth:
+                print(f'{now} {pair} signal, books too thin for {usdt_size:.3}USDT buy')
+            if not enough_usdt:
+                print(f'{now} {pair} signal, not enough free usdt for {usdt_size:.3}USDT buy')
+            if not enough_size:
+                print(f'{now} {pair} signal, size too small to trade ({usdt_size:.3}USDT)')
+            if enough_usdt and enough_size and enough_depth:
+                note = f"buy {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, init stop @ {stp}"
                 # push = pb.push_note(now, note)
-                clear_stop(pair)
-                sell_asset(pair)
-            elif stop_sig:
-                note = f"*** {now} sell (stop) {pair} @ {price}"
                 print(note)
-                # push = pb.push_note(now, note)
-                clear_stop(pair)
-                sell_asset(pair)
-        else:
-            if buy_sig:
-                print(f'{now} potential {pair} buy signal')
-                stp = df.at[len(df)-1, 'st']
-                risk = (price - stp) / price
-                if risk > 0.1:
-                    print(f'{now} {pair} signal, too far from invalidation ({risk * 100:.1f}%)')
-                    continue
-                size, usdt_size = get_size(price, fixed_risk, balance, risk)
-                usdt_bal = free_usdt()
-                usdt_depth = get_depth(pair, 'buy')
-                print(f'usdt depth: {usdt_depth}')
-                enough_depth = usdt_depth >= usdt_size
-                enough_usdt = usdt_bal > usdt_size
-                enough_size = usdt_size > (10 * (1 + risk)) # this ensures size will be big enough for init stop to be set
-                if not enough_depth:
-                    print(f'{now} {pair} signal, books too thin for {usdt_size:.3}USDT buy')
-                if not enough_usdt:
-                    print(f'{now} {pair} signal, not enough free usdt for {usdt_size:.3}USDT buy')
-                if not enough_size:
-                    print(f'{now} {pair} signal, size too small to trade ({usdt_size:.3}USDT)')
-                if enough_usdt and enough_size and enough_depth:
-                    note = f"buy {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, init stop @ {stp}"
-                    # push = pb.push_note(now, note)
-                    print(note)
-                    # TODO these try/except blocks could maybe go inside the functions
-                    try:
-                        buy_asset(pair, usdt_size)
-                    except 'BinanceAPIException' as e:
-                        print(f'problem with buy order for {pair}')
-                        print(e)
-                    try:
-                        set_stop(pair, stp)
-                    except 'BinanceAPIException' as e:
-                        print(f'problem with stop order for {pair}')
-                        print(e)
-                        
-                    # TODO maybe have a plot rendered and saved every time a trade is triggered
+                # TODO these try/except blocks could maybe go inside the functions
+                try:
+                    buy_asset(pair, usdt_size)
+                except 'BinanceAPIException' as e:
+                    print(f'problem with buy order for {pair}')
+                    print(e)
+                try:
+                    set_stop(pair, stp)
+                except 'BinanceAPIException' as e:
+                    print(f'problem with stop order for {pair}')
+                    print(e)
+                    
+                # TODO maybe have a plot rendered and saved every time a trade is triggered
                     
         
             
@@ -169,6 +171,11 @@ bal_record = {'timestamp': now_start, 'balance': round(total_bal, 2), 'positions
 new_line = json.dumps(bal_record)
 with open("/home/ross/Documents/backtester_2021/total_bal_history.txt", "a") as file:
     file.write(new_line)
+    file.write('\n')
+
+# record spreads for other analysis
+with open("/home/ross/Documents/backtester_2021/binance_spreads_history.txt", "a") as file:
+    file.write(json.dumps(spreads))
     file.write('\n')
 
 all_end = time.perf_counter()

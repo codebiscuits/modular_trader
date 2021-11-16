@@ -5,11 +5,13 @@ import keys
 import talib
 import statistics as stats
 import time
-client = Client(keys.bPkey, keys.bSkey)
 import json
 from pathlib import Path
 from execution import binance_spreads
 from config import not_pairs
+
+
+client = Client(keys.bPkey, keys.bSkey)
 
 all_start = time.perf_counter()
 
