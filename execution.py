@@ -117,52 +117,50 @@ def binance_spreads(quote='USDT'):
     
     return avg_spreads
 
-def binance_depths(quote='USDT', side='BUY'):
+def binance_depths(quotes=['USDT', 'BTC']):
     length = len(quote)
     avg_depths = {}
     
-    d_1 = {}
+    bd_1 = {}
+    sd_1 = {}
     tickers = client.get_orderbook_tickers()
     for t in tickers:
-        if t.get('symbol')[-1*length:] == quote:
+        if t.get('symbol')[-1*length:] in quotes:
             pair = t.get('symbol')
             bid = float(t.get('bidQTY'))
             ask = float(t.get('askQTY'))
-            if side == 'BUY':
-                d_1[pair] = ask
-            elif side == 'SELL':
-                d_1[pair] = bid
+            bd_1[pair] = ask
+            sd_1[pair] = bid
     
     time.sleep(1)
     
-    d_2 = {}
+    bd_2 = {}
+    sd_2 = {}
     tickers = client.get_orderbook_tickers()
     for t in tickers:
-        if t.get('symbol')[-1*length:] == quote:
+        if t.get('symbol')[-1*length:] in quotes:
             pair = t.get('symbol')
             bid = float(t.get('bidQTY'))
             ask = float(t.get('askQTY'))
-            if side == 'BUY':
-                d_2[pair] = ask
-            elif side == 'SELL':
-                d_2[pair] = bid
+            bd_2[pair] = ask
+            sd_2[pair] = bid
     
     time.sleep(1)
     
-    d_3 = {}
+    bd_3 = {}
+    sd_3 = {}
     tickers = client.get_orderbook_tickers()
     for t in tickers:
-        if t.get('symbol')[-1*length:] == quote:
+        if t.get('symbol')[-1*length:] in quotes:
             pair = t.get('symbol')
             bid = float(t.get('bidQTY'))
             ask = float(t.get('askQTY'))
-            if side == 'BUY':
-                d_3[pair] = ask
-            elif side == 'SELL':
-                d_3[pair] = bid
+            bd_3[pair] = ask
+            sd_3[pair] = bid
     
-    for k in d_1:
-        avg_depths[k] = stats.median([d_1.get(k), d_2.get(k), d_3.get(k)])
+    for k in bd_1:
+        avg_depths[k] = {'asks': stats.median([bd_1.get(k), bd_2.get(k), bd_3.get(k)]), 
+                         'bids': stats.median([sd_1.get(k), sd_2.get(k), sd_3.get(k)])}
     
     return avg_depths
 

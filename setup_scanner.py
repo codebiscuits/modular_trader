@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from rsi_optimising import get_pairs, get_ohlc, update_ohlc, get_supertrend, get_signals
 from binance_funcs import account_bal, get_size, current_positions, current_sizing, free_usdt
-from execution import buy_asset, sell_asset, set_stop, clear_stop, get_depth, binance_spreads
+from execution import buy_asset, sell_asset, set_stop, clear_stop, get_depth, binance_spreads, binance_depths
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 from pushbullet import Pushbullet
@@ -173,9 +173,16 @@ with open("/home/ross/Documents/backtester_2021/total_bal_history.txt", "a") as 
     file.write(new_line)
     file.write('\n')
 
-# record spreads for other analysis
+# record spreads and depths for other analysis
+stamped_spreads = {'timestamp': now_start, 'spreads': spreads}
 with open("/home/ross/Documents/backtester_2021/binance_spreads_history.txt", "a") as file:
-    file.write(json.dumps(spreads))
+    file.write(json.dumps(stamped_spreads))
+    file.write('\n')
+
+depths = binance_depths()
+stamped_depths = {'timestamp': now_start, 'depths': depths}
+with open("/home/ross/Documents/backtester_2021/binance_depths_history.txt", "a") as file:
+    file.write(json.dumps(stamped_depths))
     file.write('\n')
 
 all_end = time.perf_counter()
