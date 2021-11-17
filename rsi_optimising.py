@@ -7,299 +7,16 @@ import statistics as stats
 import time
 import json
 from pathlib import Path
-from execution import binance_spreads
+# from execution import binance_spreads
+import binance_funcs as funcs
+import indicators as ind
+import strategies as strats
 from config import not_pairs
 
 
 client = Client(keys.bPkey, keys.bSkey)
 
 all_start = time.perf_counter()
-
-# functions
-def get_pairs(quote='USDT', market='SPOT'):
-    '''possible values for quote are USDT, BTC, BNB etc. possible values for 
-    market are SPOT or MARGIN'''
-    info = client.get_exchange_info()
-    symbols = info.get('symbols')
-    pairs = []
-    for sym in symbols:
-        right_quote = sym.get('quoteAsset') == quote
-        right_market = market in sym.get('permissions')
-        trading = sym.get('status') == 'TRADING'
-        if right_quote and right_market and trading:
-            pairs.append(sym.get('symbol'))
-    
-    return pairs
-
-def get_ohlc(pair, timeframe, span="1 year ago UTC"):
-    client = Client(keys.bPkey, keys.bSkey)
-    tf = {'1m': Client.KLINE_INTERVAL_1MINUTE, 
-          '5m': Client.KLINE_INTERVAL_5MINUTE, 
-          '15m': Client.KLINE_INTERVAL_15MINUTE,
-          '30m': Client.KLINE_INTERVAL_30MINUTE,
-          '1h': Client.KLINE_INTERVAL_1HOUR,
-          '4h': Client.KLINE_INTERVAL_4HOUR,
-          '6h': Client.KLINE_INTERVAL_6HOUR,
-          '8h': Client.KLINE_INTERVAL_8HOUR,
-          '12h': Client.KLINE_INTERVAL_12HOUR,
-          '1d': Client.KLINE_INTERVAL_1DAY,
-          '3d': Client.KLINE_INTERVAL_3DAY,
-          '1w': Client.KLINE_INTERVAL_1WEEK,
-          }
-    klines = client.get_historical_klines(pair, tf.get(timeframe), span)
-    cols = ['timestamp', 'open', 'high', 'low', 'close', 'base vol', 'close time', 
-                'volume', 'num trades', 'taker buy base vol', 'taker buy quote vol', 'ignore']
-    df = pd.DataFrame(klines, columns=cols)
-    df['timestamp'] = df['timestamp'] * 1000000
-    df = df.astype(float)
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    df.drop(['base vol', 'close time', 'num trades', 'taker buy base vol', 
-             'taker buy quote vol', 'ignore'], axis=1, inplace=True)
-
-    return df
-
-def update_ohlc(pair, timeframe, old_df):
-    client = Client(keys.bPkey, keys.bSkey)
-    tf = {'1m': Client.KLINE_INTERVAL_1MINUTE, 
-          '5m': Client.KLINE_INTERVAL_5MINUTE, 
-          '15m': Client.KLINE_INTERVAL_15MINUTE,
-          '30m': Client.KLINE_INTERVAL_30MINUTE,
-          '1h': Client.KLINE_INTERVAL_1HOUR,
-          '4h': Client.KLINE_INTERVAL_4HOUR,
-          '6h': Client.KLINE_INTERVAL_6HOUR,
-          '8h': Client.KLINE_INTERVAL_8HOUR,
-          '12h': Client.KLINE_INTERVAL_12HOUR,
-          '1d': Client.KLINE_INTERVAL_1DAY,
-          '3d': Client.KLINE_INTERVAL_3DAY,
-          '1w': Client.KLINE_INTERVAL_1WEEK,
-          }
-    
-    old_end = int(old_df.at[len(old_df)-1, 'timestamp'].timestamp()) * 1000
-    klines = client.get_klines(symbol=pair, interval=tf.get(timeframe), 
-                               startTime=old_end)
-    cols = ['timestamp', 'open', 'high', 'low', 'close', 'base vol', 'close time', 
-                'volume', 'num trades', 'taker buy base vol', 'taker buy quote vol', 'ignore']
-    df = pd.DataFrame(klines, columns=cols)
-    df['timestamp'] = df['timestamp'] * 1000000
-    df = df.astype(float)
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    df.drop(['base vol', 'close time', 'num trades', 'taker buy base vol', 
-             'taker buy quote vol', 'ignore'], axis=1, inplace=True)
-
-    df_new = pd.concat([old_df[:-1], df], copy=True, ignore_index=True)
-    return df_new
-
-def get_supertrend(high, low, close, lookback, multiplier):
-    # ATR
-    
-    tr1 = pd.DataFrame(high - low)
-    tr2 = pd.DataFrame(abs(high - close.shift(1)))
-    tr3 = pd.DataFrame(abs(low - close.shift(1)))
-    frames = [tr1, tr2, tr3]
-    tr = pd.concat(frames, axis = 1, join = 'inner').max(axis = 1)
-    atr = tr.ewm(lookback).mean()
-    
-    # H/L AVG AND BASIC UPPER & LOWER BAND
-    
-    hl_avg = (high + low) / 2
-    upper_band = (hl_avg + multiplier * atr).dropna()
-    lower_band = (hl_avg - multiplier * atr).dropna()
-    
-    # FILL DATAFRAME WITH ZEROS TO MAKE IT THE RIGHT SIZE
-    
-    final_bands = pd.DataFrame(columns = ['upper', 'lower'])
-    final_bands.iloc[:,0] = [x for x in upper_band - upper_band]
-    final_bands.iloc[:,1] = final_bands.iloc[:,0]
-    
-    # FINAL UPPER BAND
-    
-    try:
-        for i in range(len(final_bands)):
-            if i == 0:
-                final_bands.iloc[i,0] = 0
-            else:
-                if (upper_band[i] < final_bands.iloc[i-1,0]) | (close[i-1] > final_bands.iloc[i-1,0]):
-                    final_bands.iloc[i,0] = upper_band[i]
-                else:
-                    final_bands.iloc[i,0] = final_bands.iloc[i-1,0]
-    except KeyError as e:
-        print(final_bands.head())
-    
-    # FINAL LOWER BAND
-    
-    for i in range(len(final_bands)):
-        if i == 0:
-            final_bands.iloc[i, 1] = 0
-        else:
-            if (lower_band[i] > final_bands.iloc[i-1,1]) | (close[i-1] < final_bands.iloc[i-1,1]):
-                final_bands.iloc[i,1] = lower_band[i]
-            else:
-                final_bands.iloc[i,1] = final_bands.iloc[i-1,1]
-    
-    # SUPERTREND
-    
-    supertrend = pd.DataFrame(columns = [f'supertrend_{lookback}'])
-    supertrend.iloc[:,0] = [x for x in final_bands['upper'] - final_bands['upper']]
-    
-    for i in range(len(supertrend)):
-        if i == 0:
-            supertrend.iloc[i, 0] = 0
-        elif supertrend.iloc[i-1, 0] == final_bands.iloc[i-1, 0] and close[i] < final_bands.iloc[i, 0]:
-            supertrend.iloc[i, 0] = final_bands.iloc[i, 0]
-            
-        elif supertrend.iloc[i-1, 0] == final_bands.iloc[i-1, 0] and close[i] > final_bands.iloc[i, 0]:
-            supertrend.iloc[i, 0] = final_bands.iloc[i, 1]
-            
-        elif supertrend.iloc[i-1, 0] == final_bands.iloc[i-1, 1] and close[i] > final_bands.iloc[i, 1]:
-            supertrend.iloc[i, 0] = final_bands.iloc[i, 1]
-            
-        elif supertrend.iloc[i-1, 0] == final_bands.iloc[i-1, 1] and close[i] < final_bands.iloc[i, 1]:
-            supertrend.iloc[i, 0] = final_bands.iloc[i, 0]
-    
-    supertrend = supertrend.set_index(upper_band.index)
-    # supertrend = supertrend.dropna()[1:]
-    # supertrend.reset_index(drop=True, inplace=True)
-    
-    # ST UPTREND/DOWNTREND
-    
-    upt = [0]
-    dt = [0]
-    close = close.iloc[len(close) - len(supertrend):]
-
-    for i in range(1, len(supertrend)):
-        # print('testing', close[i], supertrend.iloc[i, 0])
-        if close[i] > supertrend.iloc[i, 0]:
-            upt.append(supertrend.iloc[i, 0])
-            dt.append(np.nan)
-        elif close[i] < supertrend.iloc[i, 0]:
-            upt.append(np.nan)
-            dt.append(supertrend.iloc[i, 0])
-        else:
-            upt.append(np.nan)
-            dt.append(np.nan)
-
-    st, upt, dt = pd.Series(supertrend.iloc[:, 0]), pd.Series(upt), pd.Series(dt)
-    
-    upt.index, dt.index = supertrend.index, supertrend.index
-    
-    return st, upt, dt
-    
-def get_signals(df, buy_thresh, sell_thresh):
-    '''during an uptrend as defined by 20ema being above 200ema and price 
-    being above st line, set 'trade ready'. if rsi subsequently drops below and 
-    then crosses back above x, trigger a buy.
-    if rsi goes above y and then crosses back below OR if price closes below 
-    st line, trigger a sell
-    * only conditions that actually trigger a trade need to be defined as a 
-    specific moment in time (eg a cross up or down), other conditions which set 
-    the stage should be more diffuse (eg price is above supertrend line). if 
-    there are several conditions which are only true on individual moments, 
-    the chances of them lining up are much lower, ie good trades will be missed.
-    im not looking for price crossing above the st line because that is not what 
-    triggers a buy, i only care whether it is above or below, but a cross BELOW
-    the st line will trigger a stop, so that condition must be a cross, not 
-    just a simple less-than'''
-    signals = [np.nan]
-    s_buy = [np.nan]
-    s_sell = [np.nan]
-    s_stop = [np.nan]
-    stop_price = 0
-    trade_ready = 0
-    in_pos = 0
-    buys = 0
-    sells = 0
-    stops = 0
-    for i in range(1, len(df)):
-        ### trade conditions
-        trend_up = (df.loc[i, '20ema'] > df.loc[i, '200ema'])
-        st_up = (df.close[i] > df.st[i]) # not a trigger so doesnt need to be a cross
-        cross_down = (df.close[i] < df.st[i]) and (df.close[i-1] >= df.st[i-1]) # this is a trigger so does need to be a cross
-        rsi_buy = (df.rsi[i] >= buy_thresh) and (df.rsi[i-1] < buy_thresh)
-        rsi_sell = (df.rsi[i] <= sell_thresh) and (df.rsi[i-1] > sell_thresh)
-            
-        if trend_up and st_up and in_pos == 0:
-            trade_ready = 1
-        else:
-            trade_ready = 0
-        
-        if trade_ready == 1 and rsi_buy:
-            sl = df.st[i] * 0.995
-            signals.append(f'buy, init stop @ {sl}')
-            stop_price = df.st[i]
-            s_buy.append(df.close[i])
-            s_sell.append(np.nan)
-            s_stop.append(np.nan)
-            in_pos = 1
-            buys += 1
-        elif in_pos and cross_down:
-            signals.append('stop')
-            s_buy.append(np.nan)
-            s_sell.append(np.nan)
-            s_stop.append(df.close[i-1])
-            in_pos = 0
-            stops += 1
-        elif in_pos and rsi_sell:
-            signals.append('sell')
-            s_buy.append(np.nan)
-            s_sell.append(df.close[i])
-            s_stop.append(np.nan)
-            in_pos = 0
-            sells += 1
-        else:
-            signals.append(np.nan)
-            s_buy.append(np.nan)
-            s_sell.append(np.nan)
-            s_stop.append(np.nan)
-
-        if in_pos == 1 and (df.st[i] > stop_price):
-            stop_price = df.st[i]
-            
-    
-    
-    df['signals'] = signals
-    
-    pos_list = [0, 0]
-    for p in range(1, len(df.index)):
-        if pd.isnull(df.at[p, 'signals']):
-            pos_list.append(pos_list[-1])
-        elif df.at[p, 'signals'][:3] == 'buy':
-            pos_list.append(1)
-        elif df.at[p, 'signals'] == 'sell':
-            pos_list.append(0)
-        elif df.at[p, 'signals'] == 'stop':
-            pos_list.append(0)
-        else:
-            pos_list.append(pos_list[-1])
-    
-    df['in_pos'] = pos_list[:-1]
-    
-    exe_price = []
-    for e in range(len(df.index)):
-        if pd.isnull(df.at[e, 'signals']):
-            exe_price.append(df.at[e, 'close'])
-        elif df.at[e, 'signals'] == 'stop':
-            exe_price.append(df.at[e-1, 'st'])
-        else:
-            exe_price.append(df.at[e, 'close'])
-    df['exe_price'] = exe_price
-    df['exe_roc'] = df['exe_price'].pct_change()
-    df['roc'] = df['close'].pct_change()
-    
-    evo = [1]
-    hodl_evo = [1]
-    for e in range(1, len(df.index)):
-        evo.append(evo[-1] * (1 + (df.at[e, 'exe_roc'] * df.at[e, 'in_pos'])))
-        hodl_evo.append(hodl_evo[-1] * (1 + (df.at[e, 'roc'])))
-    df['pnl_evo'] = evo
-    df['hodl_evo'] = hodl_evo
-    
-    # print(df.drop(['open', 'high', 'low', 'volume', 'st_u', 'st_d', 
-    #                '20ema', '200ema', 'rsi'], axis=1).tail())
-        
-    
-    sb, sse, sst = pd.Series(s_buy), pd.Series(s_sell), pd.Series(s_stop)
-    sb.index, sse.index, sst.index = df.index, df.index, df.index
-    return buys, sells, stops, sb, sse, sst
 
 def get_results(df):
     results = df.loc[df['signals'].notna(), ['timestamp', 'close', 'signals']]
@@ -324,6 +41,11 @@ def get_results(df):
     pnl_list = list(results['pnl'])
     return bal, pnl_list
 
+# TODO for every trade taken, the initial risk is known, so all outcomes of closed 
+# trades can be recorded as an R multiple. if i use that to calculate the average
+# trade pnl and standard deviation of trade pnls, i can create a consistency score
+# (median pnl / stdev pnl) based on R to optimise for
+
 if __name__ == '__main__':
     
     # assign variables
@@ -331,6 +53,8 @@ if __name__ == '__main__':
     lookback = 10
     multiplier = 3
     comm = 0.00075
+    
+    # TODO sort out all the paths to match setup_scanner
     abs_folder = Path('/home/ross/Documents/backtester_2021')
     results_folder = Path('results/smoothed_rsi_4h')
     if abs_folder.exists():
@@ -340,11 +64,11 @@ if __name__ == '__main__':
     
     #TODO make it record risk factor
     
-    pairs_usdt = get_pairs('USDT')
-    spreads_usdt = binance_spreads('USDT')
+    pairs_usdt = funcs.get_pairs('USDT')
+    spreads_usdt = funcs.binance_spreads('USDT')
     pairs_u = [p for p in pairs_usdt if spreads_usdt.get(p) < 0.01]
-    pairs_btc = get_pairs('BTC')
-    spreads_btc = binance_spreads('BTC')
+    pairs_btc = funcs.get_pairs('BTC')
+    spreads_btc = funcs.binance_spreads('BTC')
     pairs_b = [p for p in pairs_btc if spreads_btc.get(p) < 0.01]
     all_pairs = pairs_u + pairs_b
     done_pairs = [x.stem for x in res_path.glob('*.*')]
@@ -353,16 +77,16 @@ if __name__ == '__main__':
     
     for pair in pairs:
         # download data
-        df_full = get_ohlc(pair, timeframe)
+        df_full = funcs.get_ohlc(pair, timeframe)
         if len(df_full) <= 200:
             continue
         all_results = [df_full.volume.sum()]
-        print(f'{pair} num ohlc periods: {len(df_full)}, total volume: {df_full.volume.sum()}')
+        print(f'{pair} num ohlc periods: {len(df_full)}')
         for rsi_len in [3, 4, 5, 6, 7]:
             df = df_full.copy()
             start = time.perf_counter()
             # compute indicators
-            df['st'], df['st_u'], df['st_d'] = get_supertrend(df.high, df.low, df.close, lookback, multiplier)
+            df['st'], df['st_u'], df['st_d'] = ind.supertrend(df.high, df.low, df.close, lookback, multiplier)
             df['20ema'] = talib.EMA(df.close, 20)
             df['200ema'] = talib.EMA(df.close, 200)
             df['k_close'] = talib.EMA(df.close, 2)
@@ -381,7 +105,7 @@ if __name__ == '__main__':
             for x in os:
                 for y in ob:
                     try:
-                        buys, sells, stops, _, _, _ = get_signals(df, x, y)
+                        buys, sells, stops, _, _, _ = strats.get_signals(df, x, y)
                         bal, pnl_list = get_results(df)
                         pnl = (bal - 1) * 100
                         pnl_bth = pnl / hodl

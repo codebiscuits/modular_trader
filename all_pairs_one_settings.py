@@ -13,7 +13,10 @@ import talib
 import statistics as stats
 import time
 from pathlib import Path
-from rsi_optimising import get_pairs, get_ohlc, get_supertrend, get_signals, get_results
+from rsi_optimising import get_results
+import binance_funcs as funcs
+import indicators
+import strategies as strats
 from binance.client import Client
 
 plt.style.use('fivethirtyeight')
@@ -27,7 +30,7 @@ client = Client(keys.bPkey, keys.bSkey)
 all_start = time.perf_counter()
 
 
-pairs = get_pairs('USDT', 'SPOT')
+pairs = funcs.get_pairs('USDT', 'SPOT')
 not_pairs = ['GPBUSDT', 'BUSDUSDT', 'EURUSDT', 'TUSDUSDT', 'USDCUSDT', 'PAXUSDT', 'COCOSUSDT',
              'ADADOWNUSDT', 'LINKDOWNUSDT', 'BNBDOWNUSDT', 'ETHDOWNUSDT']
 
@@ -38,15 +41,19 @@ overbought = 96
 # pairs = ['BTCUSDT']
 
 for pair in pairs:
+
     #get data
-    df = get_ohlc(pair, '4h')
+
+    df = funcs.get_ohlc(pair, '4h')
     if len(df) <= 200:
         continue
     if pair in not_pairs:
         continue
     start = time.perf_counter()
+
     # compute indicators
-    df['st'], df['st_u'], df['st_d'] = get_supertrend(df.high, df.low, df.close, 10, 3)
+
+    df['st'], df['st_u'], df['st_d'] = indicators.supertrend(df.high, df.low, df.close, 10, 3)
     df['20ema'] = talib.EMA(df.close, 20)
     df['200ema'] = talib.EMA(df.close, 200)
     df['rsi'] = talib.RSI(df.close, rsi_length)
@@ -54,7 +61,7 @@ for pair in pairs:
     df.reset_index(drop=True, inplace=True)
     hodl = df['close'].iloc[-1] / df['close'].iloc[0]
     # generate signals
-    buys, sells, stops, df['s_buy'], df['s_sell'], df['s_stop'] = get_signals(df, oversold, overbought)
+    buys, sells, stops, df['s_buy'], df['s_sell'], df['s_stop'] = strats.get_signals(df, oversold, overbought)
     # calculate results
     pnl, pnl_list = get_results(df)
     # print(f'pnl list: {pnl_list}')
@@ -62,7 +69,13 @@ for pair in pairs:
                     # '20ema', '200ema', 'rsi'], axis=1).tail(200))
     pnl_bth = pnl / hodl
     print(f'{pair} trades: {sells+stops}, pnl: {pnl:.1f}x, hodl returns: {hodl:.1f}x, pnl compared to hodl: {pnl_bth:.1f}x')
+
     # plot results
+    # TODO i want the current plotting method to be one of two options. the other
+    # option is to plot all individual trades on one chart, aligned by the timestamp
+    # when they opened. it might also be useful to split the winners and losers 
+    # into two charts
+
     df = df.iloc[1:,]
     
     df.set_index('timestamp', inplace=True)

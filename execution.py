@@ -50,7 +50,6 @@ def get_depth(pair, side):
         asks = []
         for i in range(3):    
             tickers = client.get_orderbook_tickers()
-            # pprint(tickers)
             for t in tickers:
                 if t.get('symbol') == pair:
                     bids.append(float(t.get('bidQty')))
@@ -185,17 +184,17 @@ def buy_asset(pair, usdt_size):
     info = client.get_symbol_info(pair)
     step_size = float(info.get('filters')[2].get('stepSize'))
     order_size = round_step_size(size, step_size)
-    print(f'Buy Order - raw size: {size}, step size: {step_size}, final size: {order_size}')
+    print(f'{pair} Buy Order - raw size: {size}, step size: {step_size}, final size: {order_size}')
     
     order = client.create_order(symbol=pair, 
                                 side=SIDE_BUY, 
                                 type=ORDER_TYPE_MARKET,
                                 quantity=order_size)
-    print('-')
+    # print('-')
     return order
 
 def sell_asset(pair):
-    print(f'selling {pair}')
+    # print(f'selling {pair}')
     asset = pair[:-4]
     
     # request asset balance from binance
@@ -214,17 +213,17 @@ def sell_asset(pair):
     # TODO this rounding function needs to always round down here, i have 
     # subtracted step_size as a temporary fix
     order_size = round_step_size(asset_bal, step_size) - step_size
-    print(f'Sell Order - raw size: {asset_bal}, step size: {step_size}, final size: {order_size}')
+    print(f'{pair} Sell Order - raw size: {asset_bal}, step size: {step_size}, final size: {order_size}')
     
     order = client.create_order(symbol=pair, 
                                 side=SIDE_SELL, 
                                 type=ORDER_TYPE_MARKET,
                                 quantity=order_size)
-    print('-')
+    # print('-')
     return order
 
 def set_stop(pair, price):
-    print(f'setting {pair} stop @ {price}')
+    # print(f'setting {pair} stop @ {price}')
     asset = pair[:-4]
     
     info = client.get_symbol_info(pair)
@@ -248,7 +247,7 @@ def set_stop(pair, price):
     lower_price = price * (1 - (spread * 10))
     trigger_price = round_step_size(price, tick_size)
     limit_price = round_step_size(lower_price, tick_size)
-    print(f'Stop Order - trigger: {trigger_price}, limit: {limit_price}, size: {order_size}')
+    print(f'{pair} Stop Order - trigger: {trigger_price}, limit: {limit_price}, size: {order_size}')
     
     order = client.create_order(symbol=pair, 
                                 side=SIDE_SELL, 
@@ -257,7 +256,7 @@ def set_stop(pair, price):
                                 stopPrice=trigger_price,
                                 quantity=order_size, 
                                 price=limit_price)
-    print('-')
+    # print('-')
     return order
 
 def clear_stop(pair):
@@ -266,4 +265,4 @@ def clear_stop(pair):
     ord_id = orders[0].get('orderId')
     result = client.cancel_order(symbol=pair, orderId=ord_id)
     print(result.get('status'))
-    print('-')
+    # print('-')
