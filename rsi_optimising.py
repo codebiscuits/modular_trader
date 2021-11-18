@@ -11,7 +11,7 @@ from pathlib import Path
 import binance_funcs as funcs
 import indicators as ind
 import strategies as strats
-from config import not_pairs
+from config import not_pairs, ohlc_data, results_data
 
 
 client = Client(keys.bPkey, keys.bSkey)
@@ -55,12 +55,9 @@ if __name__ == '__main__':
     comm = 0.00075
     
     # TODO sort out all the paths to match setup_scanner
-    abs_folder = Path('/home/ross/Documents/backtester_2021')
-    results_folder = Path('results/smoothed_rsi_4h')
-    if abs_folder.exists():
-        res_path = Path(abs_folder / results_folder)
-    else:
-        res_path = results_folder
+    results_folder = Path('rsi_st_ema/smoothed_rsi_4h')
+    res_path = results_data / results_folder
+    res_path.mkdir(parents=True, exist_ok=True)
     
     #TODO make it record risk factor
     
@@ -76,8 +73,10 @@ if __name__ == '__main__':
     pairs = [p for p in all_pairs if not p in bad_pairs]
     
     for pair in pairs:
+        ohlc_path = Path(f'{ohlc_data}/{pair}.pkl')
         # download data
-        df_full = funcs.get_ohlc(pair, timeframe)
+        # df_full = funcs.get_ohlc(pair, timeframe)
+        df_full = pd.read_pickle(ohlc_path)
         if len(df_full) <= 200:
             continue
         all_results = [df_full.volume.sum()]

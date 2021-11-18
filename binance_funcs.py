@@ -6,8 +6,10 @@ import pandas as pd
 from binance.client import Client
 import binance.enums as enums
 from binance.helpers import round_step_size
+from pushbullet import Pushbullet
 
 client = Client(keys.bPkey, keys.bSkey)
+pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 ### Account Functions
 
@@ -401,12 +403,35 @@ def buy_asset(pair, usdt_size):
                                 side=enums.SIDE_BUY, 
                                 type=enums.ORDER_TYPE_MARKET,
                                 quantity=order_size)
+    
+    fills = order.get('fills')
+    fee = 0
+    exe_prices = []
+    for fill in fills:
+        fee += float(fill.get('commission'))
+        exe_prices.append(float(fill.get('price')))
+    avg_price = stats.mean(exe_prices)
+    
+    trade_dict = {'timestamp': order.get('transactTime'), 
+                  'pair': order.get('symbol'), 
+                  'side': order.get('side'), 
+                  'trig_price': usdt_price, 
+                  'exe_price': avg_price, 
+                  'base_size': float(order.get('executedQty')), 
+                  'quote_size': float(order.get('cummulativeQuoteQty')), 
+                  'fee': fee, 
+                  'fee_currency': fills[0].get('commissionAsset')
+                  }
+    if order.get('status') != 'FILLED':
+        print(f'{pair} order not filled')
+        pb.push_note('Warning', f'{pair} order not filled')
     # print('-')
-    return order
+    return trade_dict
 
 def sell_asset(pair):
     # print(f'selling {pair}')
     asset = pair[:-4]
+    usdt_price = get_price(pair)
     
     # request asset balance from binance
     info = client.get_account()
@@ -430,8 +455,30 @@ def sell_asset(pair):
                                 side=enums.SIDE_SELL, 
                                 type=enums.ORDER_TYPE_MARKET,
                                 quantity=order_size)
+    
+    fills = order.get('fills')
+    fee = 0
+    exe_prices = []
+    for fill in fills:
+        fee += float(fill.get('commission'))
+        exe_prices.append(float(fill.get('price')))
+    avg_price = stats.mean(exe_prices)
+    
+    trade_dict = {'timestamp': order.get('transactTime'), 
+                  'pair': order.get('symbol'), 
+                  'side': order.get('side'), 
+                  'trig_price': usdt_price, 
+                  'exe_price': avg_price, 
+                  'base_size': float(order.get('executedQty')), 
+                  'quote_size': float(order.get('cummulativeQuoteQty')), 
+                  'fee': fee, 
+                  'fee_currency': fills[0].get('commissionAsset')
+                  }
+    if order.get('status') != 'FILLED':
+        print(f'{pair} order not filled')
+        pb.push_note('Warning', f'{pair} order not filled')
     # print('-')
-    return order
+    return trade_dict
 
 def set_stop(pair, price):
     # print(f'setting {pair} stop @ {price}')
@@ -467,6 +514,8 @@ def set_stop(pair, price):
                                 stopPrice=trigger_price,
                                 quantity=order_size, 
                                 price=limit_price)
+    
+    
     # print('-')
     return order
 

@@ -17,6 +17,7 @@ from rsi_optimising import get_results
 import binance_funcs as funcs
 import indicators
 import strategies as strats
+from config import not_pairs, ohlc_data
 from binance.client import Client
 
 plt.style.use('fivethirtyeight')
@@ -31,8 +32,6 @@ all_start = time.perf_counter()
 
 
 pairs = funcs.get_pairs('USDT', 'SPOT')
-not_pairs = ['GPBUSDT', 'BUSDUSDT', 'EURUSDT', 'TUSDUSDT', 'USDCUSDT', 'PAXUSDT', 'COCOSUSDT',
-             'ADADOWNUSDT', 'LINKDOWNUSDT', 'BNBDOWNUSDT', 'ETHDOWNUSDT']
 
 rsi_length = 4
 oversold = 45
@@ -41,18 +40,21 @@ overbought = 96
 # pairs = ['BTCUSDT']
 
 for pair in pairs:
+    start = time.perf_counter()
 
     #get data
-
-    df = funcs.get_ohlc(pair, '4h')
+    filepath = Path(f'{ohlc_data}/{pair}.pkl')
+    df = pd.read_pickle(filepath)
     if len(df) <= 200:
         continue
     if pair in not_pairs:
         continue
-    start = time.perf_counter()
-
+    
     # compute indicators
-
+    
+    if len(df) > 2190: # 2190 is 1 year's worth of 4h periods
+        df = df.iloc[-2190:,]
+        df.reset_index(drop=True, inplace=True)
     df['st'], df['st_u'], df['st_d'] = indicators.supertrend(df.high, df.low, df.close, 10, 3)
     df['20ema'] = talib.EMA(df.close, 20)
     df['200ema'] = talib.EMA(df.close, 200)

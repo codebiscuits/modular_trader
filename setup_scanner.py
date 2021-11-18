@@ -15,7 +15,7 @@ import strategies as strats
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 from pushbullet import Pushbullet
-from config import not_pairs
+from config import not_pairs, ohlc_data, market_data
 
 # TODO need to sort out error handling
 
@@ -43,20 +43,21 @@ oversold = 45
 overbought = 96
 fixed_risk = 0.004
 max_length = 250
+current_strat = 'rsi_st_ema'
 
-# absolute paths
-pi_ohlc_bin = Path('/mnt/2tb_ssd/coding/ohlc_binance_4h')
-lap_ohlc_bin = Path('/home/ross/Documents/backtester_2021/ohlc_data')
-desk_ohlc_bin = Path('/home/projects/ohlc_binance_4h')
-for ohlc_path in [pi_ohlc_bin, lap_ohlc_bin, desk_ohlc_bin]:
-    if ohlc_path.exists():
-        ohlc_data = ohlc_path
-pi_md = Path('/mnt/2tb_ssd/coding/market_data')
-lap_md = Path('/home/ross/Documents/market_data')
-desk_md = Path('/home/projects/market_data')
-for md_path in [pi_md, lap_md, desk_md]:
-    if md_path.exists():
-        market_data = md_path
+# # absolute paths
+# pi_ohlc_bin = Path('/mnt/2tb_ssd/coding/ohlc_binance_4h')
+# lap_ohlc_bin = Path('/home/ross/Documents/ohlc_4h_data')
+# desk_ohlc_bin = Path('/home/projects/ohlc_binance_4h')
+# for ohlc_path in [pi_ohlc_bin, lap_ohlc_bin, desk_ohlc_bin]:
+#     if ohlc_path.exists():
+#         ohlc_data = ohlc_path
+# pi_md = Path('/mnt/2tb_ssd/coding/market_data')
+# lap_md = Path('/home/ross/Documents/market_data')
+# desk_md = Path('/home/projects/market_data')
+# for md_path in [pi_md, lap_md, desk_md]:
+#     if md_path.exists():
+#         market_data = md_path
 
 # create pairs list
 all_pairs = funcs.get_pairs('USDT', 'SPOT') # list
@@ -80,11 +81,18 @@ for pair in pairs:
     filepath = Path(f'{ohlc_data}/{pair}.pkl')
     if filepath.exists():
         df = pd.read_pickle(filepath)
+        df = df.iloc[:-1,]
         df = funcs.update_ohlc(pair, '4h', df)
     else:
-        df = funcs.get_ohlc(pair, '4h', '35 days ago UTC')
+        df = funcs.get_ohlc(pair, '4h', '1 year ago UTC')
+    if len(df) > 2190: # 2190 is 1 year's worth of 4h periods
+        df = df.iloc[-2190:,]
+        df.reset_index(drop=True, inplace=True)
+    df.to_pickle(filepath)
+    
     if len(df) <= 200 and positions.get(pair) == 0:
         continue
+    
     if len(df) > max_length:
         df = df.iloc[-1*max_length:,]
         df.reset_index(drop=True, inplace=True)
@@ -122,21 +130,20 @@ for pair in pairs:
         if rsi_sell:
             note = f"*** {now} sell {pair} @ {price}"
             print(now, note)
-            # push = pb.push_note(now, note)
+            push = pb.push_note(now, note)
             funcs.clear_stop(pair)
-            funcs.sell_asset(pair)
-            trade_notes.append(note)
+            sell_order = funcs.sell_asset(pair)
+            trade_notes.append(sell_order)
         elif st_down:
             note = f"*** {now} sell (stop) {pair} @ {price}"
             print(now, note)
-            # push = pb.push_note(now, note)
+            push = pb.push_note(now, note)
             funcs.clear_stop(pair)
-            funcs.sell_asset(pair)
-            trade_notes.append(note)
+            sell_order = funcs.sell_asset(pair)
+            trade_notes.append(sell_order)
     else:
         if trend_up and st_up and rsi_buy:
-            # print(f'{now} potential {pair} buy signal')
-            stp = df.at[len(df)-1, 'st']
+            stp = df.at[len(df)-1, 'st'] # TODO incorporate spread into this
             risk = (price - stp) / price
             # if risk > 0.1:
             #     print(f'{now} {pair} signal, too far from invalidation ({risk * 100:.1f}%)')
@@ -155,28 +162,20 @@ for pair in pairs:
                 print(f'{now} {pair} signal, size too small to trade ({usdt_size:.3}USDT)')
             if enough_usdt and enough_size and enough_depth:
                 note = f"buy {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
-                # push = pb.push_note(now, note)
+                push = pb.push_note(now, note)
                 print(now, note)
                 # TODO these try/except blocks could maybe go inside the functions
                 try:
-                    funcs.buy_asset(pair, usdt_size)
+                    buy_order = funcs.buy_asset(pair, usdt_size)
+                    trade_notes.append(buy_order)
+                    stop_order = funcs.set_stop(pair, stp)
+                    trade_notes.append(stop_order)
                 except 'BinanceAPIException' as e:
-                    print(f'problem with buy order for {pair}')
+                    print(f'problem with order for {pair}')
                     print(e)
-                try:
-                    funcs.set_stop(pair, stp)
-                except 'BinanceAPIException' as e:
-                    print(f'problem with stop order for {pair}')
-                    print(e)
-                trade_notes.append(note)
+                
                     
                 # TODO maybe have a plot rendered and saved every time a trade is triggered
-                    
-        
-            
-    
-    df = df.iloc[:-1,]
-    df.to_pickle(filepath)
 
 
 # check total balance and record it in a file for analysis
@@ -191,11 +190,11 @@ with open(f"{market_data}/rsi-st-ema_bal_history.txt", "a") as file:
     file.write(new_line)
     file.write('\n')
 
-# # save a json of any trades that have happened with relevant data
-# all_trades = {now: trade_notes}
-# with open(f"{market_data}/{current_strat}_trades.txt", "a") as file:
-#     file.write(json.dumps(all_trades))
-#     file.write('\n')
+# save a json of any trades that have happened with relevant data
+with open(f"{market_data}/{current_strat}_trades.txt", "a") as file:
+    for trade in trade_notes:
+        file.write(json.dumps(trade))
+        file.write('\n')
 
 # record spreads and depths for other analysis
 stamped_spreads = {'timestamp': now_start, 'spreads': spreads}
@@ -212,3 +211,4 @@ with open(f"{market_data}/binance_depths_history.txt", "a") as file:
 all_end = time.perf_counter()
 all_time = all_end - all_start
 print(f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s')
+push = pb.push_note(now, 'Setup Scanner Finished')
