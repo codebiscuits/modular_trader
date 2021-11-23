@@ -4,6 +4,7 @@ import json
 import statistics as stats
 from pathlib import Path
 import matplotlib.pyplot as plt
+from config import results_data
 
 plt.style.use('fivethirtyeight')
 plt.rcParams['figure.figsize'] = (20,10)
@@ -11,10 +12,10 @@ plt.rcParams['figure.figsize'] = (20,10)
 pd.set_option('display.max_rows', None) 
 pd.set_option('display.expand_frame_repr', False)
 
-folder = 'results/rsi_results_1h'
+folder = f'{results_data}/rsi_st_ema/smoothed_rsi_4h'
 
 quote = 'USDT'
-rsi_length = 3
+rsi_length = 6
 oversold = 45
 overbought = 96
 min_trades = 30
@@ -34,12 +35,13 @@ for pair in pairs:
     usdt_results.extend(data[1:])
 
 df = pd.DataFrame(usdt_results)
+# print(df.head().drop('pnl_list', axis=1))
 
 # print(df.columns)
 
 # print(df.head())
 
-print(f'results for rsi length {rsi_length}')
+print(f'\n\nresults for rsi length {rsi_length}')
 
 df.drop(df.index[df['pair'] == 'COCOSUSDT'], inplace=True)
 
@@ -54,11 +56,15 @@ df.drop(df.index[df['buys'] < min_trades], inplace=True)
 wins = df.loc[df['tot_pnl'] > 0]
 losses = df.loc[df['tot_pnl'] <= 0]
 
-df['var'] = df['pnl_list'].apply(stats.stdev)
+df['pnl_var'] = df['pnl_list'].apply(stats.stdev)
+
+df['r_var'] = df['r_list'].apply(stats.stdev)
 
 df['exit_ratio'] = df['sells'] / df['stops']
 
 df['avg_pnl'] = df['pnl_list'].apply(stats.mean)
+
+df['avg_r'] = df['r_list'].apply(stats.mean)
 
 df['num_trades'] = df['pnl_list'].apply(len)
 
@@ -66,26 +72,26 @@ df['num_trades'] = df['pnl_list'].apply(len)
 
 # df.drop(df.index[df['tot_pnl'] > 1000], inplace=True)
 
-print(f'results after dropping: {len(df)}')
+print(f'# of results after dropping rows: {len(df)}')
 
-pair_groups = df.groupby('pair')['avg_pnl'].median()
+pair_groups = df.groupby('pair')['avg_r'].median()
 # print(pair_groups)
 # print(f'pairs left: {len(pair_groups.index)}')
-print(f'avg trade pnl: {pair_groups.median():.4}')
+print(f'avg r per trade: {pair_groups.median():.4}')
 
-print('med tot pnl', df.tot_pnl.median())
-print('med avg pnl', df.avg_pnl.median())
+# print('med tot pnl', df.tot_pnl.median())
+print('med avg r', df.avg_r.median())
 
 print('max trades', df.buys.max())
 
 # print(df)
 
-rsi_groups1 = df.groupby(['rsi_os', 'rsi_ob'])[['avg_pnl', 'var']].median()
+rsi_groups1 = df.groupby(['rsi_os', 'rsi_ob'])[['avg_r', 'r_var']].median()
 rsi_groups2 = df.groupby(['rsi_os', 'rsi_ob'])[['num_trades']].sum()
 group_size = df.groupby(['rsi_os', 'rsi_ob']).size().to_frame(name='count')
 rsi_groups = pd.concat([rsi_groups1, rsi_groups2, group_size], axis=1)
-rsi_groups.drop(rsi_groups.index[rsi_groups['avg_pnl'] < 0], inplace=True)
-rsi_groups['score'] = rsi_groups['avg_pnl'] / rsi_groups['var']
+rsi_groups.drop(rsi_groups.index[rsi_groups['avg_r'] < 0], inplace=True)
+rsi_groups['score'] = rsi_groups['avg_r'] / rsi_groups['r_var']
 
 print(rsi_groups.sort_values('score', ascending=False).head())
 

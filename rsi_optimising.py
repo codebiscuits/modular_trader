@@ -22,6 +22,17 @@ def get_results(df):
     results = df.loc[df['signals'].notna(), ['timestamp', 'close', 'signals']]
     results.reset_index(drop=True, inplace=True)
     
+    sl = []
+    for r in results['signals']:
+        if r[:3] == 'buy':
+            sl.append(float(r[17:]))
+        else:
+            sl.append(np.nan)
+    results['stop-loss'] = sl
+    
+    results['r'] = (results['close'] - results['stop-loss']) / results['close']
+    results.drop('stop-loss', axis=1)
+    results['r'] = results['r'].shift(1)
     results['roc'] = results['close'].pct_change()
     results['roc'] = results['roc'] - 0.0015 # subtract two * binance fees from 
     results['pnl'] = results['roc'] * 100
@@ -31,6 +42,7 @@ def get_results(df):
     # opening and closing positions in full, every second signal will 
     # be a position close. they are the only ones im interested in
     results.reset_index(drop=True, inplace=True)
+    results['r_multiple'] = results['roc'] / results['r']
     results.drop('roc', axis=1, inplace=True)
     # print(results)
     bal = 1.0
@@ -39,7 +51,8 @@ def get_results(df):
     # print(f'final pnl: {bal:.4}')
     # med_pnl = results['pnl'].median()
     pnl_list = list(results['pnl'])
-    return bal, pnl_list
+    r_list = list(results['r_multiple'])
+    return bal, pnl_list, r_list
 
 # TODO for every trade taken, the initial risk is known, so all outcomes of closed 
 # trades can be recorded as an R multiple. if i use that to calculate the average
@@ -105,7 +118,7 @@ if __name__ == '__main__':
                 for y in ob:
                     try:
                         buys, sells, stops, _, _, _ = strats.get_signals(df, x, y)
-                        bal, pnl_list = get_results(df)
+                        bal, pnl_list, r_list = get_results(df)
                         pnl = (bal - 1) * 100
                         pnl_bth = pnl / hodl
                         num_trades = (sells + stops)
@@ -114,6 +127,7 @@ if __name__ == '__main__':
                                     'rsi_os': x, 'rsi_ob': y, 
                                     'tot_pnl': pnl, 'pnl_bth': pnl_bth, 
                                     'pnl_list': pnl_list,# 'sqn': sqn, 
+                                    'r_list': r_list, 
                                     'buys': buys, 'sells': sells, 'stops': stops, 
                                     'tot_volu': df.volume.sum(), 
                                     'tot_stdev': stats.stdev(df.close), 

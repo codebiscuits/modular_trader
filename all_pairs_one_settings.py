@@ -64,13 +64,14 @@ for pair in pairs:
     hodl = df['close'].iloc[-1] / df['close'].iloc[0]
     # generate signals
     buys, sells, stops, df['s_buy'], df['s_sell'], df['s_stop'] = strats.get_signals(df, oversold, overbought)
+    
     # calculate results
-    pnl, pnl_list = get_results(df)
+    pnl, pnl_list, r_list = get_results(df)
     # print(f'pnl list: {pnl_list}')
     # print(df.drop(['open', 'high', 'low', 'volume', 'st_u', 'st_d', 
                     # '20ema', '200ema', 'rsi'], axis=1).tail(200))
     pnl_bth = pnl / hodl
-    print(f'{pair} trades: {sells+stops}, pnl: {pnl:.1f}x, hodl returns: {hodl:.1f}x, pnl compared to hodl: {pnl_bth:.1f}x')
+    print(f'{pair} trades: {sells+stops}, pnl: {pnl:.1f}x, hodl returns: {hodl:.1f}x, avg r multiple: {stats.mean(r_list):.3}')
 
     # plot results
     # TODO i want the current plotting method to be one of two options. the other
