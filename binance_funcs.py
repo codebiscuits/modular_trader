@@ -5,11 +5,22 @@ import statistics as stats
 import pandas as pd
 from binance.client import Client
 import binance.enums as enums
-from binance.helpers import round_step_size
 from pushbullet import Pushbullet
+from decimal import Decimal
+from pprint import pprint
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
+
+
+### Utility Functions
+
+
+def step_round(x, step):
+    x = Decimal(x)
+    step = Decimal(step)
+    
+    return round(x / step) * step
 
 ### Account Functions
 
@@ -358,22 +369,28 @@ def update_ohlc(pair, timeframe, old_df):
 ### Trading Functions
 
 
-def top_up_bnb(size):
+def top_up_bnb(usdt_size):
     bnb_bal = client.get_asset_balance(asset='BNB')
     free_bnb = float(bnb_bal.get('free'))
     avg_price = client.get_avg_price(symbol='BNBUSDT')
     price = float(avg_price.get('price'))
     bnb_value = free_bnb * price
     
-    usdt_bal = client.get_asset_balance(asset='BNB')
+    info = client.get_symbol_info('BNBUSDT')
+    step_size = info.get('filters')[2].get('stepSize')
+    
+    usdt_bal = client.get_asset_balance(asset='USDT')
     free_usdt = float(usdt_bal.get('free'))
-    if bnb_value < 5 and free_usdt > size:
+    bnb_size = step_round(usdt_size / price, step_size)
+    if bnb_value < 5 and free_usdt > usdt_size:
         print('Topping up BNB')
         order = client.create_order(symbol='BNBUSDT', 
                                     side=enums.SIDE_BUY, 
                                     type=enums.ORDER_TYPE_MARKET,
-                                    quantity=size)
+                                    quantity=bnb_size)
+            
     else:
+        print(f'Didnt top up BNB, current val: {bnb_value}, free usdt: {free_usdt}')
         order = None
     return order
         
@@ -395,8 +412,8 @@ def buy_asset(pair, usdt_size):
     
     # make sure order size has the right number of decimal places
     info = client.get_symbol_info(pair)
-    step_size = float(info.get('filters')[2].get('stepSize'))
-    order_size = round_step_size(size, step_size)
+    step_size = info.get('filters')[2].get('stepSize')
+    order_size = step_round(size, step_size)
     print(f'{pair} Buy Order - raw size: {size}, step size: {step_size}, final size: {order_size}')
     
     order = client.create_order(symbol=pair, 
@@ -445,10 +462,10 @@ def sell_asset(pair):
     
     # make sure order size has the right number of decimal places
     info = client.get_symbol_info(pair)
-    step_size = float(info.get('filters')[2].get('stepSize'))
+    step_size = info.get('filters')[2].get('stepSize')
     # TODO this rounding function needs to always round down here, i have 
     # subtracted step_size as a temporary fix
-    order_size = round_step_size(asset_bal, step_size) - step_size
+    order_size = step_round(asset_bal, step_size) - step_size
     print(f'{pair} Sell Order - raw size: {asset_bal}, step size: {step_size}, final size: {order_size}')
     
     order = client.create_order(symbol=pair, 
@@ -485,8 +502,8 @@ def set_stop(pair, price):
     asset = pair[:-4]
     
     info = client.get_symbol_info(pair)
-    tick_size = float(info.get('filters')[0].get('tickSize'))
-    step_size = float(info.get('filters')[2].get('stepSize'))
+    tick_size = info.get('filters')[0].get('tickSize')
+    step_size = info.get('filters')[2].get('stepSize')
     
     info = client.get_account()
     bals = info.get('balances')
@@ -500,11 +517,11 @@ def set_stop(pair, price):
     info = client.get_symbol_info(pair)
     # TODO this rounding function needs to always round down here, i have 
     # subtracted step_size as a temporary fix
-    order_size = round_step_size(asset_bal, step_size) - step_size
+    order_size = step_round(asset_bal, step_size) - Decimal(step_size)
     spread = get_spread(pair)
     lower_price = price * (1 - (spread * 10))
-    trigger_price = round_step_size(price, tick_size)
-    limit_price = round_step_size(lower_price, tick_size)
+    trigger_price = step_round(price, tick_size)
+    limit_price = step_round(lower_price, tick_size)
     print(f'{pair} Stop Order - trigger: {trigger_price}, limit: {limit_price}, size: {order_size}')
     
     order = client.create_order(symbol=pair, 

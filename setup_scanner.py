@@ -41,23 +41,9 @@ all_start = time.perf_counter()
 rsi_length = 4
 oversold = 45
 overbought = 96
-fixed_risk = 0.004
+fixed_risk = 0.003
 max_length = 250
 current_strat = 'rsi_st_ema'
-
-# # absolute paths
-# pi_ohlc_bin = Path('/mnt/2tb_ssd/coding/ohlc_binance_4h')
-# lap_ohlc_bin = Path('/home/ross/Documents/ohlc_4h_data')
-# desk_ohlc_bin = Path('/home/projects/ohlc_binance_4h')
-# for ohlc_path in [pi_ohlc_bin, lap_ohlc_bin, desk_ohlc_bin]:
-#     if ohlc_path.exists():
-#         ohlc_data = ohlc_path
-# pi_md = Path('/mnt/2tb_ssd/coding/market_data')
-# lap_md = Path('/home/ross/Documents/market_data')
-# desk_md = Path('/home/projects/market_data')
-# for md_path in [pi_md, lap_md, desk_md]:
-#     if md_path.exists():
-#         market_data = md_path
 
 # create pairs list
 all_pairs = funcs.get_pairs('USDT', 'SPOT') # list
@@ -69,7 +55,7 @@ now_start = datetime.now().strftime('%d/%m/%y %H:%M')
 
 print(f'Current time: {now_start}, rsi: {rsi_length}-{oversold}-{overbought}, fixed risk: {fixed_risk}')
 
-funcs.top_up_bnb(10)
+funcs.top_up_bnb(15)
 
 trade_notes = []
 
@@ -81,8 +67,9 @@ for pair in pairs:
     filepath = Path(f'{ohlc_data}/{pair}.pkl')
     if filepath.exists():
         df = pd.read_pickle(filepath)
-        df = df.iloc[:-1,]
-        df = funcs.update_ohlc(pair, '4h', df)
+        if len(df) > 1:
+            df = df.iloc[:-1,]
+            df = funcs.update_ohlc(pair, '4h', df)
     else:
         df = funcs.get_ohlc(pair, '4h', '1 year ago UTC')
     if len(df) > 2190: # 2190 is 1 year's worth of 4h periods
@@ -153,7 +140,7 @@ for pair in pairs:
             usdt_depth = funcs.get_depth(pair, 'buy')
             enough_depth = usdt_depth >= usdt_size
             enough_usdt = usdt_bal > usdt_size
-            enough_size = usdt_size > (10 * (1 + risk)) # this ensures size will be big enough for init stop to be set
+            enough_size = usdt_size > (12 * (1 + risk)) # this ensures size will be big enough for init stop to be set
             if not enough_depth:
                 print(f'{now} {pair} signal, books too thin for {usdt_size:.3}USDT buy')
             if not enough_usdt:
