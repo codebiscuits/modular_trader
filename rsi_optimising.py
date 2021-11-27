@@ -22,6 +22,8 @@ def get_results(df):
     results = df.loc[df['signals'].notna(), ['timestamp', 'close', 'signals']]
     results.reset_index(drop=True, inplace=True)
     
+    # TODO create a 'stop_loss' column at the point where these signals are 
+    # generated instead of reconstructing it here
     sl = []
     for r in results['signals']:
         if r[:3] == 'buy':
@@ -54,21 +56,16 @@ def get_results(df):
     r_list = list(results['r_multiple'])
     return bal, pnl_list, r_list
 
-# TODO for every trade taken, the initial risk is known, so all outcomes of closed 
-# trades can be recorded as an R multiple. if i use that to calculate the average
-# trade pnl and standard deviation of trade pnls, i can create a consistency score
-# (median pnl / stdev pnl) based on R to optimise for
-
 if __name__ == '__main__':
     
     # assign variables
     timeframe = '4h'
     lookback = 10
-    multiplier = 3
+    multiplier = 1
     comm = 0.00075
     
     # TODO sort out all the paths to match setup_scanner
-    results_folder = Path('rsi_st_ema/smoothed_rsi_4h')
+    results_folder = Path('rsi_st_ema/smoothed_rsi_4h_mult-1')
     res_path = results_data / results_folder
     res_path.mkdir(parents=True, exist_ok=True)
     
@@ -88,8 +85,10 @@ if __name__ == '__main__':
     for pair in pairs:
         ohlc_path = Path(f'{ohlc_data}/{pair}.pkl')
         # download data
-        # df_full = funcs.get_ohlc(pair, timeframe)
-        df_full = pd.read_pickle(ohlc_path)
+        if ohlc_path.exists():
+            df_full = pd.read_pickle(ohlc_path)
+        else:
+            continue
         if len(df_full) <= 200:
             continue
         all_results = [df_full.volume.sum()]
@@ -103,7 +102,8 @@ if __name__ == '__main__':
             df['200ema'] = talib.EMA(df.close, 200)
             df['k_close'] = talib.EMA(df.close, 2)
             df['rsi'] = talib.RSI(df.k_close, rsi_len)
-            # df[f'volatil20'] = df['close'].rolling(20).stdev()
+            # df['volatil20'] = df['close'].rolling(20).stdev()
+            # df['50ma_volu'] =  df['volume'].rolling(50).mean()
             df = df.iloc[200:,]
             df.reset_index(drop=True, inplace=True)
             hodl = df['close'].iloc[-1] / df['close'].iloc[0]
@@ -129,7 +129,7 @@ if __name__ == '__main__':
                                     'pnl_list': pnl_list,# 'sqn': sqn, 
                                     'r_list': r_list, 
                                     'buys': buys, 'sells': sells, 'stops': stops, 
-                                    'tot_volu': df.volume.sum(), 
+                                    'avg_volu': df.volume.mean(), 
                                     'tot_stdev': stats.stdev(df.close), 
                                     'ohlc_len': len(df), 
                                     'v_cand_len': len(df)

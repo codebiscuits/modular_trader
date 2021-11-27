@@ -390,7 +390,7 @@ def top_up_bnb(usdt_size):
                                     quantity=bnb_size)
             
     else:
-        print(f'Didnt top up BNB, current val: {bnb_value}, free usdt: {free_usdt}')
+        print(f'Didnt top up BNB, current val: {bnb_value:.3} USDT, free usdt: {free_usdt:.2f} USDT')
         order = None
     return order
         
@@ -462,7 +462,7 @@ def sell_asset(pair):
     
     # make sure order size has the right number of decimal places
     info = client.get_symbol_info(pair)
-    step_size = info.get('filters')[2].get('stepSize')
+    step_size = Decimal(info.get('filters')[2].get('stepSize'))
     # TODO this rounding function needs to always round down here, i have 
     # subtracted step_size as a temporary fix
     order_size = step_round(asset_bal, step_size) - step_size
@@ -537,11 +537,18 @@ def set_stop(pair, price):
     return order
 
 def clear_stop(pair):
+    '''blindly cancels the first resting order relating to the pair in question.
+    works as a "clear stop" function only when the strategy sets one 
+    stop-loss per position and uses no other resting orders'''
+    
     print(f'cancelling {pair} stop')
     orders = client.get_open_orders(symbol=pair)
-    ord_id = orders[0].get('orderId')
-    result = client.cancel_order(symbol=pair, orderId=ord_id)
-    print(result.get('status'))
+    if orders:
+        ord_id = orders[0].get('orderId')
+        result = client.cancel_order(symbol=pair, orderId=ord_id)
+        print(result.get('status'))
+    else:
+        print('no stop to cancel')
     # print('-')
 
 

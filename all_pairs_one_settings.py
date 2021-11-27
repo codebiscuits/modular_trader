@@ -33,9 +33,9 @@ all_start = time.perf_counter()
 
 pairs = funcs.get_pairs('USDT', 'SPOT')
 
-rsi_length = 4
-oversold = 45
-overbought = 96
+rsi_length = 6
+oversold = 55
+overbought = 84
 
 # pairs = ['BTCUSDT']
 
@@ -58,7 +58,8 @@ for pair in pairs:
     df['st'], df['st_u'], df['st_d'] = indicators.supertrend(df.high, df.low, df.close, 10, 3)
     df['20ema'] = talib.EMA(df.close, 20)
     df['200ema'] = talib.EMA(df.close, 200)
-    df['rsi'] = talib.RSI(df.close, rsi_length)
+    df['k_close'] = talib.EMA(df.close, 2)
+    df['rsi'] = talib.RSI(df.k_close, rsi_length)
     df = df.iloc[200:,]
     df.reset_index(drop=True, inplace=True)
     hodl = df['close'].iloc[-1] / df['close'].iloc[0]
