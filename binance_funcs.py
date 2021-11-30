@@ -15,12 +15,11 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 ### Utility Functions
 
-
 def step_round(x, step):
     x = Decimal(x)
     step = Decimal(step)
     
-    return round(x / step) * step
+    return math.floor(x / step) * step
 
 ### Account Functions
 
@@ -29,7 +28,16 @@ def account_bal():
     info = client.get_account()
     bals = info.get('balances')
     
-    prices = client.get_all_tickers()
+    # TODO need to find a better way of handling the readtimeout error that 
+    # get_all_tickers sometimes produces
+    x = 0
+    while x < 10:
+        try:
+            prices = client.get_all_tickers()
+            x = 10
+        except:
+            x += 1
+            continue
     price_dict = {x.get('symbol') : float(x.get('price')) for x in prices}
     
     total = 0
@@ -412,7 +420,7 @@ def buy_asset(pair, usdt_size):
     
     # make sure order size has the right number of decimal places
     info = client.get_symbol_info(pair)
-    step_size = info.get('filters')[2].get('stepSize')
+    step_size = Decimal(info.get('filters')[2].get('stepSize'))
     order_size = step_round(size, step_size)
     print(f'{pair} Buy Order - raw size: {size}, step size: {step_size}, final size: {order_size}')
     
@@ -463,9 +471,7 @@ def sell_asset(pair):
     # make sure order size has the right number of decimal places
     info = client.get_symbol_info(pair)
     step_size = Decimal(info.get('filters')[2].get('stepSize'))
-    # TODO this rounding function needs to always round down here, i have 
-    # subtracted step_size as a temporary fix
-    order_size = step_round(asset_bal, step_size) - step_size
+    order_size = step_round(asset_bal, step_size)# - step_size
     print(f'{pair} Sell Order - raw size: {asset_bal}, step size: {step_size}, final size: {order_size}')
     
     order = client.create_order(symbol=pair, 
@@ -503,7 +509,7 @@ def set_stop(pair, price):
     
     info = client.get_symbol_info(pair)
     tick_size = info.get('filters')[0].get('tickSize')
-    step_size = info.get('filters')[2].get('stepSize')
+    step_size = Decimal(info.get('filters')[2].get('stepSize'))
     
     info = client.get_account()
     bals = info.get('balances')
@@ -515,9 +521,7 @@ def set_stop(pair, price):
                 asset_bal = float(b.get('free'))
     
     info = client.get_symbol_info(pair)
-    # TODO this rounding function needs to always round down here, i have 
-    # subtracted step_size as a temporary fix
-    order_size = step_round(asset_bal, step_size) - Decimal(step_size)
+    order_size = step_round(asset_bal, step_size)# - step_size
     spread = get_spread(pair)
     lower_price = price * (1 - (spread * 10))
     trigger_price = step_round(price, tick_size)

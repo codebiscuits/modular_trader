@@ -109,8 +109,10 @@ for pair in pairs:
         sell_order = funcs.sell_asset(pair)
         trade_notes.append(sell_order)
     elif signals[2]: # open_long
+        sprd = spreads.get(pair)
         stp = df.at[len(df)-1, 'st'] # TODO incorporate spread into this
         risk = (price - stp) / price
+        print(f'risk: {risk}, stp: {stp}, spread: {sprd}')
         # if risk > 0.1:
         #     print(f'{now} {pair} signal, too far from invalidation ({risk * 100:.1f}%)')
         #     continue
@@ -130,7 +132,6 @@ for pair in pairs:
             note = f"buy {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
             push = pb.push_note(now, note)
             print(now, note)
-            # TODO these try/except blocks could maybe go inside the functions
             try:
                 buy_order = funcs.buy_asset(pair, usdt_size)
                 trade_notes.append(buy_order)

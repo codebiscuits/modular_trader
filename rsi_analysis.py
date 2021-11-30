@@ -12,7 +12,7 @@ plt.rcParams['figure.figsize'] = (20,10)
 pd.set_option('display.max_rows', None) 
 pd.set_option('display.expand_frame_repr', False)
 
-folder = f'{results_data}/rsi_st_ema/smoothed_rsi_4h'
+folder = f'{results_data}/rsi_st_ema/smoothed_rsi_4h_mult-2_5'
 
 quote = 'USDT'
 
@@ -26,9 +26,13 @@ for p in all_pairs:
         pairs.append(p)
 
 for pair in pairs:
-    file = open(f'{folder}/{pair}.txt', 'r')
-    data = json.load(file)
-    usdt_results.extend(data[1:])
+    try:
+        file = open(f'{folder}/{pair}.txt', 'r')
+        data = json.load(file)
+        usdt_results.extend(data[1:])
+    except:
+        print(f"skipping {pair}, didn't work")
+        continue
 
 df_full = pd.DataFrame(usdt_results)
 # print(df_full.head().drop('pnl_list', axis=1))
@@ -81,7 +85,7 @@ for l in [3, 4, 5, 6, 7]:
     print(f'# of results after dropping rows: {len(df)}')
     
     pair_groups = df.groupby('pair')['avg_r'].median()
-    print(pair_groups.sort_values('avg_r', ascending=False).head())
+    print(pair_groups.sort_values(ascending=False).head())
     # print(f'pairs left: {len(pair_groups.index)}')
     print(f'avg r per trade: {pair_groups.median():.4}')
     
