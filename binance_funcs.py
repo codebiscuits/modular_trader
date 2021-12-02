@@ -8,6 +8,9 @@ import binance.enums as enums
 from pushbullet import Pushbullet
 from decimal import Decimal
 from pprint import pprint
+from config import ohlc_data
+from pathlib import Path
+from datetime import datetime
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
@@ -68,7 +71,8 @@ def get_size(price, fr, balance, risk):
 
 def current_positions(fr):
     total_bal = account_bal()
-    threshold_bal = total_bal * fr
+    threshold_bal = total_bal * fr # asset balances below this value are considered dust
+    # also, this is 1R, ie the amount of money lost from entry to stop
     
     info = client.get_account()
     bals = info.get('balances')
@@ -86,21 +90,22 @@ def current_positions(fr):
         if price == None:
             continue
         quant = float(b.get('free')) + float(b.get('locked'))
-        value = price * quant
+        value = price * quant # dollar value of the position
         if asset == 'BNB':
             if value >= threshold_bal and value > 15:
-                pos_dict[pair] = 1
+                pos_dict[pair] = value / total_bal
             else:
                 pos_dict[pair] = 0
         else:
             if value >= threshold_bal and value > 10:
-                pos_dict[pair] = 1
+                pos_dict[pair] = value / total_bal
             else:
                 pos_dict[pair] = 0
             
     return pos_dict
 
 def current_sizing(fr):
+    '''returns a dict with assets as keys and asset value as a proportion of total as values'''
     total_bal = account_bal()
     threshold_bal = total_bal * fr
     
@@ -373,6 +378,47 @@ def update_ohlc(pair, timeframe, old_df):
     df_new = pd.concat([old_df[:-1], df], copy=True, ignore_index=True)
     return df_new
 
+def prepare_ohlc(pair, timeframe='4H', bars=2190):
+    filepath = Path(f'{ohlc_data}/{pair}.pkl')
+    if filepath.exists():
+        try:
+            df = pd.read_pickle(filepath)
+            # print(f'read {pair} file from pickle')
+        except:
+            print('-')
+            print(f'read_pickle went wrong with {pair}')
+            # delete file
+            # print(f'deleted {pair} file')
+            df = get_ohlc(pair, '1h', '1 year ago UTC')
+            # print(f'downloaded {pair} from scratch')
+        
+        if len(df) > 2:
+            df = df.iloc[:-1,]
+            df = update_ohlc(pair, '1h', df)
+    else:
+        df = get_ohlc(pair, '1h', '1 year ago UTC')
+        print(f'downloaded {pair} from scratch')
+    if len(df) > 8760: # 8760 is 1 year's worth of 1h periods
+        df = df.tail(8760)
+        df.reset_index(drop=True, inplace=True)
+    try:
+        df.to_pickle(filepath)
+    except:
+        print('-')
+        print(f'to_pickle went wrong with {pair}')
+        print('-')
+    
+    # print(df.tail())
+    df = df.resample(timeframe, on='timestamp').agg({'open': 'first',
+                                                     'high': 'max',
+                                                     'low': 'min', 
+                                                     'close': 'last', 
+                                                     'volume': 'sum'})
+    df = df.tail(bars)
+    df.reset_index(inplace=True)
+    
+    return df
+
 
 ### Trading Functions
 
@@ -422,7 +468,7 @@ def buy_asset(pair, usdt_size):
     info = client.get_symbol_info(pair)
     step_size = Decimal(info.get('filters')[2].get('stepSize'))
     order_size = step_round(size, step_size)
-    print(f'{pair} Buy Order - raw size: {size}, step size: {step_size}, final size: {order_size}')
+    # print(f'{pair} Buy Order - raw size: {size:.5}, step size: {step_size:.2}, final size: {order_size:.5}')
     
     order = client.create_order(symbol=pair, 
                                 side=enums.SIDE_BUY, 
@@ -453,7 +499,7 @@ def buy_asset(pair, usdt_size):
     # print('-')
     return trade_dict
 
-def sell_asset(pair):
+def sell_asset(pair, pct=100):
     # print(f'selling {pair}')
     asset = pair[:-4]
     usdt_price = get_price(pair)
@@ -469,10 +515,11 @@ def sell_asset(pair):
                 asset_bal = float(b.get('free'))
     
     # make sure order size has the right number of decimal places
+    trade_size = asset_bal * (pct / 100)
     info = client.get_symbol_info(pair)
     step_size = Decimal(info.get('filters')[2].get('stepSize'))
-    order_size = step_round(asset_bal, step_size)# - step_size
-    print(f'{pair} Sell Order - raw size: {asset_bal}, step size: {step_size}, final size: {order_size}')
+    order_size = step_round(trade_size, step_size)# - step_size
+    # print(f'{pair} Sell Order - raw size: {asset_bal:.5}, step size: {step_size:.2}, final size: {order_size:.5}')
     
     order = client.create_order(symbol=pair, 
                                 side=enums.SIDE_SELL, 
@@ -526,7 +573,7 @@ def set_stop(pair, price):
     lower_price = price * (1 - (spread * 10))
     trigger_price = step_round(price, tick_size)
     limit_price = step_round(lower_price, tick_size)
-    print(f'{pair} Stop Order - trigger: {trigger_price}, limit: {limit_price}, size: {order_size}')
+    # print(f'{pair} Stop Order - trigger: {trigger_price:.5}, limit: {limit_price:.5}, size: {order_size:.5}')
     
     order = client.create_order(symbol=pair, 
                                 side=enums.SIDE_SELL, 
@@ -554,6 +601,34 @@ def clear_stop(pair):
     else:
         print('no stop to cancel')
     # print('-')
+
+def reduce_risk(pos_open_risk, r_limit, live):
+    positions = []
+    trade_notes = []
+    for p, r in pos_open_risk.items():
+        if r >1:
+            positions.append((p, r))
+    sorted_pos = sorted(positions, key=lambda x: x[1], reverse=True)
+    # print(sorted_pos)
+    
+    total_r = sum(pos_open_risk.values())
+    
+    for pos in sorted_pos:
+        if total_r > r_limit:
+            pair = pos[0]
+            now = datetime.now().strftime('%d/%m/%y %H:%M')
+            price = get_price(pair)
+            note = f"*** sell {pair} @ {price}"
+            print(now, note)
+            if live:
+                push = pb.push_note(now, note)
+                clear_stop(pair)
+                sell_order = sell_asset(pair)
+                sell_order['reason'] = 'portfolio risk limiting'
+                trade_notes.append(sell_order)
+                total_r -= pos[1]
+    
+    return trade_notes
 
 
 

@@ -3,6 +3,7 @@ import numpy as np
 from binance.client import Client
 import keys
 import talib
+from btalib import stochrsi
 import statistics as stats
 import time
 import json
@@ -19,7 +20,35 @@ client = Client(keys.bPkey, keys.bSkey)
 
 all_start = time.perf_counter()
 
-def get_results(df):
+def sm_rsi_st_ema_ind(df, lb, mult, rsi_len):
+    df['st'], df['st_u'], df['st_d'] = ind.supertrend(df.high, df.low, df.close, lb, mult)
+    df['20ema'] = talib.EMA(df.close, 20)
+    df['200ema'] = talib.EMA(df.close, 200)
+    df['k_close'] = talib.EMA(df.close, 2)
+    df['rsi'] = talib.RSI(df.k_close, rsi_len)
+    df = df.iloc[200:,]
+    df.reset_index(drop=True, inplace=True)
+    
+    return df
+
+# def srsi_st_ema_ind(df, lb, mult, rsi_len):
+#     df['st'], df['st_u'], df['st_d'] = ind.supertrend(df.high, df.low, df.close, lb, mult)
+#     df['20ema'] = talib.EMA(df.close, 20)
+#     df['200ema'] = talib.EMA(df.close, 200)
+#     df['k_close'] = talib.EMA(df.close, 2)
+#     df['srsi'] = talib.STOCHRSI(df.k_close, rsi_len)
+#     df['stochrsi'] = stochrsi(df.k_close, rsi_len, )
+#     # df['volatil20'] = df['close'].rolling(20).stdev()
+#     df['50ma_volu'] =  df['volume'].rolling(50).mean()
+#     df['200ma_volu'] =  df['volume'].rolling(200).mean()
+#     df['volume_trend'] = df['50ma_volu'] / df['200ma_volu']
+#     df.drop(['50ma_volu', '200ma_volu'], axis=1, inplace=True)
+#     df = df.iloc[200:,]
+#     df.reset_index(drop=True, inplace=True)
+    
+#     return df
+
+def sm_rsi_st_ema_res(df):
     results = df.loc[df['signals'].notna(), ['timestamp', 'close', 'signals']]
     results.reset_index(drop=True, inplace=True)
     
@@ -61,7 +90,7 @@ def mp_opt_old(pair, df, rsi_len, pars):
     os, ob = pars
     hodl = df['close'].iloc[-1] / df['close'].iloc[0]
     buys, sells, stops, _, _, _ = strats.get_signals(df, x, y)
-    bal, pnl_list, r_list = get_results(df)
+    bal, pnl_list, r_list = sm_rsi_st_ema_res(df)
     pnl = (bal - 1) * 100
     pnl_bth = pnl / hodl
     # calculate sqn here
@@ -82,7 +111,7 @@ def mp_opt_old(pair, df, rsi_len, pars):
 def mp_opt_new(pair, df, rsi_len, pars):
     os, ob = pars
     buys, sells, stops, _, _, _ = strats.get_signals(df, x, y)
-    bal, pnl_list, r_list = get_results(df)
+    bal, pnl_list, r_list = sm_rsi_st_ema_res(df)
     pnl = (bal - 1) * 100
     avg_r = stats.mean(r_list)
     hodl = df['close'].iloc[-1] / df['close'].iloc[0]
@@ -133,32 +162,22 @@ if __name__ == '__main__':
     pairs = [p for p in all_pairs if not p in bad_pairs]
     
     for pair in pairs:
-        print(pair)
         ohlc_path = Path(f'{ohlc_data}/{pair}.pkl')
         # download data
         if ohlc_path.exists():
             df_full = pd.read_pickle(ohlc_path)
-            print('ohlc path exists')
         else:
             continue
         if len(df_full) <= 200:
             continue
-        print('length > 200')
         all_results = [df_full.volume.sum()]
-        print(f'{pair} num ohlc periods: {len(df_full)}')
+        print(f'- - - - - {pair} - - - - -')
         for rsi_len in [3, 4, 5, 6, 7]:
             df = df_full.copy()
             start = time.perf_counter()
+            
             # compute indicators
-            df['st'], df['st_u'], df['st_d'] = ind.supertrend(df.high, df.low, df.close, lookback, multiplier)
-            df['20ema'] = talib.EMA(df.close, 20)
-            df['200ema'] = talib.EMA(df.close, 200)
-            df['k_close'] = talib.EMA(df.close, 2)
-            df['rsi'] = talib.RSI(df.k_close, rsi_len)
-            # df['volatil20'] = df['close'].rolling(20).stdev()
-            # df['50ma_volu'] =  df['volume'].rolling(50).mean()
-            df = df.iloc[200:,]
-            df.reset_index(drop=True, inplace=True)
+            df = sm_rsi_st_ema_ind(df, lookback, multiplier, rsi_len)
             
             # backtest
             # avg_pnl_list = []
@@ -177,7 +196,6 @@ if __name__ == '__main__':
 
             inputs = zip(pair_list, df_list, rsi_list, params) # pair, df, rsi_len, (os, ob)
             # try:
-            print(f'multiprocessing begin, rsi_len: {rsi_len}')
             pool = Pool(processes=7)
             mp_results = pool.starmap(mp_opt_old, inputs)
             pool.close()
@@ -190,8 +208,8 @@ if __name__ == '__main__':
             elapsed = f'{round((end - start) // 60)}m {(end - start) % 60:.3}s'
             print(f'{pair}, rsi {rsi_len}, time taken: {elapsed}')
         
-        # with open(f'{res_path}/{pair}.txt', 'w') as outfile:
-        #     json.dump(all_results, outfile)
+        with open(f'{res_path}/{pair}.txt', 'w') as outfile:
+            json.dump(all_results, outfile)
     
     all_end = time.perf_counter()
     all_time = all_end - all_start

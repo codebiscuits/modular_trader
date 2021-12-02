@@ -131,7 +131,7 @@ def rsi_st_ema_lo(df, in_pos, rsi_length, overbought, oversold):
     ema_ratio = df.at[len(df)-1, '20ema'] / df.at[len(df)-1, '200ema']
     
     if ema_ratio < 1 and in_pos == 0: # this condition is just to save time
-        return False, False, False
+        return (False, False, False), 1
     else:    
         df['st'], df['st_u'], df['st_d'] = ind.supertrend(df.high, df.low, df.close, 10, 3)
         df['rsi'] = talib.RSI(df.close, rsi_length)
@@ -146,6 +146,10 @@ def rsi_st_ema_lo(df, in_pos, rsi_length, overbought, oversold):
         close_long = in_pos and st_down
         open_long = trend_up and st_up and rsi_buy and not in_pos
         if open_long:
-            print(f"20ema: {df.at[len(df)-1, '20ema']}, 200ema: {df.at[len(df)-1, '200ema']}")
+            ema20 = df.at[len(df)-1, '20ema']
+            ema200 = df.at[len(df)-1, '200ema']
+            # print(f"20ema: {ema20:.3}, 200ema: {ema200:.3}, ratio: {ema20/ema200:.3}")
         
-        return tp_long, close_long, open_long
+        inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
+        
+        return (tp_long, close_long, open_long), inval
