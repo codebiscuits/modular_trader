@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
-import talib
+# import talib
+from ta.momentum import RSIIndicator
 import indicators as ind
 
 ### Backtesting Strategies
@@ -126,15 +127,15 @@ def get_signals(df, buy_thresh, sell_thresh):
 ### Live Trading Strategies
 
 def rsi_st_ema_lo(df, in_pos, rsi_length, overbought, oversold):
-    df['20ema'] = talib.EMA(df.close, 20)
-    df['200ema'] = talib.EMA(df.close, 200)
+    df['20ema'] = df.close.ewm(20).mean()
+    df['200ema'] = df.close.ewm(200).mean()
     ema_ratio = df.at[len(df)-1, '20ema'] / df.at[len(df)-1, '200ema']
     
     if ema_ratio < 1 and in_pos == 0: # this condition is just to save time
         return (False, False, False), 1
     else:    
         df['st'], df['st_u'], df['st_d'] = ind.supertrend(df.high, df.low, df.close, 10, 3)
-        df['rsi'] = talib.RSI(df.close, rsi_length)
+        df['rsi'] = RSIIndicator(df.close, rsi_length).rsi()
         
         trend_up = df.at[len(df)-1, '20ema'] > df.at[len(df)-1, '200ema']
         st_up = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st'] # not a trigger so doesnt need to be a cross
@@ -145,11 +146,40 @@ def rsi_st_ema_lo(df, in_pos, rsi_length, overbought, oversold):
         tp_long = in_pos and rsi_sell
         close_long = in_pos and st_down
         open_long = trend_up and st_up and rsi_buy and not in_pos
-        if open_long:
-            ema20 = df.at[len(df)-1, '20ema']
-            ema200 = df.at[len(df)-1, '200ema']
-            # print(f"20ema: {ema20:.3}, 200ema: {ema200:.3}, ratio: {ema20/ema200:.3}")
+        # if open_long:
+        #     ema20 = df.at[len(df)-1, '20ema']
+        #     ema200 = df.at[len(df)-1, '200ema']
+        #     print(f"20ema: {ema20:.3}, 200ema: {ema200:.3}, ratio: {ema20/ema200:.3}")
         
         inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
         
         return (tp_long, close_long, open_long), inval
+
+# def rsi_st_ema_lo_old(df, in_pos, rsi_length, overbought, oversold):
+#     df['20ema'] = talib.EMA(df.close, 20)
+#     df['200ema'] = talib.EMA(df.close, 200)
+#     ema_ratio = df.at[len(df)-1, '20ema'] / df.at[len(df)-1, '200ema']
+    
+#     if ema_ratio < 1 and in_pos == 0: # this condition is just to save time
+#         return (False, False, False), 1
+#     else:    
+#         df['st'], df['st_u'], df['st_d'] = ind.supertrend(df.high, df.low, df.close, 10, 3)
+#         df['rsi'] = talib.RSI(df.close, rsi_length)
+        
+#         trend_up = df.at[len(df)-1, '20ema'] > df.at[len(df)-1, '200ema']
+#         st_up = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st'] # not a trigger so doesnt need to be a cross
+#         st_down = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st'] # this is a trigger so does need to be a cross
+#         rsi_buy = (df.at[len(df)-1, 'rsi'] >= oversold) and (df.at[len(df)-2, 'rsi'] < oversold)
+#         rsi_sell = (df.at[len(df)-1, 'rsi'] <= overbought) and (df.at[len(df)-2, 'rsi'] > overbought)
+        
+#         tp_long = in_pos and rsi_sell
+#         close_long = in_pos and st_down
+#         open_long = trend_up and st_up and rsi_buy and not in_pos
+#         # if open_long:
+#         #     ema20 = df.at[len(df)-1, '20ema']
+#         #     ema200 = df.at[len(df)-1, '200ema']
+#         #     print(f"20ema: {ema20:.3}, 200ema: {ema200:.3}, ratio: {ema20/ema200:.3}")
+        
+#         inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
+        
+#         return (tp_long, close_long, open_long), inval

@@ -3,16 +3,14 @@ which match the criteria for a trade, then executes the trade if possible'''
 
 import pandas as pd
 import matplotlib.pyplot as plt
-import keys, talib, time, json
+import keys, time, json
 from datetime import datetime
-from pathlib import Path
 import binance_funcs as funcs
-import indicators as ind
 import strategies as strats
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 from pushbullet import Pushbullet
-from config import not_pairs, ohlc_data, market_data
+from config import not_pairs, market_data
 from pprint import pprint
 
 # TODO need to sort out error handling
@@ -27,11 +25,11 @@ client = Client(keys.bPkey, keys.bSkey)
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
-live = True
-if not live:
-    print('*** Warning: Not Live ***')
+live = False
+if live:
+    print('-:-' * 20)
 else:
-    print('-*-' * 20)
+    print('*** Warning: Not Live ***')
 
 all_start = time.perf_counter()
 
@@ -42,8 +40,10 @@ overbought = 96
 fixed_risk = 0.003
 total_r_limit = 30
 max_positions = total_r_limit # if all pos are below b/e i don't want to open more
+max_init_risk = fixed_risk * total_r_limit
 max_length = 250
 current_strat = 'rsi_st_ema'
+quote_asset = 'USDT'
 
 # create pairs list
 all_pairs = funcs.get_pairs('USDT', 'SPOT') # list
@@ -65,9 +65,8 @@ trade_notes = []
 total_open_risk = 0 # expressed in terms of R
 pos_open_risk = {} # expressed in terms of R
 
-sizing = funcs.current_sizing(fixed_risk)
-
 for pair in pairs:
+    asset = pair[:-1*len(quote_asset)]
     in_pos = bool(positions.get(pair))
     if pair in not_pairs and in_pos == 0:
         continue
@@ -119,7 +118,7 @@ for pair in pairs:
         stp = df.at[len(df)-1, 'st'] # TODO incorporate spread into this
         risk = (price - stp) / price
         # print(f'risk: {risk:.4}, stp: {stp:.4}, spread: {sprd:.4}')
-        if risk > 0.5:
+        if risk > max_init_risk:
             print(f'{now} {pair} signal, too far from invalidation ({risk * 100:.1f}%)')
             continue
         size, usdt_size = funcs.get_size(price, fixed_risk, balance, risk)
@@ -150,14 +149,15 @@ for pair in pairs:
                     stop_order['reason'] = 'safety first'
                     trade_notes.append(stop_order)
                     in_pos = True
-                except 'BinanceAPIException' as e:
+                except BinanceAPIException as e:
                     print(f'problem with order for {pair}')
                     print(e)
         print('-')
             
+    sizing = funcs.current_sizing(fixed_risk)
+    
     if in_pos:
-        if pair[-4:] == 'USDT':
-            pos_bal = sizing.get(pair[:-4]) * total_bal
+        pos_bal = sizing.get(asset) * total_bal
         # calculate open risk
         open_risk = pos_bal - (pos_bal / inval_dist) # dollar amount i would lose 
         # from current value if this position ended up getting stopped out
@@ -169,7 +169,7 @@ for pair in pairs:
             note = f"*** {pair} take profit {tp_pct}% @ {price}"
             print(now, note)
             print(f'pos_bal: ${pos_bal}, inval_dist: {inval_dist}')
-            print(f'open_risk: ${open_risk}, open_risk_r: {open_risk_r}R')
+            print(f'open_risk: ${open_risk:.2f}, open_risk_r: {open_risk_r:.3}R')
             print('-')
             if live:
                 push = pb.push_note(now, note)
@@ -183,15 +183,19 @@ for pair in pairs:
             open_risk_r = (open_risk / total_bal) / fixed_risk
         
         total_open_risk += open_risk_r
-        pos_open_risk[pair] = open_risk_r
+        pos_open_risk[pair] = round(open_risk_r, 3)
         
     # TODO maybe have a plot rendered and saved every time a trade is triggered
 
-print('pos_open_risk')
-pprint(pos_open_risk)                  
+if not live:
+    print('pos_open_risk')
+    pprint(pos_open_risk)                  
 
 
-print(f'positions open: {len(pos_open_risk)}, total open risk (R): {total_open_risk:.3}')
+num_open_positions = len(pos_open_risk)
+dollar_tor = total_bal * fixed_risk * total_open_risk
+
+print(f'{num_open_positions = }, {total_open_risk = }R, ie ${dollar_tor:.2f}')
 
 if live:
     # check total balance and record it in a file for analysis
@@ -227,13 +231,16 @@ if live:
         file.write('\n')
     
     # record open_risk statistics
+    risk_record = {'timestamp': now_start, 'positions': pos_open_risk}
     with open(f"{market_data}/{current_strat}_open_risk.txt", "a") as file:
-        file.write(json.dumps(pos_open_risk))
+        file.write(json.dumps(risk_record))
         file.write('\n')
 else:
     print('warning: logging switched off')
     
 all_end = time.perf_counter()
 all_time = all_end - all_start
-print(f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s')
-push = pb.push_note(now, 'Setup Scanner Finished')
+elapsed_str = f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s'
+final_msg = f'Setup Scanner Finished. {elapsed_str}, total open risk: ${dollar_tor:.2f}'
+print(final_msg)
+push = pb.push_note(now, final_msg)

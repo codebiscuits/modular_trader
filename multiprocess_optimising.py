@@ -2,8 +2,8 @@ import pandas as pd
 import numpy as np
 from binance.client import Client
 import keys
-import talib
-from btalib import stochrsi
+# import talib
+from ta.momentum import RSIIndicator
 import statistics as stats
 import time
 import json
@@ -22,10 +22,11 @@ all_start = time.perf_counter()
 
 def sm_rsi_st_ema_ind(df, lb, mult, rsi_len):
     df['st'], df['st_u'], df['st_d'] = ind.supertrend(df.high, df.low, df.close, lb, mult)
-    df['20ema'] = talib.EMA(df.close, 20)
-    df['200ema'] = talib.EMA(df.close, 200)
-    df['k_close'] = talib.EMA(df.close, 2)
-    df['rsi'] = talib.RSI(df.k_close, rsi_len)
+    df['20ema'] = df.close.ewm(20).mean()
+    df['200ema'] = df.close.ewm(200).mean()
+    df['k_close'] = df.cllose.ewm(2).mean()
+    # df['rsi'] = talib.RSI(df.k_close, rsi_len)
+    df['rsi'] = RSIIndicator(df.k_close, rsi_len).rsi()
     df = df.iloc[200:,]
     df.reset_index(drop=True, inplace=True)
     
