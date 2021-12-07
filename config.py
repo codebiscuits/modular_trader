@@ -14,11 +14,12 @@ not_pairs = ['GBPUSDT', 'AUDUSDT', 'BUSDUSDT', 'EURUSDT', 'TUSDUSDT',
 
 # ohlc data paths
 ohlc_data = None
+pi2_ohlc_bin = Path('/media/coding/ohlc_binance_1h')
 pi_ohlc_bin = Path('/mnt/2tb_ssd/coding/ohlc_binance_1h')
 lap_ohlc_bin = Path('/run/user/1000/gvfs/smb-share:server=raspberrypi.local,share=pishare/ohlc_binance_1h')
 desk_ohlc_bin = Path('/mnt/pishare/ohlc_binance_1h')
 # desk_ohlc_bin = Path('/run/user/1000/gvfs/smb-share:server=raspberrypi.local,share=pishare/ohlc_binance_1h')
-for ohlc_path in [pi_ohlc_bin, lap_ohlc_bin, desk_ohlc_bin]:
+for ohlc_path in [pi2_ohlc_bin, pi_ohlc_bin, lap_ohlc_bin, desk_ohlc_bin]:
     if ohlc_path.exists():
         ohlc_data = ohlc_path
         break
@@ -29,6 +30,7 @@ if not ohlc_data:
 
 # market data paths
 market_data = None
+pi2_md = Path('/media/coding/market_data')
 pi_md = Path('/mnt/2tb_ssd/coding/market_data')
 lap_md = Path('/run/user/1000/gvfs/smb-share:server=raspberrypi.local,share=pishare/market_data')
 # desk_md = Path('/mnt/pishare/market_data')
@@ -44,6 +46,7 @@ if not market_data:
 
 # backtesting results paths
 results_data = None
+pi2_res = Path('/media/coding/results')
 pi_res = Path('/mnt/2tb_ssd/coding/results')
 lap_res = Path('/run/user/1000/gvfs/smb-share:server=raspberrypi.local,share=pishare/results')
 # desk_res = Path('/mnt/pishare/results')

@@ -25,7 +25,7 @@ client = Client(keys.bPkey, keys.bSkey)
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
-live = False
+live = True
 if live:
     print('-:-' * 20)
 else:
