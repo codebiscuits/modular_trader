@@ -444,7 +444,7 @@ def top_up_bnb(usdt_size):
                                     quantity=bnb_size)
             
     else:
-        print(f'Didnt top up BNB, current val: {bnb_value:.3} USDT, free usdt: {free_usdt:.2f} USDT')
+        # print(f'Didnt top up BNB, current val: {bnb_value:.3} USDT, free usdt: {free_usdt:.2f} USDT')
         order = None
     return order
         

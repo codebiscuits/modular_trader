@@ -25,7 +25,7 @@ client = Client(keys.bPkey, keys.bSkey)
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
-live = True
+live = False
 if live:
     print('-:-' * 20)
 else:
@@ -68,12 +68,12 @@ pos_open_risk = {} # expressed in terms of R
 for pair in pairs:
     asset = pair[:-1*len(quote_asset)]
     in_pos = bool(positions.get(pair))
-    if pair in not_pairs and in_pos == 0:
+    if pair in not_pairs and not in_pos:
         continue
     # get data
     df = funcs.prepare_ohlc(pair)
     
-    if len(df) <= 200 and in_pos == 0:
+    if len(df) <= 200 and not in_pos:
         continue
     
     if len(df) > max_length:
@@ -87,7 +87,6 @@ for pair in pairs:
     # TODO need to integrate ALL binance filters into order calculations
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     price = df.at[len(df)-1, 'close']
-    balance = funcs.account_bal()
     tp_trades = []
     
     if signals[0]: # tp_long
@@ -121,7 +120,7 @@ for pair in pairs:
         if risk > max_init_risk:
             print(f'{now} {pair} signal, too far from invalidation ({risk * 100:.1f}%)')
             continue
-        size, usdt_size = funcs.get_size(price, fixed_risk, balance, risk)
+        size, usdt_size = funcs.get_size(price, fixed_risk, total_bal, risk)
         usdt_bal = funcs.free_usdt()
         usdt_depth = funcs.get_depth(pair, 'buy')
         enough_depth = usdt_depth >= usdt_size
