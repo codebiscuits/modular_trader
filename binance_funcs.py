@@ -24,6 +24,15 @@ def step_round(x, step):
     
     return math.floor(x / step) * step
 
+def resample(df, timeframe):
+    df = df.resample(timeframe, on='timestamp').agg({'open': 'first',
+                                                      'high': 'max',
+                                                      'low': 'min', 
+                                                      'close': 'last', 
+                                                      'volume': 'sum'})
+    df.reset_index(inplace=True) # don't use drop=True because i want the 
+    # timestamp index back as a column
+
 ### Account Functions
 
 
@@ -67,7 +76,6 @@ def get_size(price, fr, balance, risk):
     asset_quantity = usdt_size / price
     
     return asset_quantity, usdt_size
-
 
 def current_positions(fr):
     total_bal = account_bal()
@@ -149,7 +157,7 @@ def get_price(pair):
             usdt_price = float(t.get('askPrice'))
     return usdt_price
 
-def get_spread(pair):
+def get_spread(pair): # possibly unused
     '''returns the proportional distance between the first bid and ask for the 
     pair in question'''
     
@@ -174,7 +182,10 @@ def get_spread(pair):
         return 'na'
     
 def get_depth(pair, side):
-    '''returns the quantities of the first bid and ask for the pair in question'''
+    '''returns the quantities (in quote denomination) of the first bid and ask 
+    for the pair in question'''
+    
+    price = get_price(pair)
     try:    
         bids = []
         asks = []
@@ -188,10 +199,13 @@ def get_depth(pair, side):
         
         avg_bid = stats.median(bids)
         avg_ask = stats.median(asks)
+                    
+        quote_bid = avg_bid * price
+        quote_ask = avg_ask * price
         if side == 'buy':
-            return avg_ask
+            return quote_ask
         elif side == 'sell':
-            return avg_bid
+            return quote_bid
     except TypeError as e:
         print(e)
         print('Skipping trade - binance returned book depth of None ')
@@ -209,6 +223,8 @@ def get_depth_unused(pair):
     return usdt_depth
     
 def binance_spreads(quote='USDT'):
+    '''returns a dictionary with pairs as keys and current average spread as values'''
+
     length = len(quote)
     avg_spreads = {}
     
@@ -379,25 +395,26 @@ def update_ohlc(pair, timeframe, old_df):
     return df_new
 
 def prepare_ohlc(pair, timeframe='4H', bars=2190):
+    '''checks if there is old data already, if so it loads the old data and 
+    downloads an update, if not it downloads all data from scratch, then 
+    resamples all data to desired timeframe'''
+    
     filepath = Path(f'{ohlc_data}/{pair}.pkl')
     if filepath.exists():
         try:
             df = pd.read_pickle(filepath)
-            # print(f'read {pair} file from pickle')
+            if len(df) > 2:
+                df = df.iloc[:-1,]
+                df = update_ohlc(pair, '1h', df)
         except:
             print('-')
-            print(f'read_pickle went wrong with {pair}')
-            # delete file
-            # print(f'deleted {pair} file')
+            print(f'read_pickle went wrong with {pair}, downloading old data')
             df = get_ohlc(pair, '1h', '1 year ago UTC')
-            # print(f'downloaded {pair} from scratch')
         
-        if len(df) > 2:
-            df = df.iloc[:-1,]
-            df = update_ohlc(pair, '1h', df)
     else:
         df = get_ohlc(pair, '1h', '1 year ago UTC')
         print(f'downloaded {pair} from scratch')
+
     if len(df) > 8760: # 8760 is 1 year's worth of 1h periods
         df = df.tail(8760)
         df.reset_index(drop=True, inplace=True)
@@ -414,10 +431,32 @@ def prepare_ohlc(pair, timeframe='4H', bars=2190):
                                                      'low': 'min', 
                                                      'close': 'last', 
                                                      'volume': 'sum'})
-    df = df.tail(bars)
-    df.reset_index(inplace=True)
+    if len(df) > bars:
+        df = df.tail(bars)
+    df.reset_index(inplace=True) # drop=False because we want to keep the timestamp column
     
     return df
+
+def get_avg_price(pair):
+    ticker = client.get_ticker(symbol=pair)
+    price = float(ticker.get('weightedAvgPrice'))
+    vol = float(ticker.get('quoteVolume'))
+    # print(f'{pair} {price} - {vol}')
+    
+    return price, vol
+
+def get_avg_prices(quote='USDT'):
+    tickers_24h = client.get_ticker() # no symbol specified so all symbols returned
+    qlen = len(quote) * -1
+    waps = {}
+    for i in tickers_24h:
+        pair = i.get('symbol')
+        if pair[qlen:] == quote:
+            price = float(i.get('weightedAvgPrice'))
+            vol = float(i.get('quoteVolume'))
+            waps['pair'] = [price, vol]
+    
+    return waps
 
 
 ### Trading Functions
@@ -448,15 +487,6 @@ def top_up_bnb(usdt_size):
         order = None
     return order
         
-def to_precision(num, base):
-    '''a rounding function which takes in the number to be rounded and the 
-    step-size which the output must conform to.'''
-    
-    decimal_places = str(base)[::-1].find('.')
-    precise = base * round(num / base)
-    mult = 10 ** decimal_places
-    return math.floor(precise * mult) / mult
-
 def buy_asset(pair, usdt_size):
     print(f'buying {pair}')
     
