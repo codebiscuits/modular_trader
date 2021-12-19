@@ -12,8 +12,11 @@ from binance.exceptions import BinanceAPIException
 from pushbullet import Pushbullet
 from config import not_pairs, market_data
 from pprint import pprint
+import utility_funcs as uf
 
 # TODO need to sort out error handling
+
+
 
 plt.style.use('fivethirtyeight')
 plt.rcParams['figure.figsize'] = (20,10)
@@ -40,10 +43,34 @@ overbought = 96
 fixed_risk = 0.003
 total_r_limit = 30
 max_positions = total_r_limit # if all pos are below b/e i don't want to open more
-max_init_risk = fixed_risk * total_r_limit
+max_init_r = fixed_risk * total_r_limit
 max_length = 250
 current_strat = 'rsi_st_ema'
 quote_asset = 'USDT'
+
+# def max_init_risk(n, target_risk, max_pos):
+#     '''n = number of open positions, target_risk is the percentage distance 
+#     from invalidation this function should converge on, max_pos is the maximum
+#     number of open positions as set in the main script
+    
+#     this function takes a target max risk and adjusts that up to 2x target depending
+#     on how many positions are currently open.
+#     whatever the output is, the system will ignore entry signals further away 
+#     from invalidation than that. if there are a lot of open positions, i want
+#     to be more picky about what new trades i open, but if there are few trades
+#     available then i don't want to be so picky
+    
+#     the formula is set so that when there are no trades currently open, the 
+#     upper limit on initial risk will be twice as high as the main script has
+#     set, and as more trades are opened, that upper limit comes down relatively
+#     quickly, then gradually settles on the target limit'''
+    
+#     exp = 4
+#     exp_limit = max_pos ** exp
+    
+#     output = (((max_pos-n)**exp) / (exp_limit / target_risk)) + target_risk
+        
+#     return round(output, 2)
 
 # create pairs list
 all_pairs = funcs.get_pairs('USDT', 'SPOT') # list
@@ -58,6 +85,7 @@ now_start = datetime.now().strftime('%d/%m/%y %H:%M')
 print(f'Current time: {now_start}, rsi: {rsi_length}-{oversold}-{overbought}, fixed risk: {fixed_risk}')
 
 total_bal = funcs.account_bal()
+avg_prices = funcs.get_avg_prices()
 
 funcs.top_up_bnb(15)
 
@@ -117,7 +145,8 @@ for pair in pairs:
         stp = df.at[len(df)-1, 'st'] # TODO incorporate spread into this
         risk = (price - stp) / price
         # print(f'risk: {risk:.4}, stp: {stp:.4}, spread: {sprd:.4}')
-        if risk > max_init_risk:
+        mir = uf.max_init_risk(len(pairs_in_pos), max_init_r, max_positions)
+        if risk > mir:
             print(f'{now} {pair} signal, too far from invalidation ({risk * 100:.1f}%)')
             continue
         size, usdt_size = funcs.get_size(price, fixed_risk, total_bal, risk)
