@@ -14,9 +14,6 @@ from config import not_pairs, market_data
 from pprint import pprint
 import utility_funcs as uf
 
-# TODO need to sort out error handling
-
-
 
 plt.style.use('fivethirtyeight')
 plt.rcParams['figure.figsize'] = (20,10)
@@ -28,7 +25,7 @@ client = Client(keys.bPkey, keys.bSkey)
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
-live = True
+live = False
 if live:
     print('-:-' * 20)
 else:
@@ -47,30 +44,6 @@ max_init_r = fixed_risk * total_r_limit
 max_length = 250
 current_strat = 'rsi_st_ema'
 quote_asset = 'USDT'
-
-# def max_init_risk(n, target_risk, max_pos):
-#     '''n = number of open positions, target_risk is the percentage distance 
-#     from invalidation this function should converge on, max_pos is the maximum
-#     number of open positions as set in the main script
-    
-#     this function takes a target max risk and adjusts that up to 2x target depending
-#     on how many positions are currently open.
-#     whatever the output is, the system will ignore entry signals further away 
-#     from invalidation than that. if there are a lot of open positions, i want
-#     to be more picky about what new trades i open, but if there are few trades
-#     available then i don't want to be so picky
-    
-#     the formula is set so that when there are no trades currently open, the 
-#     upper limit on initial risk will be twice as high as the main script has
-#     set, and as more trades are opened, that upper limit comes down relatively
-#     quickly, then gradually settles on the target limit'''
-    
-#     exp = 4
-#     exp_limit = max_pos ** exp
-    
-#     output = (((max_pos-n)**exp) / (exp_limit / target_risk)) + target_risk
-        
-#     return round(output, 2)
 
 # create pairs list
 all_pairs = funcs.get_pairs('USDT', 'SPOT') # list
@@ -122,21 +95,31 @@ for pair in pairs:
         print(now, note)
         if live:
             push = pb.push_note(now, note)
-            funcs.clear_stop(pair)
-            sell_order = funcs.sell_asset(pair)
-            sell_order['reason'] = 'trade over-extended'
-            trade_notes.append(sell_order)
-            in_pos = False
+            try:
+                funcs.clear_stop(pair)
+                sell_order = funcs.sell_asset(pair)
+                sell_order['reason'] = 'trade over-extended'
+                trade_notes.append(sell_order)
+                in_pos = False
+            except BinanceAPIException as e:
+                print(f'problem with tp order for {pair}')
+                print(e)
+                push = pb.push_note(now, f'exeption during {pair} tp order')
     elif signals[1]: # close_long
         note = f"*** sell (stop) {pair} @ {price}"
         print(now, note)
         if live:
             push = pb.push_note(now, note)
-            funcs.clear_stop(pair)
-            sell_order = funcs.sell_asset(pair)
-            sell_order['reason'] = 'hit trailing stop'
-            trade_notes.append(sell_order)
-            in_pos = False
+            try:
+                funcs.clear_stop(pair)
+                sell_order = funcs.sell_asset(pair)
+                sell_order['reason'] = 'hit trailing stop'
+                trade_notes.append(sell_order)
+                in_pos = False
+            except BinanceAPIException as e:
+                print(f'problem with sell order for {pair}')
+                print(e)
+                push = pb.push_note(now, f'exeption during {pair} sell order')
     elif signals[2]: # open_long
         if len(pairs_in_pos) >= max_positions:
             print(f'{now} {pair} signal, too many open positions already')
@@ -178,8 +161,9 @@ for pair in pairs:
                     trade_notes.append(stop_order)
                     in_pos = True
                 except BinanceAPIException as e:
-                    print(f'problem with order for {pair}')
+                    print(f'problem with buy order for {pair}')
                     print(e)
+                    push = pb.push_note(now, f'exeption during {pair} buy order')
         print('-')
             
     sizing = funcs.current_sizing(fixed_risk)

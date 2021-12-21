@@ -540,7 +540,8 @@ def sell_asset(pair, pct=100):
     for b in bals:
         if b.get('asset') == asset:
             if asset == 'BNB':
-                asset_bal = float(b.get('free')) * 0.9 # always keep a bit of bnb
+                reserve = 10 / usdt_price # amount of bnb to reserve ($10 worth)
+                asset_bal = float(b.get('free')) - reserve
             else:
                 asset_bal = float(b.get('free'))
     
