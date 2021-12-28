@@ -50,7 +50,9 @@ all_pairs = funcs.get_pairs('USDT', 'SPOT') # list
 spreads = funcs.binance_spreads('USDT') # dict
 positions = funcs.current_positions(fixed_risk)
 pairs_in_pos = [pip for pip in all_pairs if positions.get(pip) != 0]
-other_pairs = [p for p in all_pairs if spreads.get(p) < 0.01 and positions.get(p) == 0]
+other_pairs = [p for p in all_pairs if p in spreads and 
+                                       spreads.get(p) < 0.01 and 
+                                       positions.get(p) == 0]
 pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked first
 
 now_start = datetime.now().strftime('%d/%m/%y %H:%M')
@@ -63,6 +65,7 @@ avg_prices = funcs.get_avg_prices()
 funcs.top_up_bnb(15)
 
 trade_notes = []
+non_trade_notes = []
 total_open_risk = 0 # expressed in terms of R
 pos_open_risk = {} # expressed in terms of R
 
@@ -121,6 +124,14 @@ for pair in pairs:
                 print(e)
                 push = pb.push_note(now, f'exeption during {pair} sell order')
     elif signals[2]: # open_long
+        # # calc and record volume trend
+        # df['vol_ema20'] = df.volume.ewm(20).mean()
+        # df['vol_ema200'] = df.volume.ewm(200).mean()
+        # df['vol_trend'] = df.vol_ema20 / df.vol_ema200
+        # vol_trend = df.at[len(df)-1, 'vol_trend']
+        # record = {'timestamp': now, 'pair': pair, 'side': 'long', 
+        #           'price': price, 'vol_trend': vol_trend}
+        
         if len(pairs_in_pos) >= max_positions:
             print(f'{now} {pair} signal, too many open positions already')
             continue
@@ -139,11 +150,17 @@ for pair in pairs:
         enough_usdt = usdt_bal > usdt_size
         enough_size = usdt_size > (12 * (1 + risk)) # this ensures size will be big enough for init stop to be set
         if not enough_depth:
-            print(f'{now} {pair} signal, books too thin for {usdt_size:.3}USDT buy')
+            non_trade = f'{now} {pair} signal, books too thin for {usdt_size:.3}USDT buy'
+            print(non_trade)
+            non_trade_notes.append(non_trade)
         if not enough_usdt:
-            print(f'{now} {pair} signal, not enough free usdt for {usdt_size:.3}USDT buy')
+            non_trade = f'{now} {pair} signal, not enough free usdt for {usdt_size:.3}USDT buy'
+            print(non_trade)
+            non_trade_notes.append(non_trade)
         if not enough_size:
-            print(f'{now} {pair} signal, size too small to trade ({usdt_size:.3}USDT)')
+            non_trade = f'{now} {pair} signal, size too small to trade ({usdt_size:.3}USDT)'
+            print(non_trade)
+            non_trade_notes.append(non_trade)
         if enough_usdt and enough_size and enough_depth:
             # check total risk and close profitable positions if necessary
             tp_trades = funcs.reduce_risk(pos_open_risk, total_r_limit, live)
@@ -253,6 +270,7 @@ else:
 all_end = time.perf_counter()
 all_time = all_end - all_start
 elapsed_str = f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s'
-final_msg = f'Setup Scanner Finished. {elapsed_str}, total open risk: ${dollar_tor:.2f}'
+rfb = round(total_bal-dollar_tor, 2)
+final_msg = f'Setup Scanner Finished. {elapsed_str}, total open risk: ${dollar_tor:.2f}, risk-free bal: ${rfb}'
 print(final_msg)
 push = pb.push_note(now, final_msg)
