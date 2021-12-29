@@ -212,7 +212,7 @@ for pair in pairs:
             open_risk_r = (open_risk / total_bal) / fixed_risk
         
         total_open_risk += open_risk_r
-        pos_open_risk[pair] = round(open_risk_r, 3)
+        pos_open_risk[pair] = {'R': round(open_risk_r, 3), '$': round(open_risk, 2)}
         
     # TODO maybe have a plot rendered and saved every time a trade is triggered
 
@@ -260,7 +260,7 @@ if live:
         file.write('\n')
     
     # record open_risk statistics
-    risk_record = {'timestamp': now_start, 'positions': pos_open_risk}
+    risk_record = {'timestamp': now_start, 'open_risk': pos_open_risk}
     with open(f"{market_data}/{current_strat}_open_risk.txt", "a") as file:
         file.write(json.dumps(risk_record))
         file.write('\n')

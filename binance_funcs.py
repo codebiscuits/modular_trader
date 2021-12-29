@@ -127,7 +127,8 @@ def current_sizing(fr):
     for b in bals:        
         asset = b.get('asset')
         if asset in ['USDT', 'USDC', 'BUSD']:
-            value = float(b.get('free')) + float(b.get('locked'))
+            quant = float(b.get('free')) + float(b.get('locked'))
+            value = quant
         else:
             pair = asset + 'USDT'
             price = price_dict.get(pair)
@@ -136,7 +137,8 @@ def current_sizing(fr):
             quant = float(b.get('free')) + float(b.get('locked'))
             value = price * quant
         if value >= threshold_bal:
-            size_dict[asset] = round(value / total_bal, 5)
+            pct = round(value / total_bal, 5)
+            size_dict[asset] = {'qty': quant, 'allocation': pct}
             
     return size_dict
 
@@ -488,7 +490,7 @@ def top_up_bnb(usdt_size):
     return order
         
 def buy_asset(pair, usdt_size):
-    print(f'buying {pair}')
+    # print(f'buying {pair}')
     
     # calculate how much of the asset to buy
     usdt_price = get_price(pair)
@@ -623,12 +625,12 @@ def clear_stop(pair):
     works as a "clear stop" function only when the strategy sets one 
     stop-loss per position and uses no other resting orders'''
     
-    print(f'cancelling {pair} stop')
+    # print(f'cancelling {pair} stop')
     orders = client.get_open_orders(symbol=pair)
     if orders:
         ord_id = orders[0].get('orderId')
         result = client.cancel_order(symbol=pair, orderId=ord_id)
-        print(result.get('status'))
+        # print(result.get('status'))
     else:
         print('no stop to cancel')
     # print('-')
