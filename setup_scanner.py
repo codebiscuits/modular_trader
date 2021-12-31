@@ -37,6 +37,7 @@ all_start = time.perf_counter()
 rsi_length = 4
 oversold = 45
 overbought = 96
+max_spread = 0.5
 fixed_risk = 0.003
 total_r_limit = 30
 max_positions = total_r_limit # if all pos are below b/e i don't want to open more
@@ -145,14 +146,26 @@ for pair in pairs:
             continue
         size, usdt_size = funcs.get_size(price, fixed_risk, total_bal, risk)
         usdt_bal = funcs.free_usdt()
-        usdt_depth = funcs.get_depth(pair, 'buy')
+        usdt_depth = funcs.get_depth(pair, 'buy', max_spread)
+        if usdt_depth < usdt_size and usdt_depth > (usdt_size/2): # only trim size if books are a bit too thin
+            trim_size = f'{now} {pair} books too thin, reducing size from {usdt_size:.3} to {usdt_depth:.3}'
+            print(trim_size)
+            usdt_size = usdt_depth
+            non_trade_notes.append(trim_size)
+        
         enough_depth = usdt_depth >= usdt_size
         enough_usdt = usdt_bal > usdt_size
         enough_size = usdt_size > (12 * (1 + risk)) # this ensures size will be big enough for init stop to be set
+        
         if not enough_depth:
-            non_trade = f'{now} {pair} signal, books too thin for {usdt_size:.3}USDT buy'
-            print(non_trade)
-            non_trade_notes.append(non_trade)
+            if usdt_depth == 0:
+                non_trade = f'{now} {pair} signal, spread wider than {max_spread} limit'
+                print(non_trade)
+                non_trade_notes.append(non_trade)
+            else:
+                non_trade = f'{now} {pair} signal, books too thin for {usdt_size:.3}USDT buy'
+                print(non_trade)
+                non_trade_notes.append(non_trade)
         if not enough_usdt:
             non_trade = f'{now} {pair} signal, not enough free usdt for {usdt_size:.3}USDT buy'
             print(non_trade)
@@ -264,6 +277,13 @@ if live:
     with open(f"{market_data}/{current_strat}_open_risk.txt", "a") as file:
         file.write(json.dumps(risk_record))
         file.write('\n')
+    
+    # record all skipped or reduced trades
+    non_trade_record = {'timestamp': now_start, 'non_trades': non_trade_notes}
+    with open(f"{market_data}/{current_strat}_non_trades.txt", "a") as file:
+        file.write(json.dumps(non_trade_record))
+        file.write('\n')
+    
 else:
     print('warning: logging switched off')
     

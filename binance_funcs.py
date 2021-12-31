@@ -183,7 +183,39 @@ def get_spread(pair): # possibly unused
     else:
         return 'na'
     
-def get_depth(pair, side):
+def get_depth(pair, side, max_slip=1):
+    '''returns the quantity (in the quote currency) that could be bought/sold 
+    within the % range of price set by the max_slip param'''
+    
+    price = get_price(pair)
+    book = client.get_order_book(symbol=pair)
+    
+    if side == 'buy':
+        price = float(book.get('bids')[0][0])
+        max_price = price * (1 + (max_slip / 100)) # max_price is x% above price
+        depth = 0
+        for i in book.get('asks'):
+            if float(i[0]) <= max_price:
+                depth += float(i[1])
+            else:
+                break
+    elif side == 'sell':
+        price = float(book.get('asks')[0][0])
+        min_price = price * (1 - (max_slip / 100)) # max_price is x% above price
+        depth = 0
+        for i in book.get('bids'):
+            if float(i[0]) >= min_price:
+                depth += float(i[1])
+            else:
+                break
+    else:
+        print('side param must be either buy or sell')
+    
+    usdt_depth = depth * price
+    
+    return usdt_depth    
+
+def get_depth_old(pair, side):
     '''returns the quantities (in quote denomination) of the first bid and ask 
     for the pair in question'''
     
@@ -212,17 +244,6 @@ def get_depth(pair, side):
         print(e)
         print('Skipping trade - binance returned book depth of None ')
         return 0.0
-
-def get_depth_unused(pair):
-    usdt_depth = 0
-    tickers = client.get_orderbook_tickers()
-    for t in tickers:
-        if t.get('symbol') == pair:
-            usdt_price = float(t.get('askPrice'))
-            asset_qty = float(t.get('askQty'))
-            usdt_depth = usdt_price * asset_qty
-            
-    return usdt_depth
     
 def binance_spreads(quote='USDT'):
     '''returns a dictionary with pairs as keys and current average spread as values'''
