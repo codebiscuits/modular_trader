@@ -199,7 +199,7 @@ for pair in pairs:
     sizing = funcs.current_sizing(fixed_risk)
     
     if in_pos:
-        pos_bal = sizing.get(asset) * total_bal
+        pos_bal = sizing.get(asset)['allocation'] * total_bal
         # calculate open risk
         open_risk = pos_bal - (pos_bal / inval_dist) # dollar amount i would lose 
         # from current value if this position ended up getting stopped out
