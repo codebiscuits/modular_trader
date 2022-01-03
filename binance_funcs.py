@@ -660,12 +660,13 @@ def reduce_risk(pos_open_risk, r_limit, live):
     positions = []
     trade_notes = []
     for p, r in pos_open_risk.items():
-        if r >1:
-            positions.append((p, r))
+        if r.get('R') > 1:
+            positions.append((p, r.get('R')))
     sorted_pos = sorted(positions, key=lambda x: x[1], reverse=True)
     # print(sorted_pos)
     
-    total_r = sum(pos_open_risk.values())
+    r_list = [x.get('R') for x in pos_open_risk.values()]
+    total_r = sum(r_list)
     
     for pos in sorted_pos:
         if total_r > r_limit:
