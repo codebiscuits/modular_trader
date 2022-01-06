@@ -9,6 +9,7 @@ import time
 from binance.client import Client
 import keys
 from pushbullet import Pushbullet
+from pathlib import Path
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 client = Client(keys.bPkey, keys.bSkey)
@@ -58,40 +59,47 @@ def get_book_stats(pair, quote, width=2):
     
     return stats 
 
+filepath1 = Path('/media/coding/market_data/binance_liquidity_history.txt')
+filepath2 = 'test.txt'
+if filepath1.exists():
+    fp = filepath1
+else:
+    fp = filepath2
+
 start = time.perf_counter()
 
 #######################################################
 
-# now = dt.now().strftime('%d/%m/%y %H:%M')
+now = dt.now().strftime('%d/%m/%y %H:%M')
 
-# quote = 'USDT'
+quote = 'USDT'
 
-# pairs = funcs.get_pairs(quote, 'SPOT')
+pairs = funcs.get_pairs(quote, 'SPOT')
 
-# depth_dict = {}
+depth_dict = {}
 
-# ba_ratios = []
-# spreads = []
+ba_ratios = []
+spreads = []
 
-# for pair in pairs:
-#     pair_stats = funcs.get_book_stats(pair, quote, 2)
-#     depth_dict[pair] = pair_stats
+for pair in pairs:
+    pair_stats = funcs.get_book_stats(pair, quote, 2)
+    depth_dict[pair] = pair_stats
     
-#     ba_ratio = pair_stats.get('quote_bids') / pair_stats.get('quote_asks')
-#     ba_ratios.append(ba_ratio)
-#     spreads.append(pair_stats.get('spread'))
+    ba_ratio = pair_stats.get('quote_bids') / pair_stats.get('quote_asks')
+    ba_ratios.append(ba_ratio)
+    spreads.append(pair_stats.get('spread'))
     
-#     # pprint(pair_stats)
+    # pprint(pair_stats)
     
-# record = {now: depth_dict}
+record = {now: depth_dict}
 
-# with open('test.txt', 'a') as file:
-#     file.write(json.dumps(record))
-#     file.write('\n')
+with open(fp, 'a') as file:
+    file.write(json.dumps(record))
+    file.write('\n')
 
 #######################################################
 
-with open('test.txt', 'r') as file:
+with open(fp, 'r') as file:
     records = file.readlines()
 
 timestamps = []
@@ -139,6 +147,6 @@ elapsed = round(end - start)
 
 # print(len(pairs), 'pairs')
 # print(record)
-# print(f'time taken: {elapsed//60}m {elapsed%60}s')
+print(f'time taken: {elapsed//60}m {elapsed%60}s')
 
 
