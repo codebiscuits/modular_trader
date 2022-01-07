@@ -82,7 +82,7 @@ ba_ratios = []
 spreads = []
 
 for pair in pairs:
-    pair_stats = funcs.get_book_stats(pair, quote, 2)
+    pair_stats = get_book_stats(pair, quote, 2)
     depth_dict[pair] = pair_stats
     
     ba_ratio = pair_stats.get('quote_bids') / pair_stats.get('quote_asks')
