@@ -72,6 +72,8 @@ start = time.perf_counter()
 
 now = dt.now().strftime('%d/%m/%y %H:%M')
 
+print(now, 'running binance book stats')
+
 quote = 'USDT'
 
 pairs = funcs.get_pairs(quote, 'SPOT')
@@ -130,13 +132,13 @@ history = {'timestamp': timestamps, 'avg_ratio': avg_ratios,
 
 df = pd.DataFrame(history)
 
-print(df)
+# print(df)
 
 plt.plot(df.timestamp, df.avg_ratio, label='avg_ratio')
 plt.plot(df.timestamp, df.std_ratio, label='std_ratio')
 plt.legend()
 plt.xticks(rotation='vertical')
-plt.savefig('image.png')
+plt.savefig('/media/coding/scripts/backtester_2021/chart.png', format='png')
 plt.show()
 
 # pb.push_note(now, )
