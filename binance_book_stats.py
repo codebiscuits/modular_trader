@@ -59,45 +59,51 @@ def get_book_stats(pair, quote, width=2):
     
     return stats 
 
-filepath1 = Path('/media/coding/market_data/binance_liquidity_history.txt')
-filepath2 = 'test.txt'
-if filepath1.exists():
-    fp = filepath1
-else:
-    fp = filepath2
-
 start = time.perf_counter()
-
-#######################################################
 
 now = dt.now().strftime('%d/%m/%y %H:%M')
 
 print(now, 'running binance book stats')
 
-quote = 'USDT'
+#######################################################
 
-pairs = funcs.get_pairs(quote, 'SPOT')
+live = True
+filepath1 = Path('/media/coding/market_data/binance_liquidity_history.txt')
+filepath2 = Path('/mnt/pi_2/market_data/binance_liquidity_history.txt')
+filepath3 = 'test.txt'
 
-depth_dict = {}
+if filepath1.exists():
+    fp = filepath1
+elif filepath2.exists():
+    fp = filepath2
+    live = False
+else:
+    fp = filepath3
+    live = False
 
-ba_ratios = []
-spreads = []
-
-for pair in pairs:
-    pair_stats = get_book_stats(pair, quote, 2)
-    depth_dict[pair] = pair_stats
+if live: # only record a new observation if this is running on the correct machine
+    quote = 'USDT'
     
-    ba_ratio = pair_stats.get('quote_bids') / pair_stats.get('quote_asks')
-    ba_ratios.append(ba_ratio)
-    spreads.append(pair_stats.get('spread'))
+    pairs = funcs.get_pairs(quote, 'SPOT')
     
-    # pprint(pair_stats)
+    depth_dict = {}
     
-record = {now: depth_dict}
+    ba_ratios = []
+    spreads = []
+    
+    for pair in pairs:
+        pair_stats = get_book_stats(pair, quote, 2)
+        depth_dict[pair] = pair_stats
+        
+        ba_ratio = pair_stats.get('quote_bids') / pair_stats.get('quote_asks')
+        ba_ratios.append(ba_ratio)
+        spreads.append(pair_stats.get('spread'))
+        
+    record = {now: depth_dict}
 
-with open(fp, 'a') as file:
-    file.write(json.dumps(record))
-    file.write('\n')
+    with open(fp, 'a') as file:
+        file.write(json.dumps(record))
+        file.write('\n')
 
 #######################################################
 
@@ -132,13 +138,19 @@ history = {'timestamp': timestamps, 'avg_ratio': avg_ratios,
 
 df = pd.DataFrame(history)
 
-# print(df)
+p1 = Path('/media/coding/scripts/backtester_2021')
+p2 = Path('chart.png')
+if p1.exists():
+    chartpath = Path(p1 / p2)
+else:
+    chartpath = p2
+
 
 plt.plot(df.timestamp, df.avg_ratio, label='avg_ratio')
 plt.plot(df.timestamp, df.std_ratio, label='std_ratio')
 plt.legend()
 plt.xticks(rotation='vertical')
-plt.savefig('/media/coding/scripts/backtester_2021/chart.png', format='png')
+plt.savefig(chartpath, format='png')
 plt.show()
 
 # pb.push_note(now, )
@@ -147,8 +159,6 @@ end = time.perf_counter()
 
 elapsed = round(end - start)
 
-# print(len(pairs), 'pairs')
-# print(record)
 print(f'time taken: {elapsed//60}m {elapsed%60}s')
 
 
