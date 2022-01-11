@@ -176,6 +176,8 @@ def current_sizing(fr):
                 continue
             quant = float(b.get('free')) + float(b.get('locked'))
             value = price * quant
+        if asset == 'BNB' and value < 15:
+            continue
         if value >= threshold_bal:
             pct = round(value / total_bal, 5)
             size_dict[asset] = {'qty': quant, 'allocation': pct}
