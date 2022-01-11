@@ -3,6 +3,7 @@ import math
 import time
 import statistics as stats
 import pandas as pd
+import numpy as np
 from binance.client import Client
 import binance.enums as enums
 from pushbullet import Pushbullet
@@ -32,6 +33,45 @@ def resample(df, timeframe):
                                                       'volume': 'sum'})
     df.reset_index(inplace=True) # don't use drop=True because i want the 
     # timestamp index back as a column
+
+def get_book_stats(pair, quote, width=2):
+    '''returns a dictionary containing the base asset, the quote asset, 
+    the spread, and the bid and ask depth within the % range of price set 
+    by the width param in base and quote denominations'''
+    
+    q_len = len(quote) * -1
+    base = pair[:q_len]
+    
+    book = client.get_order_book(symbol=pair)
+    
+    best_bid = float(book.get('bids')[0][0])
+    best_ask = float(book.get('asks')[0][0])
+    mid_price = (best_bid + best_ask) / 2
+    spread = (best_ask-best_bid) / mid_price
+    
+    max_price = mid_price * (1 + (width / 100)) # max_price is x% above price
+    ask_depth = 0
+    for i in book.get('asks'):
+        if float(i[0]) <= max_price:
+            ask_depth += float(i[1])
+        else:
+            break
+    min_price = mid_price * (1 - (width / 100)) # max_price is x% above price
+    bid_depth = 0
+    for i in book.get('bids'):
+        if float(i[0]) >= min_price:
+            bid_depth += float(i[1])
+        else:
+            break
+    
+    q_bid_depth = bid_depth * mid_price
+    q_ask_depth = ask_depth * mid_price
+    
+    stats = {'base': base, 'quote': quote, 'spread': spread, 
+             'base_bids': bid_depth, 'base_asks': ask_depth, 
+             'quote_bids': q_bid_depth, 'quote_asks': q_ask_depth}
+    
+    return stats    
 
 ### Account Functions
 
@@ -346,16 +386,23 @@ def binance_depths(quotes=['USDT', 'BTC']):
 
 def get_pairs(quote='USDT', market='SPOT'):
     '''possible values for quote are USDT, BTC, BNB etc. possible values for 
-    market are SPOT or MARGIN'''
-    info = client.get_exchange_info()
-    symbols = info.get('symbols')
-    pairs = []
-    for sym in symbols:
-        right_quote = sym.get('quoteAsset') == quote
-        right_market = market in sym.get('permissions')
-        trading = sym.get('status') == 'TRADING'
-        if right_quote and right_market and trading:
-            pairs.append(sym.get('symbol'))
+    market are SPOT or CROSS'''
+    if market == 'SPOT':
+        info = client.get_exchange_info()
+        symbols = info.get('symbols')
+        pairs = []
+        for sym in symbols:
+            right_quote = sym.get('quoteAsset') == quote
+            right_market = market in sym.get('permissions')
+            trading = sym.get('status') == 'TRADING'
+            if right_quote and right_market and trading:
+                pairs.append(sym.get('symbol'))
+    elif market == 'CROSS':
+        pairs = []
+        info = client.get_margin_all_pairs()
+        for i in info:
+            if i.get('quote') == quote:
+                pairs.append(i.get('symbol'))
     
     return pairs
 
@@ -538,7 +585,6 @@ def buy_asset(pair, usdt_size):
     
     trade_dict = {'timestamp': order.get('transactTime'), 
                   'pair': order.get('symbol'), 
-                  'side': order.get('side'), 
                   'trig_price': usdt_price, 
                   'exe_price': avg_price, 
                   'base_size': float(order.get('executedQty')), 
@@ -590,7 +636,6 @@ def sell_asset(pair, pct=100):
     
     trade_dict = {'timestamp': order.get('transactTime'), 
                   'pair': order.get('symbol'), 
-                  'side': order.get('side'), 
                   'trig_price': usdt_price, 
                   'exe_price': avg_price, 
                   'base_size': float(order.get('executedQty')), 

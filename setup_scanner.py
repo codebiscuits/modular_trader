@@ -4,6 +4,7 @@ which match the criteria for a trade, then executes the trade if possible'''
 import pandas as pd
 import matplotlib.pyplot as plt
 import keys, time, json
+from json.decoder import JSONDecodeError
 from datetime import datetime
 import binance_funcs as funcs
 import strategies as strats
@@ -25,7 +26,7 @@ client = Client(keys.bPkey, keys.bSkey)
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
-live = True
+live = False
 if live:
     print('-:-' * 20)
 else:
@@ -34,31 +35,92 @@ else:
 all_start = time.perf_counter()
 
 # constants
-rsi_length = 4
-oversold = 45
-overbought = 96
-max_spread = 0.5
-fixed_risk = 0.003
-total_r_limit = 30
-max_positions = total_r_limit # if all pos are below b/e i don't want to open more
-max_init_r = fixed_risk * total_r_limit
-max_length = 250
-current_strat = 'rsi_st_ema'
-quote_asset = 'USDT'
+params = {'strat': '20/200ema cross and supertrend with rsi triggers', 
+          'current_strat': 'rsi_st_ema', 
+          'quote_asset': 'USDT', 
+          'rsi_length': 4, 
+          'oversold': 45, 
+          'overbought': 96, 
+          'fixed_risk': 0.003, 
+          'max_spread': 0.5, 
+          'total_r_limit': 30, 
+          'max_length': 250}
+# rsi_length = 4
+# oversold = 45
+# overbought = 96
+# max_spread = 0.5
+# fixed_risk = 0.003
+# total_r_limit = 30
+max_positions = params.get('total_r_limit') # if all pos are below b/e i don't want to open more
+max_init_r = params.get('fixed_risk') * params.get('total_r_limit')
+# max_length = 250
+# current_strat = 'rsi_st_ema'
+# quote_asset = 'USDT'
+
 
 # create pairs list
 all_pairs = funcs.get_pairs('USDT', 'SPOT') # list
 spreads = funcs.binance_spreads('USDT') # dict
-positions = funcs.current_positions(fixed_risk)
+positions = funcs.current_positions(params.get('fixed_risk'))
 pairs_in_pos = [pip for pip in all_pairs if positions.get(pip) != 0]
 other_pairs = [p for p in all_pairs if p in spreads and 
                                        spreads.get(p) < 0.01 and 
                                        positions.get(p) == 0]
 pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked first
 
+# read trade records
+# with open(f"{market_data}/{params.get('current_strat')}_open_trades.json", "r") as ot_file:
+with open(f"/mnt/pi_2/market_data/{params.get('current_strat')}_open_trades.json", "r") as ot_file:
+    try:
+        ot = json.load(ot_file)
+    except JSONDecodeError:
+        ot = {}
+# with open(f"{market_data}/{params.get('current_strat')}_closed_trades.json", "r") as ct_file:
+with open(f"/mnt/pi_2/market_data/{params.get('current_strat')}_closed_trades.json", "r") as ct_file:
+    try:
+        closed_trades = json.load(ct_file)
+        next_id = closed_trades.keys()[-1] + 1
+    except JSONDecodeError:
+        closed_trades = {}
+        next_id = 0
+
+# create list of trade records which don't match current positions
+open_trades = list(ot.keys())
+stopped_trades = [st for st in open_trades if st not in pairs_in_pos] # these positions must have been stopped out
+
+# look for stopped out positions and complete trade records
+for i in stopped_trades:
+    trade_record = ot.get(i)
+    close_is_buy = trade_record[0].get('type') == 'open_short'
+    trades = client.get_my_trades(symbol=i)
+    for t in trades[::-1]:
+        if t.get('isBuyer') == close_is_buy:
+            trade_dict = {'timestamp': t.get('time'), 
+                          'pair': t.get('symbol'), 
+                          'type': 'stop_short' if t.get('isBuyer') else 'stop_long', 
+                          'exe_price': float(t.get('price')), 
+                          'base_size': float(t.get('qty')), 
+                          'quote_size': float(t.get('quoteQty')), 
+                          'fee': t.get('commission'), 
+                          'fee_currency': t.get('commissionAsset'), 
+                          'reason': 'hit hard stop', 
+                          }
+            break
+    trade_record.append(trade_dict)
+    closed_trades[next_id] = trade_record
+    next_id += 1
+    del ot[i]
+
+# TODO i think ive set up the first section of the new trade recording system.
+# now i need to add this new system to the actual trading part of the script and 
+# then the risk limiting part of the script. i dont think i will need to add anything
+# to the logging section at the end but i should think more about whether that is correct or not
+
 now_start = datetime.now().strftime('%d/%m/%y %H:%M')
 
-print(f'Current time: {now_start}, rsi: {rsi_length}-{oversold}-{overbought}, fixed risk: {fixed_risk}')
+print(f"Current time: {now_start}, \
+      rsi: {params.get('rsi_length')}-{params.get('oversold')}-{params.get('overbought')}, \
+          fixed risk: {params.get('fixed_risk')}")
 
 total_bal = funcs.account_bal()
 avg_prices = funcs.get_avg_prices()
@@ -71,7 +133,7 @@ total_open_risk = 0 # expressed in terms of R
 pos_open_risk = {} # expressed in terms of R
 
 for pair in pairs:
-    asset = pair[:-1*len(quote_asset)]
+    asset = pair[:-1*len(params.get('quote_asset'))]
     in_pos = bool(positions.get(pair))
     if pair in not_pairs and not in_pos:
         continue
@@ -81,12 +143,12 @@ for pair in pairs:
     if len(df) <= 200 and not in_pos:
         continue
     
-    if len(df) > max_length:
-        df = df.iloc[-1*max_length:,]
+    if len(df) > params.get('max_length'):
+        df = df.iloc[-1*params.get('max_length'):,]
         df.reset_index(drop=True, inplace=True)
     
     # generate signals (tp_long, close_long, open_long)
-    signals, inval_dist = strats.rsi_st_ema_lo(df, in_pos, rsi_length, overbought, oversold)
+    signals = strats.rsi_st_ema_lo(df, in_pos, params.get('rsi_length'), params.get('overbought'), params.get('oversold'))
     
     # execute orders
     # TODO need to integrate ALL binance filters into order calculations
@@ -94,22 +156,25 @@ for pair in pairs:
     price = df.at[len(df)-1, 'close']
     tp_trades = []
     
-    if signals[0]: # tp_long
+    if signals.get('tp_long'):
         note = f"*** sell {pair} @ {price}"
         print(now, note)
         if live:
             push = pb.push_note(now, note)
             try:
                 funcs.clear_stop(pair)
-                sell_order = funcs.sell_asset(pair)
-                sell_order['reason'] = 'trade over-extended'
-                trade_notes.append(sell_order)
-                in_pos = False
+                tp_order = funcs.sell_asset(pair)
+                tp_order['type'] = 'tp_long'
+                tp_order['reason'] = 'trade over-extended'
+                trade_notes.append(tp_order) # hopefuly obsolete now
+                trade_record = ot.get(pair)
+                trade_record.append(tp_order)
+                ot['pair'] = trade_record
             except BinanceAPIException as e:
                 print(f'problem with tp order for {pair}')
                 print(e)
                 push = pb.push_note(now, f'exeption during {pair} tp order')
-    elif signals[1]: # close_long
+    elif signals.get('close_long'):
         note = f"*** sell (stop) {pair} @ {price}"
         print(now, note)
         if live:
@@ -117,14 +182,20 @@ for pair in pairs:
             try:
                 funcs.clear_stop(pair)
                 sell_order = funcs.sell_asset(pair)
+                sell_order['type'] = 'close_long'
                 sell_order['reason'] = 'hit trailing stop'
                 trade_notes.append(sell_order)
+                trade_record = ot.get(pair)
+                trade_record.append(tp_order)
+                closed_trades[next_id] = trade_record
+                next_id += 1
+                del ot[pair]
                 in_pos = False
             except BinanceAPIException as e:
                 print(f'problem with sell order for {pair}')
                 print(e)
                 push = pb.push_note(now, f'exeption during {pair} sell order')
-    elif signals[2]: # open_long
+    elif signals.get('open_long'):
         # # calc and record volume trend
         # df['vol_ema20'] = df.volume.ewm(20).mean()
         # df['vol_ema200'] = df.volume.ewm(200).mean()
@@ -136,7 +207,7 @@ for pair in pairs:
         if len(pairs_in_pos) >= max_positions:
             print(f'{now} {pair} signal, too many open positions already')
             continue
-        sprd = spreads.get(pair)
+        # sprd = spreads.get(pair)
         stp = df.at[len(df)-1, 'st'] # TODO incorporate spread into this
         risk = (price - stp) / price
         # print(f'risk: {risk:.4}, stp: {stp:.4}, spread: {sprd:.4}')
@@ -144,9 +215,9 @@ for pair in pairs:
         if risk > mir:
             print(f'{now} {pair} signal, too far from invalidation ({risk * 100:.1f}%)')
             continue
-        size, usdt_size = funcs.get_size(price, fixed_risk, total_bal, risk)
+        size, usdt_size = funcs.get_size(price, params.get('fixed_risk'), total_bal, risk)
         usdt_bal = funcs.free_usdt()
-        usdt_depth = funcs.get_depth(pair, 'buy', max_spread)
+        usdt_depth = funcs.get_depth(pair, 'buy', params.get('max_spread'))
         if usdt_depth < usdt_size and usdt_depth > (usdt_size/2): # only trim size if books are a bit too thin
             trim_size = f'{now} {pair} books too thin, reducing size from {usdt_size:.3} to {usdt_depth:.3}'
             print(trim_size)
@@ -159,7 +230,7 @@ for pair in pairs:
         
         if not enough_depth:
             if usdt_depth == 0:
-                non_trade = f'{now} {pair} signal, spread wider than {max_spread} limit'
+                non_trade = f"{now} {pair} signal, spread wider than {params.get('max_spread')} limit"
                 print(non_trade)
                 non_trade_notes.append(non_trade)
             else:
@@ -176,7 +247,7 @@ for pair in pairs:
             non_trade_notes.append(non_trade)
         if enough_usdt and enough_size and enough_depth:
             # check total risk and close profitable positions if necessary
-            tp_trades = funcs.reduce_risk(pos_open_risk, total_r_limit, live)
+            tp_trades = funcs.reduce_risk(pos_open_risk, params.get('total_r_limit'), live)
             # open new position
             note = f"buy {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
             print(now, note)
@@ -184,11 +255,12 @@ for pair in pairs:
                 push = pb.push_note(now, note)
                 try:
                     buy_order = funcs.buy_asset(pair, usdt_size)
+                    buy_order['type'] = 'open_long'
                     buy_order['reason'] = 'buy conditions met'
+                    buy_order['hard_stop'] = stp
                     trade_notes.append(buy_order)
+                    ot['pair'] = [buy_order]
                     stop_order = funcs.set_stop(pair, stp)
-                    stop_order['reason'] = 'safety first'
-                    trade_notes.append(stop_order)
                     in_pos = True
                 except BinanceAPIException as e:
                     print(f'problem with buy order for {pair}')
@@ -196,14 +268,16 @@ for pair in pairs:
                     push = pb.push_note(now, f'exeption during {pair} buy order')
         print('-')
             
-    sizing = funcs.current_sizing(fixed_risk)
+    sizing = funcs.current_sizing(params.get('fixed_risk'))
+    
+    inval_dist = signals.get('inval')
     
     if in_pos:
         pos_bal = sizing.get(asset)['allocation'] * total_bal
         # calculate open risk
         open_risk = pos_bal - (pos_bal / inval_dist) # dollar amount i would lose 
         # from current value if this position ended up getting stopped out
-        open_risk_r = (open_risk / total_bal) / fixed_risk
+        open_risk_r = (open_risk / total_bal) / params.get('fixed_risk')
         
         # take profit on risky positions
         if open_risk_r > 10:
@@ -217,12 +291,17 @@ for pair in pairs:
                 push = pb.push_note(now, note)
                 funcs.clear_stop(pair)
                 sell_order = funcs.sell_asset(pair, pct=50)
-                sell_order['reason'] = 'taking partial profit'
+                sell_order['type'] = 'tp_long'
+                sell_order['reason'] = 'reducing portfolio risk'
                 stp = df.at[len(df)-1, 'st']
                 stop_order = funcs.set_stop(pair, stp)
                 trade_notes.append(sell_order)
+                trade_record = ot.get(pair)
+                trade_record[0]['hard_stop'] = stp
+                trade_record.append(tp_order)
+                ot['pair'] = trade_record
             open_risk = pos_bal - (pos_bal / inval_dist) # update with new position
-            open_risk_r = (open_risk / total_bal) / fixed_risk
+            open_risk_r = (open_risk / total_bal) / params.get('fixed_risk')
         
         total_open_risk += open_risk_r
         pos_open_risk[pair] = {'R': round(open_risk_r, 3), '$': round(open_risk, 2)}
@@ -235,55 +314,54 @@ if not live:
 
 
 num_open_positions = len(pos_open_risk)
-dollar_tor = total_bal * fixed_risk * total_open_risk
+dollar_tor = total_bal * params.get('fixed_risk') * total_open_risk
 
 print(f'{num_open_positions = }, {total_open_risk = }R, ie ${dollar_tor:.2f}')
 
 if live:
-    # check total balance and record it in a file for analysis
-    params = {'strat': '20/200ema cross and supertrend with rsi triggers', 
-              'rsi length': rsi_length, 'oversold': oversold, 
-              'overbought': overbought, 'fixed risk': fixed_risk}
-    sizing = funcs.current_sizing(fixed_risk)
-    total_bal = funcs.account_bal()
-    bal_record = {'timestamp': now_start, 'balance': round(total_bal, 2), 'positions': sizing, 'params': params}
-    new_line = json.dumps(bal_record)
-    with open(f"{market_data}/rsi-st-ema_bal_history.txt", "a") as file:
-        file.write(new_line)
-        file.write('\n')
     
-    # save a json of any trades that have happened with relevant data
-    if tp_trades: # if the reduce_risk function closed any positions, they will be in here
-        trade_notes.extend(tp_trades)
-    with open(f"{market_data}/{current_strat}_trades.txt", "a") as file:
-        for trade in trade_notes:
-            file.write(json.dumps(trade))
+    def log(params, market_data, spreads, pos_open_risk, non_trade_notes, ot, closed_trades):    
+        
+        # check total balance and record it in a file for analysis
+        sizing = funcs.current_sizing(params.get('fixed_risk'))
+        for pair in sizing:
+            R = pos_open_risk['pair'].get('R')
+            dollar = pos_open_risk['pair'].get('$')
+            pair['or_R'] = R
+            pair['or_$'] = dollar
+        total_bal = funcs.account_bal()
+        bal_record = {'timestamp': now_start, 'balance': round(total_bal, 2), 'positions': sizing, 'params': params}
+        new_line = json.dumps(bal_record)
+        with open(f"{market_data}/{params.get('current_strat')}_bal_history.txt", "a") as file:
+            file.write(new_line)
+            file.write('\n')
+        
+        # save a json of any trades that have happened with relevant data
+        if tp_trades: # if the reduce_risk function closed any positions, they will be in here
+            trade_notes.extend(tp_trades)
+        with open(f"{market_data}/{params.get('current_strat')}_trades.txt", "a") as file:
+            for trade in trade_notes:
+                file.write(json.dumps(trade))
+                file.write('\n')        
+        with open(f"{market_data}/{params.get('current_strat')}_open_trades.json", "w") as ot_file:
+            json.dump(ot, ot_file)            
+        with open(f"{market_data}/{params.get('current_strat')}_closed_trades.json", "w") as ct_file:
+            json.dump(closed_trades, ct_file)
+        
+        # record open_risk statistics
+        risk_record = {'timestamp': now_start, 'open_risk': pos_open_risk}
+        with open(f"{market_data}/{params.get('current_strat')}_open_risk.txt", "a") as file:
+            file.write(json.dumps(risk_record))
+            file.write('\n')
+        
+        # record all skipped or reduced trades
+        non_trade_record = {'timestamp': now_start, 'non_trades': non_trade_notes}
+        with open(f"{market_data}/{params.get('current_strat')}_non_trades.txt", "a") as file:
+            file.write(json.dumps(non_trade_record))
             file.write('\n')
     
-    # record spreads and depths for other analysis
-    stamped_spreads = {'timestamp': now_start, 'spreads': spreads}
-    with open(f"{market_data}/binance_spreads_history.txt", "a") as file:
-        file.write(json.dumps(stamped_spreads))
-        file.write('\n')
-    
-    depths = funcs.binance_depths()
-    stamped_depths = {'timestamp': now_start, 'depths': depths}
-    with open(f"{market_data}/binance_depths_history.txt", "a") as file:
-        file.write(json.dumps(stamped_depths))
-        file.write('\n')
-    
-    # record open_risk statistics
-    risk_record = {'timestamp': now_start, 'open_risk': pos_open_risk}
-    with open(f"{market_data}/{current_strat}_open_risk.txt", "a") as file:
-        file.write(json.dumps(risk_record))
-        file.write('\n')
-    
-    # record all skipped or reduced trades
-    non_trade_record = {'timestamp': now_start, 'non_trades': non_trade_notes}
-    with open(f"{market_data}/{current_strat}_non_trades.txt", "a") as file:
-        file.write(json.dumps(non_trade_record))
-        file.write('\n')
-    
+    log(params, market_data, spreads, pos_open_risk, non_trade_notes, ot, closed_trades)
+
 else:
     print('warning: logging switched off')
     

@@ -24,6 +24,7 @@ def ha_st_lo_bt(df):
     exe_price = [df.at[0, 'close']] # for claculating pnl evolution
     pos_list = [0, 0] # create column which tracks when the strat is in a position
     in_pos = 0
+    tp_ready = False
     buys = 0
     adds = 0
     sells = 0
@@ -32,8 +33,8 @@ def ha_st_lo_bt(df):
     
     max_lev = 3
     leverage = max_lev / 3
-    init_size = leverage * 0.333
-    tp_thresh = 1.5
+    init_size = leverage# * 0.333
+    tp_thresh = 1.05
     tp_amt = 0.5
     
     # loop through ohlc data and generate signals
@@ -56,15 +57,17 @@ def ha_st_lo_bt(df):
         trend_up = df.ema200[i] > df.ema200[i-1]
         cross_up = (df.ha_close[i] > df.st[i])# and (df.ha_close[i-1] <= df.st[i-1])
         cross_down = (df.ha_close[i] < df.st[i])# and (df.ha_close[i-1] >= df.st[i-1])
+        cross_down_tight = df.close[i] < df.st2[i]
         stop_loss = df.low[i] < stop_price
         low_risk = 1 <= df.ratio[i] < 1.1
         high_risk = df.ratio[i] > tp_thresh
-        add_size = (leverage / size_denom)
+        add_size = (0.5 * leverage / size_denom)
         
         buy_sig = trend_up and cross_up and not in_pos
         add_sig = trend_up and low_risk and rising and 0 < in_pos < (leverage / size_denom) # make sure adding would actually increase pos size
         sell_sig = cross_down and in_pos
         tp_sig = high_risk and in_pos
+        tp_exe = tp_ready and cross_down_tight
         stop_sig = stop_loss and in_pos
         
         if buy_sig:
@@ -81,6 +84,7 @@ def ha_st_lo_bt(df):
             in_pos = init_entry
             pos_list.append(in_pos)
             buys += 1
+            tp_ready = False
             # print(f'init entry, pos size: {in_pos:.3} (ratio: {ratio:.3})')
         elif add_sig: # add to position when r/r is good
             signals.append('add')
@@ -93,6 +97,7 @@ def ha_st_lo_bt(df):
             in_pos = min((pos_list[-1]+add_size), max_lev)
             pos_list.append(in_pos)
             adds += 1
+            tp_ready = False
             # print(f'add, pos size: {in_pos:.3}')
         elif sell_sig: # sell in profit at trailing stop
             signals.append('sell')
@@ -105,9 +110,20 @@ def ha_st_lo_bt(df):
             in_pos = 0
             pos_list.append(in_pos)
             sells += 1
+            tp_ready = False
             # print(f'sell, pos size: {in_pos}')
-        elif tp_sig: # take partial profit when r/r is bad
-            signals.append('tp')
+        elif tp_sig: # tighten trailing stop when r/r is bad
+            signals.append('tp_sig')
+            s_buy.append(np.nan)
+            s_add.append(np.nan)
+            s_sell.append(np.nan)
+            s_tp.append(np.nan)
+            s_stop.append(np.nan)
+            exe_price.append(df.close[i])
+            pos_list.append(pos_list[-1])
+            tp_ready = True
+        elif tp_exe: # take partial profit when tight trailing stop is hit
+            signals.append('tp_exe')
             s_buy.append(np.nan)
             s_add.append(np.nan)
             s_sell.append(np.nan)
@@ -118,6 +134,7 @@ def ha_st_lo_bt(df):
             pos_list.append(in_pos) # if tp_amt is 0.25 
             # this will reduce position size by 25%
             tps += 1
+            tp_ready = False
             # print(f'take profit, pos size: {in_pos:.3}')
         elif stop_sig: # sell at a loss at initial stop
             signals.append('stop')
@@ -130,6 +147,7 @@ def ha_st_lo_bt(df):
             in_pos = 0
             pos_list.append(in_pos)
             stops += 1
+            tp_ready = False
             # print(f'stopped out, pos size: {in_pos}')
         else:
             signals.append(np.nan)
@@ -318,7 +336,8 @@ def ha_st_lo(df, in_pos, mult):
     
     inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
     
-    return (tp_long, close_long, open_long), inval
+    return {'open_long': open_long, 'close_long': close_long, 
+            'tp_long': tp_long, 'inval': inval}
 
 def rsi_st_ema_lo(df, in_pos, rsi_length, overbought, oversold):
     df['20ema'] = df.close.ewm(20).mean()
@@ -326,7 +345,8 @@ def rsi_st_ema_lo(df, in_pos, rsi_length, overbought, oversold):
     ema_ratio = df.at[len(df)-1, '20ema'] / df.at[len(df)-1, '200ema']
     
     if ema_ratio < 1 and in_pos == 0: # this condition is just to save time
-        return (False, False, False), 1
+        return {'open_long': False, 'close_long': False, 
+                'tp_long': False, 'inval': 1}
     else:    
         df['st'], df['st_u'], df['st_d'] = ind.supertrend(df.high, df.low, df.close, 10, 3)
         df['rsi'] = RSIIndicator(df.close, rsi_length).rsi()
@@ -347,5 +367,26 @@ def rsi_st_ema_lo(df, in_pos, rsi_length, overbought, oversold):
         
         inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
         
-        return (tp_long, close_long, open_long), inval
+        return {'open_long': open_long, 'close_long': close_long, 
+                'tp_long': tp_long, 'inval': inval}
+
+def double_st(df, in_pos):
+    df['st'], df['st_u'], df['st_d'] = ind.supertrend(df.high, df.low, df.close, 10, 3)
+    df['st2'], df['st_u2'], df['st_d2'] = ind.supertrend(df.high, df.low, df.close, 3, 1.5)
+    
+    bullish_loose = df.close > df.st
+    bearish_loose = df.close < df.st
+    bullish_tight = df.close > df.st2
+    bearish_tight = df.close < df.st2
+    
+    open_long = bullish_loose and bullish_tight and not in_pos
+    close_long = bearish_tight and in_pos
+    open_short = bearish_loose and bearish_tight and not in_pos
+    close_short = bullish_tight and in_pos
+    
+    inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
+    
+    return {'open_long': open_long, 'close_long': close_long, 
+            'open_short': open_short, 'close_short': close_short, 
+            'inval': inval}
     
