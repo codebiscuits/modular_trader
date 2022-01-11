@@ -327,14 +327,14 @@ if live:
         
         # check total balance and record it in a file for analysis
         sizing = funcs.current_sizing(params.get('fixed_risk'))
-        for pair in sizing:
+        for pair, v in sizing.items():
             if not pair in pos_open_risk:
-                pair['or_R'] = 0
-                pair['or_$'] = 0
+                v['or_R'] = 0
+                v['or_$'] = 0
             R = pos_open_risk[pair].get('R')
             dollar = pos_open_risk[pair].get('$')
-            pair['or_R'] = R
-            pair['or_$'] = dollar
+            v['or_R'] = R
+            v['or_$'] = dollar
         total_bal = funcs.account_bal()
         bal_record = {'timestamp': now_start, 'balance': round(total_bal, 2), 'positions': sizing, 'params': params}
         new_line = json.dumps(bal_record)
