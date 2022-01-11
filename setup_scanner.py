@@ -328,6 +328,9 @@ if live:
         # check total balance and record it in a file for analysis
         sizing = funcs.current_sizing(params.get('fixed_risk'))
         for pair in sizing:
+            if not pair in pos_open_risk:
+                pair['or_R'] = 0
+                pair['or_$'] = 0
             R = pos_open_risk[pair].get('R')
             dollar = pos_open_risk[pair].get('$')
             pair['or_R'] = R
