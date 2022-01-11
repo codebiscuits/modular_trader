@@ -26,7 +26,7 @@ client = Client(keys.bPkey, keys.bSkey)
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
-live = False
+live = True
 if live:
     print('-:-' * 20)
 else:
@@ -68,6 +68,8 @@ other_pairs = [p for p in all_pairs if p in spreads and
                                        positions.get(p) == 0]
 pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked first
 
+now_start = datetime.now().strftime('%d/%m/%y %H:%M')
+
 # read trade records
 # with open(f"{market_data}/{params.get('current_strat')}_open_trades.json", "r") as ot_file:
 with open(f"/mnt/pi_2/market_data/{params.get('current_strat')}_open_trades.json", "r") as ot_file:
@@ -105,6 +107,9 @@ for i in stopped_trades:
                           'fee_currency': t.get('commissionAsset'), 
                           'reason': 'hit hard stop', 
                           }
+            note = f"*** stopped out {t.get('symbol')} @ {t.get('price')}"
+            print(now_start, note)
+            push = pb.push_note(now_start, note)
             break
     trade_record.append(trade_dict)
     closed_trades[next_id] = trade_record
@@ -115,8 +120,6 @@ for i in stopped_trades:
 # now i need to add this new system to the actual trading part of the script and 
 # then the risk limiting part of the script. i dont think i will need to add anything
 # to the logging section at the end but i should think more about whether that is correct or not
-
-now_start = datetime.now().strftime('%d/%m/%y %H:%M')
 
 print(f"Current time: {now_start}, \
       rsi: {params.get('rsi_length')}-{params.get('oversold')}-{params.get('overbought')}, \
