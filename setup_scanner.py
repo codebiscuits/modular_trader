@@ -121,7 +121,7 @@ for i in stopped_trades:
 # then the risk limiting part of the script. i dont think i will need to add anything
 # to the logging section at the end but i should think more about whether that is correct or not
 
-print(f"Current time: {now_start}, \
+print(f"Current time: {now_start}, {params.get('current_strat')}\
       rsi: {params.get('rsi_length')}-{params.get('oversold')}-{params.get('overbought')}, \
           fixed risk: {params.get('fixed_risk')}")
 
@@ -328,8 +328,8 @@ if live:
         # check total balance and record it in a file for analysis
         sizing = funcs.current_sizing(params.get('fixed_risk'))
         for pair in sizing:
-            R = pos_open_risk['pair'].get('R')
-            dollar = pos_open_risk['pair'].get('$')
+            R = pos_open_risk[pair].get('R')
+            dollar = pos_open_risk[pair].get('$')
             pair['or_R'] = R
             pair['or_$'] = dollar
         total_bal = funcs.account_bal()
