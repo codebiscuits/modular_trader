@@ -81,7 +81,7 @@ with open(f"{market_data}/{params.get('current_strat')}_closed_trades.json", "r"
 # with open(f"/mnt/pi_2/market_data/{params.get('current_strat')}_closed_trades.json", "r") as ct_file:
     try:
         closed_trades = json.load(ct_file)
-        next_id = closed_trades.keys()[-1] + 1
+        next_id = sorted(list(closed_trades.keys()))[-1] + 1
     except JSONDecodeError:
         closed_trades = {}
         next_id = 0
