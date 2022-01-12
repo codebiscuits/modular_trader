@@ -331,10 +331,11 @@ if live:
             if not pair in pos_open_risk:
                 v['or_R'] = 0
                 v['or_$'] = 0
-            R = pos_open_risk[pair].get('R')
-            dollar = pos_open_risk[pair].get('$')
-            v['or_R'] = R
-            v['or_$'] = dollar
+            else:
+                R = pos_open_risk[pair].get('R')
+                dollar = pos_open_risk[pair].get('$')
+                v['or_R'] = R
+                v['or_$'] = dollar
         total_bal = funcs.account_bal()
         bal_record = {'timestamp': now_start, 'balance': round(total_bal, 2), 'positions': sizing, 'params': params}
         new_line = json.dumps(bal_record)
