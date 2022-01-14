@@ -45,27 +45,18 @@ params = {'strat': '20/200ema cross and supertrend with rsi triggers',
           'max_spread': 0.5, 
           'total_r_limit': 30, 
           'max_length': 250}
-# rsi_length = 4
-# oversold = 45
-# overbought = 96
-# max_spread = 0.5
-# fixed_risk = 0.003
-# total_r_limit = 30
 max_positions = params.get('total_r_limit') # if all pos are below b/e i don't want to open more
 max_init_r = params.get('fixed_risk') * params.get('total_r_limit')
-# max_length = 250
-# current_strat = 'rsi_st_ema'
-# quote_asset = 'USDT'
 
 
 # create pairs list
 all_pairs = funcs.get_pairs('USDT', 'SPOT') # list
 spreads = funcs.binance_spreads('USDT') # dict
-positions = funcs.current_positions(params.get('fixed_risk'))
-pairs_in_pos = [pip for pip in all_pairs if positions.get(pip) != 0]
+positions = list(funcs.current_sizing(params.get('fixed_risk')).keys())
+pairs_in_pos = [p + 'USDT' for p in positions if p != 'USDT']
 other_pairs = [p for p in all_pairs if p in spreads and 
                                        spreads.get(p) < 0.01 and 
-                                       positions.get(p) == 0]
+                                       not p in pairs_in_pos]
 pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked first
 
 now_start = datetime.now().strftime('%d/%m/%y %H:%M')
@@ -140,7 +131,8 @@ pos_open_risk = {} # expressed in terms of R
 
 for pair in pairs:
     asset = pair[:-1*len(params.get('quote_asset'))]
-    in_pos = bool(positions.get(pair))
+    # in_pos = bool(positions.get(pair))
+    in_pos = pair in pairs_in_pos
     if pair in not_pairs and not in_pos:
         continue
     # get data
@@ -279,7 +271,7 @@ for pair in pairs:
     inval_dist = signals.get('inval')
     
     if in_pos:
-        pos_bal = sizing.get(asset)['allocation'] * total_bal
+        pos_bal = sizing.get(asset)['value']
         # calculate open risk
         open_risk = pos_bal - (pos_bal / inval_dist) # dollar amount i would lose 
         # from current value if this position ended up getting stopped out

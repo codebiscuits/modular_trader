@@ -117,40 +117,40 @@ def get_size(price, fr, balance, risk):
     
     return asset_quantity, usdt_size
 
-def current_positions(fr):
-    total_bal = account_bal()
-    threshold_bal = total_bal * fr # asset balances below this value are considered dust
-    # also, this is 1R, ie the amount of money lost from entry to stop
+# def current_positions(fr):
+#     total_bal = account_bal()
+#     threshold_bal = total_bal * fr # asset balances below this value are considered dust
+#     # also, this is 1R, ie the amount of money lost from entry to stop
     
-    info = client.get_account()
-    bals = info.get('balances')
+#     info = client.get_account()
+#     bals = info.get('balances')
     
-    prices = client.get_all_tickers()
-    price_dict = {x.get('symbol') : float(x.get('price')) for x in prices}
+#     prices = client.get_all_tickers()
+#     price_dict = {x.get('symbol') : float(x.get('price')) for x in prices}
     
-    pos_dict = {}
-    for b in bals:        
-        asset = b.get('asset')
-        if asset == 'USDT':
-            continue
-        pair = asset + 'USDT'
-        price = price_dict.get(pair)
-        if price == None:
-            continue
-        quant = float(b.get('free')) + float(b.get('locked'))
-        value = price * quant # dollar value of the position
-        if asset == 'BNB':
-            if value >= threshold_bal and value > 15:
-                pos_dict[pair] = value / total_bal
-            else:
-                pos_dict[pair] = 0
-        else:
-            if value >= threshold_bal and value > 10:
-                pos_dict[pair] = value / total_bal
-            else:
-                pos_dict[pair] = 0
+#     pos_dict = {}
+#     for b in bals:        
+#         asset = b.get('asset')
+#         if asset == 'USDT':
+#             continue
+#         pair = asset + 'USDT'
+#         price = price_dict.get(pair)
+#         if price == None:
+#             continue
+#         quant = float(b.get('free')) + float(b.get('locked'))
+#         value = price * quant # dollar value of the position
+#         if asset == 'BNB':
+#             if value >= threshold_bal and value > 15:
+#                 pos_dict[pair] = value / total_bal
+#             else:
+#                 pos_dict[pair] = 0
+#         else:
+#             if value >= threshold_bal and value > 10:
+#                 pos_dict[pair] = value / total_bal
+#             else:
+#                 pos_dict[pair] = 0
             
-    return pos_dict
+#     return pos_dict
 
 def current_sizing(fr):
     '''returns a dict with assets as keys and asset value as a proportion of total as values'''
@@ -180,7 +180,7 @@ def current_sizing(fr):
             continue
         if value >= threshold_bal:
             pct = round(value / total_bal, 5)
-            size_dict[asset] = {'qty': quant, 'allocation': pct}
+            size_dict[asset] = {'qty': quant, 'value': value, 'allocation': pct}
             
     return size_dict
 
@@ -731,6 +731,8 @@ def reduce_risk(pos_open_risk, r_limit, live):
                 total_r -= pos[1]
     
     return trade_notes
+
+
 
 
 
