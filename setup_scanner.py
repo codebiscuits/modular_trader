@@ -257,7 +257,7 @@ for pair in pairs:
                     buy_order['reason'] = 'buy conditions met'
                     buy_order['hard_stop'] = stp
                     trade_notes.append(buy_order)
-                    ot['pair'] = [buy_order]
+                    ot[pair] = [buy_order]
                     stop_order = funcs.set_stop(pair, stp)
                     in_pos = True
                 except BinanceAPIException as e:
@@ -297,7 +297,7 @@ for pair in pairs:
                 trade_record = ot.get(pair)
                 trade_record[0]['hard_stop'] = stp
                 trade_record.append(tp_order)
-                ot['pair'] = trade_record
+                ot[pair] = trade_record
             open_risk = pos_bal - (pos_bal / inval_dist) # update with new position
             open_risk_r = (open_risk / total_bal) / params.get('fixed_risk')
         
