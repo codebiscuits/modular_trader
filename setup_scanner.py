@@ -14,6 +14,7 @@ from pushbullet import Pushbullet
 from config import not_pairs, market_data
 from pprint import pprint
 import utility_funcs as uf
+from pathlib import Path
 
 
 plt.style.use('fivethirtyeight')
@@ -26,7 +27,10 @@ client = Client(keys.bPkey, keys.bSkey)
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
-live = True
+# if the path below doesn't exist, the script is running on the wrong computer
+pi2path = Path('/home/ubuntu/rpi_2.txt')
+live = pi2path.exists()
+
 if live:
     print('-:-' * 20)
 else:
@@ -52,28 +56,36 @@ max_init_r = params.get('fixed_risk') * params.get('total_r_limit')
 # create pairs list
 all_pairs = funcs.get_pairs('USDT', 'SPOT') # list
 spreads = funcs.binance_spreads('USDT') # dict
-positions = list(funcs.current_sizing(params.get('fixed_risk')).keys())
+positions = list(funcs.current_positions(params.get('fixed_risk')).keys())
 pairs_in_pos = [p + 'USDT' for p in positions if p != 'USDT']
 other_pairs = [p for p in all_pairs if p in spreads and 
                                        spreads.get(p) < 0.01 and 
                                        not p in pairs_in_pos]
+other_pairs = [] ##### dont forget to delete this
+
 pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked first
 
 now_start = datetime.now().strftime('%d/%m/%y %H:%M')
 
 # read trade records
-with open(f"{market_data}/{params.get('current_strat')}_open_trades.json", "r") as ot_file:
-# with open(f"/mnt/pi_2/market_data/{params.get('current_strat')}_open_trades.json", "r") as ot_file:
+if live:
+    ot_path = f"{market_data}/{params.get('current_strat')}_open_trades.json"
+else:
+    ot_path = f"/mnt/pi_2/market_data/{params.get('current_strat')}_open_trades.json"
+with open(ot_path, "r") as ot_file:
     try:
         ot = json.load(ot_file)
     except JSONDecodeError:
         ot = {}
-with open(f"{market_data}/{params.get('current_strat')}_closed_trades.json", "r") as ct_file:
-# with open(f"/mnt/pi_2/market_data/{params.get('current_strat')}_closed_trades.json", "r") as ct_file:
+if live:
+    ct_path = f"{market_data}/{params.get('current_strat')}_closed_trades.json"
+else:
+    ct_path = f"/mnt/pi_2/market_data/{params.get('current_strat')}_closed_trades.json"
+with open(ct_path, "r") as ct_file:
     try:
         closed_trades = json.load(ct_file)
-        if closed_trades.keys():
-            next_id = sorted(list(closed_trades.keys()))[-1] + 1
+        if closed_trades.keys():            
+            next_id = int(sorted(list(closed_trades.keys()))[-1]) + 1
         else:
             next_id = 0
     except JSONDecodeError:
@@ -110,11 +122,6 @@ for i in stopped_trades:
     next_id += 1
     del ot[i]
 
-# TODO i think ive set up the first section of the new trade recording system.
-# now i need to add this new system to the actual trading part of the script and 
-# then the risk limiting part of the script. i dont think i will need to add anything
-# to the logging section at the end but i should think more about whether that is correct or not
-
 print(f"Current time: {now_start}, {params.get('current_strat')}\
       rsi: {params.get('rsi_length')}-{params.get('oversold')}-{params.get('overbought')}, \
           fixed risk: {params.get('fixed_risk')}")
@@ -124,7 +131,7 @@ avg_prices = funcs.get_avg_prices()
 
 funcs.top_up_bnb(15)
 
-trade_notes = []
+trade_notes = [] # can be removed when i know the new system is working
 non_trade_notes = []
 total_open_risk = 0 # expressed in terms of R
 pos_open_risk = {} # expressed in terms of R
@@ -266,8 +273,8 @@ for pair in pairs:
                     push = pb.push_note(now, f'exeption during {pair} buy order')
         print('-')
             
-    sizing = funcs.current_sizing(params.get('fixed_risk'))
-    
+    sizing = funcs.current_positions(params.get('fixed_risk'))
+
     inval_dist = signals.get('inval')
     
     if in_pos:
@@ -302,35 +309,39 @@ for pair in pairs:
             open_risk_r = (open_risk / total_bal) / params.get('fixed_risk')
         
         total_open_risk += open_risk_r
-        pos_open_risk[pair] = {'R': round(open_risk_r, 3), '$': round(open_risk, 2)}
+        pos_open_risk[asset] = {'R': round(open_risk_r, 3), '$': round(open_risk, 2)}
         
     # TODO maybe have a plot rendered and saved every time a trade is triggered
 
+# incorporate pos_open_risk into sizing
+for asset, v in sizing.items():
+    if not asset in pos_open_risk:
+        v['or_R'] = 0
+        v['or_$'] = 0
+    else:
+        R = pos_open_risk[asset].get('R')
+        dollar = pos_open_risk[asset].get('$')
+        v['or_R'] = R
+        v['or_$'] = dollar
+    
 if not live:
-    print('pos_open_risk')
-    pprint(pos_open_risk)                  
-
+    print('---------------- pos_open_risk ----------------')
+    pprint(pos_open_risk)
+    
 
 num_open_positions = len(pos_open_risk)
 dollar_tor = total_bal * params.get('fixed_risk') * total_open_risk
 
 print(f'{num_open_positions = }, {total_open_risk = }R, ie ${dollar_tor:.2f}')
 
+print('---------------- sizing ----------------')
+pprint(sizing)
+
 if live:
     
     def log(params, market_data, spreads, pos_open_risk, non_trade_notes, ot, closed_trades):    
         
         # check total balance and record it in a file for analysis
-        sizing = funcs.current_sizing(params.get('fixed_risk'))
-        for pair, v in sizing.items():
-            if not pair in pos_open_risk:
-                v['or_R'] = 0
-                v['or_$'] = 0
-            else:
-                R = pos_open_risk[pair].get('R')
-                dollar = pos_open_risk[pair].get('$')
-                v['or_R'] = R
-                v['or_$'] = dollar
         total_bal = funcs.account_bal()
         bal_record = {'timestamp': now_start, 'balance': round(total_bal, 2), 'positions': sizing, 'params': params}
         new_line = json.dumps(bal_record)
@@ -374,3 +385,5 @@ rfb = round(total_bal-dollar_tor, 2)
 final_msg = f'Setup Scanner Finished. {elapsed_str}, total open risk: ${dollar_tor:.2f}, risk-free bal: ${rfb}'
 print(final_msg)
 push = pb.push_note(now, final_msg)
+if live:
+    print('-:-' * 20)

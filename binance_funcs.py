@@ -152,7 +152,7 @@ def get_size(price, fr, balance, risk):
             
 #     return pos_dict
 
-def current_sizing(fr):
+def current_positions(fr): # used to be current sizing
     '''returns a dict with assets as keys and asset value as a proportion of total as values'''
     total_bal = account_bal()
     threshold_bal = total_bal * fr
@@ -179,8 +179,8 @@ def current_sizing(fr):
         if asset == 'BNB' and value < 15:
             continue
         if value >= threshold_bal:
-            pct = round(value / total_bal, 5)
-            size_dict[asset] = {'qty': quant, 'value': value, 'allocation': pct}
+            pct = round(100 * value / total_bal, 5)
+            size_dict[asset] = {'qty': quant, 'value': round(value, 2), 'pf%': pct}
             
     return size_dict
 
