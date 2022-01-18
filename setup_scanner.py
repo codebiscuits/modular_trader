@@ -61,8 +61,6 @@ pairs_in_pos = [p + 'USDT' for p in positions if p != 'USDT']
 other_pairs = [p for p in all_pairs if p in spreads and 
                                        spreads.get(p) < 0.01 and 
                                        not p in pairs_in_pos]
-other_pairs = [] ##### dont forget to delete this
-
 pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked first
 
 now_start = datetime.now().strftime('%d/%m/%y %H:%M')
