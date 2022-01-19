@@ -82,8 +82,9 @@ else:
 with open(ct_path, "r") as ct_file:
     try:
         closed_trades = json.load(ct_file)
-        if closed_trades.keys():            
-            next_id = int(sorted(list(closed_trades.keys()))[-1]) + 1
+        if closed_trades.keys():
+            key_ints = [int(x) for x in closed_trades.keys()]
+            next_id = sorted(key_ints)[-1] + 1
         else:
             next_id = 0
     except JSONDecodeError:
@@ -120,9 +121,9 @@ for i in stopped_trades:
     next_id += 1
     del ot[i]
 
-print(f"Current time: {now_start}, {params.get('current_strat')}\
-      rsi: {params.get('rsi_length')}-{params.get('oversold')}-{params.get('overbought')}, \
-          fixed risk: {params.get('fixed_risk')}")
+print(f"Current time: {now_start}, {params.get('current_strat')} \
+rsi: {params.get('rsi_length')}-{params.get('oversold')}-{params.get('overbought')}, \
+fixed risk: {params.get('fixed_risk')}")
 
 total_bal = funcs.account_bal()
 avg_prices = funcs.get_avg_prices()
@@ -189,7 +190,7 @@ for pair in pairs:
                 sell_order['reason'] = 'hit trailing stop'
                 trade_notes.append(sell_order)
                 trade_record = ot.get(pair)
-                trade_record.append(tp_order)
+                trade_record.append(sell_order)
                 closed_trades[next_id] = trade_record
                 next_id += 1
                 del ot[pair]
@@ -293,14 +294,14 @@ for pair in pairs:
             if live:
                 push = pb.push_note(now, note)
                 funcs.clear_stop(pair)
-                sell_order = funcs.sell_asset(pair, pct=50)
-                sell_order['type'] = 'tp_long'
-                sell_order['reason'] = 'reducing portfolio risk'
+                tp_order = funcs.sell_asset(pair, pct=50)
+                tp_order['type'] = 'tp_long'
+                tp_order['reason'] = 'reducing portfolio risk'
                 stp = df.at[len(df)-1, 'st']
                 stop_order = funcs.set_stop(pair, stp)
-                trade_notes.append(sell_order)
+                tp_order['hard_stop'] = stp
+                trade_notes.append(tp_order)
                 trade_record = ot.get(pair)
-                trade_record[0]['hard_stop'] = stp
                 trade_record.append(tp_order)
                 ot[pair] = trade_record
             open_risk = pos_bal - (pos_bal / inval_dist) # update with new position
