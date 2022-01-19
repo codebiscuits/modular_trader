@@ -117,43 +117,8 @@ def get_size(price, fr, balance, risk):
     
     return asset_quantity, usdt_size
 
-# def current_positions(fr):
-#     total_bal = account_bal()
-#     threshold_bal = total_bal * fr # asset balances below this value are considered dust
-#     # also, this is 1R, ie the amount of money lost from entry to stop
-    
-#     info = client.get_account()
-#     bals = info.get('balances')
-    
-#     prices = client.get_all_tickers()
-#     price_dict = {x.get('symbol') : float(x.get('price')) for x in prices}
-    
-#     pos_dict = {}
-#     for b in bals:        
-#         asset = b.get('asset')
-#         if asset == 'USDT':
-#             continue
-#         pair = asset + 'USDT'
-#         price = price_dict.get(pair)
-#         if price == None:
-#             continue
-#         quant = float(b.get('free')) + float(b.get('locked'))
-#         value = price * quant # dollar value of the position
-#         if asset == 'BNB':
-#             if value >= threshold_bal and value > 15:
-#                 pos_dict[pair] = value / total_bal
-#             else:
-#                 pos_dict[pair] = 0
-#         else:
-#             if value >= threshold_bal and value > 10:
-#                 pos_dict[pair] = value / total_bal
-#             else:
-#                 pos_dict[pair] = 0
-            
-#     return pos_dict
-
 def current_positions(fr): # used to be current sizing
-    '''returns a dict with assets as keys and asset value as a proportion of total as values'''
+    '''returns a dict with assets as keys and various expressions of positioning as values'''
     total_bal = account_bal()
     threshold_bal = total_bal * fr
     
@@ -670,6 +635,7 @@ def set_stop(pair, price):
     
     info = client.get_symbol_info(pair)
     order_size = step_round(asset_bal, step_size)# - step_size
+    print(f'checking stop-loss size calc: {asset_bal = } {order_size = }')
     spread = get_spread(pair)
     lower_price = price * (1 - (spread * 10))
     trigger_price = step_round(price, tick_size)
