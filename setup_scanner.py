@@ -39,13 +39,22 @@ else:
 all_start = time.perf_counter()
 
 # constants
-params = {'strat': '20/200ema cross and supertrend with rsi triggers', 
-          'current_strat': 'rsi_st_ema', 
+# params = {'strat': '20/200ema cross and supertrend with rsi triggers', 
+#           'current_strat': 'rsi_st_ema', 
+#           'quote_asset': 'USDT', 
+#           'rsi_length': 4, 
+#           'oversold': 45, 
+#           'overbought': 96, 
+#           'fixed_risk': 0.003, 
+#           'max_spread': 0.5, 
+#           'total_r_limit': 30, 
+#           'max_length': 250}
+params = {'strat': 'regular supertrend for bias with tight supertrend for entries/exits', 
+          'current_strat': 'double_st_lo', 
           'quote_asset': 'USDT', 
-          'rsi_length': 4, 
-          'oversold': 45, 
-          'overbought': 96, 
-          'fixed_risk': 0.003, 
+          'st2_periods': 2, 
+          'st2_mult': 1.5, 
+          'fixed_risk': 0.001, 
           'max_spread': 0.5, 
           'total_r_limit': 30, 
           'max_length': 250}
@@ -121,8 +130,11 @@ for i in stopped_trades:
     next_id += 1
     del ot[i]
 
+# print(f"Current time: {now_start}, {params.get('current_strat')} \
+# rsi: {params.get('rsi_length')}-{params.get('oversold')}-{params.get('overbought')}, \
+# fixed risk: {params.get('fixed_risk')}")
 print(f"Current time: {now_start}, {params.get('current_strat')} \
-rsi: {params.get('rsi_length')}-{params.get('oversold')}-{params.get('overbought')}, \
+st2: {params.get('st2_periods')}-{params.get('st2_mult')}, \
 fixed risk: {params.get('fixed_risk')}")
 
 total_bal = funcs.account_bal()
@@ -142,7 +154,7 @@ for pair in pairs:
     if pair in not_pairs and not in_pos:
         continue
     # get data
-    df = funcs.prepare_ohlc(pair)
+    df = funcs.prepare_ohlc(pair, live)
     
     if len(df) <= 200 and not in_pos:
         continue
@@ -152,7 +164,8 @@ for pair in pairs:
         df.reset_index(drop=True, inplace=True)
     
     # generate signals (tp_long, close_long, open_long)
-    signals = strats.rsi_st_ema_lo(df, in_pos, params.get('rsi_length'), params.get('overbought'), params.get('oversold'))
+    # signals = strats.rsi_st_ema_lo(df, in_pos, params.get('rsi_length'), params.get('overbought'), params.get('oversold'))
+    signals = strats.double_st_lo(df, in_pos, params.get('st2_periods'), params.get('st2_mult'))
     
     # execute orders
     # TODO need to integrate ALL binance filters into order calculations

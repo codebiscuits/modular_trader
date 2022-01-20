@@ -431,7 +431,7 @@ def update_ohlc(pair, timeframe, old_df):
     df_new = pd.concat([old_df[:-1], df], copy=True, ignore_index=True)
     return df_new
 
-def prepare_ohlc(pair, timeframe='4H', bars=2190):
+def prepare_ohlc(pair, is_live, timeframe='4H', bars=2190):
     '''checks if there is old data already, if so it loads the old data and 
     downloads an update, if not it downloads all data from scratch, then 
     resamples all data to desired timeframe'''
@@ -455,12 +455,13 @@ def prepare_ohlc(pair, timeframe='4H', bars=2190):
     if len(df) > 8760: # 8760 is 1 year's worth of 1h periods
         df = df.tail(8760)
         df.reset_index(drop=True, inplace=True)
-    try:
-        df.to_pickle(filepath)
-    except:
-        print('-')
-        print(f'to_pickle went wrong with {pair}')
-        print('-')
+    if is_live:
+        try:
+            df.to_pickle(filepath)
+        except:
+            print('-')
+            print(f'to_pickle went wrong with {pair}')
+            print('-')
     
     # print(df.tail())
     df = df.resample(timeframe, on='timestamp').agg({'open': 'first',
