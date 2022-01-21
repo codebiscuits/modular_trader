@@ -120,7 +120,7 @@ def get_size(price, fr, balance, risk):
 def current_positions(fr): # used to be current sizing
     '''returns a dict with assets as keys and various expressions of positioning as values'''
     total_bal = account_bal()
-    threshold_bal = total_bal * fr
+    threshold_bal = max(total_bal * fr, 12) # should be 1R, but also no less than min order size
     
     info = client.get_account()
     bals = info.get('balances')
@@ -158,13 +158,13 @@ def free_usdt():
 
 
 def get_price(pair):
-    '''returns the first ask price on the orderbook for the pair in question, 
-    meant for buy orders'''
-    tickers = client.get_orderbook_tickers()
-    for t in tickers:
-        if t.get('symbol') == pair:
-            usdt_price = float(t.get('askPrice'))
-    return usdt_price
+    '''returns the midpoint between first bid and ask price on the orderbook 
+    for the pair in question'''
+    t = client.get_orderbook_ticker(symbol=pair)
+    bid = float(t.get('bidPrice'))
+    ask = float(t.get('askPrice'))
+    
+    return (bid + ask) / 2
 
 def get_spread(pair): # possibly unused
     '''returns the proportional distance between the first bid and ask for the 
@@ -676,26 +676,29 @@ def reduce_risk(pos_open_risk, r_limit, live):
     for p, r in pos_open_risk.items():
         if r.get('R') > 1:
             positions.append((p, r.get('R')))
-    sorted_pos = sorted(positions, key=lambda x: x[1], reverse=True)
-    # print(sorted_pos)
     
-    r_list = [x.get('R') for x in pos_open_risk.values()]
-    total_r = sum(r_list)
+    if positions:
+        sorted_pos = sorted(positions, key=lambda x: x[1], reverse=True)
+        # print(sorted_pos)
     
-    for pos in sorted_pos:
-        if total_r > r_limit:
-            pair = pos[0]
-            now = datetime.now().strftime('%d/%m/%y %H:%M')
-            price = get_price(pair)
-            note = f"*** sell {pair} @ {price}"
-            print(now, note)
-            if live:
-                push = pb.push_note(now, note)
-                clear_stop(pair)
-                sell_order = sell_asset(pair)
-                sell_order['reason'] = 'portfolio risk limiting'
-                trade_notes.append(sell_order)
-                total_r -= pos[1]
+        r_list = [x.get('R') for x in pos_open_risk.values()]
+        total_r = sum(r_list)
+        
+        for pos in sorted_pos:
+            if total_r > r_limit:
+                pair = pos[0] + 'USDT'
+                now = datetime.now().strftime('%d/%m/%y %H:%M')
+                price = get_price(pair)
+                note = f"*** sell {pair} @ {price}"
+                print(now, note)
+                if live:
+                    push = pb.push_note(now, note)
+                    clear_stop(pair)
+                    sell_order = sell_asset(pair)
+                    sell_order['type'] = 'close_long'
+                    sell_order['reason'] = 'portfolio risk limiting'
+                    trade_notes.append(sell_order)
+                    total_r -= pos[1]
     
     return trade_notes
 

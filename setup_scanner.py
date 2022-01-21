@@ -57,7 +57,7 @@ params = {'strat': 'regular supertrend for bias with tight supertrend for entrie
           'fixed_risk': 0.001, 
           'max_spread': 0.5, 
           'total_r_limit': 30, 
-          'max_length': 250}
+          'max_length': 20}
 max_positions = params.get('total_r_limit') # if all pos are below b/e i don't want to open more
 max_init_r = params.get('fixed_risk') * params.get('total_r_limit')
 
@@ -160,12 +160,15 @@ for pair in pairs:
         continue
     
     if len(df) > params.get('max_length'):
-        df = df.iloc[-1*params.get('max_length'):,]
+        df = df.tail(params.get('max_length'))
         df.reset_index(drop=True, inplace=True)
     
     # generate signals (tp_long, close_long, open_long)
     # signals = strats.rsi_st_ema_lo(df, in_pos, params.get('rsi_length'), params.get('overbought'), params.get('oversold'))
     signals = strats.double_st_lo(df, in_pos, params.get('st2_periods'), params.get('st2_mult'))
+    
+    if df.at[len(df)-1, 'st'] == 0:
+        print(pair, 'supertrend 0')
     
     # execute orders
     # TODO need to integrate ALL binance filters into order calculations
@@ -184,7 +187,10 @@ for pair in pairs:
                 tp_order['type'] = 'tp_long'
                 tp_order['reason'] = 'trade over-extended'
                 trade_notes.append(tp_order) # hopefuly obsolete now
-                trade_record = ot.get(pair)
+                if ot.get(pair):
+                    trade_record = ot.get(pair)
+                else:
+                    trade_record = []
                 trade_record.append(tp_order)
                 ot['pair'] = trade_record
             except BinanceAPIException as e:
@@ -202,7 +208,10 @@ for pair in pairs:
                 sell_order['type'] = 'close_long'
                 sell_order['reason'] = 'hit trailing stop'
                 trade_notes.append(sell_order)
-                trade_record = ot.get(pair)
+                if ot.get(pair):
+                    trade_record = ot.get(pair)
+                else:
+                    trade_record = []
                 trade_record.append(sell_order)
                 closed_trades[next_id] = trade_record
                 next_id += 1
@@ -221,14 +230,14 @@ for pair in pairs:
         # record = {'timestamp': now, 'pair': pair, 'side': 'long', 
         #           'price': price, 'vol_trend': vol_trend}
         
-        if len(pairs_in_pos) >= max_positions:
-            print(f'{now} {pair} signal, too many open positions already')
-            continue
-        # sprd = spreads.get(pair)
+        # if len(pairs_in_pos) >= max_positions:
+        #     print(f'{now} {pair} signal, too many open positions already')
+        #     continue
         stp = df.at[len(df)-1, 'st'] # TODO incorporate spread into this
         risk = (price - stp) / price
         # print(f'risk: {risk:.4}, stp: {stp:.4}, spread: {sprd:.4}')
         mir = uf.max_init_risk(len(pairs_in_pos), max_init_r, max_positions)
+        # TODO max init risk should be based on average inval dist of signals, not fixed risk setting
         if risk > mir:
             print(f'{now} {pair} signal, too far from invalidation ({risk * 100:.1f}%)')
             continue
@@ -265,6 +274,11 @@ for pair in pairs:
         if enough_usdt and enough_size and enough_depth:
             # check total risk and close profitable positions if necessary
             tp_trades = funcs.reduce_risk(pos_open_risk, params.get('total_r_limit'), live)
+            # TODO make sure any trades done in reduce_risk are recorded in the new way
+            # make sure there aren't too many open positions now
+            if len(pairs_in_pos) >= max_positions:
+                print(f'{now} {pair} signal, too many open positions already')
+                continue
             # open new position
             note = f"buy {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
             print(now, note)
