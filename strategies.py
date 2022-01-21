@@ -427,7 +427,7 @@ def double_st_lo(df, in_pos, stp, stm):
     close_long = bearish_tight and in_pos
     
     inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
-    
+        
     return {'open_long': open_long, 'close_long': close_long,  
             'tp_long': False, 'add_long': False, 
             'open_short': False, 'close_short': False, 
