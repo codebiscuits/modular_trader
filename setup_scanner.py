@@ -106,7 +106,10 @@ stopped_trades = [st for st in open_trades if st not in pairs_in_pos] # these po
 
 # look for stopped out positions and complete trade records
 for i in stopped_trades:
-    trade_record = ot.get(i)
+    if ot.get(i): # this condition means that the exit will be recorded even if there is no entry in  the records
+        trade_record = ot.get(i)
+    else:
+        trade_record = []
     close_is_buy = trade_record[0].get('type') == 'open_short'
     trades = client.get_my_trades(symbol=i)
     for t in trades[::-1]:
@@ -127,8 +130,11 @@ for i in stopped_trades:
             break
     trade_record.append(trade_dict)
     closed_trades[next_id] = trade_record
+    uf.record_closed_trades(params, market_data, closed_trades)
     next_id += 1
-    del ot[i]
+    if ot[i]:
+        del ot[i]
+        uf.record_open_trades(params, market_data, ot)
 
 # print(f"Current time: {now_start}, {params.get('current_strat')} \
 # rsi: {params.get('rsi_length')}-{params.get('oversold')}-{params.get('overbought')}, \
@@ -145,11 +151,10 @@ funcs.top_up_bnb(15)
 trade_notes = [] # can be removed when i know the new system is working
 non_trade_notes = []
 total_open_risk = 0 # expressed in terms of R
-pos_open_risk = {} # expressed in terms of R
+pos_open_risk = {} # dict of dicts {asset: {R:val, $:val}, }
 
 for pair in pairs:
     asset = pair[:-1*len(params.get('quote_asset'))]
-    # in_pos = bool(positions.get(pair))
     in_pos = pair in pairs_in_pos
     if pair in not_pairs and not in_pos:
         continue
@@ -193,6 +198,7 @@ for pair in pairs:
                     trade_record = []
                 trade_record.append(tp_order)
                 ot['pair'] = trade_record
+                uf.record_open_trades(params, market_data, ot)
             except BinanceAPIException as e:
                 print(f'problem with tp order for {pair}')
                 print(e)
@@ -214,8 +220,11 @@ for pair in pairs:
                     trade_record = []
                 trade_record.append(sell_order)
                 closed_trades[next_id] = trade_record
+                uf.record_closed_trades(params, market_data, closed_trades)
                 next_id += 1
-                del ot[pair]
+                if ot[pair]:
+                    del ot[pair]
+                    uf.record_open_trades(params, market_data, ot)
                 in_pos = False
             except BinanceAPIException as e:
                 print(f'problem with sell order for {pair}')
@@ -272,13 +281,28 @@ for pair in pairs:
             print(non_trade)
             non_trade_notes.append(non_trade)
         if enough_usdt and enough_size and enough_depth:
+            
             # check total risk and close profitable positions if necessary
             tp_trades = funcs.reduce_risk(pos_open_risk, params.get('total_r_limit'), live)
-            # TODO make sure any trades done in reduce_risk are recorded in the new way
+            for t in tp_trades:
+                sym = t.get('pair')
+                if ot.get(sym):
+                    rec = ot.get(sym)
+                else:
+                    rec = []
+                rec.append(t)
+                closed_trades[next_id] = rec
+                uf.record_closed_trades(params, market_data, closed_trades)
+                next_id += 1
+                if ot[sym]:
+                    del ot[sym]
+                    uf.record_open_trades(params, market_data, ot)
+            
             # make sure there aren't too many open positions now
             if len(pairs_in_pos) >= max_positions:
                 print(f'{now} {pair} signal, too many open positions already')
                 continue
+            
             # open new position
             note = f"buy {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
             print(now, note)
@@ -293,6 +317,7 @@ for pair in pairs:
                     ot[pair] = [buy_order]
                     stop_order = funcs.set_stop(pair, stp)
                     in_pos = True
+                    uf.record_open_trades(params, market_data, ot)
                 except BinanceAPIException as e:
                     print(f'problem with buy order for {pair}')
                     print(e)
@@ -328,9 +353,13 @@ for pair in pairs:
                 stop_order = funcs.set_stop(pair, stp)
                 tp_order['hard_stop'] = stp
                 trade_notes.append(tp_order)
-                trade_record = ot.get(pair)
+                if ot.get(pair):
+                    trade_record = ot.get(pair)
+                else:
+                    trade_record = []
                 trade_record.append(tp_order)
                 ot[pair] = trade_record
+                uf.record_open_trades(params, market_data, ot)
             open_risk = pos_bal - (pos_bal / inval_dist) # update with new position
             open_risk_r = (open_risk / total_bal) / params.get('fixed_risk')
         

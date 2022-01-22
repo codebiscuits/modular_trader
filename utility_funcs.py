@@ -1,3 +1,5 @@
+import json
+
 def max_init_risk(n, target_risk, max_pos):
     '''n = number of open positions, target_risk is the percentage distance 
     from invalidation this function should converge on, max_pos is the maximum
@@ -20,5 +22,12 @@ def max_init_risk(n, target_risk, max_pos):
     
     output = (((max_pos-n)**exp) / (exp_limit / target_risk)) + target_risk
         
-    return round(output, 2)# -*- coding: utf-8 -*-
+    return round(output, 2)
 
+def record_open_trades(params, market_data, ot):
+    with open(f"{market_data}/{params.get('current_strat')}_open_trades.json", "w") as ot_file:
+        json.dump(ot, ot_file) 
+
+def record_closed_trades(params, market_data, ct):
+    with open(f"{market_data}/{params.get('current_strat')}_closed_trades.json", "w") as ct_file:
+        json.dump(ct, ct_file)

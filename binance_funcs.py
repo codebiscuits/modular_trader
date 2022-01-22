@@ -141,8 +141,10 @@ def current_positions(fr): # used to be current sizing
                 continue
             quant = float(b.get('free')) + float(b.get('locked'))
             value = price * quant
-        if asset == 'BNB' and value < 15:
+        if asset == 'BNB' and value < 20:
             continue
+        elif asset == 'BNB' and value >= 20:
+            value -= 10
         if value >= threshold_bal:
             pct = round(100 * value / total_bal, 5)
             size_dict[asset] = {'qty': quant, 'value': round(value, 2), 'pf%': pct}
@@ -572,15 +574,22 @@ def sell_asset(pair, pct=100):
     usdt_price = get_price(pair)
     
     # request asset balance from binance
-    info = client.get_account()
-    bals = info.get('balances')
-    for b in bals:
-        if b.get('asset') == asset:
-            if asset == 'BNB':
-                reserve = 10 / usdt_price # amount of bnb to reserve ($10 worth)
-                asset_bal = float(b.get('free')) - reserve
-            else:
-                asset_bal = float(b.get('free'))
+    # info = client.get_account()
+    # bals = info.get('balances')
+    # for b in bals:
+    #     if b.get('asset') == asset:
+    #         if asset == 'BNB':
+    #             reserve = 10 / usdt_price # amount of bnb to reserve ($10 worth)
+    #             asset_bal = float(b.get('free')) - reserve
+    #         else:
+    #             asset_bal = float(b.get('free'))
+    
+    bal = client.get_asset_balance(asset=asset)
+    if asset == 'BNB':
+        reserve = 10 / usdt_price # amount of bnb to reserve ($10 worth)
+        asset_bal = float(bal.get('free')) - reserve # always keep $10 of bnb
+    else:
+        asset_bal = float(bal.get('free'))
     
     # make sure order size has the right number of decimal places
     trade_size = asset_bal * (pct / 100)
@@ -625,14 +634,13 @@ def set_stop(pair, price):
     tick_size = info.get('filters')[0].get('tickSize')
     step_size = Decimal(info.get('filters')[2].get('stepSize'))
     
-    info = client.get_account()
-    bals = info.get('balances')
-    for b in bals:
-        if b.get('asset') == asset:
-            if asset == 'BNB':
-                asset_bal = float(b.get('free')) * 0.9 # always keep a bit of bnb
-            else:
-                asset_bal = float(b.get('free'))
+    reserve = 10 / price # amount of asset that would be worth $10 at stop price
+    
+    bal = client.get_asset_balance(asset=asset)
+    if asset == 'BNB':
+        asset_bal = float(bal.get('free')) - reserve # always keep $10 of bnb
+    else:
+        asset_bal = float(bal.get('free'))
     
     info = client.get_symbol_info(pair)
     order_size = step_round(asset_bal, step_size)# - step_size
@@ -660,15 +668,20 @@ def clear_stop(pair):
     works as a "clear stop" function only when the strategy sets one 
     stop-loss per position and uses no other resting orders'''
     
-    # print(f'cancelling {pair} stop')
-    orders = client.get_open_orders(symbol=pair)
-    if orders:
-        ord_id = orders[0].get('orderId')
-        result = client.cancel_order(symbol=pair, orderId=ord_id)
-        # print(result.get('status'))
-    else:
+    #sanity check
+    bal = client.get_asset_balance(asset=pair[:-4])
+    if float(bal.get('locked')) == 0:
         print('no stop to cancel')
-    # print('-')
+    else:
+        # print(f'cancelling {pair} stop')
+        orders = client.get_open_orders(symbol=pair)
+        if orders:
+            ord_id = orders[0].get('orderId')
+            result = client.cancel_order(symbol=pair, orderId=ord_id)
+            # print(result.get('status'))
+        else:
+            print('no stop to cancel')
+        # print('-')
 
 def reduce_risk(pos_open_risk, r_limit, live):
     positions = []
