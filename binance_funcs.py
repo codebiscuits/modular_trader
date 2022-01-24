@@ -574,16 +574,6 @@ def sell_asset(pair, pct=100):
     usdt_price = get_price(pair)
     
     # request asset balance from binance
-    # info = client.get_account()
-    # bals = info.get('balances')
-    # for b in bals:
-    #     if b.get('asset') == asset:
-    #         if asset == 'BNB':
-    #             reserve = 10 / usdt_price # amount of bnb to reserve ($10 worth)
-    #             asset_bal = float(b.get('free')) - reserve
-    #         else:
-    #             asset_bal = float(b.get('free'))
-    
     bal = client.get_asset_balance(asset=asset)
     if asset == 'BNB':
         reserve = 10 / usdt_price # amount of bnb to reserve ($10 worth)

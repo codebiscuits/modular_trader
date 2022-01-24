@@ -339,46 +339,60 @@ def ha_st_lo(df, in_pos, mult):
     return {'open_long': open_long, 'close_long': close_long, 
             'tp_long': tp_long, 'inval': inval}
 
-def rsi_st_ema_lo(df, in_pos, rsi_length, overbought, oversold):
-    df['20ema'] = df.close.ewm(20).mean()
-    df['200ema'] = df.close.ewm(200).mean()
-    ema_ratio = df.at[len(df)-1, '20ema'] / df.at[len(df)-1, '200ema']
+class RSI_ST_EMA:
     
-    if ema_ratio < 1 and in_pos == 0: # this condition is just to save time
-        return {'open_long': False, 'close_long': False, 
-                'tp_long': False, 'add_long': False, 
-                'open_short': False, 'close_short': False, 
-                'tp_short': False, 'add_short': False, 
-                'open_spot': False, 'close_spot': False, 
-                'tp_spot': False, 'add_spot': False, 
-                'inval': 1}
-    else:    
-        df['st'], df['st_u'], df['st_d'] = ind.supertrend(df.high, df.low, df.close, 10, 3)
-        df['rsi'] = RSIIndicator(df.close, rsi_length).rsi()
+    description = '20/200ema cross and supertrend with rsi triggers'
+    max_length = 250
+    
+    def __init__(self, len, os, ob):
+        self.name = 'rsi_st_ema'
+        self.len = len
+        self.os = os
+        self.ob = ob
         
-        trend_up = df.at[len(df)-1, '20ema'] > df.at[len(df)-1, '200ema']
-        st_up = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st'] # not a trigger so doesnt need to be a cross
-        st_down = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st'] # this is a trigger so does need to be a cross
-        rsi_buy = (df.at[len(df)-1, 'rsi'] >= oversold) and (df.at[len(df)-2, 'rsi'] < oversold)
-        rsi_sell = (df.at[len(df)-1, 'rsi'] <= overbought) and (df.at[len(df)-2, 'rsi'] > overbought)
+    def __str__(self):
+        return f'{self.name} rsi: {self.len}-{self.os}-{self.ob}'
+    
+    def live_signals(self, df, in_pos):
+        df['20ema'] = df.close.ewm(20).mean()
+        df['200ema'] = df.close.ewm(200).mean()
+        ema_ratio = df.at[len(df)-1, '20ema'] / df.at[len(df)-1, '200ema']
         
-        tp_spot = in_pos and rsi_sell
-        close_spot = in_pos and st_down
-        open_spot = trend_up and st_up and rsi_buy and not in_pos
-        # if open_long:
-        #     ema20 = df.at[len(df)-1, '20ema']
-        #     ema200 = df.at[len(df)-1, '200ema']
-        #     print(f"20ema: {ema20:.3}, 200ema: {ema200:.3}, ratio: {ema20/ema200:.3}")
-        
-        inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
-        
-        return {'open_long': False, 'close_long': False, 
-                'tp_long': False, 'add_long': False, 
-                'open_short': False, 'close_short': False, 
-                'tp_short': False, 'add_short': False, 
-                'open_spot': open_spot, 'close_spot': close_spot, 
-                'tp_spot': tp_spot, 'add_spot': False, 
-                'inval': inval}
+        if ema_ratio < 1 and in_pos == 0: # this condition is just to save time
+            return {'open_long': False, 'close_long': False, 
+                    'tp_long': False, 'add_long': False, 
+                    'open_short': False, 'close_short': False, 
+                    'tp_short': False, 'add_short': False, 
+                    'open_spot': False, 'close_spot': False, 
+                    'tp_spot': False, 'add_spot': False, 
+                    'inval': 1}
+        else:    
+            df['st'], df['st_u'], df['st_d'] = ind.supertrend(df.high, df.low, df.close, 10, 3)
+            df['rsi'] = RSIIndicator(df.close, self.len).rsi()
+            
+            trend_up = df.at[len(df)-1, '20ema'] > df.at[len(df)-1, '200ema']
+            st_up = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st'] # not a trigger so doesnt need to be a cross
+            st_down = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st'] # this is a trigger so does need to be a cross
+            rsi_buy = (df.at[len(df)-1, 'rsi'] >= self.os) and (df.at[len(df)-2, 'rsi'] < self.os)
+            rsi_sell = (df.at[len(df)-1, 'rsi'] <= self.ob) and (df.at[len(df)-2, 'rsi'] > self.ob)
+            
+            tp_spot = in_pos and rsi_sell
+            close_spot = in_pos and st_down
+            open_spot = trend_up and st_up and rsi_buy and not in_pos
+            # if open_long:
+            #     ema20 = df.at[len(df)-1, '20ema']
+            #     ema200 = df.at[len(df)-1, '200ema']
+            #     print(f"20ema: {ema20:.3}, 200ema: {ema200:.3}, ratio: {ema20/ema200:.3}")
+            
+            inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
+            
+            return {'open_long': False, 'close_long': False, 
+                    'tp_long': False, 'add_long': False, 
+                    'open_short': False, 'close_short': False, 
+                    'tp_short': False, 'add_short': False, 
+                    'open_spot': open_spot, 'close_spot': close_spot, 
+                    'tp_spot': tp_spot, 'add_spot': False, 
+                    'inval': inval}
 
 def double_st(df, in_pos):
     df['st_loose'], df['st_loose_u'], df['st_loose_d'] = ind.supertrend(df.high, df.low, df.close, 10, 3)
@@ -409,29 +423,42 @@ def double_st(df, in_pos):
             'tp_spot': False, 'add_spot': False,   
             'inval': inval}
     
-def double_st_lo(df, in_pos, stp, stm):
-    df['st_loose'], df['st_loose_u'], df['st_loose_d'] = ind.supertrend(df.high, df.low, df.close, 10, 3)
-    df['st'], df['st_u'], df['st_d'] = ind.supertrend(df.high, df.low, df.close, stp, stm)
+class DoubleSTLO:
     
-    bullish_loose = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st_loose']
-    bearish_loose = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st_loose']
-    bullish_tight = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st']
-    bearish_tight = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st']
+    description = 'regular supertrend for bias with tight supertrend for entries/exits'
+    max_length = 20
     
-    # bullish_book = bid_ask_ratio > 1
-    # bearish_book = bid_ask_ratio < 1
-    # bullish_volume = price rising on low volume or price falling on high volume
-    # bearish_volume = price rising on high volume or price falling on low volume
-    
-    open_long = bullish_loose and bullish_tight and not in_pos # and bullish_book
-    close_long = bearish_tight and in_pos
-    
-    inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
+    def __init__(self, lb, mult):
+        self.name = 'double_st_lo'
+        self.lb = lb
+        self.mult = mult
         
-    return {'open_long': open_long, 'close_long': close_long,  
-            'tp_long': False, 'add_long': False, 
-            'open_short': False, 'close_short': False, 
-            'tp_short': False, 'add_short': False, 
-            'open_spot': False, 'close_spot': False, 
-            'tp_spot': False, 'add_spot': False,   
-            'inval': inval}
+    def __str__(self):
+        return f'{self.name} st2: {self.lb}-{self.mult}'
+    
+    def live_signals(self, df, in_pos):
+        df['st_loose'], df['st_loose_u'], df['st_loose_d'] = ind.supertrend(df.high, df.low, df.close, 10, 3)
+        df['st'], df['st_u'], df['st_d'] = ind.supertrend(df.high, df.low, df.close, self.lb, self.mult)
+        
+        bullish_loose = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st_loose']
+        bearish_loose = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st_loose']
+        bullish_tight = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st']
+        bearish_tight = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st']
+        
+        # bullish_book = bid_ask_ratio > 1
+        # bearish_book = bid_ask_ratio < 1
+        # bullish_volume = price rising on low volume or price falling on high volume
+        # bearish_volume = price rising on high volume or price falling on low volume
+        
+        open_long = bullish_loose and bullish_tight and not in_pos # and bullish_book
+        close_long = bearish_tight and in_pos
+        
+        inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
+            
+        return {'open_long': open_long, 'close_long': close_long,  
+                'tp_long': False, 'add_long': False, 
+                'open_short': False, 'close_short': False, 
+                'tp_short': False, 'add_short': False, 
+                'open_spot': False, 'close_spot': False, 
+                'tp_spot': False, 'add_spot': False,   
+                'inval': inval}

@@ -39,28 +39,15 @@ else:
 all_start = time.perf_counter()
 
 # constants
-# params = {'strat': '20/200ema cross and supertrend with rsi triggers', 
-#           'current_strat': 'rsi_st_ema', 
-#           'quote_asset': 'USDT', 
-#           'rsi_length': 4, 
-#           'oversold': 45, 
-#           'overbought': 96, 
-#           'fixed_risk': 0.003, 
-#           'max_spread': 0.5, 
-#           'total_r_limit': 30, 
-#           'max_length': 250}
-params = {'strat': 'regular supertrend for bias with tight supertrend for entries/exits', 
-          'current_strat': 'double_st_lo', 
-          'quote_asset': 'USDT', 
-          'st2_periods': 2, 
-          'st2_mult': 1.5, 
+params = {'quote_asset': 'USDT', 
           'fixed_risk': 0.001, 
           'max_spread': 0.5, 
-          'total_r_limit': 30, 
-          'max_length': 20}
+          'total_r_limit': 30}
 max_positions = params.get('total_r_limit') # if all pos are below b/e i don't want to open more
 max_init_r = params.get('fixed_risk') * params.get('total_r_limit')
 
+# strat = strats.RSI_ST_EMA(4, 45, 96)
+strat = strats.DoubleSTLO(3, 1.5)
 
 # create pairs list
 all_pairs = funcs.get_pairs('USDT', 'SPOT') # list
@@ -74,74 +61,70 @@ pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked
 
 now_start = datetime.now().strftime('%d/%m/%y %H:%M')
 
-# read trade records
+# update trade records
 if live:
-    ot_path = f"{market_data}/{params.get('current_strat')}_open_trades.json"
-else:
-    ot_path = f"/mnt/pi_2/market_data/{params.get('current_strat')}_open_trades.json"
-with open(ot_path, "r") as ot_file:
-    try:
-        ot = json.load(ot_file)
-    except JSONDecodeError:
-        ot = {}
-if live:
-    ct_path = f"{market_data}/{params.get('current_strat')}_closed_trades.json"
-else:
-    ct_path = f"/mnt/pi_2/market_data/{params.get('current_strat')}_closed_trades.json"
-with open(ct_path, "r") as ct_file:
-    try:
-        closed_trades = json.load(ct_file)
-        if closed_trades.keys():
-            key_ints = [int(x) for x in closed_trades.keys()]
-            next_id = sorted(key_ints)[-1] + 1
-        else:
+    # read trade records
+    ot_path = f"{market_data}/{strat.name}_open_trades.json"
+    with open(ot_path, "r") as ot_file:
+        try:
+            ot = json.load(ot_file)
+        except JSONDecodeError:
+            ot = {}
+    ct_path = f"{market_data}/{strat.name}_closed_trades.json"
+    with open(ct_path, "r") as ct_file:
+        try:
+            closed_trades = json.load(ct_file)
+            if closed_trades.keys():
+                key_ints = [int(x) for x in closed_trades.keys()]
+                next_id = sorted(key_ints)[-1] + 1
+            else:
+                next_id = 0
+        except JSONDecodeError:
+            closed_trades = {}
             next_id = 0
-    except JSONDecodeError:
-        closed_trades = {}
-        next_id = 0
+    
+    # create list of trade records which don't match current positions
+    open_trades = list(ot.keys())
+    stopped_trades = [st for st in open_trades if st not in pairs_in_pos] # these positions must have been stopped out
+    
+    # look for stopped out positions and complete trade records
+    for i in stopped_trades:
+        if ot.get(i): # this condition means that the exit will be recorded even if there is no entry in  the records
+            trade_record = ot.get(i)
+        else:
+            trade_record = []
+        close_is_buy = trade_record[0].get('type') == 'open_short'
+        trades = client.get_my_trades(symbol=i)
+        for t in trades[::-1]:
+            if t.get('isBuyer') == close_is_buy:
+                trade_dict = {'timestamp': t.get('time'), 
+                              'pair': t.get('symbol'), 
+                              'type': 'stop_short' if t.get('isBuyer') else 'stop_long', 
+                              'exe_price': float(t.get('price')), 
+                              'base_size': float(t.get('qty')), 
+                              'quote_size': float(t.get('quoteQty')), 
+                              'fee': t.get('commission'), 
+                              'fee_currency': t.get('commissionAsset'), 
+                              'reason': 'hit hard stop', 
+                              }
+                note = f"*** stopped out {t.get('symbol')} @ {t.get('price')}"
+                print(now_start, note)
+                push = pb.push_note(now_start, note)
+                break
+        trade_record.append(trade_dict)
+        if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
+            trade_id = trade_record[0].get('timestamp')
+            closed_trades[trade_id] = trade_record
+        else:
+            closed_trades[next_id] = trade_record
+        uf.record_closed_trades(strat.name, market_data, closed_trades)
+        next_id += 1
+        if ot[i]:
+            del ot[i]
+            uf.record_open_trades(strat.name, market_data, ot)
 
-# create list of trade records which don't match current positions
-open_trades = list(ot.keys())
-stopped_trades = [st for st in open_trades if st not in pairs_in_pos] # these positions must have been stopped out
-
-# look for stopped out positions and complete trade records
-for i in stopped_trades:
-    if ot.get(i): # this condition means that the exit will be recorded even if there is no entry in  the records
-        trade_record = ot.get(i)
-    else:
-        trade_record = []
-    close_is_buy = trade_record[0].get('type') == 'open_short'
-    trades = client.get_my_trades(symbol=i)
-    for t in trades[::-1]:
-        if t.get('isBuyer') == close_is_buy:
-            trade_dict = {'timestamp': t.get('time'), 
-                          'pair': t.get('symbol'), 
-                          'type': 'stop_short' if t.get('isBuyer') else 'stop_long', 
-                          'exe_price': float(t.get('price')), 
-                          'base_size': float(t.get('qty')), 
-                          'quote_size': float(t.get('quoteQty')), 
-                          'fee': t.get('commission'), 
-                          'fee_currency': t.get('commissionAsset'), 
-                          'reason': 'hit hard stop', 
-                          }
-            note = f"*** stopped out {t.get('symbol')} @ {t.get('price')}"
-            print(now_start, note)
-            push = pb.push_note(now_start, note)
-            break
-    trade_record.append(trade_dict)
-    closed_trades[next_id] = trade_record
-    uf.record_closed_trades(params, market_data, closed_trades)
-    next_id += 1
-    if ot[i]:
-        del ot[i]
-        uf.record_open_trades(params, market_data, ot)
-
-# print(f"Current time: {now_start}, {params.get('current_strat')} \
-# rsi: {params.get('rsi_length')}-{params.get('oversold')}-{params.get('overbought')}, \
-# fixed risk: {params.get('fixed_risk')}")
-print(f"Current time: {now_start}, {params.get('current_strat')} \
-st2: {params.get('st2_periods')}-{params.get('st2_mult')}, \
-fixed risk: {params.get('fixed_risk')}")
+# print(f"Current time: {now_start}, {strat}, fixed risk: {params.get('fixed_risk')}")
+print(f"Current time: {now_start}, {strat}, fixed risk: {params.get('fixed_risk')}")
 
 total_bal = funcs.account_bal()
 avg_prices = funcs.get_avg_prices()
@@ -164,13 +147,13 @@ for pair in pairs:
     if len(df) <= 200 and not in_pos:
         continue
     
-    if len(df) > params.get('max_length'):
-        df = df.tail(params.get('max_length'))
+    if len(df) > strat.max_length:
+        df = df.tail(strat.max_length)
         df.reset_index(drop=True, inplace=True)
     
-    # generate signals (tp_long, close_long, open_long)
+    # generate signals
     # signals = strats.rsi_st_ema_lo(df, in_pos, params.get('rsi_length'), params.get('overbought'), params.get('oversold'))
-    signals = strats.double_st_lo(df, in_pos, params.get('st2_periods'), params.get('st2_mult'))
+    signals = strat.live_signals(df, in_pos)
     
     if df.at[len(df)-1, 'st'] == 0:
         print(pair, 'supertrend 0')
@@ -198,7 +181,7 @@ for pair in pairs:
                     trade_record = []
                 trade_record.append(tp_order)
                 ot['pair'] = trade_record
-                uf.record_open_trades(params, market_data, ot)
+                uf.record_open_trades(strat.name, market_data, ot)
             except BinanceAPIException as e:
                 print(f'problem with tp order for {pair}')
                 print(e)
@@ -219,12 +202,16 @@ for pair in pairs:
                 else:
                     trade_record = []
                 trade_record.append(sell_order)
-                closed_trades[next_id] = trade_record
-                uf.record_closed_trades(params, market_data, closed_trades)
+                if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
+                    trade_id = trade_record[0].get('timestamp')
+                    closed_trades[trade_id] = trade_record
+                else:
+                    closed_trades[next_id] = trade_record
+                uf.record_closed_trades(strat.name, market_data, closed_trades)
                 next_id += 1
                 if ot[pair]:
                     del ot[pair]
-                    uf.record_open_trades(params, market_data, ot)
+                    uf.record_open_trades(strat.name, market_data, ot)
                 in_pos = False
             except BinanceAPIException as e:
                 print(f'problem with sell order for {pair}')
@@ -287,16 +274,20 @@ for pair in pairs:
             for t in tp_trades:
                 sym = t.get('pair')
                 if ot.get(sym):
-                    rec = ot.get(sym)
+                    trade_record = ot.get(sym)
                 else:
-                    rec = []
-                rec.append(t)
-                closed_trades[next_id] = rec
-                uf.record_closed_trades(params, market_data, closed_trades)
+                    trade_record = []
+                trade_record.append(t)
+                if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
+                    trade_id = trade_record[0].get('timestamp')
+                    closed_trades[trade_id] = trade_record
+                else:
+                    closed_trades[next_id] = trade_record
+                uf.record_closed_trades(strat.name, market_data, closed_trades)
                 next_id += 1
                 if ot[sym]:
                     del ot[sym]
-                    uf.record_open_trades(params, market_data, ot)
+                    uf.record_open_trades(strat.name, market_data, ot)
             
             # make sure there aren't too many open positions now
             if len(pairs_in_pos) >= max_positions:
@@ -317,7 +308,7 @@ for pair in pairs:
                     ot[pair] = [buy_order]
                     stop_order = funcs.set_stop(pair, stp)
                     in_pos = True
-                    uf.record_open_trades(params, market_data, ot)
+                    uf.record_open_trades(strat.name, market_data, ot)
                 except BinanceAPIException as e:
                     print(f'problem with buy order for {pair}')
                     print(e)
@@ -328,6 +319,7 @@ for pair in pairs:
 
     inval_dist = signals.get('inval')
     
+    # calculate open risk and take profit if necessary
     if in_pos:
         pos_bal = sizing.get(asset)['value']
         # calculate open risk
@@ -359,7 +351,7 @@ for pair in pairs:
                     trade_record = []
                 trade_record.append(tp_order)
                 ot[pair] = trade_record
-                uf.record_open_trades(params, market_data, ot)
+                uf.record_open_trades(strat.name, market_data, ot)
             open_risk = pos_bal - (pos_bal / inval_dist) # update with new position
             open_risk_r = (open_risk / total_bal) / params.get('fixed_risk')
         
@@ -393,38 +385,39 @@ print('---------------- sizing ----------------')
 pprint(sizing)
 
 if live:
-    
-    def log(params, market_data, spreads, pos_open_risk, non_trade_notes, ot, closed_trades):    
+    # log all data from the session
+    def log(params, strat, market_data, spreads, pos_open_risk, tp_trades, 
+            trade_notes, non_trade_notes, ot, closed_trades):    
         
         # check total balance and record it in a file for analysis
         total_bal = funcs.account_bal()
         bal_record = {'timestamp': now_start, 'balance': round(total_bal, 2), 'positions': sizing, 'params': params}
         new_line = json.dumps(bal_record)
-        with open(f"{market_data}/{params.get('current_strat')}_bal_history.txt", "a") as file:
+        with open(f"{market_data}/{strat.name}_bal_history.txt", "a") as file:
             file.write(new_line)
             file.write('\n')
         
         # save a json of any trades that have happened with relevant data
         if tp_trades: # if the reduce_risk function closed any positions, they will be in here
             trade_notes.extend(tp_trades)
-        with open(f"{market_data}/{params.get('current_strat')}_trades.txt", "a") as file:
+        with open(f"{market_data}/{strat.name}_trades.txt", "a") as file:
             for trade in trade_notes:
                 file.write(json.dumps(trade))
                 file.write('\n')        
-        with open(f"{market_data}/{params.get('current_strat')}_open_trades.json", "w") as ot_file:
+        with open(f"{market_data}/{strat.name}_open_trades.json", "w") as ot_file:
             json.dump(ot, ot_file)            
-        with open(f"{market_data}/{params.get('current_strat')}_closed_trades.json", "w") as ct_file:
+        with open(f"{market_data}/{strat.name}_closed_trades.json", "w") as ct_file:
             json.dump(closed_trades, ct_file)
         
         # record open_risk statistics
         risk_record = {'timestamp': now_start, 'open_risk': pos_open_risk}
-        with open(f"{market_data}/{params.get('current_strat')}_open_risk.txt", "a") as file:
+        with open(f"{market_data}/{strat.name}_open_risk.txt", "a") as file:
             file.write(json.dumps(risk_record))
             file.write('\n')
         
         # record all skipped or reduced trades
         non_trade_record = {'timestamp': now_start, 'non_trades': non_trade_notes}
-        with open(f"{market_data}/{params.get('current_strat')}_non_trades.txt", "a") as file:
+        with open(f"{market_data}/{strat.name}_non_trades.txt", "a") as file:
             file.write(json.dumps(non_trade_record))
             file.write('\n')
     
@@ -437,7 +430,7 @@ all_end = time.perf_counter()
 all_time = all_end - all_start
 elapsed_str = f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s'
 rfb = round(total_bal-dollar_tor, 2)
-final_msg = f'Setup Scanner Finished. {elapsed_str}, total open risk: ${dollar_tor:.2f}, risk-free bal: ${rfb}'
+final_msg = f'Finished. {elapsed_str}, total bal: ${total_bal:.2f} (${rfb} rfb + ${dollar_tor:.2f}or)'
 print(final_msg)
 push = pb.push_note(now, final_msg)
 if live:
