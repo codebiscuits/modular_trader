@@ -152,7 +152,6 @@ for pair in pairs:
         df.reset_index(drop=True, inplace=True)
     
     # generate signals
-    # signals = strats.rsi_st_ema_lo(df, in_pos, params.get('rsi_length'), params.get('overbought'), params.get('oversold'))
     signals = strat.live_signals(df, in_pos)
     
     if df.at[len(df)-1, 'st'] == 0:
@@ -218,24 +217,15 @@ for pair in pairs:
                 print(e)
                 push = pb.push_note(now, f'exeption during {pair} sell order')
     elif signals.get('open_long'):
-        # # calc and record volume trend
-        # df['vol_ema20'] = df.volume.ewm(20).mean()
-        # df['vol_ema200'] = df.volume.ewm(200).mean()
-        # df['vol_trend'] = df.vol_ema20 / df.vol_ema200
-        # vol_trend = df.at[len(df)-1, 'vol_trend']
-        # record = {'timestamp': now, 'pair': pair, 'side': 'long', 
-        #           'price': price, 'vol_trend': vol_trend}
         
-        # if len(pairs_in_pos) >= max_positions:
-        #     print(f'{now} {pair} signal, too many open positions already')
-        #     continue
         stp = df.at[len(df)-1, 'st'] # TODO incorporate spread into this
         risk = (price - stp) / price
-        # print(f'risk: {risk:.4}, stp: {stp:.4}, spread: {sprd:.4}')
         mir = uf.max_init_risk(len(pairs_in_pos), max_init_r, max_positions)
         # TODO max init risk should be based on average inval dist of signals, not fixed risk setting
         if risk > mir:
-            print(f'{now} {pair} signal, too far from invalidation ({risk * 100:.1f}%)')
+            non_trade = f'{now} {pair} signal, too far from invalidation ({risk * 100:.1f}%)'
+            print(non_trade)
+            non_trade_notes.append(non_trade)
             continue
         size, usdt_size = funcs.get_size(price, params.get('fixed_risk'), total_bal, risk)
         usdt_bal = funcs.free_usdt()
@@ -384,53 +374,20 @@ print(f'{num_open_positions = }, {total_open_risk = }R, ie ${dollar_tor:.2f}')
 print('---------------- sizing ----------------')
 pprint(sizing)
 
-if live:
-    # log all data from the session
-    def log(params, strat, market_data, spreads, pos_open_risk, tp_trades, 
-            trade_notes, non_trade_notes, ot, closed_trades):    
-        
-        # check total balance and record it in a file for analysis
-        total_bal = funcs.account_bal()
-        bal_record = {'timestamp': now_start, 'balance': round(total_bal, 2), 'positions': sizing, 'params': params}
-        new_line = json.dumps(bal_record)
-        with open(f"{market_data}/{strat.name}_bal_history.txt", "a") as file:
-            file.write(new_line)
-            file.write('\n')
-        
-        # save a json of any trades that have happened with relevant data
-        if tp_trades: # if the reduce_risk function closed any positions, they will be in here
-            trade_notes.extend(tp_trades)
-        with open(f"{market_data}/{strat.name}_trades.txt", "a") as file:
-            for trade in trade_notes:
-                file.write(json.dumps(trade))
-                file.write('\n')        
-        with open(f"{market_data}/{strat.name}_open_trades.json", "w") as ot_file:
-            json.dump(ot, ot_file)            
-        with open(f"{market_data}/{strat.name}_closed_trades.json", "w") as ct_file:
-            json.dump(closed_trades, ct_file)
-        
-        # record open_risk statistics
-        risk_record = {'timestamp': now_start, 'open_risk': pos_open_risk}
-        with open(f"{market_data}/{strat.name}_open_risk.txt", "a") as file:
-            file.write(json.dumps(risk_record))
-            file.write('\n')
-        
-        # record all skipped or reduced trades
-        non_trade_record = {'timestamp': now_start, 'non_trades': non_trade_notes}
-        with open(f"{market_data}/{strat.name}_non_trades.txt", "a") as file:
-            file.write(json.dumps(non_trade_record))
-            file.write('\n')
-    
-    log(params, market_data, spreads, pos_open_risk, non_trade_notes, ot, closed_trades)
 
-else:
+# log all data from the session
+uf.log(live, params, strat, market_data, spreads, now_start, sizing, pos_open_risk, tp_trades, 
+    trade_notes, non_trade_notes, ot, closed_trades)
+
+if not live:
     print('warning: logging switched off')
     
 all_end = time.perf_counter()
 all_time = all_end - all_start
 elapsed_str = f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s'
 rfb = round(total_bal-dollar_tor, 2)
-final_msg = f'Finished. {elapsed_str}, total bal: ${total_bal:.2f} (${rfb} rfb + ${dollar_tor:.2f}or)'
+final_msg = f'Finished. {elapsed_str}, total bal: ${total_bal:.2f} (${rfb} + ${dollar_tor:.2f} \
+{num_open_positions} positions)'
 print(final_msg)
 push = pb.push_note(now, final_msg)
 if live:
