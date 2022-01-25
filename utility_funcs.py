@@ -20,9 +20,13 @@ def max_init_risk(n, target_risk, max_pos):
     quickly, then gradually settles on the target limit'''
     
     exp = 4
-    exp_limit = max_pos ** exp
+    scale = (max_pos-n)**exp
+    scale_limit = max_pos ** exp
     
-    output = (((max_pos-n)**exp) / (exp_limit / target_risk)) + target_risk
+    # when n is 0, scale and scale_limit cancel out
+    # and the whole thing becomes (2 * target) + target
+    output = (2 * target_risk  * scale / scale_limit) + target_risk
+    print(f'mir output: {round(output, 2) * 100}%')
         
     return round(output, 2)
 

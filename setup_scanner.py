@@ -95,22 +95,37 @@ if live:
             trade_record = []
         close_is_buy = trade_record[0].get('type') == 'open_short'
         trades = client.get_my_trades(symbol=i)
+        agg_price = []
+        agg_base = []
+        agg_quote = []
+        agg_fee = []
         for t in trades[::-1]:
             if t.get('isBuyer') == close_is_buy:
-                trade_dict = {'timestamp': t.get('time'), 
-                              'pair': t.get('symbol'), 
-                              'type': 'stop_short' if t.get('isBuyer') else 'stop_long', 
-                              'exe_price': float(t.get('price')), 
-                              'base_size': float(t.get('qty')), 
-                              'quote_size': float(t.get('quoteQty')), 
-                              'fee': t.get('commission'), 
-                              'fee_currency': t.get('commissionAsset'), 
-                              'reason': 'hit hard stop', 
-                              }
-                note = f"*** stopped out {t.get('symbol')} @ {t.get('price')}"
-                print(now_start, note)
-                push = pb.push_note(now_start, note)
+                agg_price.append(t.get('price'))
+                agg_base.append(t.get('qty'))
+                agg_quote.append(t.get('quoteQty'))
+                agg_fee.append(t.get('commission'))
+            else:
                 break
+        # aggregate trade stats
+        avg_exe_price = sum([p*b for p,b in zip(agg_price, agg_base)]) / sum(agg_base)
+        tot_base = sum(agg_base)
+        tot_quote = sum(agg_quote)
+        tot_fee = sum(agg_fee)
+        # create dict
+        trade_dict = {'timestamp': t.get('time'), 
+                      'pair': t.get('symbol'), 
+                      'type': 'stop_short' if t.get('isBuyer') else 'stop_long', 
+                      'exe_price': avg_exe_price, 
+                      'base_size': tot_base, 
+                      'quote_size': tot_quote, 
+                      'fee': tot_fee, 
+                      'fee_currency': t.get('commissionAsset'), 
+                      'reason': 'hit hard stop', 
+                      }
+        note = f"*** stopped out {t.get('symbol')} @ {t.get('price')}"
+        print(now_start, note)
+        push = pb.push_note(now_start, note)
         trade_record.append(trade_dict)
         if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
             trade_id = trade_record[0].get('timestamp')
@@ -218,8 +233,10 @@ for pair in pairs:
                 push = pb.push_note(now, f'exeption during {pair} sell order')
     elif signals.get('open_long'):
         
-        stp = df.at[len(df)-1, 'st'] # TODO incorporate spread into this
-        risk = (price - stp) / price
+        stp = df.at[len(df)-1, 'st']
+        buffer = spreads.get(pair) * 2 # stop-market order will not get perfect execution
+        exe_stop = df.at[len(df)-1, 'st'] * (1-buffer) # expect some slippage in risk calc
+        risk = (price - exe_stop) / price
         mir = uf.max_init_risk(len(pairs_in_pos), max_init_r, max_positions)
         # TODO max init risk should be based on average inval dist of signals, not fixed risk setting
         if risk > mir:
@@ -257,8 +274,8 @@ for pair in pairs:
             non_trade = f'{now} {pair} signal, size too small to trade ({usdt_size:.3}USDT)'
             print(non_trade)
             non_trade_notes.append(non_trade)
-        if enough_usdt and enough_size and enough_depth:
-            
+        
+        if enough_usdt and enough_size and enough_depth:            
             # check total risk and close profitable positions if necessary
             tp_trades = funcs.reduce_risk(pos_open_risk, params.get('total_r_limit'), live)
             for t in tp_trades:
@@ -386,8 +403,8 @@ all_end = time.perf_counter()
 all_time = all_end - all_start
 elapsed_str = f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s'
 rfb = round(total_bal-dollar_tor, 2)
-final_msg = f'Finished. {elapsed_str}, total bal: ${total_bal:.2f} (${rfb} + ${dollar_tor:.2f} \
-{num_open_positions} positions)'
+final_msg = f'{elapsed_str}, total bal: ${total_bal:.2f} (${rfb} + ${dollar_tor:.2f}) \
+{num_open_positions} positions'
 print(final_msg)
 push = pb.push_note(now, final_msg)
 if live:
