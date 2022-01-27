@@ -101,10 +101,10 @@ if live:
         agg_fee = []
         for t in trades[::-1]:
             if t.get('isBuyer') == close_is_buy:
-                agg_price.append(t.get('price'))
-                agg_base.append(t.get('qty'))
-                agg_quote.append(t.get('quoteQty'))
-                agg_fee.append(t.get('commission'))
+                agg_price.append(float(t.get('price')))
+                agg_base.append(float(t.get('qty')))
+                agg_quote.append(float(t.get('quoteQty')))
+                agg_fee.append(float(t.get('commission')))
             else:
                 break
         # aggregate trade stats
@@ -233,7 +233,7 @@ for pair in pairs:
                 push = pb.push_note(now, f'exeption during {pair} sell order')
     elif signals.get('open_long'):
         
-        stp = df.at[len(df)-1, 'st']
+        stp = float(df.at[len(df)-1, 'st'])
         buffer = spreads.get(pair) * 2 # stop-market order will not get perfect execution
         exe_stop = df.at[len(df)-1, 'st'] * (1-buffer) # expect some slippage in risk calc
         risk = (price - exe_stop) / price
