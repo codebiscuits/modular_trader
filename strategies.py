@@ -437,12 +437,12 @@ class DoubleSTLO:
         return f'{self.name} st2: {self.lb}-{self.mult}'
     
     def live_signals(self, df, in_pos):
-        df['st_loose'], df['st_loose_u'], df['st_loose_d'] = ind.supertrend(df.high, df.low, df.close, 10, 3)
-        df['st'], df['st_u'], df['st_d'] = ind.supertrend(df.high, df.low, df.close, self.lb, self.mult)
+        # df['st_loose'], df['st_loose_u'], df['st_loose_d'] = ind.supertrend(df.high, df.low, df.close, 10, 3)
+        # df['st'], df['st_u'], df['st_d'] = ind.supertrend(df.high, df.low, df.close, self.lb, self.mult)
         
-        # ind.supertrend_new(df, 10, 3)
-        # df.rename(columns={'st': 'st_loose', 'st_u': 'st_loose_u', 'st_d': 'st_loose_d'}, inplace=True)
-        # ind.supertrend_new(df, self.lb, self.mult)
+        ind.supertrend_new(df, 10, 3)
+        df.rename(columns={'st': 'st_loose', 'st_u': 'st_loose_u', 'st_d': 'st_loose_d'}, inplace=True)
+        ind.supertrend_new(df, self.lb, self.mult)
         
         bullish_loose = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st_loose']
         bearish_loose = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st_loose']

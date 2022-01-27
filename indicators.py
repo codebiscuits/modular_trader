@@ -17,22 +17,22 @@ def supertrend_new(df, lb, mult):
     df['lower_band'] = (df.hl_avg - mult * df.atr)#.dropna()
     df.drop(['hl_avg', 'atr'], axis=1, inplace=True)
     
-    df['final_upper'] = 0
-    df['final_lower'] = 0
+    df['final_upper'] = 0.0
+    df['final_lower'] = 0.0
     
     # i have to use for loops to calculate the next columns because other methods using conditional
     # statements work on only 1 row at a time, and these steps base the current value on the previous one
     for i in df.index:
-        if i == 0:
-            df.at[i, 'final_upper'] = 0
+        if i == 0.0:
+            df.at[i, 'final_upper'] = 0.0
         elif (df.at[i, 'upper_band'] < df.at[i-1, 'final_upper']) | (df.at[i-1, 'close'] > df.at[i-1, 'final_upper']):
             df.at[i, 'final_upper'] = df.at[i, 'upper_band']
         else:
             df.at[i, 'final_upper'] = df.at[i-1, 'final_upper']
     
     for i in df.index:
-        if i == 0:
-            df.at[i, 'final_lower'] = 0
+        if i == 0.0:
+            df.at[i, 'final_lower'] = 0.0
         elif (df.at[i, 'lower_band'] > df.at[i-1, 'final_lower']) | (df.at[i-1, 'close'] < df.at[i-1, 'final_lower']):
             df.at[i, 'final_lower'] = df.at[i, 'lower_band']
         else:
@@ -40,11 +40,11 @@ def supertrend_new(df, lb, mult):
     
     df.drop(['upper_band', 'lower_band'], axis=1, inplace=True)
     
-    df['st'] = 0
+    df['st'] = 0.0
     
     for j in df.index:
-        if j == 0:
-            df.at[j, 'st'] = 0
+        if j == 0.0:
+            df.at[j, 'st'] = 0.0
         elif df.at[j-1, 'st'] == df.at[j-1, 'final_upper'] and df.at[j, 'close'] < df.at[j, 'final_upper']:
             df.at[j, 'st'] = df.at[j, 'final_upper']
         elif df.at[j-1, 'st'] == df.at[j-1, 'final_upper'] and df.at[j, 'close'] > df.at[j, 'final_upper']:
