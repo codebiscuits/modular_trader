@@ -338,33 +338,33 @@ for pair in pairs:
         # from current value if this position ended up getting stopped out
         open_risk_r = (open_risk / total_bal) / params.get('fixed_risk')
         
-        # take profit on risky positions
-        if open_risk_r > 10:
-            tp_pct = 50
-            note = f"*** {pair} take profit {tp_pct}% @ {price}"
-            print(now, note)
-            print(f'pos_bal: ${pos_bal}, inval_dist: {inval_dist}')
-            print(f'open_risk: ${open_risk:.2f}, open_risk_r: {open_risk_r:.3}R')
-            print('-')
-            if live:
-                push = pb.push_note(now, note)
-                funcs.clear_stop(pair)
-                tp_order = funcs.sell_asset(pair, pct=50)
-                tp_order['type'] = 'tp_long'
-                tp_order['reason'] = 'reducing portfolio risk'
-                stp = df.at[len(df)-1, 'st']
-                stop_order = funcs.set_stop(pair, stp)
-                tp_order['hard_stop'] = stp
-                trade_notes.append(tp_order)
-                if ot.get(pair):
-                    trade_record = ot.get(pair)
-                else:
-                    trade_record = []
-                trade_record.append(tp_order)
-                ot[pair] = trade_record
-                uf.record_open_trades(strat.name, market_data, ot)
-            open_risk = pos_bal - (pos_bal / inval_dist) # update with new position
-            open_risk_r = (open_risk / total_bal) / params.get('fixed_risk')
+        # # take profit on risky positions
+        # if open_risk_r > 10:
+        #     tp_pct = 50
+        #     note = f"*** {pair} take profit {tp_pct}% @ {price}"
+        #     print(now, note)
+        #     print(f'pos_bal: ${pos_bal}, inval_dist: {inval_dist}')
+        #     print(f'open_risk: ${open_risk:.2f}, open_risk_r: {open_risk_r:.3}R')
+        #     print('-')
+        #     if live:
+        #         push = pb.push_note(now, note)
+        #         funcs.clear_stop(pair)
+        #         tp_order = funcs.sell_asset(pair, pct=50)
+        #         tp_order['type'] = 'tp_long'
+        #         tp_order['reason'] = 'reducing portfolio risk'
+        #         stp = df.at[len(df)-1, 'st']
+        #         stop_order = funcs.set_stop(pair, stp)
+        #         tp_order['hard_stop'] = stp
+        #         trade_notes.append(tp_order)
+        #         if ot.get(pair):
+        #             trade_record = ot.get(pair)
+        #         else:
+        #             trade_record = []
+        #         trade_record.append(tp_order)
+        #         ot[pair] = trade_record
+        #         uf.record_open_trades(strat.name, market_data, ot)
+        #     open_risk = pos_bal - (pos_bal / inval_dist) # update with new position
+        #     open_risk_r = (open_risk / total_bal) / params.get('fixed_risk')
         
         total_open_risk += open_risk_r
         pos_open_risk[asset] = {'R': round(open_risk_r, 3), '$': round(open_risk, 2)}
