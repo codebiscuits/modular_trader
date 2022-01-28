@@ -169,15 +169,19 @@ for pair in pairs:
         df = df.tail(strat.max_length)
         df.reset_index(drop=True, inplace=True)
     
+    now = datetime.now().strftime('%d/%m/%y %H:%M')
+    
     # generate signals
     signals = strat.live_signals(df, in_pos)
     
     if df.at[len(df)-1, 'st'] == 0:
-        print(pair, 'supertrend 0')
+        print(pair, 'supertrend 0 error, skipping pair')
+        note = f'{pair} supertrend 0 error, skipping pair'
+        push = pb.push_note(now, note)
+        continue
     
     # execute orders
     # TODO need to integrate ALL binance filters into order calculations
-    now = datetime.now().strftime('%d/%m/%y %H:%M')
     price = df.at[len(df)-1, 'close']
     tp_trades = []
     
@@ -188,6 +192,7 @@ for pair in pairs:
             push = pb.push_note(now, note)
             try:
                 funcs.clear_stop(pair)
+                # TODO isn't this supposed to be a take-profit order?!?!?!
                 tp_order = funcs.sell_asset(pair)
                 tp_order['type'] = 'tp_long'
                 tp_order['reason'] = 'trade over-extended'
@@ -338,33 +343,33 @@ for pair in pairs:
         # from current value if this position ended up getting stopped out
         open_risk_r = (open_risk / total_bal) / params.get('fixed_risk')
         
-        # # take profit on risky positions
-        # if open_risk_r > 10:
-        #     tp_pct = 50
-        #     note = f"*** {pair} take profit {tp_pct}% @ {price}"
-        #     print(now, note)
-        #     print(f'pos_bal: ${pos_bal}, inval_dist: {inval_dist}')
-        #     print(f'open_risk: ${open_risk:.2f}, open_risk_r: {open_risk_r:.3}R')
-        #     print('-')
-        #     if live:
-        #         push = pb.push_note(now, note)
-        #         funcs.clear_stop(pair)
-        #         tp_order = funcs.sell_asset(pair, pct=50)
-        #         tp_order['type'] = 'tp_long'
-        #         tp_order['reason'] = 'reducing portfolio risk'
-        #         stp = df.at[len(df)-1, 'st']
-        #         stop_order = funcs.set_stop(pair, stp)
-        #         tp_order['hard_stop'] = stp
-        #         trade_notes.append(tp_order)
-        #         if ot.get(pair):
-        #             trade_record = ot.get(pair)
-        #         else:
-        #             trade_record = []
-        #         trade_record.append(tp_order)
-        #         ot[pair] = trade_record
-        #         uf.record_open_trades(strat.name, market_data, ot)
-        #     open_risk = pos_bal - (pos_bal / inval_dist) # update with new position
-        #     open_risk_r = (open_risk / total_bal) / params.get('fixed_risk')
+        # take profit on risky positions
+        if open_risk_r > 10:
+            tp_pct = 50
+            note = f"*** {pair} take profit {tp_pct}% @ {price}"
+            print(now, note)
+            print(f'pos_bal: ${pos_bal}, inval_dist: {inval_dist}')
+            print(f'open_risk: ${open_risk:.2f}, open_risk_r: {open_risk_r:.3}R')
+            print('-')
+            if live:
+                push = pb.push_note(now, note)
+                funcs.clear_stop(pair)
+                tp_order = funcs.sell_asset(pair, pct=50)
+                tp_order['type'] = 'tp_long'
+                tp_order['reason'] = 'reducing portfolio risk'
+                stp = df.at[len(df)-1, 'st']
+                stop_order = funcs.set_stop(pair, stp)
+                tp_order['hard_stop'] = stp
+                trade_notes.append(tp_order)
+                if ot.get(pair):
+                    trade_record = ot.get(pair)
+                else:
+                    trade_record = []
+                trade_record.append(tp_order)
+                ot[pair] = trade_record
+                uf.record_open_trades(strat.name, market_data, ot)
+            open_risk = pos_bal - (pos_bal / inval_dist) # update with new position
+            open_risk_r = (open_risk / total_bal) / params.get('fixed_risk')
         
         total_open_risk += open_risk_r
         pos_open_risk[asset] = {'R': round(open_risk_r, 3), '$': round(open_risk, 2)}
@@ -409,7 +414,7 @@ all_time = all_end - all_start
 elapsed_str = f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s'
 rfb = round(total_bal-dollar_tor, 2)
 final_msg = f'{elapsed_str}, total bal: ${total_bal:.2f} (${rfb} + ${dollar_tor:.2f}) \
-{num_open_positions} positions'
+positions {num_open_positions}'
 print(final_msg)
 push = pb.push_note(now, final_msg)
 if live:
