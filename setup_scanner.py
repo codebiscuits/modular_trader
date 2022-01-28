@@ -47,7 +47,7 @@ max_positions = params.get('total_r_limit') # if all pos are below b/e i don't w
 max_init_r = params.get('fixed_risk') * params.get('total_r_limit')
 
 # strat = strats.RSI_ST_EMA(4, 45, 96)
-strat = strats.DoubleSTLO(3, 1.5)
+strat = strats.DoubleSTLO(3, 1.4)
 
 # create pairs list
 all_pairs = funcs.get_pairs('USDT', 'SPOT') # list
@@ -62,81 +62,84 @@ pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked
 now_start = datetime.now().strftime('%d/%m/%y %H:%M')
 
 # update trade records
-if live:
-    # read trade records
-    ot_path = f"{market_data}/{strat.name}_open_trades.json"
-    with open(ot_path, "r") as ot_file:
-        try:
-            ot = json.load(ot_file)
-        except JSONDecodeError:
-            ot = {}
-    ct_path = f"{market_data}/{strat.name}_closed_trades.json"
-    with open(ct_path, "r") as ct_file:
-        try:
-            closed_trades = json.load(ct_file)
-            if closed_trades.keys():
-                key_ints = [int(x) for x in closed_trades.keys()]
-                next_id = sorted(key_ints)[-1] + 1
-            else:
-                next_id = 0
-        except JSONDecodeError:
-            closed_trades = {}
+# if live:
+# read trade records
+ot_path = f"{market_data}/{strat.name}_open_trades.json"
+with open(ot_path, "r") as ot_file:
+    try:
+        ot = json.load(ot_file)
+    except JSONDecodeError:
+        ot = {}
+ct_path = f"{market_data}/{strat.name}_closed_trades.json"
+with open(ct_path, "r") as ct_file:
+    try:
+        closed_trades = json.load(ct_file)
+        if closed_trades.keys():
+            key_ints = [int(x) for x in closed_trades.keys()]
+            next_id = sorted(key_ints)[-1] + 1
+        else:
             next_id = 0
-    
-    # create list of trade records which don't match current positions
-    open_trades = list(ot.keys())
-    stopped_trades = [st for st in open_trades if st not in pairs_in_pos] # these positions must have been stopped out
-    
-    # look for stopped out positions and complete trade records
-    for i in stopped_trades:
-        if ot.get(i): # this condition means that the exit will be recorded even if there is no entry in  the records
-            trade_record = ot.get(i)
+    except JSONDecodeError:
+        closed_trades = {}
+        next_id = 0
+
+if not live: # now that trade records have been loaded, path can be changed
+    market_data = Path('test_records')
+
+# create list of trade records which don't match current positions
+open_trades = list(ot.keys())
+stopped_trades = [st for st in open_trades if st not in pairs_in_pos] # these positions must have been stopped out
+
+# look for stopped out positions and complete trade records
+for i in stopped_trades:
+    if ot.get(i): # this condition means that the exit will be recorded even if there is no entry in  the records
+        trade_record = ot.get(i)
+    else:
+        trade_record = []
+    close_is_buy = trade_record[0].get('type') == 'open_short'
+    trades = client.get_my_trades(symbol=i)
+    agg_price = []
+    agg_base = []
+    agg_quote = []
+    agg_fee = []
+    for t in trades[::-1]:
+        if t.get('isBuyer') == close_is_buy:
+            agg_price.append(float(t.get('price')))
+            agg_base.append(float(t.get('qty')))
+            agg_quote.append(float(t.get('quoteQty')))
+            agg_fee.append(float(t.get('commission')))
         else:
-            trade_record = []
-        close_is_buy = trade_record[0].get('type') == 'open_short'
-        trades = client.get_my_trades(symbol=i)
-        agg_price = []
-        agg_base = []
-        agg_quote = []
-        agg_fee = []
-        for t in trades[::-1]:
-            if t.get('isBuyer') == close_is_buy:
-                agg_price.append(float(t.get('price')))
-                agg_base.append(float(t.get('qty')))
-                agg_quote.append(float(t.get('quoteQty')))
-                agg_fee.append(float(t.get('commission')))
-            else:
-                break
-        # aggregate trade stats
-        avg_exe_price = sum([p*b for p,b in zip(agg_price, agg_base)]) / sum(agg_base)
-        tot_base = sum(agg_base)
-        tot_quote = sum(agg_quote)
-        tot_fee = sum(agg_fee)
-        # create dict
-        trade_dict = {'timestamp': t.get('time'), 
-                      'pair': t.get('symbol'), 
-                      'type': 'stop_short' if t.get('isBuyer') else 'stop_long', 
-                      'exe_price': avg_exe_price, 
-                      'base_size': tot_base, 
-                      'quote_size': tot_quote, 
-                      'fee': tot_fee, 
-                      'fee_currency': t.get('commissionAsset'), 
-                      'reason': 'hit hard stop', 
-                      }
-        note = f"*** stopped out {t.get('symbol')} @ {t.get('price')}"
-        print(now_start, note)
-        push = pb.push_note(now_start, note)
-        trade_record.append(trade_dict)
-        if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
-            trade_id = trade_record[0].get('timestamp')
-            closed_trades[trade_id] = trade_record
-        else:
-            closed_trades[next_id] = trade_record
-        uf.record_closed_trades(strat.name, market_data, closed_trades)
-        next_id += 1
-        if ot[i]:
-            del ot[i]
-            uf.record_open_trades(strat.name, market_data, ot)
+            break
+    # aggregate trade stats
+    avg_exe_price = sum([p*b for p,b in zip(agg_price, agg_base)]) / sum(agg_base)
+    tot_base = sum(agg_base)
+    tot_quote = sum(agg_quote)
+    tot_fee = sum(agg_fee)
+    # create dict
+    trade_dict = {'timestamp': t.get('time'), 
+                  'pair': t.get('symbol'), 
+                  'type': 'stop_short' if t.get('isBuyer') else 'stop_long', 
+                  'exe_price': avg_exe_price, 
+                  'base_size': tot_base, 
+                  'quote_size': tot_quote, 
+                  'fee': tot_fee, 
+                  'fee_currency': t.get('commissionAsset'), 
+                  'reason': 'hit hard stop', 
+                  }
+    note = f"*** stopped out {t.get('symbol')} @ {t.get('price')}"
+    print(now_start, note)
+    push = pb.push_note(now_start, note)
+    trade_record.append(trade_dict)
+    if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
+        trade_id = trade_record[0].get('timestamp')
+        closed_trades[trade_id] = trade_record
+    else:
+        closed_trades[next_id] = trade_record
+    uf.record_closed_trades(strat.name, market_data, closed_trades)
+    next_id += 1
+    if ot[i]:
+        del ot[i]
+        uf.record_open_trades(strat.name, market_data, ot)
 
 # print(f"Current time: {now_start}, {strat}, fixed risk: {params.get('fixed_risk')}")
 print(f"Current time: {now_start}, {strat}, fixed risk: {params.get('fixed_risk')}")
@@ -243,6 +246,7 @@ for pair in pairs:
             non_trade = f'{now} {pair} signal, too far from invalidation ({risk * 100:.1f}%)'
             print(non_trade)
             non_trade_notes.append(non_trade)
+            print('-')
             continue
         size, usdt_size = funcs.get_size(price, params.get('fixed_risk'), total_bal, risk)
         usdt_bal = funcs.free_usdt()
@@ -386,10 +390,11 @@ if not live:
 num_open_positions = len(pos_open_risk)
 dollar_tor = total_bal * params.get('fixed_risk') * total_open_risk
 
-print(f'{num_open_positions = }, {total_open_risk = }R, ie ${dollar_tor:.2f}')
-
-print('---------------- sizing ----------------')
-pprint(sizing)
+if not live:
+    print(f'{num_open_positions = }, {total_open_risk = }R, ie ${dollar_tor:.2f}')
+    
+    print('---------------- sizing ----------------')
+    pprint(sizing)
 
 
 # log all data from the session
