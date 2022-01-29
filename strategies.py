@@ -426,7 +426,7 @@ def double_st(df, in_pos):
 class DoubleSTLO:
     
     description = 'regular supertrend for bias with tight supertrend for entries/exits'
-    max_length = 20
+    max_length = 100
     
     def __init__(self, lb, mult):
         self.name = 'double_st_lo'
