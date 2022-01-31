@@ -42,7 +42,8 @@ all_start = time.perf_counter()
 params = {'quote_asset': 'USDT', 
           'fixed_risk': 0.001, 
           'max_spread': 0.5, 
-          'total_r_limit': 30}
+          'indiv_r_limit': 3, 
+          'total_r_limit': 20}
 max_positions = params.get('total_r_limit') # if all pos are below b/e i don't want to open more
 max_init_r = params.get('fixed_risk') * params.get('total_r_limit')
 
@@ -261,7 +262,8 @@ for pair in pairs:
         
         enough_depth = usdt_depth >= usdt_size
         enough_usdt = usdt_bal > usdt_size
-        enough_size = usdt_size > (12 * (1 + risk)) # this ensures size will be big enough for init stop to be set
+        enough_size = usdt_size > (24 * (1 + risk)) # this ensures size will be
+        # big enough for init stop to be set on half the position
         
         if not enough_depth:
             if usdt_depth == 0:
@@ -340,7 +342,7 @@ for pair in pairs:
         open_risk_r = (open_risk / total_bal) / params.get('fixed_risk')
         
         # take profit on risky positions
-        if open_risk_r > 10:
+        if open_risk_r > params.get('indiv_r_limit'):
             tp_pct = 50
             note = f"*** {pair} take profit {tp_pct}% @ {price}"
             print(now, note)
@@ -352,10 +354,10 @@ for pair in pairs:
                 funcs.clear_stop(pair)
                 tp_order = funcs.sell_asset(pair, pct=50)
                 tp_order['type'] = 'tp_long'
-                tp_order['reason'] = 'reducing portfolio risk'
                 stp = df.at[len(df)-1, 'st']
                 stop_order = funcs.set_stop(pair, stp)
                 tp_order['hard_stop'] = stp
+                tp_order['reason'] = 'position R limit exceeded'
                 if ot.get(pair):
                     trade_record = ot.get(pair)
                 else:

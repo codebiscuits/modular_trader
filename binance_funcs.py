@@ -112,8 +112,8 @@ def account_bal():
 
 def get_size(price, fr, balance, risk):
     trade_risk = risk / fr
-    usdt_size = balance / trade_risk
-    asset_quantity = usdt_size / price
+    usdt_size = float(balance / trade_risk)
+    asset_quantity = float(usdt_size / price)
     
     return asset_quantity, usdt_size
 
@@ -634,9 +634,8 @@ def set_stop(pair, price):
     
     info = client.get_symbol_info(pair)
     order_size = step_round(asset_bal, step_size)# - step_size
-    print(f'checking stop-loss size calc: {asset_bal = } {order_size = }')
     spread = get_spread(pair)
-    lower_price = price * (1 - (spread * 10))
+    lower_price = price * (1 - (spread * 30))
     trigger_price = step_round(price, tick_size)
     limit_price = step_round(lower_price, tick_size)
     # print(f'{pair} Stop Order - trigger: {trigger_price:.5}, limit: {limit_price:.5}, size: {order_size:.5}')
@@ -676,14 +675,17 @@ def clear_stop(pair):
 def reduce_risk(pos_open_risk, r_limit, live):
     positions = []
     trade_notes = []
+    
+    # create a list of open positions in profit and their open risk value
     for p, r in pos_open_risk.items():
         if r.get('R') > 1:
             positions.append((p, r.get('R')))
     
     if positions:
+        # sort the list so biggest open risk is first
         sorted_pos = sorted(positions, key=lambda x: x[1], reverse=True)
-        # print(sorted_pos)
     
+        # # create a new list with just the R values
         r_list = [x.get('R') for x in pos_open_risk.values()]
         total_r = sum(r_list)
         
