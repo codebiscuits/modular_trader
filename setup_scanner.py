@@ -93,7 +93,7 @@ stopped_trades = [st for st in open_trades if st not in pairs_in_pos] # these po
 
 # look for stopped out positions and complete trade records
 for i in stopped_trades:
-    trade_record = ot.get(i) if ot.get(i) else [] # either load the rest of the record or just start a new one if no record exists
+    trade_record = ot.get(i)
     close_is_buy = trade_record[0].get('type') == 'open_short'
     trades = client.get_my_trades(symbol=i)
     
@@ -181,7 +181,6 @@ for pair in pairs:
         continue
     
     # execute orders
-    # TODO need to integrate ALL binance filters into order calculations
     price = df.at[len(df)-1, 'close']
     tp_trades = []
     
@@ -239,10 +238,9 @@ for pair in pairs:
                 push = pb.push_note(now, f'exeption during {pair} sell order')
     elif signals.get('open_long'):
         
-        stp = float(df.at[len(df)-1, 'st'])
-        buffer = spreads.get(pair) * 2 # stop-market order will not get perfect execution
-        exe_stop = df.at[len(df)-1, 'st'] * (1-buffer) # expect some slippage in risk calc
-        risk = (price - exe_stop) / price
+        buffer = spreads.get(pair) * 2 # stop-market order will not get perfect execution, so
+        stp = float(df.at[len(df)-1, 'st']) * (1-buffer) # expect some slippage in risk calc
+        risk = (price - stp) / price
         mir = uf.max_init_risk(len(pairs_in_pos), max_init_r, max_positions)
         # TODO max init risk should be based on average inval dist of signals, not fixed risk setting
         if risk > mir:
@@ -354,7 +352,8 @@ for pair in pairs:
                 funcs.clear_stop(pair)
                 tp_order = funcs.sell_asset(pair, pct=50)
                 tp_order['type'] = 'tp_long'
-                stp = df.at[len(df)-1, 'st']
+                buffer = spreads.get(pair) * 2 # stop-market order will not get perfect execution, so
+                stp = float(df.at[len(df)-1, 'st']) * (1-buffer) # expect some slippage in risk calc
                 stop_order = funcs.set_stop(pair, stp)
                 tp_order['hard_stop'] = stp
                 tp_order['reason'] = 'position R limit exceeded'
@@ -371,7 +370,7 @@ for pair in pairs:
         total_open_risk += open_risk_r
         pos_open_risk[asset] = {'R': round(open_risk_r, 3), '$': round(open_risk, 2)}
         
-    # TODO maybe have a plot rendered and saved every time a trade is triggered
+    # TODO maybe have a plot rendered and saved every time a trade is closed
 
 # incorporate pos_open_risk into sizing
 for asset, v in sizing.items():
