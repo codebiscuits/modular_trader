@@ -142,7 +142,6 @@ for i in stopped_trades:
         del ot[i]
         uf.record_open_trades(strat.name, market_data, ot)
 
-# print(f"Current time: {now_start}, {strat}, fixed risk: {params.get('fixed_risk')}")
 print(f"Current time: {now_start}, {strat}, fixed risk: {params.get('fixed_risk')}")
 
 total_bal = funcs.account_bal()
@@ -150,7 +149,6 @@ avg_prices = funcs.get_avg_prices()
 
 funcs.top_up_bnb(15)
 
-trade_notes = [] # can be removed when i know the new system is working
 non_trade_notes = []
 total_open_risk = 0 # expressed in terms of R
 pos_open_risk = {} # dict of dicts {asset: {R:val, $:val}, }
@@ -197,7 +195,6 @@ for pair in pairs:
                 tp_order = funcs.sell_asset(pair)
                 tp_order['type'] = 'tp_long'
                 tp_order['reason'] = 'trade over-extended'
-                trade_notes.append(tp_order) # hopefuly obsolete now
                 if ot.get(pair):
                     trade_record = ot.get(pair)
                 else:
@@ -219,7 +216,6 @@ for pair in pairs:
                 sell_order = funcs.sell_asset(pair)
                 sell_order['type'] = 'close_long'
                 sell_order['reason'] = 'hit trailing stop'
-                trade_notes.append(sell_order)
                 if ot.get(pair):
                     trade_record = ot.get(pair)
                 else:
@@ -321,7 +317,6 @@ for pair in pairs:
                     buy_order['type'] = 'open_long'
                     buy_order['reason'] = 'buy conditions met'
                     buy_order['hard_stop'] = stp
-                    trade_notes.append(buy_order)
                     ot[pair] = [buy_order]
                     stop_order = funcs.set_stop(pair, stp)
                     in_pos = True
@@ -361,7 +356,6 @@ for pair in pairs:
                 stp = df.at[len(df)-1, 'st']
                 stop_order = funcs.set_stop(pair, stp)
                 tp_order['hard_stop'] = stp
-                trade_notes.append(tp_order)
                 if ot.get(pair):
                     trade_record = ot.get(pair)
                 else:
@@ -405,7 +399,7 @@ if not live:
 
 # log all data from the session
 uf.log(live, params, strat, market_data, spreads, now_start, sizing, pos_open_risk, tp_trades, 
-    trade_notes, non_trade_notes, ot, closed_trades)
+    non_trade_notes, ot, closed_trades)
 
 if not live:
     print('warning: logging switched off')

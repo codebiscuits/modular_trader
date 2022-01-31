@@ -40,7 +40,7 @@ def record_closed_trades(strat_name, market_data, ct):
 
 def log(live, params, strat, market_data, spreads, 
         now_start, sizing, pos_open_risk, tp_trades, 
-        trade_notes, non_trade_notes, ot, closed_trades):    
+        non_trade_notes, ot, closed_trades):    
     
     # check total balance and record it in a file for analysis
     total_bal = funcs.account_bal()
@@ -54,22 +54,12 @@ def log(live, params, strat, market_data, spreads,
     #     pprint(new_line)
     
     # save a json of any trades that have happened with relevant data
-    if tp_trades: # if the reduce_risk function closed any positions, they will be in here
-        trade_notes.extend(tp_trades)
     if live:
-        with open(f"{market_data}/{strat.name}_trades.txt", "a") as file:
-            for trade in trade_notes:
-                file.write(json.dumps(trade))
-                file.write('\n')
         # should be able to remove these two function calls
         with open(f"{market_data}/{strat.name}_open_trades.json", "w") as ot_file:
             json.dump(ot, ot_file)            
         with open(f"{market_data}/{strat.name}_closed_trades.json", "w") as ct_file:
             json.dump(closed_trades, ct_file)
-    # else:
-    #     pprint(trade_notes)
-    #     pprint(ot)
-    #     pprint(closed_trades)
     
     # record all skipped or reduced trades
     non_trade_record = {'timestamp': now_start, 'non_trades': non_trade_notes}
