@@ -92,12 +92,12 @@ stopped_trades = [st for st in open_trades if st not in pairs_in_pos] # these po
 
 # look for stopped out positions and complete trade records
 for i in stopped_trades:
-    if ot.get(i): # this condition means that the exit will be recorded even if there is no entry in  the records
-        trade_record = ot.get(i)
-    else:
-        trade_record = []
+    trade_record = ot.get(i) if ot.get(i) else [] # either load the rest of the record or just start a new one if no record exists
     close_is_buy = trade_record[0].get('type') == 'open_short'
     trades = client.get_my_trades(symbol=i)
+    
+    last_time = trades[-1].get('time')
+    
     agg_price = []
     agg_base = []
     agg_quote = []
@@ -115,10 +115,11 @@ for i in stopped_trades:
     tot_base = sum(agg_base)
     tot_quote = sum(agg_quote)
     tot_fee = sum(agg_fee)
+    trade_type = 'stop_short' if close_is_buy else 'stop_long'
     # create dict
-    trade_dict = {'timestamp': t.get('time'), 
+    trade_dict = {'timestamp': last_time, 
                   'pair': t.get('symbol'), 
-                  'type': 'stop_short' if t.get('isBuyer') else 'stop_long', 
+                  'type': trade_type, 
                   'exe_price': avg_exe_price, 
                   'base_size': tot_base, 
                   'quote_size': tot_quote, 
