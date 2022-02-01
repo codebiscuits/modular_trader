@@ -605,10 +605,6 @@ def buy_asset(pair, usdt_size, live):
             pb.push_note('Warning', f'{pair} order not filled')
 
     else:
-        # order = client.create_test_order(symbol=pair,
-        #                             side=enums.SIDE_BUY,
-        #                             type=enums.ORDER_TYPE_MARKET,
-        #                             quantity=order_size)
         trade_dict = {"pair": pair, 
                      "trig_price": usdt_price,
                      "base_size": float(order_size),
@@ -668,10 +664,6 @@ def sell_asset(pair, live, pct=100):
             pb.push_note('Warning', f'{pair} order not filled')
 
     else:
-        # order = client.create_test_order(symbol=pair,
-        #                             side=enums.SIDE_SELL,
-        #                             type=enums.ORDER_TYPE_MARKET,
-        #                             quantity=order_size)
         trade_dict = {"pair": pair, 
                     "trig_price": usdt_price,
                     "base_size": float(order_size),
@@ -717,13 +709,6 @@ def set_stop(pair, price, live):
                                     quantity=order_size,
                                     price=limit_price)
     else:
-        # order = client.create_test_order(symbol=pair,
-        #                             side=enums.SIDE_SELL,
-        #                             type=enums.ORDER_TYPE_STOP_LOSS_LIMIT,
-        #                             timeInForce=enums.TIME_IN_FORCE_GTC,
-        #                             stopPrice=trigger_price,
-        #                             quantity=order_size,
-        #                             price=limit_price)
         order = {"pair": pair, 
                 "trig_price": float(trigger_price),
                 "base_size": float(order_size),
@@ -801,7 +786,7 @@ def reduce_risk(sizing, signals, params, live):
     fixed_risk = params.get('fixed_risk')
     
     # create a list of open positions in profit and their open risk value
-    positions = [(p, r.get('or_R')) for p, r in sizing.items() if r.get('or_R') > 0]
+    positions = [(p, r.get('or_R')) for p, r in sizing.items() if r.get('or_R') and r.get('or_R') > 0]
     
     # for p, r in sizing.items():
     #     positions.append((p, r.get('or_R')))
@@ -810,16 +795,14 @@ def reduce_risk(sizing, signals, params, live):
     if positions:
         # sort the list so biggest open risk is first
         sorted_pos = sorted(positions, key=lambda x: x[1], reverse=True)
-        for posi in sorted_pos:
-            print(posi)
 
         # # create a new list with just the R values
-        r_list = [x.get('or_R') for x in sizing.values()]
+        r_list = [x.get('or_R') for x in sizing.values() if x.get('or_R')]
         total_r = sum(r_list)
-        print(f'{total_r = }')
+        num_pos = len(r_list)
 
         for pos in sorted_pos:
-            if total_r > r_limit and pos[1] > 1.5:
+            if (total_r > r_limit or num_pos >= r_limit) and pos[1] > 1.5:
                 pair = pos[0] + 'USDT'
                 now = datetime.now().strftime('%d/%m/%y %H:%M')
                 price = get_price(pair)
@@ -833,7 +816,7 @@ def reduce_risk(sizing, signals, params, live):
                     sell_order['reason'] = 'portfolio risk limiting'
                     trade_notes.append(sell_order)
                     total_r -= pos[1]
-                    sizing[pos[0]] = update_pos(pos[0], signals.get('inval'), fixed_risk)
+                    del sizing[pos[0]]
                 else:
                     push = pb.push_note(now, f'sim reduce risk {pair}')
                     clear_stop(pair, live)
@@ -842,7 +825,7 @@ def reduce_risk(sizing, signals, params, live):
                     sell_order['reason'] = 'portfolio risk limiting'
                     trade_notes.append(sell_order)
                     total_r -= pos[1]
-                    sizing[pos[0]] = {'qty': 0, 'value': 0, 'pf%': 0, 'or_R': 0, 'or_$': 0}
+                    del sizing[pos[0]]
             else:
                 break
 
