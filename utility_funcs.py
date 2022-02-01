@@ -32,14 +32,14 @@ def max_init_risk(n, target_risk, max_pos):
 
 def record_open_trades(strat_name, market_data, ot):
     with open(f"{market_data}/{strat_name}_open_trades.json", "w") as ot_file:
-        json.dump(ot, ot_file) 
+        json.dump(ot, ot_file)
 
 def record_closed_trades(strat_name, market_data, ct):
     with open(f"{market_data}/{strat_name}_closed_trades.json", "w") as ct_file:
         json.dump(ct, ct_file)
 
 def log(live, params, strat, market_data, spreads, 
-        now_start, sizing, pos_open_risk, tp_trades, 
+        now_start, sizing, tp_trades, 
         non_trade_notes, ot, closed_trades):    
     
     # check total balance and record it in a file for analysis
