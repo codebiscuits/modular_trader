@@ -203,7 +203,7 @@ for pair in pairs:
                 tp_order['reason'] = 'trade over-extended'
                 buffer = spreads.get(pair) * 2 # stop-market order will not get perfect execution, so
                 stp = float(df.at[len(df)-1, 'st']) * (1-buffer) # expect some slippage in risk calc
-                stop_order = funcs.set_stop(pair, stp)
+                stop_order = funcs.set_stop(pair, stp, live)
                 tp_order['hard_stop'] = stp
                 tp_order['reason'] = 'position R limit exceeded'
                 if ot.get(pair):
@@ -348,8 +348,6 @@ for pair in pairs:
         
         if enough_size and enough_depth:            
             # check total risk and close profitable positions if necessary
-            # tp_trades = funcs.reduce_risk(pos_open_risk, params.get('total_r_limit'), live)
-            
             sizing, tp_trades = funcs.reduce_risk(sizing, signals, params, live)
             
             # transfer trade records from reduce_risk into json records
@@ -393,12 +391,12 @@ for pair in pairs:
             if live:
                 push = pb.push_note(now, note)
                 try:
-                    buy_order = funcs.buy_asset(pair, usdt_size)
+                    buy_order = funcs.buy_asset(pair, usdt_size, live)
                     buy_order['type'] = 'open_long'
                     buy_order['reason'] = 'buy conditions met'
                     buy_order['hard_stop'] = stp
                     ot[pair] = [buy_order]
-                    stop_order = funcs.set_stop(pair, stp)
+                    stop_order = funcs.set_stop(pair, stp, live)
                     in_pos = True
                     uf.record_open_trades(strat.name, market_data, ot)
                     sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, params.get('fixed_risk'))
@@ -442,12 +440,12 @@ for pair in pairs:
                 print(f'open_risk: ${open_risk:.2f}, open_risk_r: {open_risk_r:.3}R')
                 print('-')
                 push = pb.push_note(now, note)
-                funcs.clear_stop(pair)
-                tp_order = funcs.sell_asset(pair, pct=tp_pct)
+                funcs.clear_stop(pair, live)
+                tp_order = funcs.sell_asset(pair, live, pct=tp_pct)
                 tp_order['type'] = 'tp_long'
                 buffer = spreads.get(pair) * 2 # stop-market order will not get perfect execution, so
                 stp = float(df.at[len(df)-1, 'st']) * (1-buffer) # expect some slippage in risk calc
-                stop_order = funcs.set_stop(pair, stp)
+                stop_order = funcs.set_stop(pair, stp, live)
                 tp_order['hard_stop'] = stp
                 tp_order['reason'] = 'position R limit exceeded'
                 if ot.get(pair):

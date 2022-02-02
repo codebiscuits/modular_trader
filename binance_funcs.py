@@ -810,7 +810,7 @@ def reduce_risk(sizing, signals, params, live):
                 print(now, note)
                 if live:
                     push = pb.push_note(now, note)
-                    clear_stop(pair)
+                    clear_stop(pair, live)
                     sell_order = sell_asset(pair, live)
                     sell_order['type'] = 'close_long'
                     sell_order['reason'] = 'portfolio risk limiting'
