@@ -583,9 +583,11 @@ def buy_asset(pair, usdt_size, live):
                                     side=enums.SIDE_BUY,
                                     type=enums.ORDER_TYPE_MARKET,
                                     quantity=order_size)
+        pprint(order)
         fills = order.get('fills')
-        fee = 0
-        exe_prices = []
+        fee = sum([float(fill.get('commission')) for fill in fills])
+        qty = sum([float(fill.get('qty')) for fill in fills])
+        exe_prices = [float(fill.get('price')) for fill in fills]
         for fill in fills:
             fee += float(fill.get('commission'))
             exe_prices.append(float(fill.get('price')))
@@ -595,6 +597,7 @@ def buy_asset(pair, usdt_size, live):
                       'pair': order.get('symbol'),
                       'trig_price': usdt_price,
                       'exe_price': avg_price,
+                      'size': qty,
                       'base_size': float(order.get('executedQty')),
                       'quote_size': float(order.get('cummulativeQuoteQty')),
                       'fee': fee,
@@ -642,18 +645,21 @@ def sell_asset(pair, live, pct=100):
                                     side=enums.SIDE_SELL,
                                     type=enums.ORDER_TYPE_MARKET,
                                     quantity=order_size)
+        pprint(order)
         fills = order.get('fills')
-        fee = 0
-        exe_prices = []
-        for fill in fills:
-            fee += float(fill.get('commission'))
-            exe_prices.append(float(fill.get('price')))
+        fee = sum([float(fill.get('commission')) for fill in fills])
+        qty = sum([float(fill.get('qty')) for fill in fills])
+        exe_prices = [float(fill.get('price')) for fill in fills]
+        # for fill in fills:
+        #     fee += float(fill.get('commission'))
+        #     exe_prices.append(float(fill.get('price')))
         avg_price = stats.mean(exe_prices)
 
         trade_dict = {'timestamp': order.get('transactTime'),
                       'pair': order.get('symbol'),
                       'trig_price': usdt_price,
                       'exe_price': avg_price,
+                      'size': qty,
                       'base_size': float(order.get('executedQty')),
                       'quote_size': float(order.get('cummulativeQuoteQty')),
                       'fee': fee,
