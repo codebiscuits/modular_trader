@@ -432,7 +432,7 @@ for pair in pairs:
         
         # take profit on risky positions
         if open_risk_r > params.get('indiv_r_limit'):
-            tp_pct = 50
+            tp_pct = 50 if pos_bal > 30 else 100
             if live:
                 note = f"*** {pair} take profit {tp_pct}% @ {price}"
                 print(now, note)
