@@ -42,7 +42,7 @@ all_start = time.perf_counter()
 params = {'quote_asset': 'USDT', 
           'fixed_risk': 0.001, 
           'max_spread': 0.5, 
-          'indiv_r_limit': 3, 
+          'indiv_r_limit': 1, 
           'total_r_limit': 20, 
           'target_risk': 0.05}
 max_positions = params.get('total_r_limit') # if all pos are below b/e i don't want to open more
