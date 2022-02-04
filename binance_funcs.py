@@ -751,42 +751,6 @@ def clear_stop(pair, live):
             print('simulated canceling stop')
 
 
-def reduce_risk_old(pos_open_risk, r_limit, live):
-    positions = []
-    trade_notes = []
-
-    # create a list of open positions in profit and their open risk value
-    for p, r in pos_open_risk.items():
-        if r.get('R') > 1:
-            positions.append((p, r.get('R')))
-
-    if positions:
-        # sort the list so biggest open risk is first
-        sorted_pos = sorted(positions, key=lambda x: x[1], reverse=True)
-
-        # # create a new list with just the R values
-        r_list = [x.get('R') for x in pos_open_risk.values()]
-        total_r = sum(r_list)
-
-        for pos in sorted_pos:
-            if total_r > r_limit:
-                pair = pos[0] + 'USDT'
-                now = datetime.now().strftime('%d/%m/%y %H:%M')
-                price = get_price(pair)
-                note = f"*** sell {pair} @ {price}"
-                print(now, note)
-                if live:
-                    push = pb.push_note(now, note)
-                    clear_stop(pair)
-                    sell_order = sell_asset(pair)
-                    sell_order['type'] = 'close_long'
-                    sell_order['reason'] = 'portfolio risk limiting'
-                    trade_notes.append(sell_order)
-                    total_r -= pos[1]
-                    
-
-    return trade_notes
-
 def reduce_risk(sizing, signals, params, live):
     r_limit = params.get('total_r_limit')
     fixed_risk = params.get('fixed_risk')
@@ -794,9 +758,6 @@ def reduce_risk(sizing, signals, params, live):
     # create a list of open positions in profit and their open risk value
     positions = [(p, r.get('or_R')) for p, r in sizing.items() if r.get('or_R') and r.get('or_R') > 0]
     
-    # for p, r in sizing.items():
-    #     positions.append((p, r.get('or_R')))
-
     trade_notes = []
     if positions:
         # sort the list so biggest open risk is first

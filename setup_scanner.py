@@ -42,7 +42,7 @@ all_start = time.perf_counter()
 params = {'quote_asset': 'USDT', 
           'fixed_risk': 0.001, 
           'max_spread': 0.5, 
-          'indiv_r_limit': 1, 
+          'indiv_r_limit': 1.1, 
           'total_r_limit': 20, 
           'target_risk': 0.05}
 max_positions = params.get('total_r_limit') # if all pos are below b/e i don't want to open more
@@ -456,9 +456,10 @@ for pair in pairs:
                     trade_record.append(tp_order)
                     ot[pair] = trade_record
                     uf.record_open_trades(strat.name, market_data, ot)
+                    sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, params.get('fixed_risk'))
                 else:
                     tp_order['type'] = 'close_long'
-                    
+                    tp_order['reason'] = 'position R limit exceeded'
                     if ot.get(pair):
                         trade_record = ot.get(pair)
                     else:
