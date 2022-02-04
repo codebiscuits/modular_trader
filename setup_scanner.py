@@ -442,13 +442,15 @@ for pair in pairs:
                 push = pb.push_note(now, note)
                 funcs.clear_stop(pair, live)
                 tp_order = funcs.sell_asset(pair, live, pct=tp_pct)
-                tp_order['type'] = 'tp_long'
                 if tp_pct == 50:
+                    tp_order['type'] = 'tp_long'
                     buffer = spreads.get(pair) * 2 # stop-market order will not get perfect execution, so
                     stp = float(df.at[len(df)-1, 'st']) * (1-buffer) # expect some slippage in risk calc
                     stop_order = funcs.set_stop(pair, stp, live)
                     tp_order['hard_stop'] = stp
                     tp_order['reason'] = 'position R limit exceeded'
+                else:
+                    tp_order['type'] = 'close_long'
                 if ot.get(pair):
                     trade_record = ot.get(pair)
                 else:
