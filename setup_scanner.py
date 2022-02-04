@@ -450,7 +450,7 @@ for pair in pairs:
                     tp_order['hard_stop'] = stp
                     tp_order['reason'] = 'position R limit exceeded'
                     if ot.get(pair):
-                    trade_record = ot.get(pair)
+                        trade_record = ot.get(pair)
                     else:
                         trade_record = []
                     trade_record.append(tp_order)
