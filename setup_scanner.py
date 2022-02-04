@@ -449,16 +449,34 @@ for pair in pairs:
                     stop_order = funcs.set_stop(pair, stp, live)
                     tp_order['hard_stop'] = stp
                     tp_order['reason'] = 'position R limit exceeded'
+                    if ot.get(pair):
+                    trade_record = ot.get(pair)
+                    else:
+                        trade_record = []
+                    trade_record.append(tp_order)
+                    ot[pair] = trade_record
+                    uf.record_open_trades(strat.name, market_data, ot)
                 else:
                     tp_order['type'] = 'close_long'
-                if ot.get(pair):
-                    trade_record = ot.get(pair)
-                else:
-                    trade_record = []
-                trade_record.append(tp_order)
-                ot[pair] = trade_record
-                uf.record_open_trades(strat.name, market_data, ot)
-                sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, params.get('fixed_risk'))
+                    
+                    if ot.get(pair):
+                        trade_record = ot.get(pair)
+                    else:
+                        trade_record = []
+                    trade_record.append(tp_order)  
+                    
+                    if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
+                        trade_id = trade_record[0].get('timestamp')
+                        closed_trades[trade_id] = trade_record
+                    else:
+                        closed_trades[next_id] = trade_record
+                    uf.record_closed_trades(strat.name, market_data, closed_trades)
+                    next_id += 1
+                    if ot[pair]:
+                        del ot[pair]
+                        uf.record_open_trades(strat.name, market_data, ot)
+                    in_pos = False
+                    del sizing[asset]
             else:
                 note = f"sim {pair} take profit"
                 print(now, note)
