@@ -63,8 +63,11 @@ pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked
 
 now_start = datetime.now().strftime('%d/%m/%y %H:%M')
 
+counts_dict = {'stop_count': 0, 'open_count': 0, 'add_count': 0, 'tp_count': 0, 'close_count': 0}
+
+print(f"Current time: {now_start}, {strat}, fixed risk: {params.get('fixed_risk')}")
+
 # update trade records
-# if live:
 # read trade records
 ot_path = f"{market_data}/{strat.name}_open_trades.json"
 with open(ot_path, "r") as ot_file:
@@ -131,7 +134,7 @@ for i in stopped_trades:
                   }
     note = f"*** stopped out {t.get('symbol')} @ {t.get('price')}"
     print(now_start, note)
-    push = pb.push_note(now_start, note)
+    # push = pb.push_note(now_start, note)
     trade_record.append(trade_dict)
     if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
         trade_id = trade_record[0].get('timestamp')
@@ -139,12 +142,11 @@ for i in stopped_trades:
     else:
         closed_trades[next_id] = trade_record
     uf.record_closed_trades(strat.name, market_data, closed_trades)
+    counts_dict['stop_count'] += 1
     next_id += 1
     if ot[i]:
         del ot[i]
         uf.record_open_trades(strat.name, market_data, ot)
-
-print(f"Current time: {now_start}, {strat}, fixed risk: {params.get('fixed_risk')}")
 
 total_bal = funcs.account_bal()
 avg_prices = funcs.get_avg_prices()
@@ -152,8 +154,6 @@ avg_prices = funcs.get_avg_prices()
 funcs.top_up_bnb(15)
 
 non_trade_notes = []
-total_open_risk = 0 # expressed in terms of R
-pos_open_risk = {} # dict of dicts {asset: {R:val, $:val}, }
 sizing = funcs.current_positions(params.get('fixed_risk'))
 
 for pair in pairs:
@@ -195,7 +195,7 @@ for pair in pairs:
         note = f"sell {pair} @ {price}"
         print(now, note)
         if live:
-            push = pb.push_note(now, note)
+            # push = pb.push_note(now, note)
             try:
                 funcs.clear_stop(pair, live)
                 tp_order = funcs.sell_asset(pair, live, 50)
@@ -214,12 +214,13 @@ for pair in pairs:
                 ot['pair'] = trade_record
                 uf.record_open_trades(strat.name, market_data, ot)
                 sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, params.get('fixed_risk'))
+                counts_dict['tp_count'] += 1
             except BinanceAPIException as e:
                 print(f'problem with tp order for {pair}')
                 print(e)
                 push = pb.push_note(now, f'exeption during {pair} tp order')
         else:
-            push = pb.push_note(now, f'sim tp {pair}')
+            # push = pb.push_note(now, f'sim tp {pair}')
             try:
                 funcs.clear_stop(pair, live)
                 tp_order = funcs.sell_asset(pair, live, 50)
@@ -237,12 +238,13 @@ for pair in pairs:
                 trade_record.append(tp_order)
                 ot['pair'] = trade_record
                 uf.record_open_trades(strat.name, 'test_records', ot)
-                qty = sizing.get('asset').get('qty') / 2
-                val = sizing.get('asset').get('value') / 2
-                pf = sizing.get('asset').get('pf%') / 2
-                or_R = sizing.get('asset').get('or_R') / 2
-                or_dol = sizing.get('asset').get('or_$') / 2
+                qty = sizing.get(asset).get('qty') / 2
+                val = sizing.get(asset).get('value') / 2
+                pf = sizing.get(asset).get('pf%') / 2
+                or_R = sizing.get(asset).get('or_R') / 2
+                or_dol = sizing.get(asset).get('or_$') / 2
                 sizing[asset] = {'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol}
+                counts_dict['tp_count'] += 1
             except BinanceAPIException as e:
                 print(f'problem with tp order for {pair}')
                 print(e)
@@ -252,7 +254,7 @@ for pair in pairs:
         note = f"*** sell (stop) {pair} @ {price}"
         print(now, note)
         if live:
-            push = pb.push_note(now, note)
+            # push = pb.push_note(now, note)
             try:
                 funcs.clear_stop(pair, live)
                 sell_order = funcs.sell_asset(pair, live)
@@ -275,12 +277,13 @@ for pair in pairs:
                     uf.record_open_trades(strat.name, market_data, ot)
                 in_pos = False
                 del sizing[asset]
+                counts_dict['close_count'] += 1
             except BinanceAPIException as e:
                 print(f'problem with sell order for {pair}')
                 print(e)
                 push = pb.push_note(now, f'exeption during {pair} sell order')
         else:
-            push = pb.push_note(now, f'sim sell {pair}')
+            # push = pb.push_note(now, f'sim sell {pair}')
             try:
                 funcs.clear_stop(pair, live)
                 sell_order = funcs.sell_asset(pair, live)
@@ -303,6 +306,7 @@ for pair in pairs:
                     uf.record_open_trades(strat.name, 'test_records', ot)
                 in_pos = False
                 del sizing[asset]
+                counts_dict['close_count'] += 1
             except BinanceAPIException as e:
                 print(f'problem with sell order for {pair}')
                 print(e)
@@ -368,6 +372,7 @@ for pair in pairs:
                 if ot[sym]:
                     del ot[sym]
                     uf.record_open_trades(strat.name, market_data, ot)
+                counts_dict['close_count'] += 1
             
             # make sure there aren't too many open positions now
             or_list = [v.get('or_R') for v in sizing.values() if v.get('or_R')]
@@ -389,7 +394,7 @@ for pair in pairs:
             note = f"buy {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
             print(now, note)
             if live:
-                push = pb.push_note(now, note)
+                # push = pb.push_note(now, note)
                 try:
                     buy_order = funcs.buy_asset(pair, usdt_size, live)
                     buy_order['type'] = 'open_long'
@@ -400,12 +405,13 @@ for pair in pairs:
                     in_pos = True
                     uf.record_open_trades(strat.name, market_data, ot)
                     sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, params.get('fixed_risk'))
+                    counts_dict['open_count'] += 1
                 except BinanceAPIException as e:
                     print(f'problem with buy order for {pair}')
                     print(e)
                     push = pb.push_note(now, f'exeption during {pair} buy order')
             else:
-                push = pb.push_note(now, f'sim buy {pair}')
+                # push = pb.push_note(now, f'sim buy {pair}')
                 try:
                     buy_order = funcs.buy_asset(pair, usdt_size, live)
                     buy_order['type'] = 'open_long'
@@ -418,6 +424,7 @@ for pair in pairs:
                     pf = usdt_size / total_bal
                     or_dol = total_bal * params.get('fixed_risk')
                     sizing[asset] = {'qty': size, 'value': usdt_size, 'pf%': pf, 'or_R': 1, 'or_$': or_dol}
+                    counts_dict['open_count'] += 1
                 except BinanceAPIException as e:
                     print(f'problem with sim buy order for {pair}')
                     print(e)
@@ -439,7 +446,7 @@ for pair in pairs:
                 print(f'pos_bal: ${pos_bal}, inval_dist: {inval_dist}')
                 print(f'open_risk: ${open_risk:.2f}, open_risk_r: {open_risk_r:.3}R')
                 print('-')
-                push = pb.push_note(now, note)
+                # push = pb.push_note(now, note)
                 funcs.clear_stop(pair, live)
                 tp_order = funcs.sell_asset(pair, live, pct=tp_pct)
                 if tp_pct == 50:
@@ -457,6 +464,7 @@ for pair in pairs:
                     ot[pair] = trade_record
                     uf.record_open_trades(strat.name, market_data, ot)
                     sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, params.get('fixed_risk'))
+                    counts_dict['tp_count'] += 1
                 else:
                     tp_order['type'] = 'close_long'
                     tp_order['reason'] = 'position R limit exceeded'
@@ -478,10 +486,11 @@ for pair in pairs:
                         uf.record_open_trades(strat.name, market_data, ot)
                     in_pos = False
                     del sizing[asset]
+                    counts_dict['close_count'] += 1
             else:
                 note = f"sim {pair} take profit"
                 print(now, note)
-                push = pb.push_note(now, note)
+                # push = pb.push_note(now, note)
                 funcs.clear_stop(pair, live)
                 tp_order = funcs.sell_asset(pair, live, pct=tp_pct)
                 tp_order['type'] = 'tp_long'
@@ -497,12 +506,13 @@ for pair in pairs:
                 trade_record.append(tp_order)
                 ot[pair] = trade_record
                 uf.record_open_trades(strat.name, 'test_records', ot)
-                qty = sizing.get('asset').get('qty') / 2
-                val = sizing.get('asset').get('value') / 2
-                pf = sizing.get('asset').get('pf%') / 2
-                or_R = sizing.get('asset').get('or_R') / 2
-                or_dol = sizing.get('asset').get('or_$') / 2
+                qty = sizing.get(asset).get('qty') / 2
+                val = sizing.get(asset).get('value') / 2
+                pf = sizing.get(asset).get('pf%') / 2
+                or_R = sizing.get(asset).get('or_R') / 2
+                or_dol = sizing.get(asset).get('or_$') / 2
                 sizing[asset] = {'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol}
+                counts_dict['tp_count'] += 1
         
         or_list = [v.get('or_R') for v in sizing.values() if v.get('or_R')]
         total_open_risk = round(sum(or_list), 2)
@@ -527,13 +537,15 @@ uf.log(live, params, strat, market_data, spreads, now_start, sizing, tp_trades,
 if not live:
     print('warning: logging directed to test_records')
     
+
 all_end = time.perf_counter()
 all_time = all_end - all_start
 elapsed_str = f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s'
 rfb = round(total_bal-dollar_tor, 2)
 vol_exp = round(100 - sizing.get('USDT').get('pf%'))
+count_str = uf.count_trades(counts_dict)
 final_msg = f'{elapsed_str}, total bal: ${total_bal:.2f} (${rfb} + ${dollar_tor:.2f}) \
-positions {num_open_positions}, exposure {vol_exp}%'
+positions {num_open_positions}, exposure {vol_exp}%, {count_str}'
 print(final_msg)
 push = pb.push_note(now, final_msg)
 if live:

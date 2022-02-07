@@ -252,37 +252,6 @@ def get_depth(pair, side, max_slip=1):
     return usdt_depth
 
 
-def get_depth_old(pair, side):
-    '''returns the quantities (in quote denomination) of the first bid and ask 
-    for the pair in question'''
-
-    price = get_price(pair)
-    try:
-        bids = []
-        asks = []
-        for i in range(3):
-            tickers = client.get_orderbook_tickers()
-            for t in tickers:
-                if t.get('symbol') == pair:
-                    bids.append(float(t.get('bidQty')))
-                    asks.append(float(t.get('askQty')))
-            time.sleep(2)
-
-        avg_bid = stats.median(bids)
-        avg_ask = stats.median(asks)
-
-        quote_bid = avg_bid * price
-        quote_ask = avg_ask * price
-        if side == 'buy':
-            return quote_ask
-        elif side == 'sell':
-            return quote_bid
-    except TypeError as e:
-        print(e)
-        print('Skipping trade - binance returned book depth of None ')
-        return 0.0
-
-
 def binance_spreads(quote='USDT'):
     '''returns a dictionary with pairs as keys and current average spread as values'''
 

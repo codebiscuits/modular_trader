@@ -69,3 +69,19 @@ def log(live, params, strat, market_data, spreads,
             file.write('\n')
     # else:
     #     pprint(non_trade_record)
+
+def count_trades(counts):
+    count_list = []
+    if counts.get("stop_count"):
+        count_list.append(f'stopped: {counts.get("stop_count")}') 
+    if counts.get("open_count"):
+        count_list.append(f'opened: {counts.get("open_count")}') 
+    if counts.get("add_count"):
+        count_list.append(f'added: {counts.get("add_count")}') 
+    if counts.get("tp_count"):
+        count_list.append(f'tped: {counts.get("tp_count")}') 
+    if counts.get("close_count"):
+        count_list.append(f'closed: {counts.get("close_count")}') 
+    counts_str = ', '.join(count_list)
+    
+    return counts_str
