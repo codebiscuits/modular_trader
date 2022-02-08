@@ -1,6 +1,11 @@
-import json
+import json, keys
+from json.decoder import JSONDecodeError
 import binance_funcs as funcs
 from pprint import pprint
+from binance.client import Client
+from binance.exceptions import BinanceAPIException
+
+client = Client(keys.bPkey, keys.bSkey)
 
 def max_init_risk(n, target_risk, max_pos):
     '''n = number of open positions, target_risk is the percentage distance 
@@ -40,11 +45,11 @@ def record_closed_trades(strat_name, market_data, ct):
 
 def log(live, params, strat, market_data, spreads, 
         now_start, sizing, tp_trades, 
-        non_trade_notes, ot, closed_trades):    
+        non_trade_notes, counts_dict, ot, closed_trades):    
     
     # check total balance and record it in a file for analysis
     total_bal = funcs.account_bal()
-    bal_record = {'timestamp': now_start, 'balance': round(total_bal, 2), 'positions': sizing, 'params': params}
+    bal_record = {'timestamp': now_start, 'balance': round(total_bal, 2), 'positions': sizing, 'params': params, 'trade_counts': counts_dict}
     new_line = json.dumps(bal_record)
     if live:
         with open(f"{market_data}/{strat.name}_bal_history.txt", "a") as file:
@@ -85,3 +90,111 @@ def count_trades(counts):
     counts_str = ', '.join(count_list)
     
     return counts_str
+
+def read_trade_records(market_data, strat_name):
+    ot_path = f"{market_data}/{strat_name}_open_trades.json"
+    with open(ot_path, "r") as ot_file:
+        try:
+            open_trades = json.load(ot_file)
+        except JSONDecodeError:
+            open_trades = {}
+    ct_path = f"{market_data}/{strat_name}_closed_trades.json"
+    with open(ct_path, "r") as ct_file:
+        try:
+            closed_trades = json.load(ct_file)
+            if closed_trades.keys():
+                key_ints = [int(x) for x in closed_trades.keys()]
+                next_id = sorted(key_ints)[-1] + 1
+            else:
+                next_id = 0
+        except JSONDecodeError:
+            closed_trades = {}
+            next_id = 0
+    
+    return open_trades, closed_trades, next_id
+
+def record_stopped_trades(open_trades, closed_trades, pairs_in_pos, now_start, 
+                          next_id, strat, market_data, counts_dict):
+    # create list of trade records which don't match current positions
+    open_trades_list = list(open_trades.keys())
+    stopped_trades = [st for st in open_trades_list if st not in pairs_in_pos] # these positions must have been stopped out
+
+    # look for stopped out positions and complete trade records
+    for i in stopped_trades:
+        trade_record = open_trades.get(i)
+        
+        # work out how much base size has been bought vs sold
+        init_base = 0
+        add_base = 0
+        tp_base = 0
+        close_base = 0
+        for x in trade_record:
+            if x.get('type')[:4] == 'open':
+                init_base = x.get('base_size')
+            elif x.get('type')[:3] == 'add':
+                add_base += x.get('base_size')
+            elif x.get('type')[:2] == 'tp':
+                tp_base += x.get('base_size')
+            elif x.get('type')[:5] == 'close':
+                close_base = x.get('base_size')
+        
+        diff = (init_base + add_base) - (tp_base + close_base)        
+        
+        close_is_buy = trade_record[0].get('type') == 'open_short'
+        trades = client.get_my_trades(symbol=i)
+        
+        last_time = trades[-1].get('time')
+        
+        # aggregate trade stats
+        base_size_count = 0
+        agg_price = []
+        agg_base = []
+        agg_quote = []
+        agg_fee = []
+        for t in trades[::-1]:
+            # if t.get('isBuyer') == close_is_buy:
+            if abs((base_size_count / diff) - 1) > 0.1:
+                agg_price.append(float(t.get('price')))
+                agg_base.append(float(t.get('qty')))
+                agg_quote.append(float(t.get('quoteQty')))
+                agg_fee.append(float(t.get('commission')))
+                base_size_count += float(t.get('qty'))
+            else:
+                print(f'trade record completed, {round(abs((base_size_count / diff) - 1), 3)} of diff unaccounted for')
+                break
+        avg_exe_price = sum([p*b for p,b in zip(agg_price, agg_base)]) / sum(agg_base)
+        tot_base = sum(agg_base)
+        tot_quote = sum(agg_quote)
+        tot_fee = sum(agg_fee)
+        trade_type = 'stop_short' if close_is_buy else 'stop_long'
+        
+        # create dict
+        trade_dict = {'timestamp': last_time, 
+                      'pair': t.get('symbol'), 
+                      'type': trade_type, 
+                      'exe_price': avg_exe_price, 
+                      'base_size': tot_base, 
+                      'quote_size': tot_quote, 
+                      'fee': tot_fee, 
+                      'fee_currency': t.get('commissionAsset'), 
+                      'reason': 'hit hard stop', 
+                      }
+        note = f"stopped out {t.get('symbol')} @ {t.get('price')}"
+        print(now_start, note)
+        # push = pb.push_note(now_start, note)
+        trade_record.append(trade_dict)
+        if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
+            trade_id = trade_record[0].get('timestamp')
+            closed_trades[trade_id] = trade_record
+        else:
+            closed_trades[next_id] = trade_record
+            print(f'warning, trade record for {t.get("symbol")} missing trade open')
+        record_closed_trades(strat.name, market_data, closed_trades)
+        counts_dict['stop_count'] += 1
+        next_id += 1
+        if open_trades[i]:
+            del open_trades[i]
+            record_open_trades(strat.name, market_data, open_trades)
+    
+    return next_id, counts_dict
+

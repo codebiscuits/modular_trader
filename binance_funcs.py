@@ -491,18 +491,18 @@ def get_avg_price(pair):
     return price, vol
 
 
-def get_avg_prices(quote='USDT'):
-    tickers_24h = client.get_ticker()  # no symbol specified so all symbols returned
-    qlen = len(quote) * -1
-    waps = {}
-    for i in tickers_24h:
-        pair = i.get('symbol')
-        if pair[qlen:] == quote:
-            price = float(i.get('weightedAvgPrice'))
-            vol = float(i.get('quoteVolume'))
-            waps['pair'] = [price, vol]
+# def get_avg_prices(quote='USDT'):
+#     tickers_24h = client.get_ticker()  # no symbol specified so all symbols returned
+#     qlen = len(quote) * -1
+#     waps = {}
+#     for i in tickers_24h:
+#         pair = i.get('symbol')
+#         if pair[qlen:] == quote:
+#             price = float(i.get('weightedAvgPrice'))
+#             vol = float(i.get('quoteVolume'))
+#             waps['pair'] = [price, vol]
 
-    return waps
+#     return waps
 
 
 # Trading Functions
@@ -716,8 +716,8 @@ def clear_stop(pair, live):
             else:
                 print('no stop to cancel')
             # print('-')
-        else:
-            print('simulated canceling stop')
+        # else:
+        #     print('simulated canceling stop')
 
 
 def reduce_risk(sizing, signals, params, live):
