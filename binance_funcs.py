@@ -36,44 +36,43 @@ def resample(df, timeframe):
     # timestamp index back as a column
 
 
-def get_book_stats(pair, quote, width=2):
-    '''returns a dictionary containing the base asset, the quote asset, 
-    the spread, and the bid and ask depth within the % range of price set 
-    by the width param in base and quote denominations'''
-
-    q_len = len(quote) * -1
-    base = pair[:q_len]
-
-    book = client.get_order_book(symbol=pair)
-
-    best_bid = float(book.get('bids')[0][0])
-    best_ask = float(book.get('asks')[0][0])
-    mid_price = (best_bid + best_ask) / 2
-    spread = (best_ask-best_bid) / mid_price
-
-    max_price = mid_price * (1 + (width / 100))  # max_price is x% above price
-    ask_depth = 0
-    for i in book.get('asks'):
-        if float(i[0]) <= max_price:
-            ask_depth += float(i[1])
+def order_by_volsm(pairs, lookback):
+    tup_list = []
+    
+    for pair in pairs:
+        # load data
+        filepath = Path(f'{ohlc_data}/{pair}.pkl')
+        if filepath.exists():
+            df = pd.read_pickle(filepath)
         else:
-            break
-    min_price = mid_price * (1 - (width / 100))  # max_price is x% above price
-    bid_depth = 0
-    for i in book.get('bids'):
-        if float(i[0]) >= min_price:
-            bid_depth += float(i[1])
-        else:
-            break
+            continue
+        
+        # trim data
+        if len(df) > lookback:  # 8760 is 1 year's worth of 1h periods
+            df = df.tail(lookback)
+            df.reset_index(drop=True, inplace=True)
+        
+            # calc vol and add to list
+            df['roc'] = df.close.pct_change(periods=4)
+            df['roc_diff'] = abs(df['roc'] - df['roc'].shift(1))
+            df['volatil'] = df.roc_diff.ewm(2).mean()
+            try:
+                high = df.high.max()
+                low = df.low.min()
+                mid = (high + low) / 2
+                price_range = ((high - low) / mid)#**2
+                # volatility = df.roc.std()
+                volatility = df.roc_diff.mean()
+                smoothness = round(10 * price_range / volatility)
+            except ValueError as e:
+                print(pair, e)
+            tup_list.append((pair, smoothness))
+    
+    # sort tup_list by vol
+    tup_list = sorted(tup_list, key=lambda x: x[1], reverse=True)
+    
+    return tup_list
 
-    q_bid_depth = bid_depth * mid_price
-    q_ask_depth = ask_depth * mid_price
-
-    stats = {'base': base, 'quote': quote, 'spread': spread,
-             'base_bids': bid_depth, 'base_asks': ask_depth,
-             'quote_bids': q_bid_depth, 'quote_asks': q_ask_depth}
-
-    return stats
 
 # Account Functions
 
@@ -179,6 +178,16 @@ def update_pos(asset, total_bal, inval, fixed_risk):
     return {'qty': base_bal, 'value': value, 'pf%': pct, 'or_R': open_risk_r, 'or_$': open_risk}
 
 
+def update_usdt(total_bal):
+    '''checks current usdt balance and returns a dictionary for updating the sizing dict'''
+    bal = client.get_asset_balance(asset='USDT')
+    base_bal = float(bal.get('free')) + float(bal.get('locked'))
+    value = round(base_bal, 2)
+    pct = round(100 * value / total_bal, 5)
+    
+    return {'qty': base_bal, 'value': value, 'pf%': pct}
+
+
 # Market Data Functions
 
 
@@ -250,6 +259,46 @@ def get_depth(pair, side, max_slip=1):
     usdt_depth = depth * price
 
     return usdt_depth
+
+
+def get_book_stats(pair, quote, width=2):
+    '''returns a dictionary containing the base asset, the quote asset, 
+    the spread, and the bid and ask depth within the % range of price set 
+    by the width param in base and quote denominations'''
+
+    q_len = len(quote) * -1
+    base = pair[:q_len]
+
+    book = client.get_order_book(symbol=pair)
+
+    best_bid = float(book.get('bids')[0][0])
+    best_ask = float(book.get('asks')[0][0])
+    mid_price = (best_bid + best_ask) / 2
+    spread = (best_ask-best_bid) / mid_price
+
+    max_price = mid_price * (1 + (width / 100))  # max_price is x% above price
+    ask_depth = 0
+    for i in book.get('asks'):
+        if float(i[0]) <= max_price:
+            ask_depth += float(i[1])
+        else:
+            break
+    min_price = mid_price * (1 - (width / 100))  # max_price is x% above price
+    bid_depth = 0
+    for i in book.get('bids'):
+        if float(i[0]) >= min_price:
+            bid_depth += float(i[1])
+        else:
+            break
+
+    q_bid_depth = bid_depth * mid_price
+    q_ask_depth = ask_depth * mid_price
+
+    stats = {'base': base, 'quote': quote, 'spread': spread,
+             'base_bids': bid_depth, 'base_asks': ask_depth,
+             'quote_bids': q_bid_depth, 'quote_asks': q_ask_depth}
+
+    return stats
 
 
 def binance_spreads(quote='USDT'):
@@ -419,7 +468,6 @@ def update_ohlc(pair, timeframe, old_df):
           '3d': Client.KLINE_INTERVAL_3DAY,
           '1w': Client.KLINE_INTERVAL_1WEEK,
           }
-
     old_end = int(old_df.at[len(old_df)-1, 'timestamp'].timestamp()) * 1000
     klines = client.get_klines(symbol=pair, interval=tf.get(timeframe),
                                startTime=old_end)
@@ -521,6 +569,7 @@ def top_up_bnb(usdt_size):
     usdt_bal = client.get_asset_balance(asset='USDT')
     free_usdt = float(usdt_bal.get('free'))
     bnb_size = step_round(usdt_size / price, step_size)
+    
     if bnb_value < 5 and free_usdt > usdt_size:
         print('Topping up BNB')
         order = client.create_order(symbol='BNBUSDT',
@@ -552,7 +601,7 @@ def buy_asset(pair, usdt_size, live):
                                     side=enums.SIDE_BUY,
                                     type=enums.ORDER_TYPE_MARKET,
                                     quantity=order_size)
-        pprint(order)
+        # pprint(order)
         fills = order.get('fills')
         fee = sum([float(fill.get('commission')) for fill in fills])
         qty = sum([float(fill.get('qty')) for fill in fills])
@@ -614,7 +663,7 @@ def sell_asset(pair, live, pct=100):
                                     side=enums.SIDE_SELL,
                                     type=enums.ORDER_TYPE_MARKET,
                                     quantity=order_size)
-        pprint(order)
+        # pprint(order)
         fills = order.get('fills')
         fee = sum([float(fill.get('commission')) for fill in fills])
         qty = sum([float(fill.get('qty')) for fill in fills])
@@ -745,7 +794,7 @@ def reduce_risk(sizing, signals, params, live):
                 note = f"reduce risk {pair} @ {price}"
                 print(now, note)
                 if live:
-                    push = pb.push_note(now, note)
+                    # push = pb.push_note(now, note)
                     clear_stop(pair, live)
                     sell_order = sell_asset(pair, live)
                     sell_order['type'] = 'close_long'
@@ -754,7 +803,7 @@ def reduce_risk(sizing, signals, params, live):
                     total_r -= pos[1]
                     del sizing[pos[0]]
                 else:
-                    push = pb.push_note(now, f'sim reduce risk {pair}')
+                    # push = pb.push_note(now, f'sim reduce risk {pair}')
                     clear_stop(pair, live)
                     sell_order = sell_asset(pair, live)
                     sell_order['type'] = 'close_long'

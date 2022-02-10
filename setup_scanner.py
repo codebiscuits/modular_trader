@@ -40,7 +40,7 @@ all_start = time.perf_counter()
 
 # constants
 params = {'quote_asset': 'USDT', 
-          'fixed_risk': 0.001, 
+          'fixed_risk': 0.00025, 
           'max_spread': 0.5, 
           'indiv_r_limit': 1.1, 
           'total_r_limit': 20, 
@@ -53,9 +53,10 @@ strat = strats.DoubleSTLO(3, 1.4)
 
 # create pairs list
 all_pairs = funcs.get_pairs('USDT', 'SPOT') # list
-spreads = funcs.binance_spreads('USDT') # dict
+# put order_by_vol here
 positions = list(funcs.current_positions(params.get('fixed_risk')).keys())
 pairs_in_pos = [p + 'USDT' for p in positions if p != 'USDT']
+spreads = funcs.binance_spreads('USDT') # dict
 other_pairs = [p for p in all_pairs if p in spreads and 
                                        spreads.get(p) < 0.01 and 
                                        not p in pairs_in_pos]
@@ -76,13 +77,13 @@ open_trades, closed_trades, next_id = uf.read_trade_records(market_data, strat.n
 if not live: # now that trade records have been loaded, path can be changed
     market_data = Path('test_records')
 
-# look for stopped out positions and complete trade records
-next_id, counts_dict = uf.record_stopped_trades(open_trades, closed_trades, pairs_in_pos, now_start, 
-                          next_id, strat, market_data, counts_dict)
+next_id, counts_dict = uf.record_stopped_trades(open_trades, closed_trades, 
+                                                pairs_in_pos, now_start, 
+                                                next_id, strat, 
+                                                market_data, counts_dict)
 
 
 total_bal = funcs.account_bal()
-# avg_prices = funcs.get_avg_prices()
 
 funcs.top_up_bnb(15)
 
@@ -110,7 +111,7 @@ for pair in pairs:
     signals = strat.live_signals(df, in_pos)
     inval_dist = signals.get('inval')
     
-    # update positions dictionary
+    # update positions dictionary with open_risk values
     if in_pos:
         sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, params.get('fixed_risk'))
     
@@ -147,6 +148,7 @@ for pair in pairs:
                 open_trades['pair'] = trade_record
                 uf.record_open_trades(strat.name, market_data, open_trades)
                 sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, params.get('fixed_risk'))
+                sizing['USDT'] = funcs.update_usdt(total_bal)
                 counts_dict['tp_count'] += 1
             except BinanceAPIException as e:
                 print(f'problem with tp order for {pair}')
@@ -210,6 +212,7 @@ for pair in pairs:
                     uf.record_open_trades(strat.name, market_data, open_trades)
                 in_pos = False
                 del sizing[asset]
+                sizing['USDT'] = funcs.update_usdt(total_bal)
                 counts_dict['close_count'] += 1
             except BinanceAPIException as e:
                 print(f'problem with sell order for {pair}')
@@ -291,6 +294,7 @@ for pair in pairs:
         if enough_size and enough_depth:            
             # check total risk and close profitable positions if necessary
             sizing, tp_trades = funcs.reduce_risk(sizing, signals, params, live)
+            sizing['USDT'] = funcs.update_usdt(total_bal)
             
             # transfer trade records from reduce_risk into json records
             for t in tp_trades:
@@ -345,6 +349,7 @@ for pair in pairs:
                     in_pos = True
                     uf.record_open_trades(strat.name, market_data, open_trades)
                     sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, params.get('fixed_risk'))
+                    sizing['USDT'] = funcs.update_usdt(total_bal)
                     counts_dict['open_count'] += 1
                 except BinanceAPIException as e:
                     print(f'problem with buy order for {pair}')
@@ -404,6 +409,7 @@ for pair in pairs:
                     open_trades[pair] = trade_record
                     uf.record_open_trades(strat.name, market_data, open_trades)
                     sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, params.get('fixed_risk'))
+                    sizing['USDT'] = funcs.update_usdt(total_bal)
                     counts_dict['tp_count'] += 1
                 else:
                     tp_order['type'] = 'close_long'
@@ -426,6 +432,7 @@ for pair in pairs:
                         uf.record_open_trades(strat.name, market_data, open_trades)
                     in_pos = False
                     del sizing[asset]
+                    sizing['USDT'] = funcs.update_usdt(total_bal)
                     counts_dict['close_count'] += 1
             else:
                 note = f"sim {pair} take profit"
@@ -464,6 +471,8 @@ for pair in pairs:
 
 dollar_tor = sum([v.get('or_$') for v in sizing.values() if v.get('or_$')])
 
+pprint(sizing)
+
 if not live:
     print(f'{num_open_positions = }, {total_open_risk = }R, ie ${dollar_tor:.2f}')
     
@@ -484,6 +493,7 @@ all_time = all_end - all_start
 live_str = '' if live else '*not live* '
 elapsed_str = f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s'
 rfb = round(total_bal-dollar_tor, 2)
+sizing['USDT'] = funcs.update_usdt(total_bal)
 vol_exp = round(100 - sizing.get('USDT').get('pf%'))
 count_str = uf.count_trades(counts_dict)
 final_msg = f'{live_str}{elapsed_str}, total bal: ${total_bal:.2f} (${rfb} + ${dollar_tor:.2f}) \

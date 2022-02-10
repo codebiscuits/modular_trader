@@ -4,6 +4,7 @@ import binance_funcs as funcs
 from pprint import pprint
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
+from pathlib import Path
 
 client = Client(keys.bPkey, keys.bSkey)
 
@@ -93,25 +94,54 @@ def count_trades(counts):
 
 def read_trade_records(market_data, strat_name):
     ot_path = f"{market_data}/{strat_name}_open_trades.json"
-    with open(ot_path, "r") as ot_file:
-        try:
-            open_trades = json.load(ot_file)
-        except JSONDecodeError:
-            open_trades = {}
+    if Path(ot_path).exists():
+        with open(ot_path, "r") as ot_file:
+            try:
+                open_trades = json.load(ot_file)
+            except JSONDecodeError:
+                open_trades = {}
     ct_path = f"{market_data}/{strat_name}_closed_trades.json"
-    with open(ct_path, "r") as ct_file:
-        try:
-            closed_trades = json.load(ct_file)
-            if closed_trades.keys():
-                key_ints = [int(x) for x in closed_trades.keys()]
-                next_id = sorted(key_ints)[-1] + 1
-            else:
+    if Path(ct_path).exists():
+        with open(ct_path, "r") as ct_file:
+            try:
+                closed_trades = json.load(ct_file)
+                if closed_trades.keys():
+                    key_ints = [int(x) for x in closed_trades.keys()]
+                    next_id = sorted(key_ints)[-1] + 1
+                else:
+                    next_id = 0
+            except JSONDecodeError:
+                closed_trades = {}
                 next_id = 0
-        except JSONDecodeError:
-            closed_trades = {}
-            next_id = 0
     
     return open_trades, closed_trades, next_id
+
+def find_bad_keys(c_data):
+    bad_keys = []
+    for k, v in c_data.items():
+        init_base = 0
+        add_base = 0
+        tp_base = 0
+        close_base = 0
+        for x in v:
+            if x.get('type')[:4] == 'open':
+                init_base = x.get('base_size')
+            elif x.get('type')[:3] == 'add':
+                add_base += x.get('base_size')
+            elif x.get('type')[:2] == 'tp':
+                tp_base += x.get('base_size')
+            elif x.get('type')[:5] in ['close', 'stop_']:
+                close_base = x.get('base_size')
+        
+        gross_buy = init_base + add_base
+        gross_sell = tp_base + close_base
+        diff = (gross_buy - gross_sell) / gross_buy
+        pair = x.get('pair')
+        if abs(diff) > 0.03:
+            # print(f'{k} {pair} - bought: {gross_buy} sold: {gross_sell}')
+            bad_keys.append({'key': k, 'pair': pair, 'buys': gross_buy, 'sells': gross_sell})
+    
+    return bad_keys
 
 def record_stopped_trades(open_trades, closed_trades, pairs_in_pos, now_start, 
                           next_id, strat, market_data, counts_dict):
@@ -135,7 +165,7 @@ def record_stopped_trades(open_trades, closed_trades, pairs_in_pos, now_start,
                 add_base += x.get('base_size')
             elif x.get('type')[:2] == 'tp':
                 tp_base += x.get('base_size')
-            elif x.get('type')[:5] == 'close':
+            elif x.get('type')[:5] in ['close', 'stop_']:
                 close_base = x.get('base_size')
         
         diff = (init_base + add_base) - (tp_base + close_base)        
@@ -153,7 +183,7 @@ def record_stopped_trades(open_trades, closed_trades, pairs_in_pos, now_start,
         agg_fee = []
         for t in trades[::-1]:
             # if t.get('isBuyer') == close_is_buy:
-            if abs((base_size_count / diff) - 1) > 0.1:
+            if abs((base_size_count / diff) - 1) > 0.03:
                 agg_price.append(float(t.get('price')))
                 agg_base.append(float(t.get('qty')))
                 agg_quote.append(float(t.get('quoteQty')))
