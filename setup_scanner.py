@@ -51,15 +51,12 @@ max_init_r = params.get('fixed_risk') * params.get('total_r_limit')
 # strat = strats.RSI_ST_EMA(4, 45, 96)
 strat = strats.DoubleSTLO(3, 1.4)
 
-# create pairs list
-all_pairs = funcs.get_pairs('USDT', 'SPOT') # list
-# put order_by_vol here
-positions = list(funcs.current_positions(params.get('fixed_risk')).keys())
-pairs_in_pos = [p + 'USDT' for p in positions if p != 'USDT']
+# compile and sort list of pairs to loop through
 spreads = funcs.binance_spreads('USDT') # dict
-other_pairs = [p for p in all_pairs if p in spreads and 
-                                       spreads.get(p) < 0.01 and 
-                                       not p in pairs_in_pos]
+all_pairs = sorted(spreads.items(), key=lambda x:x[1])
+positions = list(funcs.current_positions(0.00025).keys())
+pairs_in_pos = [p + 'USDT' for p in positions if p != 'USDT']
+other_pairs = [p[0] for p in all_pairs if (not p[0] in pairs_in_pos) and (not p[0] in not_pairs)]
 pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked first
 
 now_start = datetime.now().strftime('%d/%m/%y %H:%M')
@@ -93,8 +90,7 @@ sizing = funcs.current_positions(params.get('fixed_risk'))
 for pair in pairs:
     asset = pair[:-1*len(params.get('quote_asset'))]
     in_pos = pair in pairs_in_pos
-    if pair in not_pairs and not in_pos:
-        continue
+    
     # get data
     df = funcs.prepare_ohlc(pair, live)
     
@@ -485,13 +481,13 @@ uf.log(live, params, strat, market_data, spreads, now_start, sizing, tp_trades,
         non_trade_notes, counts_dict, open_trades, closed_trades)
 if not live:
     print('warning: logging directed to test_records')
-    
 
 all_end = time.perf_counter()
 all_time = all_end - all_start
 
 live_str = '' if live else '*not live* '
 elapsed_str = f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s'
+total_bal = funcs.account_bal()
 rfb = round(total_bal-dollar_tor, 2)
 sizing['USDT'] = funcs.update_usdt(total_bal)
 vol_exp = round(100 - sizing.get('USDT').get('pf%'))

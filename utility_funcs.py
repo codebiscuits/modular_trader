@@ -44,10 +44,19 @@ def record_closed_trades(strat_name, market_data, ct):
     with open(f"{market_data}/{strat_name}_closed_trades.json", "w") as ct_file:
         json.dump(ct, ct_file)
 
+def strat_benchmark():
+    # get list of ohlc data in storage
+    # loop through all ohlc pkls and create a dict of {pair: 24H roc}
+    # calculate avg of all pair's roc
+    # calculate strat performance as percentage diff between total_bal now and 24H ago
+    pass
+
 def log(live, params, strat, market_data, spreads, 
         now_start, sizing, tp_trades, 
         non_trade_notes, counts_dict, ot, closed_trades):    
     
+    # strat_benchmark = strat_benchmark()    
+
     # check total balance and record it in a file for analysis
     total_bal = funcs.account_bal()
     bal_record = {'timestamp': now_start, 'balance': round(total_bal, 2), 'positions': sizing, 'params': params, 'trade_counts': counts_dict}
@@ -227,4 +236,6 @@ def record_stopped_trades(open_trades, closed_trades, pairs_in_pos, now_start,
             record_open_trades(strat.name, market_data, open_trades)
     
     return next_id, counts_dict
+
+
 
