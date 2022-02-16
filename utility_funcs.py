@@ -5,10 +5,44 @@ from pprint import pprint
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 from pathlib import Path
+from config import ohlc_data
+import pandas as pd
+from datetime import datetime, timedelta
+import statistics as stats
 
 client = Client(keys.bPkey, keys.bSkey)
 
-def max_init_risk(n, target_risk, max_pos):
+
+def open_trade_stats(now, k, v):
+    '''inputs are key and value from the open trades dictionary
+    returns current profit denominated in R'''
+    if v[0].get('type')[:4] != 'open':
+        print('Warning - {pair} record missing open trade')
+    entry_price = v[0].get('exe_price')
+    # curr_price = funcs.get_price(k)
+    curr_price = float(client.get_ticker(symbol=k).get('lastPrice'))
+    pnl = 100 * (curr_price - entry_price) / entry_price
+    
+    open_time = v[0].get('timestamp') / 1000
+    duration = round((now.timestamp() - open_time) / 3600, 1)
+    
+    trig = v[0].get('trig_price')
+    sl = v[0].get('hard_stop')
+    r = 100 * (trig-sl) / sl
+    
+    return {'pnl_R': pnl / r, 'pnl_%': pnl, 'entry_price': entry_price, 'duration': duration}
+
+def adjust_max_positions(max_pos, sizing):
+    '''the max_pos input tells the function what the strategy has as a default
+    the sizing input is the dictionary of currently open positions with their 
+    associated open risk
+    
+    this function decides if there should currently be a limit on how many positions
+    can be open at once, based on current performance of currently open positions'''
+    
+    
+
+def max_init_risk(n, target_risk):
     '''n = number of open positions, target_risk is the percentage distance 
     from invalidation this function should converge on, max_pos is the maximum
     number of open positions as set in the main script
@@ -25,9 +59,12 @@ def max_init_risk(n, target_risk, max_pos):
     set, and as more trades are opened, that upper limit comes down relatively
     quickly, then gradually settles on the target limit'''
     
+    if n > 20:
+        n = 20
+    
     exp = 4
-    scale = (max_pos-n)**exp
-    scale_limit = max_pos ** exp
+    scale = (20-n)**exp
+    scale_limit = 20 ** exp
     
     # when n is 0, scale and scale_limit cancel out
     # and the whole thing becomes (2 * target) + target
@@ -44,18 +81,77 @@ def record_closed_trades(strat_name, market_data, ct):
     with open(f"{market_data}/{strat_name}_closed_trades.json", "w") as ct_file:
         json.dump(ct, ct_file)
 
-def strat_benchmark():
-    # get list of ohlc data in storage
-    # loop through all ohlc pkls and create a dict of {pair: 24H roc}
-    # calculate avg of all pair's roc
-    # calculate strat performance as percentage diff between total_bal now and 24H ago
-    pass
+def market_benchmark():
+    all_4h = []
+    all_1d = []
+    all_1w = []
+    btc_4h = None
+    btc_1d = None
+    btc_1w = None
+    eth_4h = None
+    eth_1d = None
+    eth_1w = None
+        
+    for x in ohlc_data.glob('*.*'):
+        df = pd.read_pickle(x)
+        last_idx = len(df) - 1
+        last_stamp = df.at[last_idx, 'timestamp']
+        now = datetime.now()
+        window = timedelta(hours=4)
+        if last_stamp > now - window:
+            df['roc_4h'] = df.close.pct_change(1)
+            df['roc_1d'] = df.close.pct_change(6)
+            df['roc_1w'] = df.close.pct_change(42)
+            all_4h.append(df.at[last_idx, 'roc_4h'])
+            all_1d.append(df.at[last_idx, 'roc_1d'])
+            all_1w.append(df.at[last_idx, 'roc_1w'])
+            if x.stem == 'BTCUSDT':
+                btc_4h = df.at[last_idx, 'roc_4h']
+                btc_1d = df.at[last_idx, 'roc_1d']
+                btc_1w = df.at[last_idx, 'roc_1w']
+            elif x.stem == 'ETHUSDT':
+                eth_4h = df.at[last_idx, 'roc_4h']
+                eth_1d = df.at[last_idx, 'roc_1d']
+                eth_1w = df.at[last_idx, 'roc_1w']
+    market_4h = stats.mean(all_4h)
+    market_1d = stats.mean(all_1d)
+    market_1w = stats.mean(all_1w)
+    
+    all_pairs = len(list(ohlc_data.glob('*.*')))
+    valid_pairs = len(all_4h)
+    if all_pairs / valid_pairs > 1.5:
+        print('warning (strat benchmark): lots of pairs ohlc data not up to date')
+    
+    return {'btc_4h': btc_4h, 'btc_1d': btc_1d, 'btc_1w': btc_1w, 
+            'eth_4h': eth_4h, 'eth_1d': eth_1d, 'eth_1w': eth_1w, 
+            'market_4h': market_4h, 'market_1d': market_1d, 'market_1w': market_1w, }
+
+def strat_benchmark(market_data, strat, benchmark):
+    with open(f"{market_data}/{strat.name}_bal_history.txt", "r") as file:
+        bal_data = file.readlines()
+        bal_data = bal_data[-43:]
+        all_bals = []
+        for entry in bal_data:
+            entry = json.loads(entry)
+            all_bals.append(entry.get('balance'))
+    
+    strat_4h = (all_bals[-1] - all_bals[-2]) / all_bals[-2]
+    strat_1d = (all_bals[-1] - all_bals[-7]) / all_bals[-7]
+    strat_1w = (all_bals[-1] - all_bals[-43]) / all_bals[-43]
+    
+    benchmark['strat_4h'] = strat_4h
+    benchmark['strat_1d'] = strat_1d
+    benchmark['strat_1w'] = strat_1w
+    
+    
+    return benchmark 
 
 def log(live, params, strat, market_data, spreads, 
         now_start, sizing, tp_trades, 
         non_trade_notes, counts_dict, ot, closed_trades):    
     
-    # strat_benchmark = strat_benchmark()    
+    benchmark = market_benchmark()
+    benchmark = strat_benchmark(market_data, strat, benchmark)
 
     # check total balance and record it in a file for analysis
     total_bal = funcs.account_bal()
@@ -76,14 +172,7 @@ def log(live, params, strat, market_data, spreads,
         with open(f"{market_data}/{strat.name}_closed_trades.json", "w") as ct_file:
             json.dump(closed_trades, ct_file)
     
-    # record all skipped or reduced trades
-    non_trade_record = {'timestamp': now_start, 'non_trades': non_trade_notes}
-    if live:
-        with open(f"{market_data}/{strat.name}_non_trades.txt", "a") as file:
-            file.write(json.dumps(non_trade_record))
-            file.write('\n')
-    # else:
-    #     pprint(non_trade_record)
+    return benchmark
 
 def count_trades(counts):
     count_list = []

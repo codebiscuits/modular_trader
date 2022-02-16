@@ -8,6 +8,7 @@ from json.decoder import JSONDecodeError
 from datetime import datetime
 import binance_funcs as funcs
 import strategies as strats
+import statistics as stats
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 from pushbullet import Pushbullet
@@ -44,8 +45,9 @@ params = {'quote_asset': 'USDT',
           'max_spread': 0.5, 
           'indiv_r_limit': 1.1, 
           'total_r_limit': 20, 
-          'target_risk': 0.05}
-max_positions = params.get('total_r_limit') # if all pos are below b/e i don't want to open more
+          'target_risk': 0.05, 
+          'max_pos': 20}
+# max_positions = params.get('total_r_limit') # if all pos are below b/e i don't want to open more
 max_init_r = params.get('fixed_risk') * params.get('total_r_limit')
 
 # strat = strats.RSI_ST_EMA(4, 45, 96)
@@ -54,7 +56,7 @@ strat = strats.DoubleSTLO(3, 1.4)
 # compile and sort list of pairs to loop through
 spreads = funcs.binance_spreads('USDT') # dict
 all_pairs = sorted(spreads.items(), key=lambda x:x[1])
-positions = list(funcs.current_positions(0.00025).keys())
+positions = list(funcs.current_positions(strat.name, 0.00025).keys())
 pairs_in_pos = [p + 'USDT' for p in positions if p != 'USDT']
 other_pairs = [p[0] for p in all_pairs if (not p[0] in pairs_in_pos) and (not p[0] in not_pairs)]
 pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked first
@@ -85,7 +87,12 @@ total_bal = funcs.account_bal()
 funcs.top_up_bnb(15)
 
 non_trade_notes = []
-sizing = funcs.current_positions(params.get('fixed_risk'))
+sizing = funcs.current_positions(strat.name, params.get('fixed_risk'))
+
+open_pnls = [v.get('pnl') for v in sizing.values() if v.get('pnl')]
+avg_open_pnl = stats.median(open_pnls)
+max_positions = params.get('max_pos') if avg_open_pnl <= 0 else 50
+    
 
 for pair in pairs:
     asset = pair[:-1*len(params.get('quote_asset'))]
@@ -248,7 +255,7 @@ for pair in pairs:
         buffer = spreads.get(pair) * 2 # stop-market order will not get perfect execution, so
         stp = float(df.at[len(df)-1, 'st']) * (1-buffer) # expect some slippage in risk calc
         risk = (price - stp) / price
-        mir = uf.max_init_risk(len(pairs_in_pos), params.get('target_risk'), max_positions)
+        mir = uf.max_init_risk(len(pairs_in_pos), params.get('target_risk'))
         # TODO max init risk should be based on average inval dist of signals, not fixed risk setting
         if risk > mir:
             non_trade = f'{now} {pair} signal, too far from invalidation ({risk * 100:.1f}%)'
@@ -316,7 +323,7 @@ for pair in pairs:
             or_list = [v.get('or_R') for v in sizing.values() if v.get('or_R')]
             total_open_risk = sum(or_list)
             num_open_positions = len(or_list)
-            if num_open_positions >= max_positions or total_open_risk > max_positions:
+            if num_open_positions >= max_positions or total_open_risk > params.get('total_r_limit'):
                 # print(f'{now} {pair} signal, too many open positions already')
                 counts_dict['too_many_pos'] += 1
                 continue
@@ -471,16 +478,19 @@ pprint(sizing)
 
 if not live:
     print(f'{num_open_positions = }, {total_open_risk = }R, ie ${dollar_tor:.2f}')
-    
-    print('---------------- sizing ----------------')
-    pprint(sizing)
 
 
 # log all data from the session
-uf.log(live, params, strat, market_data, spreads, now_start, sizing, tp_trades, 
+benchmark = uf.log(live, params, strat, market_data, spreads, now_start, sizing, tp_trades, 
         non_trade_notes, counts_dict, open_trades, closed_trades)
 if not live:
     print('warning: logging directed to test_records')
+
+str_4h = ' last session' if benchmark.get("strat_4h") > benchmark.get("market_4h") else ''
+str_1d = ' last 24 hrs' if benchmark.get("strat_1d") > benchmark.get("market_1d") else ''
+str_1w = ' last 7 days' if benchmark.get("strat_1w") > benchmark.get("market_1w") else ''
+print(f'the strategy beat the market {str_4h}{str_1d}{str_1w}')
+    
 
 all_end = time.perf_counter()
 all_time = all_end - all_start

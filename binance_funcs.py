@@ -1,6 +1,4 @@
-import keys
-import math
-import time
+import keys, math, time, json
 import statistics as stats
 import pandas as pd
 import numpy as np
@@ -12,6 +10,8 @@ from pprint import pprint
 from config import ohlc_data
 from pathlib import Path
 from datetime import datetime
+import utility_funcs as uf
+from config import market_data
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
@@ -119,8 +119,13 @@ def get_size(price, fr, balance, risk):
     return asset_quantity, usdt_size
 
 
-def current_positions(fr):  # used to be current sizing
+def current_positions(strat, fr):  # used to be current sizing
     '''returns a dict with assets as keys and various expressions of positioning as values'''
+    
+    o_path = Path(f'{market_data}/{strat}_open_trades.json')
+    with open(o_path, 'r') as file:
+        o_data = json.load(file)
+        
     total_bal = account_bal()
     # should be 1R, but also no less than min order size
     threshold_bal = max(total_bal * fr, 12)
@@ -140,6 +145,9 @@ def current_positions(fr):  # used to be current sizing
         else:
             pair = asset + 'USDT'
             price = price_dict.get(pair)
+            if pair in o_data.keys():
+                now = datetime.now()
+                ots = uf.open_trade_stats(now, pair, o_data.get(pair))
             if price == None:
                 continue
             quant = float(b.get('free')) + float(b.get('locked'))
@@ -151,7 +159,8 @@ def current_positions(fr):  # used to be current sizing
         if value >= threshold_bal:
             pct = round(100 * value / total_bal, 5)
             size_dict[asset] = {'qty': quant,
-                                'value': round(value, 2), 'pf%': pct}
+                                'value': round(value, 2), 'pf%': pct,
+                                'pnl': ots.get('pnl_R')}
 
     return size_dict
 
