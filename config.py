@@ -7,11 +7,7 @@ now = datetime.now().strftime('%d/%m/%y %H:%M')
 
 not_pairs = ['GBPUSDT', 'AUDUSDT', 'BUSDUSDT', 'EURUSDT', 'TUSDUSDT', 
              'USDCUSDT', 'PAXUSDT', 'COCOSUSDT', 'SUSDUSDT', 'USDPUSDT', 
-             'ADADOWNUSDT', 'LINKDOWNUSDT', 'BNBDOWNUSDT', 'ETHDOWNUSDT', 
              'USTUSDT']
-
-# TODO turn this pathfinding into a function that can be run at the start of a
-# script, instead of an attribute to import from here
 
 # ohlc data paths
 ohlc_data = None
@@ -21,12 +17,12 @@ possible_paths = [Path('/media/coding/ohlc_binance_1h'),
 for ohlc_path in possible_paths:
     if ohlc_path.exists():
         ohlc_data = ohlc_path
-        print(f'{ohlc_path} = ')
         break
 if not ohlc_data:
     note = 'none of the paths for ohlc_data are available'
     print(note)
     pb.push_note(now, note)
+
 
 # market data paths
 market_data = None
@@ -41,6 +37,7 @@ if not market_data:
     note = 'none of the paths for market_data are available'
     print(note)
     pb.push_note(now, note)
+
 
 # backtesting results paths
 results_data = None

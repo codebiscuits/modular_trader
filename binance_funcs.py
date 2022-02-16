@@ -7,11 +7,10 @@ import binance.enums as enums
 from pushbullet import Pushbullet
 from decimal import Decimal
 from pprint import pprint
-from config import ohlc_data
+from config import ohlc_data, market_data
 from pathlib import Path
 from datetime import datetime
 import utility_funcs as uf
-from config import market_data
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
@@ -170,7 +169,7 @@ def free_usdt():
     return float(usdt_bals.get('free'))
 
 
-def update_pos(asset, total_bal, inval, fixed_risk):
+def update_pos(asset, total_bal, inval, pos_fr_dol):
     '''checks for the current balance of a particular asset and returns it in 
     the correct format for the sizing dict. also calculates the open risk for 
     a given asset and returns it in R and $ denominations'''
@@ -182,7 +181,7 @@ def update_pos(asset, total_bal, inval, fixed_risk):
     value = price * base_bal
     pct = round(100 * value / total_bal, 5)
     open_risk = value - (value / inval)
-    open_risk_r = (open_risk / total_bal) / fixed_risk
+    open_risk_r = open_risk / pos_fr_dol
 
     return {'qty': base_bal, 'value': value, 'pf%': pct, 'or_R': open_risk_r, 'or_$': open_risk}
 
@@ -498,7 +497,10 @@ def prepare_ohlc(pair, is_live, timeframe='4H', bars=2190):
     downloads an update, if not it downloads all data from scratch, then 
     resamples all data to desired timeframe'''
 
-    filepath = Path(f'{ohlc_data}/{pair}.pkl')
+    if is_live:
+        filepath = Path(f'{ohlc_data}/{pair}.pkl')
+    else:
+        filepath = Path(f'bin_ohlc/{pair}.pkl')
     if filepath.exists():
         try:
             df = pd.read_pickle(filepath)
@@ -517,13 +519,12 @@ def prepare_ohlc(pair, is_live, timeframe='4H', bars=2190):
     if len(df) > 8760:  # 8760 is 1 year's worth of 1h periods
         df = df.tail(8760)
         df.reset_index(drop=True, inplace=True)
-    if is_live:
-        try:
-            df.to_pickle(filepath)
-        except:
-            print('-')
-            print(f'to_pickle went wrong with {pair}')
-            print('-')
+    try:
+        df.to_pickle(filepath)
+    except:
+        print('-')
+        print(f'to_pickle went wrong with {pair}')
+        print('-')
 
     # print(df.tail())
     df = df.resample(timeframe, on='timestamp').agg({'open': 'first',

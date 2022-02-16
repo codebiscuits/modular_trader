@@ -3,8 +3,7 @@ which match the criteria for a trade, then executes the trade if possible'''
 
 import pandas as pd
 import matplotlib.pyplot as plt
-import keys, time, json
-from json.decoder import JSONDecodeError
+import keys, time
 from datetime import datetime
 import binance_funcs as funcs
 import strategies as strats
@@ -39,6 +38,8 @@ else:
 
 all_start = time.perf_counter()
 
+total_bal = funcs.account_bal()
+
 # constants
 params = {'quote_asset': 'USDT', 
           'fixed_risk': 0.00025, 
@@ -49,6 +50,8 @@ params = {'quote_asset': 'USDT',
           'max_pos': 20}
 # max_positions = params.get('total_r_limit') # if all pos are below b/e i don't want to open more
 max_init_r = params.get('fixed_risk') * params.get('total_r_limit')
+fixed_risk_dol = params.get('fixed_risk') * total_bal
+
 
 # strat = strats.RSI_ST_EMA(4, 45, 96)
 strat = strats.DoubleSTLO(3, 1.4)
@@ -82,8 +85,6 @@ next_id, counts_dict = uf.record_stopped_trades(open_trades, closed_trades,
                                                 market_data, counts_dict)
 
 
-total_bal = funcs.account_bal()
-
 funcs.top_up_bnb(15)
 
 non_trade_notes = []
@@ -97,6 +98,20 @@ max_positions = params.get('max_pos') if avg_open_pnl <= 0 else 50
 for pair in pairs:
     asset = pair[:-1*len(params.get('quote_asset'))]
     in_pos = pair in pairs_in_pos
+    
+    # look up or calculate $ fixed risk
+    if open_trades.get(pair):
+        trade_record = open_trades.get(pair)
+    else:
+        trade_record = []
+    
+    if in_pos and trade_record and trade_record[0].get('type')[0] == 'o':
+        qs = trade_record[0].get('quote_size')
+        ep = trade_record[0].get('exe_price')
+        hs = trade_record[0].get('hard_stop')
+        pos_fr_dol = qs * ((ep - hs) / ep)
+    else:
+        pos_fr_dol = fixed_risk_dol
     
     # get data
     df = funcs.prepare_ohlc(pair, live)
@@ -116,7 +131,7 @@ for pair in pairs:
     
     # update positions dictionary with open_risk values
     if in_pos:
-        sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, params.get('fixed_risk'))
+        sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, pos_fr_dol)
     
     if df.at[len(df)-1, 'st'] == 0:
         print(pair, 'supertrend 0 error, skipping pair')
@@ -143,14 +158,14 @@ for pair in pairs:
                 stop_order = funcs.set_stop(pair, stp, live)
                 tp_order['hard_stop'] = stp
                 tp_order['reason'] = 'position R limit exceeded'
-                if open_trades.get(pair):
-                    trade_record = open_trades.get(pair)
-                else:
-                    trade_record = []
+                # if open_trades.get(pair):
+                #     trade_record = open_trades.get(pair)
+                # else:
+                #     trade_record = []
                 trade_record.append(tp_order)
                 open_trades['pair'] = trade_record
                 uf.record_open_trades(strat.name, market_data, open_trades)
-                sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, params.get('fixed_risk'))
+                sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, params.get('fixed_risk'), pos_fr_dol)
                 sizing['USDT'] = funcs.update_usdt(total_bal)
                 counts_dict['tp_count'] += 1
             except BinanceAPIException as e:
@@ -169,10 +184,10 @@ for pair in pairs:
                 stop_order = funcs.set_stop(pair, stp, live)
                 tp_order['hard_stop'] = stp
                 tp_order['reason'] = 'position R limit exceeded'
-                if open_trades.get(pair):
-                    trade_record = open_trades.get(pair)
-                else:
-                    trade_record = []
+                # if open_trades.get(pair):
+                #     trade_record = open_trades.get(pair)
+                # else:
+                #     trade_record = []
                 trade_record.append(tp_order)
                 open_trades['pair'] = trade_record
                 uf.record_open_trades(strat.name, 'test_records', open_trades)
@@ -198,10 +213,10 @@ for pair in pairs:
                 sell_order = funcs.sell_asset(pair, live)
                 sell_order['type'] = 'close_long'
                 sell_order['reason'] = 'hit trailing stop'
-                if open_trades.get(pair):
-                    trade_record = open_trades.get(pair)
-                else:
-                    trade_record = []
+                # if open_trades.get(pair):
+                #     trade_record = open_trades.get(pair)
+                # else:
+                #     trade_record = []
                 trade_record.append(sell_order)
                 if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
                     trade_id = trade_record[0].get('timestamp')
@@ -228,10 +243,10 @@ for pair in pairs:
                 sell_order = funcs.sell_asset(pair, live)
                 sell_order['type'] = 'close_long'
                 sell_order['reason'] = 'hit trailing stop'
-                if open_trades.get(pair):
-                    trade_record = open_trades.get(pair)
-                else:
-                    trade_record = []
+                # if open_trades.get(pair):
+                #     trade_record = open_trades.get(pair)
+                # else:
+                #     trade_record = []
                 trade_record.append(sell_order)
                 if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
                     trade_id = trade_record[0].get('timestamp')
@@ -351,7 +366,7 @@ for pair in pairs:
                     stop_order = funcs.set_stop(pair, stp, live)
                     in_pos = True
                     uf.record_open_trades(strat.name, market_data, open_trades)
-                    sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, params.get('fixed_risk'))
+                    sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, params.get('fixed_risk'), pos_fr_dol)
                     sizing['USDT'] = funcs.update_usdt(total_bal)
                     counts_dict['open_count'] += 1
                 except BinanceAPIException as e:
@@ -404,23 +419,23 @@ for pair in pairs:
                     stop_order = funcs.set_stop(pair, stp, live)
                     tp_order['hard_stop'] = stp
                     tp_order['reason'] = 'position R limit exceeded'
-                    if open_trades.get(pair):
-                        trade_record = open_trades.get(pair)
-                    else:
-                        trade_record = []
+                    # if open_trades.get(pair):
+                    #     trade_record = open_trades.get(pair)
+                    # else:
+                    #     trade_record = []
                     trade_record.append(tp_order)
                     open_trades[pair] = trade_record
                     uf.record_open_trades(strat.name, market_data, open_trades)
-                    sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, params.get('fixed_risk'))
+                    sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, params.get('fixed_risk'), pos_fr_dol)
                     sizing['USDT'] = funcs.update_usdt(total_bal)
                     counts_dict['tp_count'] += 1
                 else:
                     tp_order['type'] = 'close_long'
                     tp_order['reason'] = 'position R limit exceeded'
-                    if open_trades.get(pair):
-                        trade_record = open_trades.get(pair)
-                    else:
-                        trade_record = []
+                    # if open_trades.get(pair):
+                    #     trade_record = open_trades.get(pair)
+                    # else:
+                    #     trade_record = []
                     trade_record.append(tp_order)  
                     
                     if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
@@ -449,10 +464,10 @@ for pair in pairs:
                 stop_order = funcs.set_stop(pair, stp, live)
                 tp_order['hard_stop'] = stp
                 tp_order['reason'] = 'position R limit exceeded'
-                if open_trades.get(pair):
-                    trade_record = open_trades.get(pair)
-                else:
-                    trade_record = []
+                # if open_trades.get(pair):
+                #     trade_record = open_trades.get(pair)
+                # else:
+                #     trade_record = []
                 trade_record.append(tp_order)
                 open_trades[pair] = trade_record
                 uf.record_open_trades(strat.name, 'test_records', open_trades)
@@ -505,6 +520,6 @@ count_str = uf.count_trades(counts_dict)
 final_msg = f'{live_str}{elapsed_str}, total bal: ${total_bal:.2f} (${rfb} + ${dollar_tor:.2f}) \
 positions {num_open_positions}, exposure {vol_exp}%, {count_str}'
 print(final_msg)
-push = pb.push_note(now, final_msg)
 if live:
+    push = pb.push_note(now, final_msg)
     print('-:-' * 20)
