@@ -144,7 +144,7 @@ for pair in pairs:
     tp_trades = []
     
     if signals.get('tp_long'):
-        note = f"sell {pair} @ {price}"
+        note = f"{pair} take-profit @ {price}"
         print(now, note)
         if live:
             # push = pb.push_note(now, note)
@@ -165,7 +165,7 @@ for pair in pairs:
                 trade_record.append(tp_order)
                 open_trades['pair'] = trade_record
                 uf.record_open_trades(strat.name, market_data, open_trades)
-                sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, params.get('fixed_risk'), pos_fr_dol)
+                sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, pos_fr_dol)
                 sizing['USDT'] = funcs.update_usdt(total_bal)
                 counts_dict['tp_count'] += 1
             except BinanceAPIException as e:
@@ -204,7 +204,7 @@ for pair in pairs:
                 push = pb.push_note(now, f'exeption during sim {pair} tp order')
             
     elif signals.get('close_long'):
-        note = f"*** sell (stop) {pair} @ {price}"
+        note = f"{pair} hit trailing stop @ {price}"
         print(now, note)
         if live:
             # push = pb.push_note(now, note)
@@ -366,7 +366,7 @@ for pair in pairs:
                     stop_order = funcs.set_stop(pair, stp, live)
                     in_pos = True
                     uf.record_open_trades(strat.name, market_data, open_trades)
-                    sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, params.get('fixed_risk'), pos_fr_dol)
+                    sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, pos_fr_dol)
                     sizing['USDT'] = funcs.update_usdt(total_bal)
                     counts_dict['open_count'] += 1
                 except BinanceAPIException as e:
@@ -426,7 +426,7 @@ for pair in pairs:
                     trade_record.append(tp_order)
                     open_trades[pair] = trade_record
                     uf.record_open_trades(strat.name, market_data, open_trades)
-                    sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, params.get('fixed_risk'), pos_fr_dol)
+                    sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, pos_fr_dol)
                     sizing['USDT'] = funcs.update_usdt(total_bal)
                     counts_dict['tp_count'] += 1
                 else:
