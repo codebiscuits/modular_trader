@@ -437,13 +437,14 @@ class DoubleSTLO:
         return f'{self.name} st2: {self.lb}-{self.mult}'
     
     def live_signals(self, df, in_pos):
-        # df['st_loose'], df['st_loose_u'], df['st_loose_d'] = ind.supertrend(df.high, df.low, df.close, 10, 3)
-        # df['st'], df['st_u'], df['st_d'] = ind.supertrend(df.high, df.low, df.close, self.lb, self.mult)
         
+        df['ema200'] = df.close.ewm(200).mean()
         ind.supertrend_new(df, 10, 3)
         df.rename(columns={'st': 'st_loose', 'st_u': 'st_loose_u', 'st_d': 'st_loose_d'}, inplace=True)
         ind.supertrend_new(df, self.lb, self.mult)
         
+        bullish_ema = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'ema200']
+        bearish_ema = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'ema200']
         bullish_loose = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st_loose']
         bearish_loose = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st_loose']
         bullish_tight = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st']
@@ -454,7 +455,7 @@ class DoubleSTLO:
         # bullish_volume = price rising on low volume or price falling on high volume
         # bearish_volume = price rising on high volume or price falling on low volume
         
-        open_long = bullish_loose and bullish_tight and not in_pos # and bullish_book
+        open_long = bullish_ema and bullish_loose and bullish_tight and not in_pos # and bullish_book
         close_long = bearish_tight and in_pos
         
         inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price

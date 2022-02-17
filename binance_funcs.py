@@ -613,22 +613,22 @@ def buy_asset(pair, usdt_size, live):
                                     quantity=order_size)
         # pprint(order)
         fills = order.get('fills')
-        fee = sum([float(fill.get('commission')) for fill in fills])
-        qty = sum([float(fill.get('qty')) for fill in fills])
-        exe_prices = [float(fill.get('price')) for fill in fills]
+        fee = sum([Decimal(fill.get('commission')) for fill in fills])
+        qty = sum([Decimal(fill.get('qty')) for fill in fills])
+        exe_prices = [Decimal(fill.get('price')) for fill in fills]
         for fill in fills:
-            fee += float(fill.get('commission'))
-            exe_prices.append(float(fill.get('price')))
+            fee += Decimal(fill.get('commission'))
+            exe_prices.append(Decimal(fill.get('price')))
         avg_price = stats.mean(exe_prices)
 
         trade_dict = {'timestamp': order.get('transactTime'),
                       'pair': order.get('symbol'),
                       'trig_price': usdt_price,
                       'exe_price': avg_price,
-                      'size': qty,
-                      'base_size': float(order.get('executedQty')),
-                      'quote_size': float(order.get('cummulativeQuoteQty')),
-                      'fee': fee,
+                      'size': str(qty),
+                      'base_size': order.get('executedQty'),
+                      'quote_size': order.get('cummulativeQuoteQty'),
+                      'fee': str(fee),
                       'fee_currency': fills[0].get('commissionAsset')
                       }
         if order.get('status') != 'FILLED':
@@ -638,9 +638,9 @@ def buy_asset(pair, usdt_size, live):
     else:
         trade_dict = {"pair": pair, 
                      "trig_price": usdt_price,
-                     "base_size": float(order_size),
+                     "base_size": str(order_size),
                      "quote_size": usdt_size,
-                     "fee": 0,
+                     "fee": '0',
                      "fee_currency": "BNB"
                      }
     
@@ -657,12 +657,12 @@ def sell_asset(pair, live, pct=100):
     bal = client.get_asset_balance(asset=asset)
     if asset == 'BNB':
         reserve = 10 / usdt_price  # amount of bnb to reserve ($10 worth)
-        asset_bal = float(bal.get('free')) - reserve  # always keep $10 of bnb
+        asset_bal = Decimal(bal.get('free')) - reserve  # always keep $10 of bnb
     else:
-        asset_bal = float(bal.get('free'))
+        asset_bal = Decimal(bal.get('free'))
 
     # make sure order size has the right number of decimal places
-    trade_size = asset_bal * (pct / 100)
+    trade_size = asset_bal * Decimal(pct / 100)
     info = client.get_symbol_info(pair)
     step_size = Decimal(info.get('filters')[2].get('stepSize'))
     order_size = step_round(trade_size, step_size)  # - step_size
@@ -675,9 +675,9 @@ def sell_asset(pair, live, pct=100):
                                     quantity=order_size)
         # pprint(order)
         fills = order.get('fills')
-        fee = sum([float(fill.get('commission')) for fill in fills])
-        qty = sum([float(fill.get('qty')) for fill in fills])
-        exe_prices = [float(fill.get('price')) for fill in fills]
+        fee = sum([Decimal(fill.get('commission')) for fill in fills])
+        qty = sum([Decimal(fill.get('qty')) for fill in fills])
+        exe_prices = [Decimal(fill.get('price')) for fill in fills]
         # for fill in fills:
         #     fee += float(fill.get('commission'))
         #     exe_prices.append(float(fill.get('price')))
@@ -688,9 +688,9 @@ def sell_asset(pair, live, pct=100):
                       'trig_price': usdt_price,
                       'exe_price': avg_price,
                       'size': qty,
-                      'base_size': float(order.get('executedQty')),
-                      'quote_size': float(order.get('cummulativeQuoteQty')),
-                      'fee': fee,
+                      'base_size': order.get('executedQty'),
+                      'quote_size': order.get('cummulativeQuoteQty'),
+                      'fee': str(fee),
                       'fee_currency': fills[0].get('commissionAsset')
                       }
         if order.get('status') != 'FILLED':
@@ -700,9 +700,9 @@ def sell_asset(pair, live, pct=100):
     else:
         trade_dict = {"pair": pair, 
                     "trig_price": usdt_price,
-                    "base_size": float(order_size),
-                    "quote_size": float(order_size) * usdt_price,
-                    "fee": 0,
+                    "base_size": str(Decimal(order_size)),
+                    "quote_size": str(Decimal(order_size) * Decimal(usdt_price)),
+                    "fee": '0',
                     "fee_currency": "BNB"
                     }
 
@@ -722,9 +722,9 @@ def set_stop(pair, price, live):
 
     bal = client.get_asset_balance(asset=asset)
     if asset == 'BNB':
-        asset_bal = float(bal.get('free')) - reserve  # always keep $10 of bnb
+        asset_bal = Decimal(bal.get('free')) - reserve  # always keep $10 of bnb
     else:
-        asset_bal = float(bal.get('free'))
+        asset_bal = Decimal(bal.get('free'))
 
     info = client.get_symbol_info(pair)
     order_size = step_round(asset_bal, step_size)  # - step_size
@@ -744,9 +744,9 @@ def set_stop(pair, price, live):
                                     price=limit_price)
     else:
         order = {"pair": pair, 
-                "trig_price": float(trigger_price),
-                "base_size": float(order_size),
-                "quote_size": float(order_size) * float(trigger_price),
+                "trig_price": Decimal(trigger_price),
+                "base_size": Decimal(order_size),
+                "quote_size": Decimal(order_size) * Decimal(trigger_price),
                 "fee": 0,
                 "fee_currency": "BNB"
                 }
@@ -762,7 +762,7 @@ def clear_stop(pair, live):
 
     # sanity check
     bal = client.get_asset_balance(asset=pair[:-4])
-    if float(bal.get('locked')) == 0:
+    if Decimal(bal.get('locked')) == 0:
         print('no stop to cancel')
     else:
         # print(f'cancelling {pair} stop')

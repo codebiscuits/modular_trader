@@ -113,9 +113,9 @@ def market_benchmark():
                 eth_4h = df.at[last_idx, 'roc_4h']
                 eth_1d = df.at[last_idx, 'roc_1d']
                 eth_1w = df.at[last_idx, 'roc_1w']
-    market_4h = stats.mean(all_4h)
-    market_1d = stats.mean(all_1d)
-    market_1w = stats.mean(all_1w)
+    market_4h = stats.median(all_4h)
+    market_1d = stats.median(all_1d)
+    market_1w = stats.median(all_1w)
     
     all_pairs = len(list(ohlc_data.glob('*.*')))
     valid_pairs = len(all_4h)
@@ -129,14 +129,28 @@ def market_benchmark():
 def strat_benchmark(market_data, strat, benchmark):
     with open(f"{market_data}/{strat.name}_bal_history.txt", "r") as file:
         bal_data = file.readlines()
-        bal_data = bal_data[-43:]
-        all_bals = []
-        for entry in bal_data:
-            entry = json.loads(entry)
-            all_bals.append(entry.get('balance'))
     
+    bal_data = bal_data[-50:]
+    all_bals = []
+    all_exp = []
+    for row in bal_data:
+        row = json.loads(row)
+        try:
+            total_bal = row.get('balance')
+            positions = row.get('positions')
+            usdt_bal = positions.get('USDT').get('value')
+            exposure = total_bal - usdt_bal
+        except AttributeError:
+            continue
+        all_bals.append(total_bal)
+        all_exp.append(exposure)
+    
+    # when the strat is fully operational and self-directing, these calcs can be
+    # all_bals - all_bals / all_bals, so its performance will be measured by how 
+    # much profit it makes for the whole account, not just the small bit of 
+    # exposure i'm currently willing to risk while testing
     strat_4h = (all_bals[-1] - all_bals[-2]) / all_bals[-2]
-    strat_1d = (all_bals[-1] - all_bals[-7]) / all_bals[-7]
+    strat_1d = (all_bals[-1] - all_bals[-8]) / all_bals[-8]
     strat_1w = (all_bals[-1] - all_bals[-43]) / all_bals[-43]
     
     benchmark['strat_4h'] = strat_4h
@@ -150,9 +164,6 @@ def log(live, params, strat, market_data, spreads,
         now_start, sizing, tp_trades, 
         non_trade_notes, counts_dict, ot, closed_trades):    
     
-    benchmark = market_benchmark()
-    benchmark = strat_benchmark(market_data, strat, benchmark)
-
     # check total balance and record it in a file for analysis
     total_bal = funcs.account_bal()
     bal_record = {'timestamp': now_start, 'balance': round(total_bal, 2), 'positions': sizing, 'params': params, 'trade_counts': counts_dict}
@@ -161,9 +172,10 @@ def log(live, params, strat, market_data, spreads,
         with open(f"{market_data}/{strat.name}_bal_history.txt", "a") as file:
             file.write(new_line)
             file.write('\n')
-    # else:
-    #     pprint(new_line)
     
+    benchmark = market_benchmark()
+    benchmark = strat_benchmark(market_data, strat, benchmark)
+
     # save a json of any trades that have happened with relevant data
     if live:
         # should be able to remove these two function calls

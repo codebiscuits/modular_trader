@@ -496,15 +496,26 @@ if not live:
 
 
 # log all data from the session
+sizing['USDT'] = funcs.update_usdt(total_bal)
+total_bal = funcs.account_bal()
+rfb = round(total_bal-dollar_tor, 2)
+vol_exp = round(100 - sizing.get('USDT').get('pf%'))
 benchmark = uf.log(live, params, strat, market_data, spreads, now_start, sizing, tp_trades, 
         non_trade_notes, counts_dict, open_trades, closed_trades)
 if not live:
     print('warning: logging directed to test_records')
 
-str_4h = ' last session' if benchmark.get("strat_4h") > benchmark.get("market_4h") else ''
-str_1d = ' last 24 hrs' if benchmark.get("strat_1d") > benchmark.get("market_1d") else ''
-str_1w = ' last 7 days' if benchmark.get("strat_1w") > benchmark.get("market_1w") else ''
-print(f'the strategy beat the market {str_4h}{str_1d}{str_1w}')
+# pprint(benchmark)
+
+ranking = [
+    ('btc', round(benchmark['btc_1d']*100, 4)), 
+    ('eth', round(benchmark['eth_1d']*100, 4)), 
+    ('mkt', round(benchmark['market_1d']*100, 4)), 
+    ('strat', round(benchmark['strat_1d']*100, 4))
+    ]
+ranking = sorted(ranking, key=lambda x: x[1], reverse=True)
+for e, r in enumerate(ranking):
+    print(f'rank {e+1}: {r[0]} {r[1]}%')
     
 
 all_end = time.perf_counter()
@@ -512,10 +523,6 @@ all_time = all_end - all_start
 
 live_str = '' if live else '*not live* '
 elapsed_str = f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s'
-total_bal = funcs.account_bal()
-rfb = round(total_bal-dollar_tor, 2)
-sizing['USDT'] = funcs.update_usdt(total_bal)
-vol_exp = round(100 - sizing.get('USDT').get('pf%'))
 count_str = uf.count_trades(counts_dict)
 final_msg = f'{live_str}{elapsed_str}, total bal: ${total_bal:.2f} (${rfb} + ${dollar_tor:.2f}) \
 positions {num_open_positions}, exposure {vol_exp}%, {count_str}'
