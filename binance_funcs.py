@@ -144,22 +144,22 @@ def current_positions(strat, fr):  # used to be current sizing
         else:
             pair = asset + 'USDT'
             price = price_dict.get(pair)
+            if price == None:
+                continue
             if pair in o_data.keys():
                 now = datetime.now()
                 ots = uf.open_trade_stats(now, pair, o_data.get(pair))
-            if price == None:
-                continue
-            quant = float(b.get('free')) + float(b.get('locked'))
-            value = price * quant
-        if asset == 'BNB' and value < 20:
-            continue
-        elif asset == 'BNB' and value >= 20:
-            value -= 10
-        if value >= threshold_bal:
-            pct = round(100 * value / total_bal, 5)
-            size_dict[asset] = {'qty': quant,
-                                'value': round(value, 2), 'pf%': pct,
-                                'pnl': ots.get('pnl_R')}
+                quant = float(b.get('free')) + float(b.get('locked'))
+                value = price * quant
+                if asset == 'BNB' and value < 20:
+                    continue
+                elif asset == 'BNB' and value >= 20:
+                    value -= 10
+                if value >= threshold_bal:
+                    pct = round(100 * value / total_bal, 5)
+                    size_dict[asset] = {'qty': quant,
+                                        'value': round(value, 2), 'pf%': pct,
+                                        'pnl': ots.get('pnl_R')}
 
     return size_dict
 

@@ -458,7 +458,10 @@ class DoubleSTLO:
         open_long = bullish_ema and bullish_loose and bullish_tight and not in_pos # and bullish_book
         close_long = bearish_tight and in_pos
         
-        inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
+        if df.at[len(df)-1, 'st']:
+            inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
+        else:
+            inval = 100000
             
         return {'open_long': open_long, 'close_long': close_long,  
                 'tp_long': False, 'add_long': False, 

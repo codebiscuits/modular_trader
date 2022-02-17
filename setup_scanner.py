@@ -129,15 +129,15 @@ for pair in pairs:
     signals = strat.live_signals(df, in_pos)
     inval_dist = signals.get('inval')
     
+    if df.at[len(df)-1, 'st'] == 0:
+        note = f'{pair} supertrend 0 error, skipping pair'
+        print(note)
+        push = pb.push_note(now, note)
+        continue
+    
     # update positions dictionary with open_risk values
     if in_pos:
         sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, pos_fr_dol)
-    
-    if df.at[len(df)-1, 'st'] == 0:
-        print(pair, 'supertrend 0 error, skipping pair')
-        note = f'{pair} supertrend 0 error, skipping pair'
-        push = pb.push_note(now, note)
-        continue
     
     # execute orders
     price = df.at[len(df)-1, 'close']
@@ -507,15 +507,15 @@ if not live:
 
 # pprint(benchmark)
 
-ranking = [
-    ('btc', round(benchmark['btc_1d']*100, 4)), 
-    ('eth', round(benchmark['eth_1d']*100, 4)), 
-    ('mkt', round(benchmark['market_1d']*100, 4)), 
-    ('strat', round(benchmark['strat_1d']*100, 4))
-    ]
-ranking = sorted(ranking, key=lambda x: x[1], reverse=True)
-for e, r in enumerate(ranking):
-    print(f'rank {e+1}: {r[0]} {r[1]}%')
+# ranking = [
+#     ('btc', round(benchmark['btc_1d']*100, 4)), 
+#     ('eth', round(benchmark['eth_1d']*100, 4)), 
+#     ('mkt', round(benchmark['market_1d']*100, 4)), 
+#     ('strat', round(benchmark['strat_1d']*100, 4))
+#     ]
+# ranking = sorted(ranking, key=lambda x: x[1], reverse=True)
+# for e, r in enumerate(ranking):
+#     print(f'rank {e+1}: {r[0]} {r[1]}%')
     
 
 all_end = time.perf_counter()

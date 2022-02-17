@@ -40,8 +40,6 @@ def adjust_max_positions(max_pos, sizing):
     this function decides if there should currently be a limit on how many positions
     can be open at once, based on current performance of currently open positions'''
     
-    
-
 def max_init_risk(n, target_risk):
     '''n = number of open positions, target_risk is the percentage distance 
     from invalidation this function should converge on, max_pos is the maximum
@@ -94,6 +92,7 @@ def market_benchmark():
         
     for x in ohlc_data.glob('*.*'):
         df = pd.read_pickle(x)
+        # need to resample to 4h ohlc
         last_idx = len(df) - 1
         last_stamp = df.at[last_idx, 'timestamp']
         now = datetime.now()
@@ -113,13 +112,13 @@ def market_benchmark():
                 eth_4h = df.at[last_idx, 'roc_4h']
                 eth_1d = df.at[last_idx, 'roc_1d']
                 eth_1w = df.at[last_idx, 'roc_1w']
-    market_4h = stats.median(all_4h)
-    market_1d = stats.median(all_1d)
-    market_1w = stats.median(all_1w)
+    market_4h = stats.median(all_4h) if all_4h else 0
+    market_1d = stats.median(all_1d) if all_1d else 0
+    market_1w = stats.median(all_1w) if all_1w else 0
     
     all_pairs = len(list(ohlc_data.glob('*.*')))
     valid_pairs = len(all_4h)
-    if all_pairs / valid_pairs > 1.5:
+    if valid_pairs and all_pairs / valid_pairs > 1.5:
         print('warning (strat benchmark): lots of pairs ohlc data not up to date')
     
     return {'btc_4h': btc_4h, 'btc_1d': btc_1d, 'btc_1w': btc_1w, 
@@ -173,8 +172,9 @@ def log(live, params, strat, market_data, spreads,
             file.write(new_line)
             file.write('\n')
     
-    benchmark = market_benchmark()
-    benchmark = strat_benchmark(market_data, strat, benchmark)
+    # if live:
+    #     benchmark = market_benchmark()
+    #     benchmark = strat_benchmark(market_data, strat, benchmark)
 
     # save a json of any trades that have happened with relevant data
     if live:
@@ -184,7 +184,8 @@ def log(live, params, strat, market_data, spreads,
         with open(f"{market_data}/{strat.name}_closed_trades.json", "w") as ct_file:
             json.dump(closed_trades, ct_file)
     
-    return benchmark
+    # return benchmark
+    return 0 # commented out everything to do with benchmarking temporarily
 
 def count_trades(counts):
     count_list = []
