@@ -88,11 +88,14 @@ next_id, counts_dict = uf.record_stopped_trades(open_trades, closed_trades,
 funcs.top_up_bnb(15)
 
 non_trade_notes = []
-sizing = funcs.current_positions(strat.name, params.get('fixed_risk'))
 
-open_pnls = [v.get('pnl') for v in sizing.values() if v.get('pnl')]
-avg_open_pnl = stats.median(open_pnls)
-max_positions = params.get('max_pos') if avg_open_pnl <= 0 else 50
+sizing = funcs.current_positions(strat.name, params.get('fixed_risk'))
+if sizing:
+    open_pnls = [v.get('pnl') for v in sizing.values() if v.get('pnl')]
+    avg_open_pnl = stats.median(open_pnls)
+    max_positions = params.get('max_pos') if avg_open_pnl <= 0 else 50
+else:
+    max_positions = 20
     
 
 for pair in pairs:
@@ -489,10 +492,10 @@ for pair in pairs:
 
 dollar_tor = sum([v.get('or_$') for v in sizing.values() if v.get('or_$')])
 
-pprint(sizing)
 
 if not live:
-    print(f'{num_open_positions = }, {total_open_risk = }R, ie ${dollar_tor:.2f}')
+    pprint(sizing)
+    print(f'\n{num_open_positions = }, {total_open_risk = }R, ie ${dollar_tor:.2f}')
 
 
 # log all data from the session
