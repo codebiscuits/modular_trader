@@ -18,7 +18,7 @@ def open_trade_stats(now, k, v):
     returns current profit denominated in R'''
     if v[0].get('type')[:4] != 'open':
         print('Warning - {pair} record missing open trade')
-    entry_price = v[0].get('exe_price')
+    entry_price = float(v[0].get('exe_price'))
     # curr_price = funcs.get_price(k)
     curr_price = float(client.get_ticker(symbol=k).get('lastPrice'))
     pnl = 100 * (curr_price - entry_price) / entry_price
@@ -271,13 +271,13 @@ def record_stopped_trades(open_trades, closed_trades, pairs_in_pos, now_start,
         close_base = 0
         for x in trade_record:
             if x.get('type')[:4] == 'open':
-                init_base = x.get('base_size')
+                init_base = float(x.get('base_size'))
             elif x.get('type')[:3] == 'add':
-                add_base += x.get('base_size')
+                add_base += float(x.get('base_size'))
             elif x.get('type')[:2] == 'tp':
-                tp_base += x.get('base_size')
+                tp_base += float(x.get('base_size'))
             elif x.get('type')[:5] in ['close', 'stop_']:
-                close_base = x.get('base_size')
+                close_base = float(x.get('base_size'))
         
         diff = (init_base + add_base) - (tp_base + close_base)        
         

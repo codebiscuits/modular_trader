@@ -109,8 +109,8 @@ for pair in pairs:
         trade_record = []
     
     if in_pos and trade_record and trade_record[0].get('type')[0] == 'o':
-        qs = trade_record[0].get('quote_size')
-        ep = trade_record[0].get('exe_price')
+        qs = float(trade_record[0].get('quote_size'))
+        ep = float(trade_record[0].get('exe_price'))
         hs = trade_record[0].get('hard_stop')
         pos_fr_dol = qs * ((ep - hs) / ep)
     else:
