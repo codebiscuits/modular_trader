@@ -123,7 +123,10 @@ def current_positions(strat, fr):  # used to be current sizing
     
     o_path = Path(f'{market_data}/{strat}_open_trades.json')
     with open(o_path, 'r') as file:
-        o_data = json.load(file)
+        try:
+            o_data = json.load(file)
+        except:
+            o_data = {}
         
     total_bal = account_bal()
     # should be 1R, but also no less than min order size
