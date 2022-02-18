@@ -687,7 +687,7 @@ def sell_asset(pair, live, pct=100):
                       'pair': order.get('symbol'),
                       'trig_price': usdt_price,
                       'exe_price': avg_price,
-                      'size': qty,
+                      'size': str(qty),
                       'base_size': order.get('executedQty'),
                       'quote_size': order.get('cummulativeQuoteQty'),
                       'fee': str(fee),
