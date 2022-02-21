@@ -9,8 +9,11 @@ from config import ohlc_data
 import pandas as pd
 from datetime import datetime, timedelta
 import statistics as stats
+from pushbullet import Pushbullet
 
 client = Client(keys.bPkey, keys.bSkey)
+pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
+now = datetime.now().strftime('%d/%m/%y %H:%M')
 
 
 def open_trade_stats(now, k, v):
@@ -78,6 +81,18 @@ def record_open_trades(strat_name, market_data, ot):
 def record_closed_trades(strat_name, market_data, ct):
     with open(f"{market_data}/{strat_name}_closed_trades.json", "w") as ct_file:
         json.dump(ct, ct_file)
+
+def backup_trade_records(strat_name, market_data, ot, ct):
+    if ot:
+        with open(f"{market_data}/{strat_name}_ot_backup.json", "w") as ot_file:
+            json.dump(ot, ot_file)
+    else:
+        pb.push_note(now, 'open trades file empty')
+    if ct:
+        with open(f"{market_data}/{strat_name}_ct_backup.json", "w") as ct_file:
+            json.dump(ct, ct_file)
+    else:
+        pb.push_note(now, 'closed trades file empty')
 
 def market_benchmark():
     all_4h = []
@@ -236,13 +251,13 @@ def find_bad_keys(c_data):
         close_base = 0
         for x in v:
             if x.get('type')[:4] == 'open':
-                init_base = x.get('base_size')
+                init_base = float(x.get('base_size'))
             elif x.get('type')[:3] == 'add':
-                add_base += x.get('base_size')
+                add_base += float(x.get('base_size'))
             elif x.get('type')[:2] == 'tp':
-                tp_base += x.get('base_size')
+                tp_base += float(x.get('base_size'))
             elif x.get('type')[:5] in ['close', 'stop_']:
-                close_base = x.get('base_size')
+                close_base = float(x.get('base_size'))
         
         gross_buy = init_base + add_base
         gross_sell = tp_base + close_base

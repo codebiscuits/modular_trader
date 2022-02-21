@@ -79,6 +79,8 @@ open_trades, closed_trades, next_id = uf.read_trade_records(market_data, strat.n
 if not live: # now that trade records have been loaded, path can be changed
     market_data = Path('test_records')
 
+uf.backup_trade_records(strat.name, market_data, open_trades, closed_trades)
+
 next_id, counts_dict = uf.record_stopped_trades(open_trades, closed_trades, 
                                                 pairs_in_pos, now_start, 
                                                 next_id, strat, 
