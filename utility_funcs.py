@@ -185,8 +185,7 @@ def strat_benchmark(market_data, strat, benchmark):
     return benchmark 
 
 def log(live, params, strat, market_data, spreads, 
-        now_start, sizing, tp_trades, 
-        non_trade_notes, counts_dict, ot, closed_trades):    
+        now_start, sizing, tp_trades, counts_dict, ot, closed_trades):    
     
     # check total balance and record it in a file for analysis
     total_bal = funcs.account_bal()
