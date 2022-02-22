@@ -449,9 +449,10 @@ vol_exp = round(100 - sizing.get('USDT').get('pf%'))
 live_str = '' if live else '*not live* '
 elapsed_str = f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s'
 count_str = uf.count_trades(counts_dict)
-bench_str = f"1 day strat perf: {round(benchmark.get('strat_1d')*100, 2)}% 1 day market perf: {round(benchmark.get('market_1d')*100, 2)}%"
-final_msg = f'{live_str}{elapsed_str}, total bal: ${total_bal:.2f} (${rfb} + ${dollar_tor:.2f}) \
-positions {num_open_positions}, exposure {vol_exp}%, {count_str} - {bench_str}'
+bench_str = f"1 day strat perf: {round(benchmark.get('strat_1d')*100, 2)}%\
+\n1 day market perf: {round(benchmark.get('market_1d')*100, 2)}%"
+final_msg = f'{live_str}{elapsed_str}, total bal: ${total_bal:.2f} \
+\npositions {num_open_positions}, exposure {vol_exp}%\n{count_str}\n{bench_str}'
 print(final_msg)
 if live:
     push = pb.push_note(now, final_msg)
