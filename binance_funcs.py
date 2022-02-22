@@ -519,8 +519,8 @@ def prepare_ohlc(pair, is_live, timeframe='4H', bars=2190):
         df = get_ohlc(pair, '1h', '1 year ago UTC')
         print(f'downloaded {pair} from scratch')
 
-    if len(df) > 8760:  # 8760 is 1 year's worth of 1h periods
-        df = df.tail(8760)
+    if len(df) > 17520:  # 17520 is 2 year's worth of 1h periods
+        df = df.tail(17520)
         df.reset_index(drop=True, inplace=True)
     try:
         df.to_pickle(filepath)
@@ -529,7 +529,6 @@ def prepare_ohlc(pair, is_live, timeframe='4H', bars=2190):
         print(f'to_pickle went wrong with {pair}')
         print('-')
 
-    # print(df.tail())
     df = df.resample(timeframe, on='timestamp').agg({'open': 'first',
                                                      'high': 'max',
                                                      'low': 'min',

@@ -95,15 +95,15 @@ def backup_trade_records(strat_name, market_data, ot, ct):
         pb.push_note(now, 'closed trades file empty')
 
 def market_benchmark():
-    all_4h = []
     all_1d = []
     all_1w = []
-    btc_4h = None
+    all_1m = []
     btc_1d = None
     btc_1w = None
-    eth_4h = None
+    btc_1m = None
     eth_1d = None
     eth_1w = None
+    eth_1m = None
         
     for x in ohlc_data.glob('*.*'):
         df = pd.read_pickle(x)
@@ -112,64 +112,74 @@ def market_benchmark():
         last_stamp = df.at[last_idx, 'timestamp']
         now = datetime.now()
         window = timedelta(hours=4)
-        if last_stamp > now - window:
-            df['roc_4h'] = df.close.pct_change(1)
+        if last_stamp > now - window: # if there is data up to the last 4 hours
             df['roc_1d'] = df.close.pct_change(6)
             df['roc_1w'] = df.close.pct_change(42)
-            all_4h.append(df.at[last_idx, 'roc_4h'])
+            df['roc_1m'] = df.close.pct_change(181)
             all_1d.append(df.at[last_idx, 'roc_1d'])
             all_1w.append(df.at[last_idx, 'roc_1w'])
+            all_1m.append(df.at[last_idx, 'roc_1m'])
             if x.stem == 'BTCUSDT':
-                btc_4h = df.at[last_idx, 'roc_4h']
                 btc_1d = df.at[last_idx, 'roc_1d']
                 btc_1w = df.at[last_idx, 'roc_1w']
+                btc_1m = df.at[last_idx, 'roc_1m']
             elif x.stem == 'ETHUSDT':
-                eth_4h = df.at[last_idx, 'roc_4h']
                 eth_1d = df.at[last_idx, 'roc_1d']
                 eth_1w = df.at[last_idx, 'roc_1w']
-    market_4h = stats.median(all_4h) if all_4h else 0
+                eth_1m = df.at[last_idx, 'roc_1m']
     market_1d = stats.median(all_1d) if all_1d else 0
     market_1w = stats.median(all_1w) if all_1w else 0
+    market_1m = stats.median(all_1m) if all_1m else 0
     
     all_pairs = len(list(ohlc_data.glob('*.*')))
-    valid_pairs = len(all_4h)
+    valid_pairs = len(all_1d)
     if valid_pairs and all_pairs / valid_pairs > 1.5:
         print('warning (strat benchmark): lots of pairs ohlc data not up to date')
     
-    return {'btc_4h': btc_4h, 'btc_1d': btc_1d, 'btc_1w': btc_1w, 
-            'eth_4h': eth_4h, 'eth_1d': eth_1d, 'eth_1w': eth_1w, 
-            'market_4h': market_4h, 'market_1d': market_1d, 'market_1w': market_1w, }
+    return {'btc_1d': btc_1d, 'btc_1w': btc_1w, 'btc_1m': btc_1m, 
+            'eth_1d': eth_1d, 'eth_1w': eth_1w, 'eth_1m': eth_1m, 
+            'market_1d': market_1d, 'market_1w': market_1w, 'market_1m': market_1m, }
 
 def strat_benchmark(market_data, strat, benchmark):
+    print('running')
+    now = datetime.now()
+    day_ago = now - timedelta(days=1)
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+    
+    bal_now, bal_1d, bal_1w, bal_1m = None, None, None, None
+    
     with open(f"{market_data}/{strat.name}_bal_history.txt", "r") as file:
         bal_data = file.readlines()
     
-    bal_data = bal_data[-50:]
-    all_bals = []
-    all_exp = []
-    for row in bal_data:
+    bal_now = json.loads(bal_data[-1]).get('balance')
+    
+    for row in bal_data[-1:0:-1]:
         row = json.loads(row)
-        try:
-            total_bal = row.get('balance')
-            positions = row.get('positions')
-            usdt_bal = positions.get('USDT').get('value')
-            exposure = total_bal - usdt_bal
-        except AttributeError:
-            continue
-        all_bals.append(total_bal)
-        all_exp.append(exposure)
+        row_dt = datetime.strptime(row.get('timestamp'), '%d/%m/%y %H:%M')
+        if row_dt < month_ago and not bal_1m:
+            try:
+                bal_1m = row.get('balance')
+            except AttributeError:
+                continue 
+        if row_dt < week_ago and not bal_1w:
+            try:
+                bal_1w = row.get('balance')
+            except AttributeError:
+                continue
+        if row_dt < day_ago and not bal_1d:
+            try:
+                bal_1d = row.get('balance')
+            except AttributeError:
+                continue
+        
+    strat_1d = (bal_now - bal_1d) / bal_1d
+    strat_1w = (bal_now - bal_1w) / bal_1w
+    strat_1m = (bal_now - bal_1m) / bal_1m
     
-    # when the strat is fully operational and self-directing, these calcs can be
-    # all_bals - all_bals / all_bals, so its performance will be measured by how 
-    # much profit it makes for the whole account, not just the small bit of 
-    # exposure i'm currently willing to risk while testing
-    strat_4h = (all_bals[-1] - all_bals[-2]) / all_bals[-2]
-    strat_1d = (all_bals[-1] - all_bals[-8]) / all_bals[-8]
-    strat_1w = (all_bals[-1] - all_bals[-43]) / all_bals[-43]
-    
-    benchmark['strat_4h'] = strat_4h
     benchmark['strat_1d'] = strat_1d
     benchmark['strat_1w'] = strat_1w
+    benchmark['strat_1m'] = strat_1m
     
     
     return benchmark 
@@ -188,8 +198,8 @@ def log(live, params, strat, market_data, spreads,
             file.write('\n')
     
     # if live:
-    #     benchmark = market_benchmark()
-    #     benchmark = strat_benchmark(market_data, strat, benchmark)
+    benchmark = market_benchmark()
+    benchmark = strat_benchmark(market_data, strat, benchmark)
 
     # save a json of any trades that have happened with relevant data
     if live:
@@ -199,8 +209,40 @@ def log(live, params, strat, market_data, spreads,
         with open(f"{market_data}/{strat.name}_closed_trades.json", "w") as ct_file:
             json.dump(closed_trades, ct_file)
     
-    # return benchmark
-    return 0 # commented out everything to do with benchmarking temporarily
+    return benchmark
+    # return 0 # commented out everything to do with benchmarking temporarily
+
+def interpret_benchmark(benchmark):
+    d_ranking = [
+        ('btc', round(benchmark['btc_1d']*100, 4)), 
+        ('eth', round(benchmark['eth_1d']*100, 4)), 
+        ('mkt', round(benchmark['market_1d']*100, 4)), 
+        ('strat', round(benchmark['strat_1d']*100, 4))
+        ]
+    d_ranking = sorted(d_ranking, key=lambda x: x[1], reverse=True)
+    print('1 day stats')
+    for e, r in enumerate(d_ranking):
+        print(f'rank {e+1}: {r[0]} {r[1]}%')
+    w_ranking = [
+        ('btc', round(benchmark['btc_1w']*100, 4)), 
+        ('eth', round(benchmark['eth_1w']*100, 4)), 
+        ('mkt', round(benchmark['market_1w']*100, 4)), 
+        ('strat', round(benchmark['strat_1w']*100, 4))
+        ]
+    w_ranking = sorted(w_ranking, key=lambda x: x[1], reverse=True)
+    print('1 week stats')
+    for e, r in enumerate(w_ranking):
+        print(f'rank {e+1}: {r[0]} {r[1]}%')
+    m_ranking = [
+        ('btc', round(benchmark['btc_1m']*100, 4)), 
+        ('eth', round(benchmark['eth_1m']*100, 4)), 
+        ('mkt', round(benchmark['market_1m']*100, 4)), 
+        ('strat', round(benchmark['strat_1m']*100, 4))
+        ]
+    m_ranking = sorted(m_ranking, key=lambda x: x[1], reverse=True)
+    print('1 month stats')
+    for e, r in enumerate(m_ranking):
+        print(f'rank {e+1}: {r[0]} {r[1]}%')
 
 def count_trades(counts):
     count_list = []
