@@ -10,6 +10,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import statistics as stats
 from pushbullet import Pushbullet
+import time
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
@@ -213,30 +214,30 @@ def log(live, params, strat, market_data, spreads,
 
 def interpret_benchmark(benchmark):
     d_ranking = [
-        ('btc', round(benchmark['btc_1d']*100, 4)), 
-        ('eth', round(benchmark['eth_1d']*100, 4)), 
-        ('mkt', round(benchmark['market_1d']*100, 4)), 
-        ('strat', round(benchmark['strat_1d']*100, 4))
+        ('btc', round(benchmark['btc_1d']*100, 3)), 
+        ('eth', round(benchmark['eth_1d']*100, 3)), 
+        ('mkt', round(benchmark['market_1d']*100, 3)), 
+        ('strat', round(benchmark['strat_1d']*100, 3))
         ]
     d_ranking = sorted(d_ranking, key=lambda x: x[1], reverse=True)
     print('1 day stats')
     for e, r in enumerate(d_ranking):
         print(f'rank {e+1}: {r[0]} {r[1]}%')
     w_ranking = [
-        ('btc', round(benchmark['btc_1w']*100, 4)), 
-        ('eth', round(benchmark['eth_1w']*100, 4)), 
-        ('mkt', round(benchmark['market_1w']*100, 4)), 
-        ('strat', round(benchmark['strat_1w']*100, 4))
+        ('btc', round(benchmark['btc_1w']*100, 2)), 
+        ('eth', round(benchmark['eth_1w']*100, 2)), 
+        ('mkt', round(benchmark['market_1w']*100, 2)), 
+        ('strat', round(benchmark['strat_1w']*100, 2))
         ]
     w_ranking = sorted(w_ranking, key=lambda x: x[1], reverse=True)
     print('1 week stats')
     for e, r in enumerate(w_ranking):
         print(f'rank {e+1}: {r[0]} {r[1]}%')
     m_ranking = [
-        ('btc', round(benchmark['btc_1m']*100, 4)), 
-        ('eth', round(benchmark['eth_1m']*100, 4)), 
-        ('mkt', round(benchmark['market_1m']*100, 4)), 
-        ('strat', round(benchmark['strat_1m']*100, 4))
+        ('btc', round(benchmark['btc_1m']*100, 1)), 
+        ('eth', round(benchmark['eth_1m']*100, 1)), 
+        ('mkt', round(benchmark['market_1m']*100, 1)), 
+        ('strat', round(benchmark['strat_1m']*100, 1))
         ]
     m_ranking = sorted(m_ranking, key=lambda x: x[1], reverse=True)
     print('1 month stats')
@@ -395,5 +396,28 @@ def record_stopped_trades(open_trades, closed_trades, pairs_in_pos, now_start,
     
     return next_id, counts_dict
 
-
+def scanner_summary(all_start, sizing, counts_dict, benchmark, live):
+    all_end = time.perf_counter()
+    all_time = all_end - all_start
+    
+    total_bal = funcs.account_bal()
+    
+    or_list = [v.get('or_$') for v in sizing.values() if v.get('or_$')]
+    dollar_tor = round(sum(or_list), 2)
+    num_open_positions = len(or_list)
+    rfb = round(total_bal-dollar_tor, 2)
+    vol_exp = round(100 - sizing.get('USDT').get('pf%'))
+    
+    live_str = '' if live else '*not live* '
+    elapsed_str = f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s'
+    count_str = count_trades(counts_dict)
+    bench_str = f"1d perf: strat {round(benchmark.get('strat_1d')*100, 2)}%, \
+    mkt {round(benchmark.get('market_1d')*100, 2)}%"
+    final_msg = f'{live_str}{elapsed_str}, total bal: ${total_bal:.2f} \
+    \npositions {num_open_positions}, exposure {vol_exp}%\n{count_str}\n{bench_str}'
+    print(final_msg)
+    
+    if live:
+        push = pb.push_note(now, final_msg)
+        print('-:-' * 20)
 

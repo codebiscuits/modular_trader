@@ -101,6 +101,7 @@ for pair in pairs:
         hs = trade_record[0].get('hard_stop')
         pos_fr_dol = qs * ((ep - hs) / ep)
     else:
+        ep = None # i refer to this later and need it to exist even if it has no value
         pos_fr_dol = fixed_risk_dol
     
     # get data
@@ -125,12 +126,16 @@ for pair in pairs:
         push = pb.push_note(now, note)
         continue
     
+    # calculate how much price has moved since entry
+    price = df.at[len(df)-1, 'close']
+    if ep:
+        price_delta = (price - ep) / ep
+    
     # update positions dictionary with open_risk values
     if in_pos:
         sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, pos_fr_dol)
     
     # execute orders
-    price = df.at[len(df)-1, 'close']
     tp_trades = []
     
     if signals.get('tp_long'):
@@ -352,30 +357,17 @@ for pair in pairs:
         open_risk_r = sizing.get(asset)['or_R']
         
         # take profit on risky positions
-        if open_risk_r > params.get('indiv_r_limit'):
+        if open_risk_r > params.get('indiv_r_limit') and price_delta > 0.001:
             tp_pct = 50 if pos_bal > 30 else 100
             if live:
-                note = f"*** {pair} take profit {tp_pct}% @ {price}"
+                note = f"{pair} take profit {tp_pct}% @ {price}, {round(price_delta*100, 2)}% from entry"
                 print(now, note)
                 print(f'pos_bal: ${pos_bal}, inval_dist: {inval_dist}')
                 print(f'open_risk: ${open_risk:.2f}, open_risk_r: {open_risk_r:.3}R')
                 # print('-')
                 funcs.clear_stop(pair, live)
                 tp_order = funcs.sell_asset(pair, live, pct=tp_pct)
-                if tp_pct == 50:
-                    tp_order['type'] = 'tp_long'
-                    buffer = spreads.get(pair) * 2 # stop-market order will not get perfect execution, so
-                    stp = float(df.at[len(df)-1, 'st']) * (1-buffer) # expect some slippage in risk calc
-                    stop_order = funcs.set_stop(pair, stp, live)
-                    tp_order['hard_stop'] = stp
-                    tp_order['reason'] = 'position R limit exceeded'
-                    trade_record.append(tp_order)
-                    open_trades[pair] = trade_record
-                    uf.record_open_trades(strat.name, market_data, open_trades)
-                    sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, pos_fr_dol)
-                    sizing['USDT'] = funcs.update_usdt(total_bal)
-                    counts_dict['tp_count'] += 1
-                else:
+                if tp_pct == 100:
                     tp_order['type'] = 'close_long'
                     tp_order['reason'] = 'position R limit exceeded'
                     trade_record.append(tp_order)  
@@ -394,6 +386,20 @@ for pair in pairs:
                     del sizing[asset]
                     sizing['USDT'] = funcs.update_usdt(total_bal)
                     counts_dict['close_count'] += 1
+                else:
+                    tp_order['type'] = 'tp_long'
+                    buffer = spreads.get(pair) * 2 # stop-market order will not get perfect execution, so
+                    stp = float(df.at[len(df)-1, 'st']) * (1-buffer) # expect some slippage in risk calc
+                    stop_order = funcs.set_stop(pair, stp, live)
+                    tp_order['hard_stop'] = stp
+                    tp_order['reason'] = 'position R limit exceeded'
+                    trade_record.append(tp_order)
+                    open_trades[pair] = trade_record
+                    uf.record_open_trades(strat.name, market_data, open_trades)
+                    sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, pos_fr_dol)
+                    sizing['USDT'] = funcs.update_usdt(total_bal)
+                    counts_dict['tp_count'] += 1
+                
             else:
                 note = f"sim {pair} take profit"
                 print(now, note)
@@ -421,39 +427,17 @@ for pair in pairs:
         num_open_positions = len(or_list)
         
         
-    # TODO maybe have a plot rendered and saved every time a trade is closed
-
-
-dollar_tor = sum([v.get('or_$') for v in sizing.values() if v.get('or_$')])
-
-
-if not live:
-    pprint(sizing)
-    print(f'\n{num_open_positions = }, {total_open_risk = }R, ie ${dollar_tor:.2f}')
-
-
-# log all data from the session
+# log all data from the session and print/push summary
 sizing['USDT'] = funcs.update_usdt(total_bal)
 if not live:
+    pprint(sizing)
     print('warning: logging directed to test_records')
-benchmark = uf.log(live, params, strat, market_data, spreads, now_start, sizing, tp_trades, 
-        counts_dict, open_trades, closed_trades)
+
+benchmark = uf.log(live, params, strat, 
+                   market_data, spreads, now_start, 
+                   sizing, tp_trades, counts_dict, 
+                   open_trades, closed_trades)
 uf.interpret_benchmark(benchmark)    
 
-# print summary
-all_end = time.perf_counter()
-all_time = all_end - all_start
-total_bal = funcs.account_bal()
-rfb = round(total_bal-dollar_tor, 2)
-vol_exp = round(100 - sizing.get('USDT').get('pf%'))
-live_str = '' if live else '*not live* '
-elapsed_str = f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s'
-count_str = uf.count_trades(counts_dict)
-bench_str = f"1 day strat perf: {round(benchmark.get('strat_1d')*100, 2)}%\
-\n1 day market perf: {round(benchmark.get('market_1d')*100, 2)}%"
-final_msg = f'{live_str}{elapsed_str}, total bal: ${total_bal:.2f} \
-\npositions {num_open_positions}, exposure {vol_exp}%\n{count_str}\n{bench_str}'
-print(final_msg)
-if live:
-    push = pb.push_note(now, final_msg)
-    print('-:-' * 20)
+uf.scanner_summary(all_start, sizing, counts_dict, benchmark, live)
+
