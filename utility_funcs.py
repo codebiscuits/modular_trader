@@ -256,7 +256,10 @@ def count_trades(counts):
         count_list.append(f'tped: {counts.get("tp_count")}') 
     if counts.get("close_count"):
         count_list.append(f'closed: {counts.get("close_count")}') 
-    counts_str = ', '.join(count_list)
+    if count_list:
+        counts_str = '\n' + ', '.join(count_list)
+    else:
+        counts_str = ''
     
     return counts_str
 
@@ -411,10 +414,8 @@ def scanner_summary(all_start, sizing, counts_dict, benchmark, live):
     live_str = '' if live else '*not live* '
     elapsed_str = f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s'
     count_str = count_trades(counts_dict)
-    bench_str = f"1d perf: strat {round(benchmark.get('strat_1d')*100, 2)}%, \
-    mkt {round(benchmark.get('market_1d')*100, 2)}%"
-    final_msg = f'{live_str}{elapsed_str}, total bal: ${total_bal:.2f} \
-    \npositions {num_open_positions}, exposure {vol_exp}%\n{count_str}\n{bench_str}'
+    bench_str = f"1d perf: strat {round(benchmark.get('strat_1d')*100, 2)}%, mkt {round(benchmark.get('market_1d')*100, 2)}%"
+    final_msg = f'{live_str}{elapsed_str}, total bal: ${total_bal:.2f} \npositions {num_open_positions}, exposure {vol_exp}% {count_str}\n{bench_str}'
     print(final_msg)
     
     if live:
