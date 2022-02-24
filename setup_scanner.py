@@ -343,44 +343,6 @@ for pair in pairs:
                 pf = usdt_size / total_bal
                 or_dol = total_bal * params.get('fixed_risk')
                 sizing[asset] = {'qty': size, 'value': usdt_size, 'pf%': pf, 'or_R': 1, 'or_$': or_dol}
-            # note = f"buy {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
-            # print(now, note)
-            # if live:
-            #     try:
-            #         buy_order = funcs.buy_asset(pair, usdt_size, live)
-            #         buy_order['type'] = 'open_long'
-            #         buy_order['reason'] = 'buy conditions met'
-            #         buy_order['hard_stop'] = stp
-            #         open_trades[pair] = [buy_order]
-            #         stop_order = funcs.set_stop(pair, stp, live)
-            #         in_pos = True
-            #         uf.record_open_trades(strat.name, market_data, open_trades)
-            #         sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, pos_fr_dol)
-            #         sizing['USDT'] = funcs.update_usdt(total_bal)
-            #         counts_dict['open_count'] += 1
-            #     except BinanceAPIException as e:
-            #         print(f'problem with buy order for {pair}')
-            #         print(e)
-            #         push = pb.push_note(now, f'exeption during {pair} buy order')
-            # else:
-            #     try:
-            #         buy_order = funcs.buy_asset(pair, usdt_size, live)
-            #         buy_order['type'] = 'open_long'
-            #         buy_order['reason'] = 'buy conditions met'
-            #         buy_order['hard_stop'] = stp
-            #         open_trades[pair] = [buy_order]
-            #         stop_order = funcs.set_stop(pair, stp, live)
-            #         in_pos = True
-            #         uf.record_open_trades(strat.name, 'test_records', open_trades)
-            #         pf = usdt_size / total_bal
-            #         or_dol = total_bal * params.get('fixed_risk')
-            #         sizing[asset] = {'qty': size, 'value': usdt_size, 'pf%': pf, 'or_R': 1, 'or_$': or_dol}
-            #         counts_dict['open_count'] += 1
-            #     except BinanceAPIException as e:
-            #         print(f'problem with sim buy order for {pair}')
-            #         print(e)
-            #         push = pb.push_note(now, f'exeption during sim {pair} buy order')
-        # print('-')
             
     # calculate open risk and take profit if necessary
     if in_pos:
@@ -395,7 +357,7 @@ for pair in pairs:
                                                                                      price_delta, trade_record, 
                                                                                      open_trades, closed_trades, 
                                                                                      next_id, market_data, 
-                                                                                     counts_dict, stp, live)
+                                                                                     counts_dict, stp, in_pos, live)
             if live:
                 if tp_pct == 100:
                     del sizing[asset]

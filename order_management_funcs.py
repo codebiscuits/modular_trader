@@ -145,7 +145,7 @@ def spot_sell(strat, pair, price, next_id,
 
 def spot_risk_limit_tp(strat, pair, tp_pct, price, price_delta, trade_record, 
                        open_trades, closed_trades, next_id, market_data, 
-                       counts_dict, stp, live):
+                       counts_dict, stp, in_pos, live):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     if live:
         note = f"{pair} take profit {tp_pct}% @ {price}, {round(price_delta*100, 2)}% from entry"
