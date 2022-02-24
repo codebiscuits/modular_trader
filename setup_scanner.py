@@ -48,7 +48,7 @@ fixed_risk_dol = params.get('fixed_risk') * total_bal
 # strat = strats.RSI_ST_EMA(4, 45, 96)
 strat = strats.DoubleSTLO(3, 1.4)
 
-# compile and sort list of pairs to loop through
+# compile and sort list of pairs to loop through ------------------------------
 spreads = funcs.binance_spreads('USDT') # dict
 all_pairs = sorted(spreads.items(), key=lambda x:x[1])
 positions = list(funcs.current_positions(strat.name, 0.00025).keys())
@@ -64,7 +64,7 @@ counts_dict = {'stop_count': 0, 'open_count': 0, 'add_count': 0, 'tp_count': 0, 
 
 print(f"Current time: {now_start}, {strat}, fixed risk: {params.get('fixed_risk')}")
 
-# update trade records
+# update trade records --------------------------------------------------------
 open_trades, closed_trades, next_id = uf.read_trade_records(market_data, strat.name)
 if not live: # now that trade records have been loaded, path can be changed
     market_data = Path('test_records')
@@ -90,7 +90,7 @@ for pair in pairs:
     asset = pair[:-1*len(params.get('quote_asset'))]
     in_pos = pair in pairs_in_pos
     
-    # look up or calculate $ fixed risk
+# look up or calculate $ fixed risk -------------------------------------------
     if open_trades.get(pair):
         trade_record = open_trades.get(pair)
     else:
@@ -105,7 +105,7 @@ for pair in pairs:
         ep = None # i refer to this later and need it to exist even if it has no value
         pos_fr_dol = fixed_risk_dol
     
-    # get data
+# get data --------------------------------------------------------------------
     df = funcs.prepare_ohlc(pair, live)
     
     if len(df) <= 200 and not in_pos:
@@ -117,11 +117,11 @@ for pair in pairs:
     
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     
-    # generate signals
+# generate signals ------------------------------------------------------------
     signals = strat.live_signals(df, in_pos)
     inval_dist = signals.get('inval')
     
-    # calculate where stop_loss should be set if needed
+# calculate where stop_loss should be set if needed ---------------------------
     buffer = spreads.get(pair) * 2 # stop-market order will not get perfect execution, so
     stp = float(df.at[len(df)-1, 'st']) * (1-buffer) # expect some slippage in risk calc
     
@@ -131,139 +131,28 @@ for pair in pairs:
         push = pb.push_note(now, note)
         continue
     
-    # calculate how much price has moved since entry
+# calculate how much price has moved since entry ------------------------------
     price = df.at[len(df)-1, 'close']
     if ep:
         price_delta = (price - ep) / ep
     
-    # update positions dictionary with open_risk values
+# update positions dictionary with open_risk values ---------------------------
     if in_pos:
         sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, pos_fr_dol)
     
-    # execute orders
+# execute orders --------------------------------------------------------------
     tp_trades = []
     
     if signals.get('tp_long'):
-        counts_dict, trade_record = omf.spot_tp(strat, pair, price, stp, 
-                                                trade_record, open_trades, 
-                                                market_data, counts_dict, live)
-        if live:
-            sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, pos_fr_dol)
-            sizing['USDT'] = funcs.update_usdt(total_bal)
-        else:
-            qty = sizing.get(asset).get('qty') / 2
-            val = sizing.get(asset).get('value') / 2
-            pf = sizing.get(asset).get('pf%') / 2
-            or_R = sizing.get(asset).get('or_R') / 2
-            or_dol = sizing.get(asset).get('or_$') / 2
-            sizing[asset] = {'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol}
-        # note = f"{pair} take-profit @ {price}"
-        # print(now, note)
-        # if live:
-        #     try:
-        #         funcs.clear_stop(pair, live)
-        #         tp_order = funcs.sell_asset(pair, live, 50)
-        #         tp_order['type'] = 'tp_long'
-        #         tp_order['reason'] = 'trade over-extended'
-        #         stop_order = funcs.set_stop(pair, stp, live)
-        #         tp_order['hard_stop'] = stp
-        #         tp_order['reason'] = 'position R limit exceeded'
-        #         trade_record.append(tp_order)
-        #         open_trades['pair'] = trade_record
-        #         uf.record_open_trades(strat.name, market_data, open_trades)
-        #         sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, pos_fr_dol)
-        #         sizing['USDT'] = funcs.update_usdt(total_bal)
-        #         counts_dict['tp_count'] += 1
-        #     except BinanceAPIException as e:
-        #         print(f'problem with tp order for {pair}')
-        #         print(e)
-        #         push = pb.push_note(now, f'exeption during {pair} tp order')
-        # else:
-        #     try:
-        #         funcs.clear_stop(pair, live)
-        #         tp_order = funcs.sell_asset(pair, live, 50)
-        #         tp_order['type'] = 'tp_long'
-        #         tp_order['reason'] = 'trade over-extended'
-        #         stop_order = funcs.set_stop(pair, stp, live)
-        #         tp_order['hard_stop'] = stp
-        #         tp_order['reason'] = 'position R limit exceeded'
-        #         trade_record.append(tp_order)
-        #         open_trades['pair'] = trade_record
-        #         uf.record_open_trades(strat.name, 'test_records', open_trades)
-        #         qty = sizing.get(asset).get('qty') / 2
-        #         val = sizing.get(asset).get('value') / 2
-        #         pf = sizing.get(asset).get('pf%') / 2
-        #         or_R = sizing.get(asset).get('or_R') / 2
-        #         or_dol = sizing.get(asset).get('or_$') / 2
-        #         sizing[asset] = {'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol}
-        #         counts_dict['tp_count'] += 1
-        #     except BinanceAPIException as e:
-        #         print(f'problem with tp order for {pair}')
-        #         print(e)
-        #         push = pb.push_note(now, f'exeption during sim {pair} tp order')
+        counts_dict, trade_record = omf.spot_tp(strat, pair, price, stp, sizing, total_bal, 
+                                                inval_dist, pos_fr_dol, trade_record, 
+                                                open_trades, market_data, counts_dict, live)
+        
             
     elif signals.get('close_long'):
-        counts_dict, open_trades, closed_trades, in_pos = omf.spot_sell(strat, pair, price, next_id, 
-                                                                        counts_dict, trade_record, 
-                                                                        open_trades, closed_trades, 
-                                                                        market_data, live)
-        if live:
-            del sizing[asset]
-            sizing['USDT'] = funcs.update_usdt(total_bal)
-        else:
-            sizing['USDT'] += sizing.get('asset').get('value')
-            del sizing[asset]
-        # note = f"{pair} hit trailing stop @ {price}"
-        # print(now, note)
-        # if live:
-        #     try:
-        #         funcs.clear_stop(pair, live)
-        #         sell_order = funcs.sell_asset(pair, live)
-        #         sell_order['type'] = 'close_long'
-        #         sell_order['reason'] = 'hit trailing stop'
-        #         trade_record.append(sell_order)
-        #         if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
-        #             trade_id = trade_record[0].get('timestamp')
-        #             closed_trades[trade_id] = trade_record
-        #         else:
-        #             closed_trades[next_id] = trade_record
-        #         uf.record_closed_trades(strat.name, market_data, closed_trades)
-        #         next_id += 1
-        #         if open_trades[pair]:
-        #             del open_trades[pair]
-        #             uf.record_open_trades(strat.name, market_data, open_trades)
-        #         in_pos = False
-        #         del sizing[asset]
-        #         sizing['USDT'] = funcs.update_usdt(total_bal)
-        #         counts_dict['close_count'] += 1
-        #     except BinanceAPIException as e:
-        #         print(f'problem with sell order for {pair}')
-        #         print(e)
-        #         push = pb.push_note(now, f'exeption during {pair} sell order')
-        # else:
-        #     try:
-        #         funcs.clear_stop(pair, live)
-        #         sell_order = funcs.sell_asset(pair, live)
-        #         sell_order['type'] = 'close_long'
-        #         sell_order['reason'] = 'hit trailing stop'
-        #         trade_record.append(sell_order)
-        #         if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
-        #             trade_id = trade_record[0].get('timestamp')
-        #             closed_trades[trade_id] = trade_record
-        #         else:
-        #             closed_trades[next_id] = trade_record
-        #             next_id += 1
-        #         uf.record_closed_trades(strat.name, 'test_records', closed_trades)
-        #         if open_trades[pair]:
-        #             del open_trades[pair]
-        #             uf.record_open_trades(strat.name, 'test_records', open_trades)
-        #         in_pos = False
-        #         del sizing[asset]
-        #         counts_dict['close_count'] += 1
-        #     except BinanceAPIException as e:
-        #         print(f'problem with sell order for {pair}')
-        #         print(e)
-        #         push = pb.push_note(now, f'exeption during sim {pair} sell order')
+        sizing, counts_dict, open_trades, closed_trades, in_pos = omf.spot_sell(strat, pair, price, next_id, sizing, 
+                                                                                counts_dict, trade_record, open_trades, 
+                                                                                closed_trades, total_bal, market_data, live)
     
     elif signals.get('open_long'):        
         risk = (price - stp) / price
@@ -271,7 +160,6 @@ for pair in pairs:
         # TODO max init risk should be based on average inval dist of signals, not fixed risk setting
         if risk > mir:
             counts_dict['too_risky'] += 1
-            # print('-')
             continue
         size, usdt_size = funcs.get_size(price, params.get('fixed_risk'), total_bal, risk)
         usdt_depth = funcs.get_depth(pair, 'buy', params.get('max_spread'))
@@ -294,11 +182,11 @@ for pair in pairs:
             counts_dict['too_small'] += 1
         
         if enough_size and enough_depth:            
-            # check total risk and close profitable positions if necessary
+# check total risk and close profitable positions if necessary ----------------
             sizing, tp_trades = funcs.reduce_risk(sizing, signals, params, live)
             sizing['USDT'] = funcs.update_usdt(total_bal)
             
-            # transfer trade records from reduce_risk into json records
+# transfer trade records from reduce_risk into json records -------------------
             for t in tp_trades:
                 sym = t.get('pair')
                 if open_trades.get(sym):
@@ -318,7 +206,7 @@ for pair in pairs:
                     uf.record_open_trades(strat.name, market_data, open_trades)
                 counts_dict['close_count'] += 1
             
-            # make sure there aren't too many open positions now
+# make sure there aren't too many open positions now --------------------------
             or_list = [v.get('or_R') for v in sizing.values() if v.get('or_R')]
             total_open_risk = sum(or_list)
             num_open_positions = len(or_list)
@@ -332,112 +220,32 @@ for pair in pairs:
                 counts_dict['not_enough_usdt'] += 1
                 continue
             
-            # # open new position
-            counts_dict, open_trades, in_pos = omf.spot_buy(strat, pair, size, usdt_size, 
-                                           price, stp, market_data, 
-                                           counts_dict, open_trades, live)
-            if live:
-                sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, pos_fr_dol)
-                sizing['USDT'] = funcs.update_usdt(total_bal)
-            else:
-                pf = usdt_size / total_bal
-                or_dol = total_bal * params.get('fixed_risk')
-                sizing[asset] = {'qty': size, 'value': usdt_size, 'pf%': pf, 'or_R': 1, 'or_$': or_dol}
+# open new position -----------------------------------------------------------
+            sizing, counts_dict, open_trades, in_pos = omf.spot_buy(strat, pair, size, usdt_size, price, stp, 
+                                                                    sizing, total_bal, inval_dist, pos_fr_dol, 
+                                                                    params, market_data, counts_dict, open_trades, live)            
             
-    # calculate open risk and take profit if necessary
+# calculate open risk and take profit if necessary ----------------------------
     if in_pos:
         pos_bal = sizing.get(asset)['value']
         open_risk = sizing.get(asset)['or_$']
         open_risk_r = sizing.get(asset)['or_R']
         
-        # take profit on risky positions
+# take profit on risky positions ----------------------------------------------
         if open_risk_r > params.get('indiv_r_limit') and price_delta > 0.001:
             tp_pct = 50 if pos_bal > 30 else 100
-            counts_dict, open_trades, closed_trades, in_pos = omf.spot_risk_limit_tp(strat, pair, tp_pct, price, 
-                                                                                     price_delta, trade_record, 
-                                                                                     open_trades, closed_trades, 
-                                                                                     next_id, market_data, 
-                                                                                     counts_dict, stp, in_pos, live)
-            if live:
-                if tp_pct == 100:
-                    del sizing[asset]
-                    sizing['USDT'] = funcs.update_usdt(total_bal)
-                else:
-                    sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, pos_fr_dol)
-                    sizing['USDT'] = funcs.update_usdt(total_bal)
-            else:
-                qty = sizing.get(asset).get('qty') / 2
-                val = sizing.get(asset).get('value') / 2
-                pf = sizing.get(asset).get('pf%') / 2
-                or_R = sizing.get(asset).get('or_R') / 2
-                or_dol = sizing.get(asset).get('or_$') / 2
-                sizing[asset] = {'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol}
-                
-            # if live:
-            #     note = f"{pair} take profit {tp_pct}% @ {price}, {round(price_delta*100, 2)}% from entry"
-            #     print(now, note)
-            #     print(f'pos_bal: ${pos_bal}, inval_dist: {inval_dist}')
-            #     print(f'open_risk: ${open_risk:.2f}, open_risk_r: {open_risk_r:.3}R')
-            #     # print('-')
-            #     funcs.clear_stop(pair, live)
-            #     tp_order = funcs.sell_asset(pair, live, pct=tp_pct)
-            #     if tp_pct == 100:
-            #         tp_order['type'] = 'close_long'
-            #         tp_order['reason'] = 'position R limit exceeded'
-            #         trade_record.append(tp_order)  
-                    
-            #         if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
-            #             trade_id = trade_record[0].get('timestamp')
-            #             closed_trades[trade_id] = trade_record
-            #         else:
-            #             closed_trades[next_id] = trade_record
-            #         uf.record_closed_trades(strat.name, market_data, closed_trades)
-            #         next_id += 1
-            #         if open_trades[pair]:
-            #             del open_trades[pair]
-            #             uf.record_open_trades(strat.name, market_data, open_trades)
-            #         in_pos = False
-            #         del sizing[asset]
-            #         sizing['USDT'] = funcs.update_usdt(total_bal)
-            #         counts_dict['close_count'] += 1
-            #     else:
-            #         tp_order['type'] = 'tp_long'
-            #         stop_order = funcs.set_stop(pair, stp, live)
-            #         tp_order['hard_stop'] = stp
-            #         tp_order['reason'] = 'position R limit exceeded'
-            #         trade_record.append(tp_order)
-            #         open_trades[pair] = trade_record
-            #         uf.record_open_trades(strat.name, market_data, open_trades)
-            #         sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, pos_fr_dol)
-            #         sizing['USDT'] = funcs.update_usdt(total_bal)
-            #         counts_dict['tp_count'] += 1
-                
-            # else:
-            #     note = f"sim {pair} take profit"
-            #     print(now, note)
-            #     funcs.clear_stop(pair, live)
-            #     tp_order = funcs.sell_asset(pair, live, pct=tp_pct)
-            #     tp_order['type'] = 'tp_long'
-            #     stop_order = funcs.set_stop(pair, stp, live)
-            #     tp_order['hard_stop'] = stp
-            #     tp_order['reason'] = 'position R limit exceeded'
-            #     trade_record.append(tp_order)
-            #     open_trades[pair] = trade_record
-            #     uf.record_open_trades(strat.name, 'test_records', open_trades)
-            #     qty = sizing.get(asset).get('qty') / 2
-            #     val = sizing.get(asset).get('value') / 2
-            #     pf = sizing.get(asset).get('pf%') / 2
-            #     or_R = sizing.get(asset).get('or_R') / 2
-            #     or_dol = sizing.get(asset).get('or_$') / 2
-            #     sizing[asset] = {'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol}
-            #     counts_dict['tp_count'] += 1
+            sizing, counts_dict, open_trades, closed_trades, in_pos = omf.spot_risk_limit_tp(strat, pair, tp_pct, price, 
+                                                                                             price_delta, sizing, trade_record, 
+                                                                                             open_trades, closed_trades, next_id, 
+                                                                                             market_data, counts_dict, stp, 
+                                                                                             total_bal, inval_dist, pos_fr_dol, in_pos, live)
         
         or_list = [v.get('or_R') for v in sizing.values() if v.get('or_R')]
         total_open_risk = round(sum(or_list), 2)
         num_open_positions = len(or_list)
         
         
-# log all data from the session and print/push summary
+# log all data from the session and print/push summary-------------------------
 sizing['USDT'] = funcs.update_usdt(total_bal)
 if not live:
     pprint(sizing)

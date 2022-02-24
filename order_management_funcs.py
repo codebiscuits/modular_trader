@@ -8,9 +8,9 @@ from pushbullet import Pushbullet
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 
-def spot_buy(strat, pair, size, usdt_size, price, stp, 
-             market_data, counts_dict, open_trades, live):
+def spot_buy(strat, pair, size, usdt_size, price, stp, sizing, total_bal, inval_dist, pos_fr_dol, params, market_data, counts_dict, open_trades, live):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
+    asset = pair[:-4]
     note = f"buy {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
     print(now, note)
     if live:
@@ -23,6 +23,8 @@ def spot_buy(strat, pair, size, usdt_size, price, stp,
             stop_order = funcs.set_stop(pair, stp, live)
             in_pos = True
             uf.record_open_trades(strat.name, market_data, open_trades)
+            sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, pos_fr_dol)
+            sizing['USDT'] = funcs.update_usdt(total_bal)
             counts_dict['open_count'] += 1
         except BinanceAPIException as e:
             print(f'problem with buy order for {pair}')
@@ -38,16 +40,19 @@ def spot_buy(strat, pair, size, usdt_size, price, stp,
             stop_order = funcs.set_stop(pair, stp, live)
             in_pos = True
             uf.record_open_trades(strat.name, 'test_records', open_trades)
+            pf = usdt_size / total_bal
+            or_dol = total_bal * params.get('fixed_risk')
+            sizing[asset] = {'qty': size, 'value': usdt_size, 'pf%': pf, 'or_R': 1, 'or_$': or_dol}
             counts_dict['open_count'] += 1
         except BinanceAPIException as e:
             print(f'problem with sim buy order for {pair}')
             print(e)
             push = pb.push_note(now, f'exeption during sim {pair} buy order')
     
-    return counts_dict, open_trades, in_pos
+    return sizing, counts_dict, open_trades, in_pos
 
-def spot_strat_tp(strat, pair, price, stp, trade_record, 
-            open_trades, market_data, counts_dict, live):
+def spot_strat_tp(strat, pair, price, stp, sizing, total_bal, inval_dist, pos_fr_dol, trade_record, open_trades, market_data, counts_dict, live):
+    asset = pair[:-4]
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     note = f"{pair} take-profit @ {price}"
     print(now, note)
@@ -63,6 +68,8 @@ def spot_strat_tp(strat, pair, price, stp, trade_record,
             trade_record.append(tp_order)
             open_trades['pair'] = trade_record
             uf.record_open_trades(strat.name, market_data, open_trades)
+            sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, pos_fr_dol)
+            sizing['USDT'] = funcs.update_usdt(total_bal)
             counts_dict['tp_count'] += 1
         except BinanceAPIException as e:
             print(f'problem with tp order for {pair}')
@@ -80,6 +87,12 @@ def spot_strat_tp(strat, pair, price, stp, trade_record,
             trade_record.append(tp_order)
             open_trades['pair'] = trade_record
             uf.record_open_trades(strat.name, 'test_records', open_trades)
+            qty = sizing.get(asset).get('qty') / 2
+            val = sizing.get(asset).get('value') / 2
+            pf = sizing.get(asset).get('pf%') / 2
+            or_R = sizing.get(asset).get('or_R') / 2
+            or_dol = sizing.get(asset).get('or_$') / 2
+            sizing[asset] = {'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol}
             counts_dict['tp_count'] += 1
         except BinanceAPIException as e:
             print(f'problem with tp order for {pair}')
@@ -88,9 +101,8 @@ def spot_strat_tp(strat, pair, price, stp, trade_record,
             
     return counts_dict, trade_record
 
-def spot_sell(strat, pair, price, next_id, 
-              counts_dict, trade_record, 
-              open_trades, closed_trades, market_data, live):
+def spot_sell(strat, pair, price, next_id, sizing, counts_dict, trade_record, open_trades, closed_trades, total_bal, market_data, live):
+    asset = pair[:-4]
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     note = f"{pair} hit trailing stop @ {price}"
     print(now, note)
@@ -112,6 +124,8 @@ def spot_sell(strat, pair, price, next_id,
                 del open_trades[pair]
                 uf.record_open_trades(strat.name, market_data, open_trades)
             in_pos = False
+            del sizing[asset]
+            sizing['USDT'] = funcs.update_usdt(total_bal)
             counts_dict['close_count'] += 1
         except BinanceAPIException as e:
             print(f'problem with sell order for {pair}')
@@ -135,18 +149,20 @@ def spot_sell(strat, pair, price, next_id,
                 del open_trades[pair]
                 uf.record_open_trades(strat.name, 'test_records', open_trades)
             in_pos = False
+            sizing['USDT'] += sizing.get('asset').get('value')
+            del sizing[asset]
             counts_dict['close_count'] += 1
         except BinanceAPIException as e:
             print(f'problem with sell order for {pair}')
             print(e)
             push = pb.push_note(now, f'exeption during sim {pair} sell order')
             
-    return counts_dict, open_trades, closed_trades, in_pos
+    return sizing, counts_dict, open_trades, closed_trades, in_pos
 
-def spot_risk_limit_tp(strat, pair, tp_pct, price, price_delta, trade_record, 
-                       open_trades, closed_trades, next_id, market_data, 
-                       counts_dict, stp, in_pos, live):
+def spot_risk_limit_tp(strat, pair, tp_pct, price, price_delta, sizing, trade_record, open_trades, closed_trades, 
+                       next_id, market_data, counts_dict, stp, total_bal, inval_dist, pos_fr_dol, in_pos, live):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
+    asset = pair[:-4]
     if live:
         note = f"{pair} take profit {tp_pct}% @ {price}, {round(price_delta*100, 2)}% from entry"
         print(now, note)
@@ -168,6 +184,8 @@ def spot_risk_limit_tp(strat, pair, tp_pct, price, price_delta, trade_record,
                 del open_trades[pair]
                 uf.record_open_trades(strat.name, market_data, open_trades)
             in_pos = False
+            del sizing[asset]
+            sizing['USDT'] = funcs.update_usdt(total_bal)
             counts_dict['close_count'] += 1
         else:
             tp_order['type'] = 'tp_long'
@@ -177,6 +195,8 @@ def spot_risk_limit_tp(strat, pair, tp_pct, price, price_delta, trade_record,
             trade_record.append(tp_order)
             open_trades[pair] = trade_record
             uf.record_open_trades(strat.name, market_data, open_trades)
+            sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, pos_fr_dol)
+            sizing['USDT'] = funcs.update_usdt(total_bal)
             counts_dict['tp_count'] += 1
         
     else:
@@ -191,8 +211,14 @@ def spot_risk_limit_tp(strat, pair, tp_pct, price, price_delta, trade_record,
         trade_record.append(tp_order)
         open_trades[pair] = trade_record
         uf.record_open_trades(strat.name, 'test_records', open_trades)
+        qty = sizing.get(asset).get('qty') / 2
+        val = sizing.get(asset).get('value') / 2
+        pf = sizing.get(asset).get('pf%') / 2
+        or_R = sizing.get(asset).get('or_R') / 2
+        or_dol = sizing.get(asset).get('or_$') / 2
+        sizing[asset] = {'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol}
         counts_dict['tp_count'] += 1
     
-    return counts_dict, open_trades, closed_trades, in_pos
+    return sizing, counts_dict, open_trades, closed_trades, in_pos
 
 
