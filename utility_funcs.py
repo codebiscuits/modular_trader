@@ -5,7 +5,7 @@ from pprint import pprint
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 from pathlib import Path
-from config import ohlc_data
+from config import ohlc_data, params
 import pandas as pd
 from datetime import datetime, timedelta
 import statistics as stats
@@ -185,12 +185,12 @@ def strat_benchmark(market_data, strat, benchmark):
     
     return benchmark 
 
-def log(live, params, strat, market_data, spreads, 
+def log(live, strat, fixed_risk, market_data, spreads, 
         now_start, sizing, tp_trades, counts_dict, ot, closed_trades):    
     
     # check total balance and record it in a file for analysis
     total_bal = funcs.account_bal()
-    bal_record = {'timestamp': now_start, 'balance': round(total_bal, 2), 'positions': sizing, 'params': params, 'trade_counts': counts_dict}
+    bal_record = {'timestamp': now_start, 'balance': round(total_bal, 2), 'fr': fixed_risk, 'positions': sizing, 'params': params, 'trade_counts': counts_dict}
     new_line = json.dumps(bal_record)
     if live:
         with open(f"{market_data}/{strat.name}_bal_history.txt", "a") as file:
@@ -210,7 +210,6 @@ def log(live, params, strat, market_data, spreads,
             json.dump(closed_trades, ct_file)
     
     return benchmark
-    # return 0 # commented out everything to do with benchmarking temporarily
 
 def interpret_benchmark(benchmark):
     d_ranking = [
@@ -421,4 +420,43 @@ def scanner_summary(all_start, sizing, counts_dict, benchmark, live):
     if live:
         push = pb.push_note(now, final_msg)
         print('-:-' * 20)
+
+def set_fixed_risk(strat, market_data):
+    '''calculates fixed risk setting for new trades based on recent performance 
+    and previous setting. if recent performance is very good, fr is increased slightly.
+    if recent performance is less than perfect, fr is decreased by thirds'''
+    
+    with open(f"{market_data}/{strat.name}_bal_history.txt", "r") as file:
+        bal_data = file.readlines()
+    
+    last_fr = bal_data[-1].get('fr')
+    fr_min = bal_data[-1].get('params').get('fr_range')[0]
+    fr_max = bal_data[-1].get('params').get('fr_range')[1]
+    fr_inc = (fr_max - fr_min) / 10 # increment fr in 10% steps of the range
+    
+    bal_0 = json.loads(bal_data[-1]).get('balance')
+    bal_1 = json.loads(bal_data[-2]).get('balance')
+    bal_2 = json.loads(bal_data[-3]).get('balance')
+    bal_3 = json.loads(bal_data[-4]).get('balance')
+    bal_4 = json.loads(bal_data[-5]).get('balance')
+    
+    last_prof = bal_0 > bal_1
+    other_prof = (bal_1 > bal_2) + (bal_2 > bal_3) + (bal_3 > bal_4)
+    
+    if last_prof and (other_prof == 3):
+        fr = last_fr + fr_inc
+    elif last_prof and (other_prof != 3):
+        fr = last_fr
+    elif not last_prof and (other_prof == 3):
+        fr = ((last_fr - fr_min) * 0.666) + fr_min
+    elif not last_prof and (other_prof == 2):
+        fr = ((last_fr - fr_min) * 0.5) + fr_min
+    elif not last_prof and (other_prof == 2):
+        fr = fr_min
+        
+    if fr != last_fr:
+        pb.push_note(now, f'fixed risk adjusted: {last_fr = }, {fr = }')
+    
+    return fr
+
 

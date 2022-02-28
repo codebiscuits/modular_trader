@@ -11,7 +11,7 @@ not_pairs = ['BNBUSDT', 'GBPUSDT', 'AUDUSDT', 'BUSDUSDT', 'EURUSDT', 'TUSDUSDT',
 
 # constants
 params = {'quote_asset': 'USDT', 
-          'fixed_risk': 0.00025, 
+          'fr_range': (0.00025, 0.00125), 
           'max_spread': 0.5, 
           'indiv_r_limit': 1.1, 
           'total_r_limit': 20, 

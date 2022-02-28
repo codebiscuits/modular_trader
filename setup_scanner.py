@@ -17,36 +17,26 @@ from pprint import pprint
 import utility_funcs as uf
 from pathlib import Path
 
-
+# setup
 plt.style.use('fivethirtyeight')
 plt.rcParams['figure.figsize'] = (20,10)
-
 pd.set_option('display.max_rows', None) 
 pd.set_option('display.expand_frame_repr', False)
-
 client = Client(keys.bPkey, keys.bSkey)
-
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
+now_start = datetime.now().strftime('%d/%m/%y %H:%M')
+all_start = time.perf_counter()
+total_bal = funcs.account_bal()
+# strat = strats.RSI_ST_EMA(4, 45, 96)
+strat = strats.DoubleSTLO(3, 1.4)
 
-# if the path below doesn't exist, the script is running on the wrong computer
 pi2path = Path('/home/ubuntu/rpi_2.txt')
 live = pi2path.exists()
-
 if live:
     print('-:-' * 20)
 else:
     print('*** Warning: Not Live ***')
 
-all_start = time.perf_counter()
-
-total_bal = funcs.account_bal()
-
-max_init_r = params.get('fixed_risk') * params.get('total_r_limit')
-fixed_risk_dol = params.get('fixed_risk') * total_bal
-
-
-# strat = strats.RSI_ST_EMA(4, 45, 96)
-strat = strats.DoubleSTLO(3, 1.4)
 
 # compile and sort list of pairs to loop through ------------------------------
 spreads = funcs.binance_spreads('USDT') # dict
@@ -56,7 +46,6 @@ pairs_in_pos = [p + 'USDT' for p in positions if p != 'USDT']
 other_pairs = [p[0] for p in all_pairs if (not p[0] in pairs_in_pos) and (not p[0] in not_pairs)]
 pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked first
 
-now_start = datetime.now().strftime('%d/%m/%y %H:%M')
 
 counts_dict = {'stop_count': 0, 'open_count': 0, 'add_count': 0, 'tp_count': 0, 'close_count': 0, 
                'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 
@@ -75,9 +64,15 @@ next_id, counts_dict = uf.record_stopped_trades(open_trades, closed_trades,
                                                 market_data, counts_dict)
 
 
+# set fixed risk
+fixed_risk = 0.00025 #uf.set_fixed_risk(strat, market_data)
+max_init_r = fixed_risk * params.get('total_r_limit')
+fixed_risk_dol = fixed_risk * total_bal
+
+
 funcs.top_up_bnb(15)
 
-sizing = funcs.current_positions(strat.name, params.get('fixed_risk'))
+sizing = funcs.current_positions(strat.name, fixed_risk)
 if sizing:
     open_pnls = [v.get('pnl') for v in sizing.values() if v.get('pnl')]
     avg_open_pnl = stats.median(open_pnls)
@@ -161,7 +156,7 @@ for pair in pairs:
         if risk > mir:
             counts_dict['too_risky'] += 1
             continue
-        size, usdt_size = funcs.get_size(price, params.get('fixed_risk'), total_bal, risk)
+        size, usdt_size = funcs.get_size(price, fixed_risk, total_bal, risk)
         usdt_depth = funcs.get_depth(pair, 'buy', params.get('max_spread'))
         if usdt_depth < usdt_size and usdt_depth > (usdt_size/2): # only trim size if books are a bit too thin
             trim_size = f'{now} {pair} books too thin, reducing size from {usdt_size:.3} to {usdt_depth:.3}'
@@ -251,7 +246,7 @@ if not live:
     pprint(sizing)
     print('warning: logging directed to test_records')
 
-benchmark = uf.log(live, params, strat, 
+benchmark = uf.log(live, strat, fixed_risk, 
                    market_data, spreads, now_start, 
                    sizing, tp_trades, counts_dict, 
                    open_trades, closed_trades)
