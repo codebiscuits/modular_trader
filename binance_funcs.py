@@ -781,9 +781,8 @@ def clear_stop(pair, live):
         #     print('simulated canceling stop')
 
 
-def reduce_risk(sizing, signals, params, live):
+def reduce_risk(sizing, signals, params, fixed_risk, live):
     r_limit = params.get('total_r_limit')
-    fixed_risk = params.get('fixed_risk')
     
     # create a list of open positions in profit and their open risk value
     positions = [(p, r.get('or_R')) for p, r in sizing.items() if r.get('or_R') and r.get('or_R') > 0]

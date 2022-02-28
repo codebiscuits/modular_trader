@@ -8,7 +8,7 @@ from pushbullet import Pushbullet
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 
-def spot_buy(strat, pair, size, usdt_size, price, stp, sizing, total_bal, inval_dist, pos_fr_dol, params, market_data, counts_dict, open_trades, live):
+def spot_buy(strat, pair, fixed_risk, size, usdt_size, price, stp, sizing, total_bal, inval_dist, pos_fr_dol, params, market_data, counts_dict, open_trades, live):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     asset = pair[:-4]
     note = f"buy {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
@@ -41,7 +41,7 @@ def spot_buy(strat, pair, size, usdt_size, price, stp, sizing, total_bal, inval_
             in_pos = True
             uf.record_open_trades(strat.name, 'test_records', open_trades)
             pf = usdt_size / total_bal
-            or_dol = total_bal * params.get('fixed_risk')
+            or_dol = total_bal * fixed_risk
             sizing[asset] = {'qty': size, 'value': usdt_size, 'pf%': pf, 'or_R': 1, 'or_$': or_dol}
             counts_dict['open_count'] += 1
         except BinanceAPIException as e:

@@ -51,11 +51,11 @@ counts_dict = {'stop_count': 0, 'open_count': 0, 'add_count': 0, 'tp_count': 0, 
                'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 
                'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0}
 
-print(f"Current time: {now_start}, {strat}, fixed risk: {params.get('fixed_risk')}")
-
 # update trade records --------------------------------------------------------
 open_trades, closed_trades, next_id = uf.read_trade_records(market_data, strat.name)
-if not live: # now that trade records have been loaded, path can be changed
+if not live:
+    uf.sync_test_records(strat, market_data)
+    # now that trade records have been loaded, path can be changed
     market_data = Path('test_records')
 uf.backup_trade_records(strat.name, market_data, open_trades, closed_trades)
 next_id, counts_dict = uf.record_stopped_trades(open_trades, closed_trades, 
@@ -63,12 +63,12 @@ next_id, counts_dict = uf.record_stopped_trades(open_trades, closed_trades,
                                                 next_id, strat, 
                                                 market_data, counts_dict)
 
-
 # set fixed risk
-fixed_risk = 0.00025 #uf.set_fixed_risk(strat, market_data)
+fixed_risk = uf.set_fixed_risk(strat, market_data)
 max_init_r = fixed_risk * params.get('total_r_limit')
 fixed_risk_dol = fixed_risk * total_bal
 
+print(f"Current time: {now_start}, {strat}, fixed risk: {fixed_risk}")
 
 funcs.top_up_bnb(15)
 
@@ -178,7 +178,7 @@ for pair in pairs:
         
         if enough_size and enough_depth:            
 # check total risk and close profitable positions if necessary ----------------
-            sizing, tp_trades = funcs.reduce_risk(sizing, signals, params, live)
+            sizing, tp_trades = funcs.reduce_risk(sizing, signals, params, fixed_risk, live)
             sizing['USDT'] = funcs.update_usdt(total_bal)
             
 # transfer trade records from reduce_risk into json records -------------------
@@ -216,7 +216,7 @@ for pair in pairs:
                 continue
             
 # open new position -----------------------------------------------------------
-            sizing, counts_dict, open_trades, in_pos = omf.spot_buy(strat, pair, size, usdt_size, price, stp, 
+            sizing, counts_dict, open_trades, in_pos = omf.spot_buy(strat, pair, fixed_risk, size, usdt_size, price, stp, 
                                                                     sizing, total_bal, inval_dist, pos_fr_dol, 
                                                                     params, market_data, counts_dict, open_trades, live)            
             

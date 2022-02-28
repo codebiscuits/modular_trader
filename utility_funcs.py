@@ -429,9 +429,9 @@ def set_fixed_risk(strat, market_data):
     with open(f"{market_data}/{strat.name}_bal_history.txt", "r") as file:
         bal_data = file.readlines()
     
-    last_fr = bal_data[-1].get('fr')
-    fr_min = bal_data[-1].get('params').get('fr_range')[0]
-    fr_max = bal_data[-1].get('params').get('fr_range')[1]
+    last_fr = json.loads(bal_data[-1]).get('fr')
+    fr_min = json.loads(bal_data[-1]).get('params').get('fr_range')[0]
+    fr_max = json.loads(bal_data[-1]).get('params').get('fr_range')[1]
     fr_inc = (fr_max - fr_min) / 10 # increment fr in 10% steps of the range
     
     bal_0 = json.loads(bal_data[-1]).get('balance')
@@ -451,12 +451,31 @@ def set_fixed_risk(strat, market_data):
         fr = ((last_fr - fr_min) * 0.666) + fr_min
     elif not last_prof and (other_prof == 2):
         fr = ((last_fr - fr_min) * 0.5) + fr_min
-    elif not last_prof and (other_prof == 2):
+    else:
         fr = fr_min
         
     if fr != last_fr:
         pb.push_note(now, f'fixed risk adjusted: {last_fr = }, {fr = }')
     
     return fr
+
+def sync_test_records(strat, market_data):
+    with open(f"{market_data}/{strat.name}_bal_history.txt", "r") as file:
+        bal_data = file.readlines()
+    with open(f"test_records/{strat.name}_bal_history.txt", "w") as file:
+        file.writelines(bal_data)
+    
+    
+    with open(f'{market_data}/{strat.name}_open_trades.json', 'r') as file:
+        o_data = json.load(file)
+    with open(f'test_records/{strat.name}_open_trades.json', 'w') as file:
+        json.dump(o_data, file)
+    
+    
+    with open(f'{market_data}/{strat.name}_closed_trades.json', 'r') as file:
+        c_data = json.load(file)
+    with open(f'test_records/{strat.name}_closed_trades.json', 'w') as file:
+        json.dump(c_data, file)
+
 
 
