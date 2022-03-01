@@ -28,7 +28,7 @@ def get_book_stats(pair, quote, width=2):
     q_len = len(quote) * -1
     base = pair[:q_len]
     
-    book = client.get_order_book(symbol=pair)
+    book = client.get_order_book(symbol=pair, limit=1000)
     
     best_bid = float(book.get('bids')[0][0])
     best_ask = float(book.get('asks')[0][0])
@@ -67,13 +67,13 @@ print(now, 'running binance book stats')
 
 #######################################################
 
-live = True
 filepath1 = Path('/media/coding/market_data/binance_liquidity_history.txt')
 filepath2 = Path('/mnt/pi_2/market_data/binance_liquidity_history.txt')
 filepath3 = 'test.txt'
 
 if filepath1.exists():
     fp = filepath1
+    live = True
 elif filepath2.exists():
     fp = filepath2
     live = False
@@ -145,9 +145,12 @@ if p1.exists():
 else:
     chartpath = p2
 
+df['avg_ratio_ma'] = df.avg_ratio.ewm(4).mean()
+
 
 plt.plot(df.timestamp, df.avg_ratio, label='avg_ratio')
-plt.plot(df.timestamp, df.std_ratio, label='std_ratio')
+plt.plot(df.timestamp, df.avg_ratio_ma, label='avg_ratio_ma')
+# plt.plot(df.timestamp, df.std_ratio, label='std_ratio')
 plt.legend()
 plt.xticks(rotation='vertical')
 plt.savefig(chartpath, format='png')
