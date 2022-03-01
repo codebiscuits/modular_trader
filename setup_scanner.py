@@ -250,7 +250,8 @@ benchmark = uf.log(live, strat, fixed_risk,
                    market_data, spreads, now_start, 
                    sizing, tp_trades, counts_dict, 
                    open_trades, closed_trades)
-uf.interpret_benchmark(benchmark)    
+if live:
+    uf.interpret_benchmark(benchmark)    
 
 uf.scanner_summary(all_start, sizing, counts_dict, benchmark, live)
 

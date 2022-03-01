@@ -360,7 +360,7 @@ def record_stopped_trades(open_trades, closed_trades, pairs_in_pos, now_start,
                 agg_fee.append(float(t.get('commission')))
                 base_size_count += float(t.get('qty'))
             else:
-                print(f'trade record completed, {round(abs((base_size_count / diff) - 1), 3)} of diff unaccounted for')
+                # print(f'trade record completed, {round(abs((base_size_count / diff) - 1), 3)} of diff unaccounted for')
                 break
         avg_exe_price = sum([p*b for p,b in zip(agg_price, agg_base)]) / sum(agg_base)
         tot_base = sum(agg_base)
