@@ -13,10 +13,8 @@ from pathlib import Path
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 client = Client(keys.bPkey, keys.bSkey)
-
 plt.style.use('fivethirtyeight')
 plt.rcParams['figure.figsize'] = (20,10)
-
 pd.set_option('display.max_rows', None) 
 pd.set_option('display.expand_frame_repr', False)
 
@@ -71,15 +69,14 @@ filepath1 = Path('/media/coding/market_data/binance_liquidity_history.txt')
 filepath2 = Path('/mnt/pi_2/market_data/binance_liquidity_history.txt')
 filepath3 = 'test.txt'
 
+live = filepath1.exists()
+
 if filepath1.exists():
     fp = filepath1
-    live = True
 elif filepath2.exists():
     fp = filepath2
-    live = False
 else:
     fp = filepath3
-    live = False
 
 if live: # only record a new observation if this is running on the correct machine
     quote = 'USDT'
@@ -91,13 +88,15 @@ if live: # only record a new observation if this is running on the correct machi
     ba_ratios = []
     spreads = []
     
-    for pair in pairs:
+    for pair in pairs[:100]:
         pair_stats = get_book_stats(pair, quote, 2)
         depth_dict[pair] = pair_stats
         
         ba_ratio = pair_stats.get('quote_bids') / pair_stats.get('quote_asks')
         ba_ratios.append(ba_ratio)
         spreads.append(pair_stats.get('spread'))
+        
+        time.sleep(3)
         
     record = {now: depth_dict}
 
@@ -148,15 +147,13 @@ else:
 df['avg_ratio_ma'] = df.avg_ratio.ewm(4).mean()
 
 
-plt.plot(df.timestamp, df.avg_ratio, label='avg_ratio')
-plt.plot(df.timestamp, df.avg_ratio_ma, label='avg_ratio_ma')
+plt.plot(df.timestamp, df.avg_ratio, label='avg_ratio', linewidth=1)
+plt.plot(df.timestamp, df.avg_ratio_ma, label='avg_ratio_ma', linewidth=1)
 # plt.plot(df.timestamp, df.std_ratio, label='std_ratio')
 plt.legend()
 plt.xticks(rotation='vertical')
 plt.savefig(chartpath, format='png')
 plt.show()
-
-# pb.push_note(now, )
 
 end = time.perf_counter()
 
