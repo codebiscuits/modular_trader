@@ -16,6 +16,7 @@ from config import not_pairs, params, market_data
 from pprint import pprint
 import utility_funcs as uf
 from pathlib import Path
+from random import shuffle
 
 # setup
 plt.style.use('fivethirtyeight')
@@ -39,11 +40,11 @@ else:
 
 
 # compile and sort list of pairs to loop through ------------------------------
-spreads = funcs.binance_spreads('USDT') # dict
-all_pairs = sorted(spreads.items(), key=lambda x:x[1])
-positions = list(funcs.current_positions(strat.name, 0.00025).keys())
+all_pairs = funcs.get_pairs()
+shuffle(all_pairs)
+positions = list(funcs.current_positions(strat.name, params.get('fr_range')[0]).keys())
 pairs_in_pos = [p + 'USDT' for p in positions if p != 'USDT']
-other_pairs = [p[0] for p in all_pairs if (not p[0] in pairs_in_pos) and (not p[0] in not_pairs)]
+other_pairs = [p for p in all_pairs if (not p in pairs_in_pos) and (not p in not_pairs)]
 pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked first
 
 
@@ -71,8 +72,10 @@ fixed_risk_dol = fixed_risk * total_bal
 print(f"Current time: {now_start}, {strat}, fixed risk: {fixed_risk}")
 
 funcs.top_up_bnb(15)
+spreads = funcs.binance_spreads('USDT') # dict
 
 sizing = funcs.current_positions(strat.name, fixed_risk)
+sizing['USDT'] = funcs.update_usdt(total_bal)
 if sizing:
     open_pnls = [v.get('pnl') for v in sizing.values() if v.get('pnl')]
     avg_open_pnl = stats.median(open_pnls)
@@ -84,21 +87,6 @@ else:
 for pair in pairs:
     asset = pair[:-1*len(params.get('quote_asset'))]
     in_pos = pair in pairs_in_pos
-    
-# look up or calculate $ fixed risk -------------------------------------------
-    if open_trades.get(pair):
-        trade_record = open_trades.get(pair)
-    else:
-        trade_record = []
-    
-    if in_pos and trade_record and trade_record[0].get('type')[0] == 'o':
-        qs = float(trade_record[0].get('quote_size'))
-        ep = float(trade_record[0].get('exe_price'))
-        hs = trade_record[0].get('hard_stop')
-        pos_fr_dol = qs * ((ep - hs) / ep)
-    else:
-        ep = None # i refer to this later and need it to exist even if it has no value
-        pos_fr_dol = fixed_risk_dol
     
 # get data --------------------------------------------------------------------
     df = funcs.prepare_ohlc(pair, live)
@@ -117,8 +105,8 @@ for pair in pairs:
     inval_dist = signals.get('inval')
     
 # calculate where stop_loss should be set if needed ---------------------------
-    buffer = spreads.get(pair) * 2 # stop-market order will not get perfect execution, so
-    stp = float(df.at[len(df)-1, 'st']) * (1-buffer) # expect some slippage in risk calc
+    buffer = max(spreads.get(pair) * 2, 0.001) # stop-market order will not get perfect execution,
+    stp = float(df.at[len(df)-1, 'st']) * (1-buffer) # so build some slippage into risk calc
     
     if df.at[len(df)-1, 'st'] == 0:
         note = f'{pair} supertrend 0 error, skipping pair'
@@ -126,16 +114,27 @@ for pair in pairs:
         push = pb.push_note(now, note)
         continue
     
-# calculate how much price has moved since entry ------------------------------
-    price = df.at[len(df)-1, 'close']
-    if ep:
-        price_delta = (price - ep) / ep
+# look up or calculate $ fixed risk -------------------------------------------
+    if open_trades.get(pair):
+        trade_record = open_trades.get(pair)
+    else:
+        trade_record = []
     
-# update positions dictionary with open_risk values ---------------------------
+    if in_pos and trade_record and trade_record[0].get('type')[0] == 'o':
+        qs = float(trade_record[0].get('quote_size'))
+        ep = float(trade_record[0].get('exe_price'))
+        hs = trade_record[0].get('hard_stop')
+        pos_fr_dol = qs * ((ep - hs) / ep)
+    else:
+        ep = None # i refer to this later and need it to exist even if it has no value
+        pos_fr_dol = fixed_risk_dol
+    
+# update positions dictionary with current pair's open_risk values ------------
     if in_pos:
         sizing[asset] = funcs.update_pos(asset, total_bal, inval_dist, pos_fr_dol)
     
 # execute orders --------------------------------------------------------------
+    price = df.at[len(df)-1, 'close']
     tp_trades = []
     
     if signals.get('tp_long'):
@@ -226,6 +225,10 @@ for pair in pairs:
         open_risk = sizing.get(asset)['or_$']
         open_risk_r = sizing.get(asset)['or_R']
         
+# calculate how much price has moved since entry ------------------------------
+    if ep:
+        price_delta = (price - ep) / ep
+    
 # take profit on risky positions ----------------------------------------------
         if open_risk_r > params.get('indiv_r_limit') and price_delta > 0.001:
             tp_pct = 50 if pos_bal > 30 else 100
@@ -242,16 +245,15 @@ for pair in pairs:
         
 # log all data from the session and print/push summary-------------------------
 sizing['USDT'] = funcs.update_usdt(total_bal)
-if not live:
-    pprint(sizing)
-    print('warning: logging directed to test_records')
 
 benchmark = uf.log(live, strat, fixed_risk, 
                    market_data, spreads, now_start, 
                    sizing, tp_trades, counts_dict, 
                    open_trades, closed_trades)
-if live:
-    uf.interpret_benchmark(benchmark)    
+if not live:
+    pprint(sizing)
+    uf.interpret_benchmark(benchmark)
+    print('warning: logging directed to test_records')
 
-uf.scanner_summary(all_start, sizing, counts_dict, benchmark, live)
+uf.scanner_summary(strat, market_data, all_start, sizing, counts_dict, benchmark, live)
 

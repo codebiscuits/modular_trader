@@ -398,7 +398,26 @@ def record_stopped_trades(open_trades, closed_trades, pairs_in_pos, now_start,
     
     return next_id, counts_dict
 
-def scanner_summary(all_start, sizing, counts_dict, benchmark, live):
+def recent_perf_str(strat, market_data):
+    '''generates a string of + and - to represent recent strat performance'''
+    
+    with open(f"{market_data}/{strat.name}_bal_history.txt", "r") as file:
+        bal_data = file.readlines()
+    
+    bal_0 = json.loads(bal_data[-1]).get('balance')
+    bal_1 = json.loads(bal_data[-2]).get('balance')
+    bal_2 = json.loads(bal_data[-3]).get('balance')
+    bal_3 = json.loads(bal_data[-4]).get('balance')
+    bal_4 = json.loads(bal_data[-5]).get('balance')
+    
+    a = '+' if bal_0 > bal_1 else '-'
+    b = '+' if bal_1 > bal_2 else '-'
+    c = '+' if bal_2 > bal_3 else '-'
+    d = '+' if bal_3 > bal_4 else '-'
+    
+    return f'  {a} | {b} {c} {d}'
+
+def scanner_summary(strat, market_data, all_start, sizing, counts_dict, benchmark, live):
     all_end = time.perf_counter()
     all_time = all_end - all_start
     
@@ -413,8 +432,9 @@ def scanner_summary(all_start, sizing, counts_dict, benchmark, live):
     live_str = '' if live else '*not live* '
     elapsed_str = f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s'
     count_str = count_trades(counts_dict)
-    bench_str = f"1d perf: strat {round(benchmark.get('strat_1d')*100, 2)}%, mkt {round(benchmark.get('market_1d')*100, 2)}%"
-    final_msg = f'{live_str}{elapsed_str}, total bal: ${total_bal:.2f} \npositions {num_open_positions}, exposure {vol_exp}% {count_str}\n{bench_str}'
+    perf_str = recent_perf_str(strat, market_data)
+    bench_str = f"1w perf: strat {round(benchmark.get('strat_1w')*100, 2)}%, mkt {round(benchmark.get('market_1w')*100, 2)}%"
+    final_msg = f'{live_str}{elapsed_str}, total bal: ${total_bal:.2f} {perf_str}\npositions {num_open_positions}, exposure {vol_exp}% {count_str}\n{bench_str}'
     print(final_msg)
     
     if live:
@@ -476,6 +496,12 @@ def sync_test_records(strat, market_data):
         c_data = json.load(file)
     with open(f'test_records/{strat.name}_closed_trades.json', 'w') as file:
         json.dump(c_data, file)
+
+
+    with open(f'{market_data}/binance_liquidity_history.txt', 'r') as file:
+        book_data = file.readlines()
+    with open('test_records/binance_liquidity_history.txt', 'w') as file:
+        file.writelines(book_data)
 
 
 
