@@ -73,6 +73,14 @@ def order_by_volsm(pairs, lookback):
     return tup_list
 
 
+def get_size(price, fr, balance, risk):
+    trade_risk = risk / fr
+    usdt_size = float(balance / trade_risk)
+    asset_quantity = float(usdt_size / price)
+
+    return asset_quantity, usdt_size
+
+
 # Account Functions
 
 
@@ -110,14 +118,6 @@ def account_bal():
     return total
 
 
-def get_size(price, fr, balance, risk):
-    trade_risk = risk / fr
-    usdt_size = float(balance / trade_risk)
-    asset_quantity = float(usdt_size / price)
-
-    return asset_quantity, usdt_size
-
-
 def current_positions(strat, fr):  # used to be current sizing
     '''returns a dict with assets as keys and various expressions of positioning as values'''
     
@@ -141,10 +141,10 @@ def current_positions(strat, fr):  # used to be current sizing
     size_dict = {}
     for b in bals:
         asset = b.get('asset')
-        if asset in ['USDT', 'USDC', 'BUSD']:
-            quant = float(b.get('free')) + float(b.get('locked'))
-            value = quant
-        else:
+        if asset not in ['USDT', 'USDC', 'BUSD']:
+        #     quant = float(b.get('free')) + float(b.get('locked'))
+        #     value = quant
+        # else:
             pair = asset + 'USDT'
             price = price_dict.get(pair)
             if price == None:
@@ -542,48 +542,29 @@ def prepare_ohlc(pair, is_live, timeframe='4H', bars=2190):
     return df
 
 
-def get_avg_price(pair):
-    ticker = client.get_ticker(symbol=pair)
-    price = float(ticker.get('weightedAvgPrice'))
-    vol = float(ticker.get('quoteVolume'))
-    # print(f'{pair} {price} - {vol}')
-
-    return price, vol
-
-
-# def get_avg_prices(quote='USDT'):
-#     tickers_24h = client.get_ticker()  # no symbol specified so all symbols returned
-#     qlen = len(quote) * -1
-#     waps = {}
-#     for i in tickers_24h:
-#         pair = i.get('symbol')
-#         if pair[qlen:] == quote:
-#             price = float(i.get('weightedAvgPrice'))
-#             vol = float(i.get('quoteVolume'))
-#             waps['pair'] = [price, vol]
-
-#     return waps
-
-
 # Trading Functions
 
 
 def top_up_bnb(usdt_size):
+    
+    # calculate bnb balance in usdt
     bnb_bal = client.get_asset_balance(asset='BNB')
     free_bnb = float(bnb_bal.get('free'))
     avg_price = client.get_avg_price(symbol='BNBUSDT')
     price = float(avg_price.get('price'))
     bnb_value = free_bnb * price
 
-    info = client.get_symbol_info('BNBUSDT')
-    step_size = info.get('filters')[2].get('stepSize')
-
+    # get free usdt balance
     usdt_bal = client.get_asset_balance(asset='USDT')
     free_usdt = float(usdt_bal.get('free'))
-    bnb_size = step_round(usdt_size / price, step_size)
     
     if bnb_value < 5 and free_usdt > usdt_size:
         print('Topping up BNB')
+        # round size to proper step size
+        info = client.get_symbol_info('BNBUSDT')
+        step_size = info.get('filters')[2].get('stepSize')
+        bnb_size = step_round(usdt_size / price, step_size)
+        # send order
         order = client.create_order(symbol='BNBUSDT',
                                     side=enums.SIDE_BUY,
                                     type=enums.ORDER_TYPE_MARKET,

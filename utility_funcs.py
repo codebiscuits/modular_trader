@@ -1,9 +1,7 @@
 import json, keys
 from json.decoder import JSONDecodeError
 import binance_funcs as funcs
-from pprint import pprint
 from binance.client import Client
-from binance.exceptions import BinanceAPIException
 from pathlib import Path
 from config import ohlc_data, params
 import pandas as pd
@@ -14,7 +12,7 @@ import time
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
-now = datetime.now().strftime('%d/%m/%y %H:%M')
+# now = datetime.now().strftime('%d/%m/%y %H:%M')
 
 
 def open_trade_stats(now, k, v):
@@ -84,6 +82,7 @@ def record_closed_trades(strat_name, market_data, ct):
         json.dump(ct, ct_file)
 
 def backup_trade_records(strat_name, market_data, ot, ct):
+    now = datetime.now().strftime('%d/%m/%y %H:%M')
     if ot:
         with open(f"{market_data}/{strat_name}_ot_backup.json", "w") as ot_file:
             json.dump(ot, ot_file)
@@ -418,27 +417,28 @@ def recent_perf_str(strat, market_data):
     return f'  {a} | {b} {c} {d}'
 
 def scanner_summary(strat, market_data, all_start, sizing, counts_dict, benchmark, live):
-    all_end = time.perf_counter()
-    all_time = all_end - all_start
+    now = datetime.now().strftime('%d/%m/%y %H:%M')
+    # all_end = time.perf_counter()
+    # all_time = all_end - all_start
     
     total_bal = funcs.account_bal()
     
     or_list = [v.get('or_$') for v in sizing.values() if v.get('or_$')]
-    dollar_tor = round(sum(or_list), 2)
+    # dollar_tor = round(sum(or_list), 2)
     num_open_positions = len(or_list)
-    rfb = round(total_bal-dollar_tor, 2)
+    # rfb = round(total_bal-dollar_tor, 2)
     vol_exp = round(100 - sizing.get('USDT').get('pf%'))
     
     live_str = '' if live else '*not live* '
-    elapsed_str = f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s'
+    elapsed_str = '' # f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s, '
     count_str = count_trades(counts_dict)
     perf_str = recent_perf_str(strat, market_data)
     bench_str = f"1w perf: strat {round(benchmark.get('strat_1w')*100, 2)}%, mkt {round(benchmark.get('market_1w')*100, 2)}%"
-    final_msg = f'{live_str}{elapsed_str}, total bal: ${total_bal:.2f} {perf_str}\npositions {num_open_positions}, exposure {vol_exp}% {count_str}\n{bench_str}'
+    final_msg = f'{live_str}{elapsed_str}total bal: ${total_bal:.2f} {perf_str}\npositions {num_open_positions}, exposure {vol_exp}% {count_str}\n{bench_str}'
     print(final_msg)
     
     if live:
-        push = pb.push_note(now, final_msg)
+        pb.push_note(now, final_msg)
         print('-:-' * 20)
 
 def set_fixed_risk(strat, market_data):
@@ -446,10 +446,20 @@ def set_fixed_risk(strat, market_data):
     and previous setting. if recent performance is very good, fr is increased slightly.
     if recent performance is less than perfect, fr is decreased by thirds'''
     
+    def reduce_fr(factor, fr_prev, fr_min, fr_inc):
+        '''reduces fixed_risk by 1/3 (with the floor value being fr_min)'''
+        
+        ideal = (fr_prev - fr_min) * factor
+        reduce = max(ideal, fr_inc)
+        
+        return max((fr_prev-reduce), fr_min)
+    
+    now = datetime.now().strftime('%d/%m/%y %H:%M')
+    
     with open(f"{market_data}/{strat.name}_bal_history.txt", "r") as file:
         bal_data = file.readlines()
     
-    last_fr = json.loads(bal_data[-1]).get('fr')
+    fr_prev = json.loads(bal_data[-1]).get('fr')
     fr_min = json.loads(bal_data[-1]).get('params').get('fr_range')[0]
     fr_max = json.loads(bal_data[-1]).get('params').get('fr_range')[1]
     fr_inc = (fr_max - fr_min) / 10 # increment fr in 10% steps of the range
@@ -464,18 +474,18 @@ def set_fixed_risk(strat, market_data):
     other_prof = (bal_1 > bal_2) + (bal_2 > bal_3) + (bal_3 > bal_4)
     
     if last_prof and (other_prof == 3):
-        fr = last_fr + fr_inc
+        fr = fr_prev + fr_inc
     elif last_prof and (other_prof != 3):
-        fr = last_fr
+        fr = fr_prev
     elif not last_prof and (other_prof == 3):
-        fr = ((last_fr - fr_min) * 0.666) + fr_min
+        fr = reduce_fr(0.333, fr_prev, fr_min, fr_inc)
     elif not last_prof and (other_prof == 2):
-        fr = ((last_fr - fr_min) * 0.5) + fr_min
+        fr = reduce_fr(0.5, fr_prev, fr_min, fr_inc)
     else:
         fr = fr_min
         
-    if fr != last_fr:
-        pb.push_note(now, f'fixed risk adjusted: {last_fr = }, {fr = }')
+    if fr != fr_prev:
+        pb.push_note(now, f'fixed risk adjusted: {fr_prev = }, {fr = }')
     
     return fr
 
@@ -503,5 +513,23 @@ def sync_test_records(strat, market_data):
     with open('test_records/binance_liquidity_history.txt', 'w') as file:
         file.writelines(book_data)
 
+def set_max_pos(sizing, params):
+    if sizing:
+        open_pnls = [v.get('pnl') for v in sizing.values() if v.get('pnl')]
+        avg_open_pnl = stats.median(open_pnls)
+        return params.get('max_pos') if avg_open_pnl <= 0 else 50
+    else:
+        return 20
 
+def calc_pos_fr_dol(trade_record, fixed_risk_dol, in_pos):   
+    if in_pos and trade_record and trade_record[0].get('type')[0] == 'o':
+        qs = float(trade_record[0].get('quote_size'))
+        ep = float(trade_record[0].get('exe_price'))
+        hs = trade_record[0].get('hard_stop')
+        pos_fr_dol = qs * ((ep - hs) / ep)
+    else:
+        ep = None # i refer to this later and need it to exist even if it has no value
+        pos_fr_dol = fixed_risk_dol
+    
+    return pos_fr_dol, ep
 

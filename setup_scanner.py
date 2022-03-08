@@ -76,13 +76,8 @@ spreads = funcs.binance_spreads('USDT') # dict
 
 sizing = funcs.current_positions(strat.name, fixed_risk)
 sizing['USDT'] = funcs.update_usdt(total_bal)
-if sizing:
-    open_pnls = [v.get('pnl') for v in sizing.values() if v.get('pnl')]
-    avg_open_pnl = stats.median(open_pnls)
-    max_positions = params.get('max_pos') if avg_open_pnl <= 0 else 50
-else:
-    max_positions = 20
-    
+max_positions = uf.set_max_pos(sizing, params)
+print(f'{max_positions = }')
 
 for pair in pairs:
     asset = pair[:-1*len(params.get('quote_asset'))]
@@ -115,19 +110,13 @@ for pair in pairs:
         continue
     
 # look up or calculate $ fixed risk -------------------------------------------
+
     if open_trades.get(pair):
         trade_record = open_trades.get(pair)
     else:
         trade_record = []
-    
-    if in_pos and trade_record and trade_record[0].get('type')[0] == 'o':
-        qs = float(trade_record[0].get('quote_size'))
-        ep = float(trade_record[0].get('exe_price'))
-        hs = trade_record[0].get('hard_stop')
-        pos_fr_dol = qs * ((ep - hs) / ep)
-    else:
-        ep = None # i refer to this later and need it to exist even if it has no value
-        pos_fr_dol = fixed_risk_dol
+
+    pos_fr_dol, ep = uf.calc_pos_fr_dol(trade_record, fixed_risk_dol, in_pos)
     
 # update positions dictionary with current pair's open_risk values ------------
     if in_pos:
