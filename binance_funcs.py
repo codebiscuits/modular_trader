@@ -558,17 +558,20 @@ def top_up_bnb(usdt_size):
     usdt_bal = client.get_asset_balance(asset='USDT')
     free_usdt = float(usdt_bal.get('free'))
     
-    if bnb_value < 5 and free_usdt > usdt_size:
-        print('Topping up BNB')
-        # round size to proper step size
-        info = client.get_symbol_info('BNBUSDT')
-        step_size = info.get('filters')[2].get('stepSize')
-        bnb_size = step_round(usdt_size / price, step_size)
-        # send order
-        order = client.create_order(symbol='BNBUSDT',
-                                    side=enums.SIDE_BUY,
-                                    type=enums.ORDER_TYPE_MARKET,
-                                    quantity=bnb_size)
+    if bnb_value < 5:
+        if free_usdt > usdt_size:
+            pb.push_note('Topping up BNB')
+            # round size to proper step size
+            info = client.get_symbol_info('BNBUSDT')
+            step_size = info.get('filters')[2].get('stepSize')
+            bnb_size = step_round(usdt_size / price, step_size)
+            # send order
+            order = client.create_order(symbol='BNBUSDT',
+                                        side=enums.SIDE_BUY,
+                                        type=enums.ORDER_TYPE_MARKET,
+                                        quantity=bnb_size)
+        else:
+            pb.push_note('Warning - BNB balance low and not enough USDT to top up')
 
     else:
         # print(f'Didnt top up BNB, current val: {bnb_value:.3} USDT, free usdt: {free_usdt:.2f} USDT')
