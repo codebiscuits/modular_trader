@@ -579,37 +579,19 @@ def top_up_bnb(usdt_size):
     return order
 
 
-def buy_asset(pair, usdt_size, live):
-    # print(f'buying {pair}')
-
-    # calculate how much of the asset to buy
-    usdt_price = get_price(pair)
-    size = usdt_size / usdt_price
-
-    # make sure order size has the right number of decimal places
-    info = client.get_symbol_info(pair)
-    step_size = Decimal(info.get('filters')[2].get('stepSize'))
-    order_size = step_round(size, step_size)
-    # print(f'{pair} Buy Order - raw size: {size:.5}, step size: {step_size:.2}, final size: {order_size:.5}')
-
+def create_trade_dict(order, live):
+    '''collects and returns the details of the order in a dictionary'''
+    pair = order.get('symbol')
     if live:
-        order = client.create_order(symbol=pair,
-                                    side=enums.SIDE_BUY,
-                                    type=enums.ORDER_TYPE_MARKET,
-                                    quantity=order_size)
-        # pprint(order)
         fills = order.get('fills')
         fee = sum([Decimal(fill.get('commission')) for fill in fills])
         qty = sum([Decimal(fill.get('qty')) for fill in fills])
         exe_prices = [Decimal(fill.get('price')) for fill in fills]
-        for fill in fills:
-            fee += Decimal(fill.get('commission'))
-            exe_prices.append(Decimal(fill.get('price')))
         avg_price = stats.mean(exe_prices)
 
         trade_dict = {'timestamp': order.get('transactTime'),
-                      'pair': order.get('symbol'),
-                      'trig_price': usdt_price,
+                      'pair': pair,
+                      'trig_price': order.get('price'),
                       'exe_price': str(avg_price),
                       'size': str(qty),
                       'base_size': order.get('executedQty'),
@@ -623,15 +605,37 @@ def buy_asset(pair, usdt_size, live):
 
     else:
         trade_dict = {"pair": pair, 
-                     "trig_price": usdt_price,
-                     "base_size": str(order_size),
-                     "quote_size": usdt_size,
+                     "trig_price": str(order.get('price')),
+                     "base_size": str(order.get('base_size')),
+                     "quote_size": str(order.get('quote_size')),
                      "fee": '0',
                      "fee_currency": "BNB"
                      }
     
-    # print('-')
     return trade_dict
+
+
+def buy_asset(pair, usdt_size, live):
+    '''takes the pair and the dollar value of the desired position, and 
+    calculates the exact amount to order. then executes a market buy.'''
+
+    # calculate how much of the asset to buy
+    usdt_price = get_price(pair)
+    info = client.get_symbol_info(pair)
+    step_size = Decimal(info.get('filters')[2].get('stepSize'))
+    order_size = step_round((usdt_size/usdt_price), step_size)
+    
+    if live:
+        order = client.create_order(symbol=pair,
+                                    side=enums.SIDE_BUY,
+                                    type=enums.ORDER_TYPE_MARKET,
+                                    quantity=order_size)
+        
+    else:
+        order = {'symbol': pair, 'price': usdt_price, 
+                 'base_size': order_size, 'quote_size': usdt_size}
+    
+    return order
 
 
 def sell_asset(pair, live, pct=100):
@@ -659,41 +663,12 @@ def sell_asset(pair, live, pct=100):
                                     side=enums.SIDE_SELL,
                                     type=enums.ORDER_TYPE_MARKET,
                                     quantity=order_size)
-        # pprint(order)
-        fills = order.get('fills')
-        fee = sum([Decimal(fill.get('commission')) for fill in fills])
-        qty = sum([Decimal(fill.get('qty')) for fill in fills])
-        exe_prices = [Decimal(fill.get('price')) for fill in fills]
-        # for fill in fills:
-        #     fee += float(fill.get('commission'))
-        #     exe_prices.append(float(fill.get('price')))
-        avg_price = stats.mean(exe_prices)
-
-        trade_dict = {'timestamp': order.get('transactTime'),
-                      'pair': order.get('symbol'),
-                      'trig_price': usdt_price,
-                      'exe_price': str(avg_price),
-                      'size': str(qty),
-                      'base_size': order.get('executedQty'),
-                      'quote_size': order.get('cummulativeQuoteQty'),
-                      'fee': str(fee),
-                      'fee_currency': fills[0].get('commissionAsset')
-                      }
-        if order.get('status') != 'FILLED':
-            print(f'{pair} order not filled')
-            pb.push_note('Warning', f'{pair} order not filled')
-
+        
     else:
-        trade_dict = {"pair": pair, 
-                    "trig_price": usdt_price,
-                    "base_size": str(Decimal(order_size)),
-                    "quote_size": str(Decimal(order_size) * Decimal(usdt_price)),
-                    "fee": '0',
-                    "fee_currency": "BNB"
-                    }
-
-    # print('-')
-    return trade_dict
+        order = {'symbol': pair, 'price': usdt_price, 
+                 'base_size': order_size, 'quote_size': (order_size*Decimal(usdt_price))}
+        
+    return order
 
 
 def set_stop(pair, price, live):
@@ -712,7 +687,6 @@ def set_stop(pair, price, live):
     else:
         asset_bal = Decimal(bal.get('free'))
 
-    info = client.get_symbol_info(pair)
     order_size = step_round(asset_bal, step_size)  # - step_size
     spread = get_spread(pair)
     lower_price = price * (1 - (spread * 30))

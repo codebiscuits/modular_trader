@@ -15,7 +15,8 @@ def spot_buy(strat, pair, fixed_risk, size, usdt_size, price, stp, sizing, total
     print(now, note)
     if live:
         try:
-            buy_order = funcs.buy_asset(pair, usdt_size, live)
+            api_order = funcs.buy_asset(pair, usdt_size, live)
+            buy_order = funcs.create_trade_dict(api_order, live)
             buy_order['type'] = 'open_long'
             buy_order['reason'] = 'buy conditions met'
             buy_order['hard_stop'] = stp
@@ -29,10 +30,11 @@ def spot_buy(strat, pair, fixed_risk, size, usdt_size, price, stp, sizing, total
         except BinanceAPIException as e:
             print(f'problem with buy order for {pair}')
             print(e)
-            push = pb.push_note(now, f'exeption during {pair} buy order')
+            pb.push_note(now, f'exeption during {pair} buy order')
     else:
         try:
-            buy_order = funcs.buy_asset(pair, usdt_size, live)
+            api_order = funcs.buy_asset(pair, usdt_size, live)
+            buy_order = funcs.create_trade_dict(api_order, live)
             buy_order['type'] = 'open_long'
             buy_order['reason'] = 'buy conditions met'
             buy_order['hard_stop'] = stp
@@ -47,7 +49,7 @@ def spot_buy(strat, pair, fixed_risk, size, usdt_size, price, stp, sizing, total
         except BinanceAPIException as e:
             print(f'problem with sim buy order for {pair}')
             print(e)
-            push = pb.push_note(now, f'exeption during sim {pair} buy order')
+            pb.push_note(now, f'exeption during sim {pair} buy order')
     
     return sizing, counts_dict, open_trades, in_pos
 
@@ -59,7 +61,8 @@ def spot_strat_tp(strat, pair, price, stp, sizing, total_bal, inval_dist, pos_fr
     if live:
         try:
             funcs.clear_stop(pair, live)
-            tp_order = funcs.sell_asset(pair, live, 50)
+            api_order = funcs.sell_asset(pair, live, 50)
+            tp_order = funcs.create_trade_dict(api_order, live)
             tp_order['type'] = 'tp_long'
             tp_order['reason'] = 'trade over-extended'
             stop_order = funcs.set_stop(pair, stp, live)
@@ -74,11 +77,12 @@ def spot_strat_tp(strat, pair, price, stp, sizing, total_bal, inval_dist, pos_fr
         except BinanceAPIException as e:
             print(f'problem with tp order for {pair}')
             print(e)
-            push = pb.push_note(now, f'exeption during {pair} tp order')
+            pb.push_note(now, f'exeption during {pair} tp order')
     else:
         try:
             funcs.clear_stop(pair, live)
-            tp_order = funcs.sell_asset(pair, live, 50)
+            api_order = funcs.sell_asset(pair, live, 50)
+            tp_order = funcs.create_trade_dict(api_order, live)
             tp_order['type'] = 'tp_long'
             tp_order['reason'] = 'trade over-extended'
             stop_order = funcs.set_stop(pair, stp, live)
@@ -97,7 +101,7 @@ def spot_strat_tp(strat, pair, price, stp, sizing, total_bal, inval_dist, pos_fr
         except BinanceAPIException as e:
             print(f'problem with tp order for {pair}')
             print(e)
-            push = pb.push_note(now, f'exeption during sim {pair} tp order')
+            pb.push_note(now, f'exeption during sim {pair} tp order')
             
     return counts_dict, trade_record
 
@@ -109,7 +113,8 @@ def spot_sell(strat, pair, price, next_id, sizing, counts_dict, trade_record, op
     if live:
         try:
             funcs.clear_stop(pair, live)
-            sell_order = funcs.sell_asset(pair, live)
+            api_order = funcs.sell_asset(pair, live)
+            sell_order = funcs.create_trade_dict(api_order, live)
             sell_order['type'] = 'close_long'
             sell_order['reason'] = 'hit trailing stop'
             trade_record.append(sell_order)
@@ -130,11 +135,12 @@ def spot_sell(strat, pair, price, next_id, sizing, counts_dict, trade_record, op
         except BinanceAPIException as e:
             print(f'problem with sell order for {pair}')
             print(e)
-            push = pb.push_note(now, f'exeption during {pair} sell order')
+            pb.push_note(now, f'exeption during {pair} sell order')
     else:
         try:
             funcs.clear_stop(pair, live)
-            sell_order = funcs.sell_asset(pair, live)
+            api_order = funcs.sell_asset(pair, live)
+            sell_order = funcs.create_trade_dict(api_order, live)
             sell_order['type'] = 'close_long'
             sell_order['reason'] = 'hit trailing stop'
             trade_record.append(sell_order)
@@ -155,7 +161,7 @@ def spot_sell(strat, pair, price, next_id, sizing, counts_dict, trade_record, op
         except BinanceAPIException as e:
             print(f'problem with sell order for {pair}')
             print(e)
-            push = pb.push_note(now, f'exeption during sim {pair} sell order')
+            pb.push_note(now, f'exeption during sim {pair} sell order')
             
     return sizing, counts_dict, open_trades, closed_trades, in_pos
 
@@ -167,7 +173,8 @@ def spot_risk_limit_tp(strat, pair, tp_pct, price, price_delta, sizing, trade_re
         note = f"{pair} take profit {tp_pct}% @ {price}, {round(price_delta*100, 2)}% from entry"
         print(now, note)
         funcs.clear_stop(pair, live)
-        tp_order = funcs.sell_asset(pair, live, pct=tp_pct)
+        api_order = funcs.sell_asset(pair, live, pct=tp_pct)
+        tp_order = funcs.create_trade_dict(api_order, live)
         if tp_pct == 100:
             tp_order['type'] = 'close_long'
             tp_order['reason'] = 'position R limit exceeded'
@@ -203,7 +210,8 @@ def spot_risk_limit_tp(strat, pair, tp_pct, price, price_delta, sizing, trade_re
         note = f"sim {pair} take profit"
         print(now, note)
         funcs.clear_stop(pair, live)
-        tp_order = funcs.sell_asset(pair, live, pct=tp_pct)
+        api_order = funcs.sell_asset(pair, live, pct=tp_pct)
+        tp_order = funcs.create_trade_dict(api_order, live)
         tp_order['type'] = 'tp_long'
         stop_order = funcs.set_stop(pair, stp, live)
         tp_order['hard_stop'] = stp

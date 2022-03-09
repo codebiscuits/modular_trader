@@ -444,14 +444,12 @@ def scanner_summary(strat, market_data, all_start, sizing, counts_dict, benchmar
 def set_fixed_risk(strat, market_data):
     '''calculates fixed risk setting for new trades based on recent performance 
     and previous setting. if recent performance is very good, fr is increased slightly.
-    if recent performance is less than perfect, fr is decreased by thirds'''
+    if not, fr is decreased by thirds'''
     
     def reduce_fr(factor, fr_prev, fr_min, fr_inc):
-        '''reduces fixed_risk by 1/3 (with the floor value being fr_min)'''
-        
+        '''reduces fixed_risk by factor (with the floor value being fr_min)'''
         ideal = (fr_prev - fr_min) * factor
         reduce = max(ideal, fr_inc)
-        
         return max((fr_prev-reduce), fr_min)
     
     now = datetime.now().strftime('%d/%m/%y %H:%M')
@@ -485,7 +483,7 @@ def set_fixed_risk(strat, market_data):
         fr = fr_min
         
     if fr != fr_prev:
-        pb.push_note(now, f'fixed risk adjusted: {fr_prev = }, {fr = }')
+        pb.push_note(now, f'fixed risk adjusted from {fr_prev} to {fr}')
     
     return fr
 
