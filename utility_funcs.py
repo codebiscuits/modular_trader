@@ -28,8 +28,8 @@ def open_trade_stats(now, k, v):
     open_time = v[0].get('timestamp') / 1000
     duration = round((now.timestamp() - open_time) / 3600, 1)
     
-    trig = v[0].get('trig_price')
-    sl = v[0].get('hard_stop')
+    trig = float(v[0].get('trig_price'))
+    sl = float(v[0].get('hard_stop'))
     r = 100 * (trig-sl) / sl
     
     return {'pnl_R': pnl / r, 'pnl_%': pnl, 'entry_price': entry_price, 'duration': duration}
