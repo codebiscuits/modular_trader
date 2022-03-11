@@ -514,7 +514,10 @@ def sync_test_records(strat, market_data):
 def set_max_pos(sizing, params):
     if sizing:
         open_pnls = [v.get('pnl') for v in sizing.values() if v.get('pnl')]
-        avg_open_pnl = stats.median(open_pnls)
+        if open_pnls:
+            avg_open_pnl = stats.median(open_pnls)
+        else:
+            avg_open_pnl = 0
         return params.get('max_pos') if avg_open_pnl <= 0 else 50
     else:
         return 20
