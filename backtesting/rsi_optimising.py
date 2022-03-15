@@ -19,23 +19,24 @@ client = Client(keys.bPkey, keys.bSkey)
 all_start = time.perf_counter()
 
 def get_results(df):
-    results = df.loc[df['signals'].notna(), ['timestamp', 'close', 'signals']]
+    results = df.loc[df['signals'].isin(['buy', 'sell', 'stop']), ['timestamp', 'close', 'st', 'signals', 'stop_loss', 'pnl_evo']]
     results.reset_index(drop=True, inplace=True)
     
     # TODO create a 'stop_loss' column at the point where these signals are 
     # generated instead of reconstructing it here
-    sl = []
-    for r in results['signals']:
-        if r[:3] == 'buy':
-            sl.append(float(r[17:]))
-        else:
-            sl.append(np.nan)
-    results['stop-loss'] = sl
+    # sl = []
+    # for r in results.index:
+    #     if results.at[r, 'signals'] == 'buy':
+    #         # sl.append(float(r[17:]))
+    #         sl.append(df.at[r, 'st'])
+    #     else:
+    #         sl.append(np.nan)
+    # results['stop-loss'] = sl
     
-    results['r'] = (results['close'] - results['stop-loss']) / results['close']
-    results.drop('stop-loss', axis=1)
+    results['r'] = (results['close'] - results['stop_loss']) / results['close']
+    results.drop('stop_loss', axis=1)
     results['r'] = results['r'].shift(1)
-    results['roc'] = results['close'].pct_change()
+    results['roc'] = results['pnl_evo'].pct_change()
     results['roc'] = results['roc'] - 0.0015 # subtract two * binance fees from 
     results['pnl'] = results['roc'] * 100
     results['adj'] = results['roc'] + 1 # each entry in this column will represent 
@@ -48,8 +49,9 @@ def get_results(df):
     results.drop('roc', axis=1, inplace=True)
     # print(results)
     bal = 1.0
-    for a in results['adj']:
+    for n, a in enumerate(results['adj']):
         bal *= a
+        print(f'trade {n}, adj: {a}, new bal: {bal}')
     # print(f'final pnl: {bal:.4}')
     # med_pnl = results['pnl'].median()
     pnl_list = list(results['pnl'])
@@ -120,7 +122,7 @@ if __name__ == '__main__':
             for x in os:
                 for y in ob:
                     try:
-                        buys, sells, stops, _, _, _ = strats.get_signals(df, x, y)
+                        buys, sells, stops, _, _, _ = strats.rsi_st_ema_lo_bt(df, x, y)
                         bal, pnl_list, r_list = get_results(df)
                         pnl = (bal - 1) * 100
                         pnl_bth = pnl / hodl

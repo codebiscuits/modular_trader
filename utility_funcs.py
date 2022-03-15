@@ -185,11 +185,13 @@ def strat_benchmark(market_data, strat, benchmark):
     return benchmark 
 
 def log(live, strat, fixed_risk, market_data, spreads, 
-        now_start, sizing, tp_trades, counts_dict, ot, closed_trades):    
+        now_start, tp_trades, ot, closed_trades):    
     
     # check total balance and record it in a file for analysis
     total_bal = funcs.account_bal()
-    bal_record = {'timestamp': now_start, 'balance': round(total_bal, 2), 'fr': fixed_risk, 'positions': sizing, 'params': params, 'trade_counts': counts_dict}
+    bal_record = {'timestamp': now_start, 'balance': round(total_bal, 2), 'fr': 
+                  fixed_risk, 'positions': strat.sizing, 'params': params, 
+                  'trade_counts': strat.counts_dict}
     new_line = json.dumps(bal_record)
     if live:
         with open(f"{market_data}/{strat.name}_bal_history.txt", "a") as file:
@@ -416,24 +418,24 @@ def recent_perf_str(strat, market_data):
     
     return f'  {a} | {b} {c} {d}'
 
-def scanner_summary(strat, market_data, all_start, sizing, counts_dict, benchmark, live):
+def scanner_summary(strat, market_data, all_start, benchmark, live):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     # all_end = time.perf_counter()
     # all_time = all_end - all_start
     
     total_bal = funcs.account_bal()
     
-    or_list = [v.get('or_$') for v in sizing.values() if v.get('or_$')]
+    or_list = [v.get('or_$') for v in strat.sizing.values() if v.get('or_$')]
     # dollar_tor = round(sum(or_list), 2)
     num_open_positions = len(or_list)
     # rfb = round(total_bal-dollar_tor, 2)
-    vol_exp = round(100 - sizing.get('USDT').get('pf%'))
+    vol_exp = round(100 - strat.sizing.get('USDT').get('pf%'))
     
     live_str = '' if live else '*not live* '
     elapsed_str = '' # f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s, '
-    count_str = count_trades(counts_dict)
+    count_str = count_trades(strat.counts_dict)
     perf_str = recent_perf_str(strat, market_data)
-    bench_str = f"1w perf: strat {round(benchmark.get('strat_1w')*100, 2)}%, mkt {round(benchmark.get('market_1w')*100, 2)}%"
+    bench_str = f"1m perf: strat {round(benchmark.get('strat_1m')*100, 2)}%, mkt {round(benchmark.get('market_1m')*100, 2)}%"
     final_msg = f'{live_str}{elapsed_str}total bal: ${total_bal:.2f} {perf_str}\npositions {num_open_positions}, exposure {vol_exp}% {count_str}\n{bench_str}'
     print(final_msg)
     
@@ -458,8 +460,8 @@ def set_fixed_risk(strat, market_data):
         bal_data = file.readlines()
     
     fr_prev = json.loads(bal_data[-1]).get('fr')
-    fr_min = json.loads(bal_data[-1]).get('params').get('fr_range')[0]
-    fr_max = json.loads(bal_data[-1]).get('params').get('fr_range')[1]
+    fr_min = params.get('fr_range')[0]
+    fr_max = params.get('fr_range')[1]
     fr_inc = (fr_max - fr_min) / 10 # increment fr in 10% steps of the range
     
     bal_0 = json.loads(bal_data[-1]).get('balance')

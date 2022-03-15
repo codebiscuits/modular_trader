@@ -3,6 +3,7 @@ import numpy as np
 # import talib
 from ta.momentum import RSIIndicator
 import indicators as ind
+import binance_funcs as funcs
 
 ### Backtesting Strategies
 
@@ -424,14 +425,66 @@ def double_st(df, in_pos):
             'inval': inval}
     
 class DoubleSTLO:
-    
+    name = 'double_st_lo'
     description = 'regular supertrend for bias with tight supertrend for entries/exits'
     max_length = 201
+    counts_dict = {'stop_count': 0, 'open_count': 0, 'add_count': 0, 'tp_count': 0, 'close_count': 0, 
+                   'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 
+                   'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0}
     
     def __init__(self, lb, mult):
-        self.name = 'double_st_lo'
         self.lb = lb
         self.mult = mult
+        self.bal = funcs.account_bal()
+        
+    def __str__(self):
+        return f'{self.name} st2: {self.lb}-{self.mult}'
+    
+    def live_signals(self, df, in_pos):
+        
+        df['ema200'] = df.close.ewm(200).mean()
+        ind.supertrend_new(df, 10, 3)
+        df.rename(columns={'st': 'st_loose', 'st_u': 'st_loose_u', 'st_d': 'st_loose_d'}, inplace=True)
+        ind.supertrend_new(df, self.lb, self.mult)
+        
+        bullish_ema = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'ema200']
+        bullish_loose = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st_loose']
+        bullish_tight = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st']
+        bearish_tight = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st']
+        
+        # bullish_book = bid_ask_ratio > 1
+        # bearish_book = bid_ask_ratio < 1
+        # bullish_volume = price rising on low volume or price falling on high volume
+        # bearish_volume = price rising on high volume or price falling on low volume
+        
+        open_spot = bullish_ema and bullish_loose and bullish_tight and not in_pos # and bullish_book
+        add_spot = False
+        tp_spot = False
+        close_spot = bearish_tight and in_pos
+        
+        if df.at[len(df)-1, 'st']:
+            inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
+        else:
+            inval = 100000
+            
+        return {'open_spot': open_spot, 'close_spot': close_spot, 
+                'tp_spot': tp_spot, 'add_spot': add_spot,   
+                'inval': inval}
+
+class DoubleST:
+    #class attributes
+    name = 'double_st'
+    description = 'regular supertrend for bias with tight supertrend for entries/exits'
+    max_length = 201
+    counts_dict = {'stop_count': 0, 'open_count': 0, 'add_count': 0, 'tp_count': 0, 'close_count': 0, 
+                   'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 
+                   'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0}
+    
+    def __init__(self, lb, mult):
+        # instance attributes
+        self.lb = lb
+        self.mult = mult
+        self.bal = funcs.account_bal_M()
         
     def __str__(self):
         return f'{self.name} st2: {self.lb}-{self.mult}'
@@ -456,7 +509,13 @@ class DoubleSTLO:
         # bearish_volume = price rising on high volume or price falling on low volume
         
         open_long = bullish_ema and bullish_loose and bullish_tight and not in_pos # and bullish_book
+        add_long = False
+        tp_long = False
         close_long = bearish_tight and in_pos
+        open_short = bearish_ema and bearish_loose and bearish_tight and not in_pos # and bearish_book
+        add_short = False
+        tp_short = False
+        close_short = bullish_tight and in_pos
         
         if df.at[len(df)-1, 'st']:
             inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
@@ -464,9 +523,9 @@ class DoubleSTLO:
             inval = 100000
             
         return {'open_long': open_long, 'close_long': close_long,  
-                'tp_long': False, 'add_long': False, 
-                'open_short': False, 'close_short': False, 
-                'tp_short': False, 'add_short': False, 
-                'open_spot': False, 'close_spot': False, 
-                'tp_spot': False, 'add_spot': False,   
+                'tp_long': tp_long, 'add_long': add_long, 
+                'open_short': open_short, 'close_short': close_short, 
+                'tp_short': tp_short, 'add_short': add_short, 
                 'inval': inval}
+
+

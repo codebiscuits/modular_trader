@@ -3,7 +3,7 @@ import statistics as stats
 import pandas as pd
 import numpy as np
 from binance.client import Client
-import binance.enums as enums
+import binance.enums as be
 from pushbullet import Pushbullet
 from decimal import Decimal
 from pprint import pprint
@@ -16,7 +16,7 @@ client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 
-# Utility Functions
+#-#-#- Utility Functions
 
 def step_round(x, step):
     x = Decimal(x)
@@ -81,7 +81,22 @@ def get_size(price, fr, balance, risk):
     return asset_quantity, usdt_size
 
 
-# Account Functions
+def calc_stop(st, spread,  price, min_risk=0.01):
+    '''calculates what the stop-loss trigger price should be based on the current 
+    value of the supertrend line and the current spread (for slippage). 
+    if this is too close to the entry price, the stop will be set at the minimum 
+    allowable distance. 
+    I would like to make min_risk part of the adaptive settings, so if too 
+    many positions are getting stopped out too early, the system can increase 
+    it automatically'''
+    buffer = max(spread * 2, min_risk) 
+    if price > st:
+        return float(st) * (1 - buffer)
+    else:
+        return float(st) * (1 + buffer)
+
+
+#-#-#- Account Functions
 
 
 def account_bal():
@@ -199,7 +214,7 @@ def update_usdt(total_bal):
     return {'qty': base_bal, 'value': value, 'pf%': pct}
 
 
-# Market Data Functions
+#-#-#- Market Data Functions
 
 
 def get_price(pair):
@@ -542,7 +557,7 @@ def prepare_ohlc(pair, is_live, timeframe='4H', bars=2190):
     return df
 
 
-# Trading Functions
+#-#-#- Trading Functions
 
 
 def top_up_bnb(usdt_size):
@@ -567,8 +582,8 @@ def top_up_bnb(usdt_size):
             bnb_size = step_round(usdt_size / price, step_size)
             # send order
             order = client.create_order(symbol='BNBUSDT',
-                                        side=enums.SIDE_BUY,
-                                        type=enums.ORDER_TYPE_MARKET,
+                                        side=be.SIDE_BUY,
+                                        type=be.ORDER_TYPE_MARKET,
                                         quantity=bnb_size)
         else:
             pb.push_note('Warning - BNB balance low and not enough USDT to top up')
@@ -615,24 +630,30 @@ def create_trade_dict(order, live):
     return trade_dict
 
 
+def valid_size(pair, size):
+    '''rounds the desired order size to the correct step size for binance'''
+    info = client.get_symbol_info(pair)
+    step_size = Decimal(info.get('filters')[2].get('stepSize'))
+    
+    return step_round(size, step_size)
+
+
 def buy_asset(pair, usdt_size, live):
     '''takes the pair and the dollar value of the desired position, and 
     calculates the exact amount to order. then executes a market buy.'''
 
-    # calculate how much of the asset to buy
-    usdt_price = get_price(pair)
-    info = client.get_symbol_info(pair)
-    step_size = Decimal(info.get('filters')[2].get('stepSize'))
-    order_size = step_round((usdt_size/usdt_price), step_size)
+    # calculate the exact size of the order
+    order_size = valid_size(pair, usdt_size)
     
+    # send the order
     if live:
         order = client.create_order(symbol=pair,
-                                    side=enums.SIDE_BUY,
-                                    type=enums.ORDER_TYPE_MARKET,
+                                    side=be.SIDE_BUY,
+                                    type=be.ORDER_TYPE_MARKET,
                                     quantity=order_size)
         
     else:
-        order = {'symbol': pair, 'price': usdt_price, 
+        order = {'symbol': pair, 'price': get_price(pair), 
                  'base_size': order_size, 'quote_size': usdt_size}
     
     return order
@@ -653,15 +674,13 @@ def sell_asset(pair, live, pct=100):
 
     # make sure order size has the right number of decimal places
     trade_size = asset_bal * Decimal(pct / 100)
-    info = client.get_symbol_info(pair)
-    step_size = Decimal(info.get('filters')[2].get('stepSize'))
-    order_size = step_round(trade_size, step_size)  # - step_size
+    order_size = valid_size(pair, trade_size)
     # print(f'{pair} Sell Order - raw size: {asset_bal:.5}, step size: {step_size:.2}, final size: {order_size:.5}')
 
     if live:
         order = client.create_order(symbol=pair,
-                                    side=enums.SIDE_SELL,
-                                    type=enums.ORDER_TYPE_MARKET,
+                                    side=be.SIDE_SELL,
+                                    type=be.ORDER_TYPE_MARKET,
                                     quantity=order_size)
         
     else:
@@ -679,7 +698,7 @@ def set_stop(pair, price, live):
     tick_size = info.get('filters')[0].get('tickSize')
     step_size = Decimal(info.get('filters')[2].get('stepSize'))
 
-    reserve = 10 / price  # amount of asset that would be worth $10 at stop price
+    reserve = 10 / price  # amount of BNB that would be worth $10 at stop price
 
     bal = client.get_asset_balance(asset=asset)
     if asset == 'BNB':
@@ -696,9 +715,9 @@ def set_stop(pair, price, live):
 
     if live:
         order = client.create_order(symbol=pair,
-                                    side=enums.SIDE_SELL,
-                                    type=enums.ORDER_TYPE_STOP_LOSS_LIMIT,
-                                    timeInForce=enums.TIME_IN_FORCE_GTC,
+                                    side=be.SIDE_SELL,
+                                    type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
+                                    timeInForce=be.TIME_IN_FORCE_GTC,
                                     stopPrice=trigger_price,
                                     quantity=order_size,
                                     price=limit_price)
@@ -734,9 +753,6 @@ def clear_stop(pair, live):
                 # print(result.get('status'))
             else:
                 print('no stop to cancel')
-            # print('-')
-        # else:
-        #     print('simulated canceling stop')
 
 
 def reduce_risk(sizing, signals, params, fixed_risk, live):
@@ -784,3 +800,208 @@ def reduce_risk(sizing, signals, params, fixed_risk, live):
                 break
 
     return sizing, trade_notes
+
+
+#-#-#- Margin Account Functions
+
+
+def account_bal_M():
+    info = client.get_margin_account()
+    total_net = float(info.get('totalNetAssetOfBtc'))
+    btc_price = get_price('BTCUSDT')
+    usdt_total_net = total_net * btc_price
+    
+    return round(usdt_total_net, 2)
+
+
+def current_positions_M(strat, fr):  # used to be current sizing
+    '''returns a dict with assets as keys and various expressions of positioning as values'''
+    
+    o_path = Path(f'{market_data}/{strat}_open_trades.json')
+    with open(o_path, 'r') as file:
+        try:
+            o_data = json.load(file)
+        except:
+            o_data = {}
+        
+    total_bal = account_bal_M()
+    # should be 1R, but also no less than min order size
+    threshold_bal = max(total_bal * fr, 12)
+
+    info = client.get_margin_account()
+    assets = info.get('userAssets')
+    
+    prices = client.get_all_tickers()
+    price_dict = {x.get('symbol'): float(x.get('price')) for x in prices}
+
+    size_dict = {}
+    for a in assets:        
+        asset = a.get('asset')
+        if asset not in ['USDT', 'USDC', 'BUSD']:
+            pair = asset + 'USDT'
+            price = price_dict.get(pair)
+            if price == None:
+                continue
+            if pair in o_data.keys():
+                now = datetime.now()
+                ots = uf.open_trade_stats(now, pair, o_data.get(pair))
+                quant = float(a.get('netAsset'))
+                value = price * quant
+                if asset == 'BNB' and value < 20:
+                    continue
+                elif asset == 'BNB' and value >= 20:
+                    value -= 10
+                if value >= threshold_bal:
+                    pct = round(100 * value / total_bal, 5)
+                    size_dict[asset] = {'qty': quant,
+                                        'value': round(value, 2), 'pf%': pct,
+                                        'pnl': ots.get('pnl_R')}
+
+    return size_dict
+
+
+def free_usdt_M():
+    info = client.get_margin_account()
+    assets = info.get('userAssets')
+    bal = 0
+    for a in assets:
+        if a.get('asset') == 'USDT':
+            bal = float(a.get('free'))
+    return bal
+
+
+def asset_bal_M(asset):
+    info = client.get_margin_account()
+    bals = info.get('userAssets')
+    
+    balance = 0
+    for bal in bals:
+        if bal.get('asset') == asset:
+            balance = bal.get('netAsset')
+    
+    return balance
+
+
+def update_pos_M(asset, total_bal, inval, pos_fr_dol):
+    '''checks for the current balance of a particular asset and returns it in 
+    the correct format for the sizing dict. also calculates the open risk for 
+    a given asset and returns it in R and $ denominations'''
+
+    pair = asset + 'USDT'
+    price = get_price(pair)
+    bal = asset_bal_M(asset)
+    value = price * bal
+    pct = round(100 * value / total_bal, 5)
+    open_risk = value - (value / inval)
+    open_risk_r = open_risk / pos_fr_dol
+
+    return {'qty': bal, 'value': value, 'pf%': pct, 'or_R': open_risk_r, 'or_$': open_risk}
+
+
+def update_usdt_M(total_bal):
+    '''checks current usdt balance and returns a dictionary for updating the sizing dict'''
+    bal = asset_bal_M('USDT')
+    value = round(bal, 2)
+    pct = round(100 * value / total_bal, 5)
+    
+    return {'qty': bal, 'value': value, 'pf%': pct}
+
+
+#-#-#- Margin Trading Functions
+
+
+def top_up_bnb_M(usdt_size):
+    '''checks net BNB balance and interest owed, if net is below the threshold,
+    buys BNB then repays any interest'''
+    
+    # check balances
+    info = client.get_margin_account()
+    assets = info.get('userAssets')
+    free_bnb = 0
+    interest = 0
+    free_usdt = 0
+    for a in assets:
+        if a.get('asset') == 'BNB':
+            free_bnb = float(a.get('free'))
+            interest = float(a.get('interest'))
+            print(interest)
+        if a.get('asset') == 'USDT':
+            free_usdt = float(a.get('free'))
+    net_bnb = free_bnb - interest
+    
+    # calculate value
+    avg_price = client.get_avg_price(symbol='BNBUSDT')
+    price = float(avg_price.get('price'))
+    bnb_value = net_bnb * price
+    
+    # top up if needed
+    info = client.get_symbol_info('BNBUSDT')
+    # step_size = info.get('filters')[2].get('stepSize') # might not be needed
+    # bnb_size = step_round(usdt_size / price, step_size)
+    if bnb_value < 10:
+        if free_usdt > usdt_size:
+            pb.push_note('Topping up BNB')
+            order = client.create_margin_order(
+                symbol='BNBUSDT',
+                side=be.SIDE_BUY,
+                type=be.ORDER_TYPE_MARKET,
+                quoteOrderQty=usdt_size)
+            # pprint(order)
+        else:
+            pb.push_note('Warning - BNB balance low and not enough USDT to top up')
+    else:
+        order = None
+    
+    # repay interest
+    if interest > 0:
+        repay = client.repay_margin_loan(asset='BNB', amount=str(interest))
+    else:
+        repay = None
+    
+    return order, repay
+
+
+def open_long(trade_pair, usdt_size):
+    # borrow usdt
+    print(f'amount: {usdt_size}')
+    usdt_borrow = client.create_margin_loan(asset='USDT', amount=usdt_size)
+    # pprint(usdt_borrow)
+    
+    # execute trade
+    long_order = client.create_margin_order(
+        symbol=trade_pair,
+        side=be.SIDE_BUY,
+        type=be.ORDER_TYPE_MARKET,
+        quoteOrderQty=usdt_size)
+    # pprint(long_order)
+    
+    return long_order
+
+
+
+def set_stop_M(pair, order, side, trigger, limit):
+    info = client.get_symbol_info(pair)
+    tick_size = info.get('filters')[0].get('tickSize')
+    stop_size = Decimal(order.get('executedQty'))
+    stop_sell_order = client.create_margin_order(
+        symbol=pair,
+        side=side,
+        type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
+        timeInForce=be.TIME_IN_FORCE_GTC,
+        stopPrice=str(step_round(trigger, tick_size)),
+        quantity=stop_size,
+        price=str(step_round(limit, tick_size)))
+    pprint(stop_sell_order)
+    
+    return stop_sell_order
+
+
+def clear_stop_M(pair):
+    orders = client.get_all_margin_orders(symbol=pair)
+    if orders[-1].get('type') == 'STOP_LOSS_LIMIT':
+        stop_id = orders[-1].get('orderId')
+        client.cancel_margin_order(symbol=pair, orderId=stop_id)
+    else:
+        print('no stop to clear')
+
+
