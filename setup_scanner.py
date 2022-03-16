@@ -151,7 +151,7 @@ for pair in pairs:
             strat.counts_dict['books_too_thin'] += 1
         
         enough_depth = usdt_depth >= usdt_size
-        enough_size = usdt_size > (24 * (1 + risk)) # this ensures size will be
+        enough_size = usdt_size > (21 * (1 + risk)) # this ensures size will be
         # big enough for init stop to be set on half the position
         
         if not enough_depth:

@@ -141,7 +141,6 @@ def market_benchmark():
             'market_1d': market_1d, 'market_1w': market_1w, 'market_1m': market_1m, }
 
 def strat_benchmark(market_data, strat, benchmark):
-    print('running')
     now = datetime.now()
     day_ago = now - timedelta(days=1)
     week_ago = now - timedelta(days=7)
@@ -441,7 +440,6 @@ def scanner_summary(strat, market_data, all_start, benchmark, live):
     
     if live:
         pb.push_note(now, final_msg)
-        print('-:-' * 20)
 
 def set_fixed_risk(strat, market_data):
     '''calculates fixed risk setting for new trades based on recent performance 
@@ -462,6 +460,7 @@ def set_fixed_risk(strat, market_data):
     fr_prev = json.loads(bal_data[-1]).get('fr')
     fr_min = params.get('fr_range')[0]
     fr_max = params.get('fr_range')[1]
+    print(f'{fr_min = } {fr_max = }')
     fr_inc = (fr_max - fr_min) / 10 # increment fr in 10% steps of the range
     
     bal_0 = json.loads(bal_data[-1]).get('balance')
@@ -475,7 +474,7 @@ def set_fixed_risk(strat, market_data):
     
     if last_prof and (other_prof == 3):
         fr = fr_prev + fr_inc
-    elif last_prof and (other_prof != 3):
+    elif last_prof and (other_prof != 3) and (fr_prev >= fr_min):
         fr = fr_prev
     elif not last_prof and (other_prof == 3):
         fr = reduce_fr(0.333, fr_prev, fr_min, fr_inc)
