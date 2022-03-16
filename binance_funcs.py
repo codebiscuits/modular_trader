@@ -643,7 +643,9 @@ def buy_asset(pair, usdt_size, live):
     calculates the exact amount to order. then executes a market buy.'''
 
     # calculate the exact size of the order
-    order_size = valid_size(pair, usdt_size)
+    usdt_price = get_price(pair)
+    order_size = valid_size(pair, usdt_size/usdt_price)
+    print(f'order size: {order_size}')
     
     # send the order
     if live:
@@ -977,6 +979,36 @@ def open_long(trade_pair, usdt_size):
     
     return long_order
 
+
+def close_long(trade_pair, pct=1):
+    print('------------Close Long------------')
+    asset = trade_pair[:-4]
+    
+    # calculate size
+    info = client.get_margin_account()
+    for i in info.get('userAssets'):
+        if i.get('asset') == asset:
+            bal = i.get('free')
+    order_size = valid_size(trade_pair, float(bal)*pct)
+    
+    # execute trade
+    order = client.create_margin_order(
+        symbol=trade_pair,
+        side=be.SIDE_SELL,
+        type=be.ORDER_TYPE_MARKET,
+        quantity=order_size)
+    pprint(order)
+    
+    # repay loan
+    info = client.get_margin_account()
+    for i in info.get('userAssets'):
+        if i.get('asset') == 'USDT':
+            fre = i.get('free')
+            bor = i.get('borrowed')
+    max_repay = min(float(fre), float(bor))
+    usdt_repay = client.repay_margin_loan(asset='USDT', amount=max_repay)
+    
+    return order
 
 
 def set_stop_M(pair, order, side, trigger, limit):
