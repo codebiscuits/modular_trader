@@ -28,7 +28,7 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 now_start = datetime.now().strftime('%d/%m/%y %H:%M')
 all_start = time.perf_counter()
 # strat = strats.RSI_ST_EMA(4, 45, 96)
-strat = strats.DoubleSTLO(3, 1.4)
+strat = strats.DoubleSTLO(3, 1.2)
 
 pi2path = Path('/home/ubuntu/rpi_2.txt')
 live = pi2path.exists()
