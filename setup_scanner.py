@@ -76,7 +76,8 @@ spreads = funcs.binance_spreads('USDT') # dict
 strat.sizing = funcs.current_positions(strat.name, fixed_risk)
 strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
 max_positions = uf.set_max_pos(strat.sizing, params)
-print(f'{max_positions = }')
+if max_positions > 20:
+    print(f'{max_positions = }')
 
 for pair in pairs:
     asset = pair[:-1*len(params.get('quote_asset'))]
@@ -135,9 +136,11 @@ for pair in pairs:
     elif signals.get('open_spot'):        
         risk = (price - stp) / price
         mir = uf.max_init_risk(len(pairs_in_pos), params.get('target_risk'))
+        print(f'risk: {risk}, max_init_risk: {mir}, open positions: {len(pairs_in_pos)}')
         # TODO max init risk should be based on average inval dist of signals, not fixed risk setting
         if risk > mir:
             strat.counts_dict['too_risky'] += 1
+            print('too risky')
             continue
         size, usdt_size = funcs.get_size(price, fixed_risk, strat.bal, risk)
         usdt_depth = funcs.get_depth(pair, 'buy', params.get('max_spread'))
@@ -158,6 +161,7 @@ for pair in pairs:
                 strat.counts_dict['books_too_thin'] += 1
         if not enough_size:
             strat.counts_dict['too_small'] += 1
+            print(f'too small, size: ${usdt_size}')
         
         if enough_size and enough_depth:            
 # check total risk and close profitable positions if necessary ----------------
@@ -259,3 +263,4 @@ if not live:
 uf.scanner_summary(strat, market_data, all_start, benchmark, live)
 
 pprint(strat.counts_dict)
+print('-:-' * 20)
