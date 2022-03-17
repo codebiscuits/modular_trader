@@ -15,7 +15,7 @@ params = {'quote_asset': 'USDT',
           'max_spread': 0.5, 
           'indiv_r_limit': 1.1, 
           'total_r_limit': 20, 
-          'target_risk': 0.05, 
+          'target_risk': 0.1, 
           'max_pos': 20}
 
 # ohlc data paths
