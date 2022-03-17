@@ -561,6 +561,7 @@ def prepare_ohlc(pair, is_live, timeframe='4H', bars=2190):
 
 
 def top_up_bnb(usdt_size):
+    now = datetime.now().strftime('%d/%m/%y %H:%M')
     
     # calculate bnb balance in usdt
     bnb_bal = client.get_asset_balance(asset='BNB')
@@ -575,7 +576,7 @@ def top_up_bnb(usdt_size):
     
     if bnb_value < 5:
         if free_usdt > usdt_size:
-            pb.push_note('Topping up BNB')
+            pb.push_note(now, 'Topping up BNB')
             # round size to proper step size
             info = client.get_symbol_info('BNBUSDT')
             step_size = info.get('filters')[2].get('stepSize')
@@ -586,7 +587,7 @@ def top_up_bnb(usdt_size):
                                         type=be.ORDER_TYPE_MARKET,
                                         quantity=bnb_size)
         else:
-            pb.push_note('Warning - BNB balance low and not enough USDT to top up')
+            pb.push_note(now, 'Warning - BNB balance low and not enough USDT to top up')
 
     else:
         # print(f'Didnt top up BNB, current val: {bnb_value:.3} USDT, free usdt: {free_usdt:.2f} USDT')
@@ -884,6 +885,16 @@ def asset_bal_M(asset):
     return balance
 
 
+def free_bal_M(asset):
+    info = client.get_margin_account()
+    bal = 0
+    for i in info.get('userAssets'):
+        if i.get('asset') == asset:
+            bal = i.get('free')
+            
+    return bal
+
+
 def update_pos_M(asset, total_bal, inval, pos_fr_dol):
     '''checks for the current balance of a particular asset and returns it in 
     the correct format for the sizing dict. also calculates the open risk for 
@@ -915,6 +926,7 @@ def update_usdt_M(total_bal):
 def top_up_bnb_M(usdt_size):
     '''checks net BNB balance and interest owed, if net is below the threshold,
     buys BNB then repays any interest'''
+    now = datetime.now().strftime('%d/%m/%y %H:%M')
     
     # check balances
     info = client.get_margin_account()
@@ -942,7 +954,7 @@ def top_up_bnb_M(usdt_size):
     # bnb_size = step_round(usdt_size / price, step_size)
     if bnb_value < 10:
         if free_usdt > usdt_size:
-            pb.push_note('Topping up BNB')
+            pb.push_note(now, 'Topping up BNB')
             order = client.create_margin_order(
                 symbol='BNBUSDT',
                 side=be.SIDE_BUY,
@@ -950,7 +962,7 @@ def top_up_bnb_M(usdt_size):
                 quoteOrderQty=usdt_size)
             # pprint(order)
         else:
-            pb.push_note('Warning - BNB balance low and not enough USDT to top up')
+            pb.push_note(now, 'Warning - BNB balance low and not enough USDT to top up')
     else:
         order = None
     
@@ -981,14 +993,10 @@ def open_long(trade_pair, usdt_size):
 
 
 def close_long(trade_pair, pct=1):
-    print('------------Close Long------------')
     asset = trade_pair[:-4]
     
     # calculate size
-    info = client.get_margin_account()
-    for i in info.get('userAssets'):
-        if i.get('asset') == asset:
-            bal = i.get('free')
+    bal = free_bal_M(asset)
     order_size = valid_size(trade_pair, float(bal)*pct)
     
     # execute trade
