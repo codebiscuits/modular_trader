@@ -33,6 +33,7 @@ def resample(df, timeframe):
                                                      'volume': 'sum'})
     df.reset_index(inplace=True)  # don't use drop=True because i want the
     # timestamp index back as a column
+    return df
 
 
 def order_by_volsm(pairs, lookback):

@@ -28,7 +28,7 @@ def open_trade_stats(now, k, v):
     open_time = v[0].get('timestamp') / 1000
     duration = round((now.timestamp() - open_time) / 3600, 1)
     
-    trig = float(v[0].get('trig_price'))
+    trig = float(v[0].get('exe_price'))
     sl = float(v[0].get('hard_stop'))
     r = 100 * (trig-sl) / sl
     
@@ -441,7 +441,7 @@ def scanner_summary(strat, market_data, all_start, benchmark, live):
     if live:
         pb.push_note(now, final_msg)
 
-def set_fixed_risk(strat, market_data):
+def set_fixed_risk(strat, market_data, total_bal):
     '''calculates fixed risk setting for new trades based on recent performance 
     and previous setting. if recent performance is very good, fr is increased slightly.
     if not, fr is decreased by thirds'''
@@ -463,17 +463,17 @@ def set_fixed_risk(strat, market_data):
     print(f'{fr_min = } {fr_max = }')
     fr_inc = (fr_max - fr_min) / 10 # increment fr in 10% steps of the range
     
-    bal_0 = json.loads(bal_data[-1]).get('balance')
-    bal_1 = json.loads(bal_data[-2]).get('balance')
-    bal_2 = json.loads(bal_data[-3]).get('balance')
-    bal_3 = json.loads(bal_data[-4]).get('balance')
-    bal_4 = json.loads(bal_data[-5]).get('balance')
+    bal_0 = total_bal
+    bal_1 = json.loads(bal_data[-1]).get('balance')
+    bal_2 = json.loads(bal_data[-2]).get('balance')
+    bal_3 = json.loads(bal_data[-3]).get('balance')
+    bal_4 = json.loads(bal_data[-4]).get('balance')
     
     last_prof = bal_0 > bal_1
     other_prof = (bal_1 > bal_2) + (bal_2 > bal_3) + (bal_3 > bal_4)
     
     if last_prof and (other_prof == 3):
-        fr = fr_prev + fr_inc
+        fr = min(fr_prev + fr_inc, fr_max)
     elif last_prof and (other_prof != 3) and (fr_prev >= fr_min):
         fr = fr_prev
     elif not last_prof and (other_prof == 3):

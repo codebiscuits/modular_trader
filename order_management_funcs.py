@@ -7,6 +7,7 @@ from pushbullet import Pushbullet
 from binance.client import Client
 import keys
 import binance.enums as be
+from pprint import pprint
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 client = Client(keys.bPkey, keys.bSkey)
@@ -16,6 +17,7 @@ def spot_buy(strat, pair, fixed_risk, size, usdt_size, price, stp, inval_dist, p
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     asset = pair[:-4]
     note = f"buy {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
+    in_pos = False
     print(now, note)
     if live:
         try:
@@ -159,7 +161,7 @@ def spot_sell(strat, pair, price, next_id, trade_record, open_trades, closed_tra
                 del open_trades[pair]
                 uf.record_open_trades(strat.name, 'test_records', open_trades)
             in_pos = False
-            strat.sizing['USDT'] += strat.sizing.get('asset').get('value')
+            strat.sizing['USDT']['value'] += strat.sizing.get(asset).get('value')
             del strat.sizing[asset]
             strat.counts_dict['close_count'] += 1
         except BinanceAPIException as e:
@@ -234,7 +236,7 @@ def spot_risk_limit_tp(strat, pair, tp_pct, price, price_delta, trade_record, op
 
 
 
-def margin_open_long(pair, size, stp, inval_dist, pos_fr_dol, open_trades, strat, market_data, in_pos, live):
+def margin_open_long(strat, pair, size, stp, inval_dist, pos_fr_dol, open_trades, market_data, in_pos, live):
     price = funcs.get_price(pair)
     usdt_size = round(size*price, 2)
     now = datetime.now().strftime('%d/%m/%y %H:%M')
@@ -251,7 +253,7 @@ def margin_open_long(pair, size, stp, inval_dist, pos_fr_dol, open_trades, strat
         long_order['hard_stop'] = stp
         open_trades[pair] = [long_order]
         uf.record_open_trades(strat.name, market_data, open_trades)
-        stop_order = funcs.set_stop_M(pair, long_order, be.SIDE_SELL, stp, stp*0.9)
+        funcs.set_stop_M(pair, long_order, be.SIDE_SELL, stp, stp*0.9)
         in_pos = True
         strat.sizing[asset] = funcs.update_pos_M(asset, strat.bal, inval_dist, pos_fr_dol)
         strat.sizing['USDT'] = funcs.update_usdt_M(strat.bal)
@@ -276,7 +278,7 @@ def margin_tp_long(pair, pct, stp, live):
     print(now, note)
     
     if live:
-        pass
+        api_order = funcs.close_long(pair, pct)
     else:
         pass
 
