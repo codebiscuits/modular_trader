@@ -58,10 +58,10 @@ if not live:
     # now that trade records have been loaded, path can be changed
     market_data = Path('test_records')
 uf.backup_trade_records(strat.name, market_data, open_trades, closed_trades)
-next_id, strat.counts_dict = uf.record_stopped_trades(open_trades, closed_trades, 
+next_id = uf.record_stopped_trades(open_trades, closed_trades, 
                                                 pairs_in_pos, now_start, 
                                                 next_id, strat, 
-                                                market_data, strat.counts_dict)
+                                                market_data)
 
 # set fixed risk
 total_bal = funcs.account_bal()
@@ -79,6 +79,7 @@ strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
 max_positions = uf.set_max_pos(strat.sizing, params)
 if max_positions > 20:
     print(f'{max_positions = }')
+num_open_positions = len(pairs_in_pos)
 
 for pair in pairs:
     asset = pair[:-1*len(params.get('quote_asset'))]
@@ -136,8 +137,8 @@ for pair in pairs:
     
     elif signals.get('open_spot'):        
         risk = (price - stp) / price
-        mir = uf.max_init_risk(len(pairs_in_pos), params.get('target_risk'))
-        print(f'risk: {risk}, max_init_risk: {mir}, open positions: {len(pairs_in_pos)}')
+        mir = uf.max_init_risk(num_open_positions, params.get('target_risk'))
+        # print(f'risk: {risk}, max_init_risk: {mir}, open positions: {num_open_positions}')
         # TODO max init risk should be based on average inval dist of signals, not fixed risk setting
         if risk > mir:
             strat.counts_dict['too_risky'] += 1
@@ -166,7 +167,7 @@ for pair in pairs:
         
         if enough_size and enough_depth:            
 # check total risk and close profitable positions if necessary ----------------
-            strat.sizing, tp_trades = funcs.reduce_risk(strat.sizing, signals, params, fixed_risk, live)
+            tp_trades = funcs.reduce_risk(strat.sizing, signals, params, fixed_risk, live)
             strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
             
 # transfer trade records from reduce_risk into json records -------------------
@@ -195,6 +196,7 @@ for pair in pairs:
             num_open_positions = len(or_list)
             if num_open_positions >= max_positions or total_open_risk > params.get('total_r_limit'):
                 strat.counts_dict['too_many_pos'] += 1
+                print(f'max exposure reached: {total_open_risk = }, {num_open_positions = }')
                 continue
             
             usdt_bal = funcs.free_usdt()

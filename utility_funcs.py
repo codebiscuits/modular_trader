@@ -314,7 +314,7 @@ def find_bad_keys(c_data):
     return bad_keys
 
 def record_stopped_trades(open_trades, closed_trades, pairs_in_pos, now_start, 
-                          next_id, strat, market_data, counts_dict):
+                          next_id, strat, market_data):
     # create list of trade records which don't match current positions
     open_trades_list = list(open_trades.keys())
     stopped_trades = [st for st in open_trades_list if st not in pairs_in_pos] # these positions must have been stopped out
@@ -390,13 +390,13 @@ def record_stopped_trades(open_trades, closed_trades, pairs_in_pos, now_start,
             closed_trades[next_id] = trade_record
             print(f'warning, trade record for {t.get("symbol")} missing trade open')
         record_closed_trades(strat.name, market_data, closed_trades)
-        counts_dict['stop_count'] += 1
+        strat.counts_dict['stop_count'] += 1
         next_id += 1
         if open_trades[i]:
             del open_trades[i]
             record_open_trades(strat.name, market_data, open_trades)
     
-    return next_id, counts_dict
+    return next_id
 
 def recent_perf_str(strat, market_data):
     '''generates a string of + and - to represent recent strat performance'''
@@ -460,7 +460,6 @@ def set_fixed_risk(strat, market_data, total_bal):
     fr_prev = json.loads(bal_data[-1]).get('fr')
     fr_min = params.get('fr_range')[0]
     fr_max = params.get('fr_range')[1]
-    print(f'{fr_min = } {fr_max = }')
     fr_inc = (fr_max - fr_min) / 10 # increment fr in 10% steps of the range
     
     bal_0 = total_bal
@@ -469,16 +468,25 @@ def set_fixed_risk(strat, market_data, total_bal):
     bal_3 = json.loads(bal_data[-3]).get('balance')
     bal_4 = json.loads(bal_data[-4]).get('balance')
     
-    last_prof = bal_0 > bal_1
-    other_prof = (bal_1 > bal_2) + (bal_2 > bal_3) + (bal_3 > bal_4)
+    score = 0
+    if bal_0 > bal_1:
+        score += 1
+    if (bal_1 > bal_2):
+        score += 0.75
+    if (bal_2 > bal_3):
+        score += 0.5
+    if (bal_3 > bal_4):
+        score += 0.25
     
-    if last_prof and (other_prof == 3):
+    if score == 2.5:
+        fr = min(fr_prev + (2*fr_inc), fr_max)
+    elif score > 2:
         fr = min(fr_prev + fr_inc, fr_max)
-    elif last_prof and (other_prof != 3) and (fr_prev >= fr_min):
+    elif score >= 1.25:
         fr = fr_prev
-    elif not last_prof and (other_prof == 3):
+    elif score >= 0.75:
         fr = reduce_fr(0.333, fr_prev, fr_min, fr_inc)
-    elif not last_prof and (other_prof == 2):
+    elif score >= 0.5:
         fr = reduce_fr(0.5, fr_prev, fr_min, fr_inc)
     else:
         fr = fr_min
@@ -486,6 +494,7 @@ def set_fixed_risk(strat, market_data, total_bal):
     if fr != fr_prev:
         pb.push_note(now, f'fixed risk adjusted from {fr_prev} to {fr}')
     
+    print(f'fixed risk perf score: {score}')
     return fr
 
 def sync_test_records(strat, market_data):

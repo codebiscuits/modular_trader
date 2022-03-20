@@ -769,6 +769,7 @@ def reduce_risk(sizing, signals, params, fixed_risk, live):
     if positions:
         # sort the list so biggest open risk is first
         sorted_pos = sorted(positions, key=lambda x: x[1], reverse=True)
+        # pprint(sorted_pos)
 
         # # create a new list with just the R values
         r_list = [x.get('or_R') for x in sizing.values() if x.get('or_R')]
@@ -803,7 +804,7 @@ def reduce_risk(sizing, signals, params, fixed_risk, live):
             else:
                 break
 
-    return sizing, trade_notes
+    return trade_notes
 
 
 #-#-#- Margin Account Functions
