@@ -64,7 +64,8 @@ next_id, strat.counts_dict = uf.record_stopped_trades(open_trades, closed_trades
                                                 market_data, strat.counts_dict)
 
 # set fixed risk
-fixed_risk = uf.set_fixed_risk(strat, market_data)
+total_bal = funcs.account_bal()
+fixed_risk = uf.set_fixed_risk(strat, market_data, total_bal)
 max_init_r = fixed_risk * params.get('total_r_limit')
 fixed_risk_dol = fixed_risk * strat.bal
 
