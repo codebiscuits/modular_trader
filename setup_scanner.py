@@ -237,20 +237,20 @@ for pair in pairs:
         open_risk_r = strat.sizing.get(asset)['or_R']
         
 # calculate how much price has moved since entry ------------------------------
-    if ep:
-        price_delta = (price - ep) / ep
+        if ep:
+            price_delta = (price - ep) / ep
     
 # take profit on risky positions ----------------------------------------------
-        if open_risk_r > params.get('indiv_r_limit') and price_delta > 0.001:
-            tp_pct = 50 if pos_bal > 30 else 100
-            open_trades, closed_trades, in_pos = omf.spot_risk_limit_tp(strat, pair, tp_pct, price, 
-                                                                        price_delta, trade_record, open_trades, 
-                                                                        closed_trades, next_id, market_data, stp, 
-                                                                        inval_dist, pos_fr_dol, in_pos, live)
-        
-        or_list = [v.get('or_R') for v in strat.sizing.values() if v.get('or_R')]
-        total_open_risk = round(sum(or_list), 2)
-        num_open_positions = len(or_list)
+            if open_risk_r > params.get('indiv_r_limit') and price_delta > 0.001:
+                tp_pct = 50 if pos_bal > 30 else 100
+                open_trades, closed_trades, in_pos = omf.spot_risk_limit_tp(strat, pair, tp_pct, price, 
+                                                                            price_delta, trade_record, open_trades, 
+                                                                            closed_trades, next_id, market_data, stp, 
+                                                                            inval_dist, pos_fr_dol, in_pos, live)
+            
+            or_list = [v.get('or_R') for v in strat.sizing.values() if v.get('or_R')]
+            total_open_risk = round(sum(or_list), 2)
+            num_open_positions = len(or_list)
         
         
 # log all data from the session and print/push summary-------------------------
