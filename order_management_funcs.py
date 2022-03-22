@@ -22,7 +22,7 @@ def spot_buy(strat, pair, fixed_risk, size, usdt_size, price, stp, inval_dist, p
     if live:
         try:
             api_order = funcs.buy_asset(pair, usdt_size, live)
-            buy_order = funcs.create_trade_dict(api_order, live)
+            buy_order = funcs.create_trade_dict(api_order, price, live)
             buy_order['type'] = 'open_long'
             buy_order['reason'] = 'buy conditions met'
             buy_order['hard_stop'] = stp
@@ -41,7 +41,7 @@ def spot_buy(strat, pair, fixed_risk, size, usdt_size, price, stp, inval_dist, p
     else:
         try:
             api_order = funcs.buy_asset(pair, usdt_size, live)
-            buy_order = funcs.create_trade_dict(api_order, live)
+            buy_order = funcs.create_trade_dict(api_order, price, live)
             buy_order['type'] = 'open_long'
             buy_order['reason'] = 'buy conditions met'
             buy_order['hard_stop'] = stp
@@ -69,7 +69,7 @@ def spot_strat_tp(strat, pair, price, stp, inval_dist, pos_fr_dol, trade_record,
         try:
             funcs.clear_stop(pair, live)
             api_order = funcs.sell_asset(pair, live, 50)
-            tp_order = funcs.create_trade_dict(api_order, live)
+            tp_order = funcs.create_trade_dict(api_order, price, live)
             tp_order['type'] = 'tp_long'
             tp_order['reason'] = 'trade over-extended'
             stop_order = funcs.set_stop(pair, stp, live)
@@ -89,7 +89,7 @@ def spot_strat_tp(strat, pair, price, stp, inval_dist, pos_fr_dol, trade_record,
         try:
             funcs.clear_stop(pair, live)
             api_order = funcs.sell_asset(pair, live, 50)
-            tp_order = funcs.create_trade_dict(api_order, live)
+            tp_order = funcs.create_trade_dict(api_order, price, live)
             tp_order['type'] = 'tp_long'
             tp_order['reason'] = 'trade over-extended'
             stop_order = funcs.set_stop(pair, stp, live)
@@ -121,7 +121,7 @@ def spot_sell(strat, pair, price, next_id, trade_record, open_trades, closed_tra
         try:
             funcs.clear_stop(pair, live)
             api_order = funcs.sell_asset(pair, live)
-            sell_order = funcs.create_trade_dict(api_order, live)
+            sell_order = funcs.create_trade_dict(api_order, price, live)
             sell_order['type'] = 'close_long'
             sell_order['reason'] = 'hit trailing stop'
             trade_record.append(sell_order)
@@ -147,7 +147,7 @@ def spot_sell(strat, pair, price, next_id, trade_record, open_trades, closed_tra
         try:
             funcs.clear_stop(pair, live)
             api_order = funcs.sell_asset(pair, live)
-            sell_order = funcs.create_trade_dict(api_order, live)
+            sell_order = funcs.create_trade_dict(api_order, price, live)
             sell_order['type'] = 'close_long'
             sell_order['reason'] = 'hit trailing stop'
             trade_record.append(sell_order)
@@ -180,7 +180,7 @@ def spot_risk_limit_tp(strat, pair, tp_pct, price, price_delta, trade_record, op
         print(now, note)
         funcs.clear_stop(pair, live)
         api_order = funcs.sell_asset(pair, live, pct=tp_pct)
-        tp_order = funcs.create_trade_dict(api_order, live)
+        tp_order = funcs.create_trade_dict(api_order, price, live)
         if tp_pct == 100:
             tp_order['type'] = 'close_long'
             tp_order['reason'] = 'position R limit exceeded'
@@ -217,7 +217,7 @@ def spot_risk_limit_tp(strat, pair, tp_pct, price, price_delta, trade_record, op
         print(now, note)
         funcs.clear_stop(pair, live)
         api_order = funcs.sell_asset(pair, live, pct=tp_pct)
-        tp_order = funcs.create_trade_dict(api_order, live)
+        tp_order = funcs.create_trade_dict(api_order, price, live)
         tp_order['type'] = 'tp_long'
         stop_order = funcs.set_stop(pair, stp, live)
         tp_order['hard_stop'] = stp
@@ -236,7 +236,6 @@ def spot_risk_limit_tp(strat, pair, tp_pct, price, price_delta, trade_record, op
     
     return open_trades, closed_trades, in_pos
 
-
 def reduce_risk(strat, params, open_trades, closed_trades, market_data, next_id, live):
     r_limit = params.get('total_r_limit')
     
@@ -253,11 +252,11 @@ def reduce_risk(strat, params, open_trades, closed_trades, market_data, next_id,
         # # create a new list with just the R values
         r_list = [x.get('or_R') for x in strat.sizing.values() if x.get('or_R')]
         total_r = sum(r_list)
-        counted = len(r_list)
-        print(f'*** total open risk: {total_r:.1f}, positions counted: {counted}/{len(strat.sizing.keys())-1}, reducing risk ***')
+        counted = len(r_list)        
         
         for pos in sorted_pos:
             if total_r > r_limit and pos[1] > 1:
+                print(f'*** tor: {total_r:.1f}, reducing risk ***')
                 pair = pos[0] + 'USDT'
                 now = datetime.now().strftime('%d/%m/%y %H:%M')
                 price = funcs.get_price(pair)
@@ -269,7 +268,7 @@ def reduce_risk(strat, params, open_trades, closed_trades, market_data, next_id,
                         # push = pb.push_note(now, note)
                         funcs.clear_stop(pair, live)
                         api_order = funcs.sell_asset(pair, live)
-                        sell_order = funcs.create_trade_dict(api_order, live)
+                        sell_order = funcs.create_trade_dict(api_order, price, live)
                         sell_order['type'] = 'close_long'
                         sell_order['reason'] = 'portfolio risk limiting'
                         if open_trades.get(pair):
@@ -297,7 +296,7 @@ def reduce_risk(strat, params, open_trades, closed_trades, market_data, next_id,
                 else:
                     funcs.clear_stop(pair, live)
                     api_order = funcs.sell_asset(pair, live)
-                    sell_order = funcs.create_trade_dict(api_order, live)
+                    sell_order = funcs.create_trade_dict(api_order, price, live)
                     sell_order['type'] = 'close_long'
                     sell_order['reason'] = 'portfolio risk limiting'
                     if open_trades.get(pair):
@@ -322,6 +321,7 @@ def reduce_risk(strat, params, open_trades, closed_trades, market_data, next_id,
     return open_trades, closed_trades, next_id
 
 
+
 def margin_open_long(strat, pair, size, stp, inval_dist, pos_fr_dol, open_trades, market_data, in_pos, live):
     price = funcs.get_price(pair)
     usdt_size = round(size*price, 2)
@@ -333,7 +333,7 @@ def margin_open_long(strat, pair, size, stp, inval_dist, pos_fr_dol, open_trades
     
     if live:
         api_order = funcs.open_long(pair, usdt_size)
-        long_order = funcs.create_trade_dict(api_order, live)
+        long_order = funcs.create_trade_dict(api_order, price, live)
         long_order['type'] = 'open_long'
         long_order['score'] = 'signal score'
         long_order['hard_stop'] = stp
@@ -346,7 +346,7 @@ def margin_open_long(strat, pair, size, stp, inval_dist, pos_fr_dol, open_trades
         strat.counts_dict['open_count'] += 1
     else:
         api_order = {'symbol': pair, 'price': funcs.get_price(pair), 'quote_size': usdt_size}
-        long_order = funcs.create_trade_dict(api_order, live)
+        long_order = funcs.create_trade_dict(api_order, price, live)
         long_order['type'] = 'open_long'
         long_order['score'] = 'signal score'
         long_order['hard_stop'] = stp
@@ -354,8 +354,6 @@ def margin_open_long(strat, pair, size, stp, inval_dist, pos_fr_dol, open_trades
         uf.record_open_trades(strat.name, market_data, open_trades)
         
     return in_pos
-
-
 
 def margin_tp_long(pair, pct, stp, live):
     price = funcs.get_price(pair)

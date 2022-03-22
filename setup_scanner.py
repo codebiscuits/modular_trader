@@ -27,8 +27,6 @@ client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 now_start = datetime.now().strftime('%d/%m/%y %H:%M')
 all_start = time.perf_counter()
-# strat = strats.RSI_ST_EMA(4, 45, 96)
-strat = strats.DoubleSTLO(3, 1.2)
 
 pi2path = Path('/home/ubuntu/rpi_2.txt')
 live = pi2path.exists()
@@ -36,6 +34,10 @@ if live:
     print('-:-' * 20)
 else:
     print('*** Warning: Not Live ***')
+    del strat
+
+# strat = strats.RSI_ST_EMA(4, 45, 96)
+strat = strats.DoubleSTLO(3, 1.2)    
 
 
 # compile and sort list of pairs to loop through ------------------------------
@@ -171,32 +173,14 @@ for pair in pairs:
             open_trades, closed_trades, next_id = omf.reduce_risk(strat, params, open_trades, closed_trades, market_data, next_id, live)
             strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
             
-# transfer trade records from reduce_risk into json records -------------------
-            # for t in tp_trades:
-            #     sym = t.get('pair')
-            #     if open_trades.get(sym):
-            #         trade_record = open_trades.get(sym)
-            #     else:
-            #         trade_record = []
-            #     trade_record.append(t)
-            #     if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
-            #         trade_id = trade_record[0].get('timestamp')
-            #         closed_trades[trade_id] = trade_record
-            #     else:
-            #         closed_trades[next_id] = trade_record
-            #     uf.record_closed_trades(strat.name, market_data, closed_trades)
-            #     next_id += 1
-            #     if open_trades[sym]:
-            #         del open_trades[sym]
-            #         uf.record_open_trades(strat.name, market_data, open_trades)
-            #     strat.counts_dict['close_count'] += 1
-            
 # make sure there aren't too many open positions now --------------------------
             or_list = [v.get('or_R') for v in strat.sizing.values() if v.get('or_R')]
             total_open_risk = sum(or_list)
             num_open_positions = len(or_list)
-            if num_open_positions >= max_positions or total_open_risk > params.get('total_r_limit'):
+            if num_open_positions >= max_positions:
                 strat.counts_dict['too_many_pos'] += 1
+            if total_open_risk > params.get('total_r_limit'):
+                strat.counts_dict['too_much_or'] += 1
                 # print(f'max exposure reached: {total_open_risk = }, {num_open_positions = }')
                 continue
             
@@ -255,6 +239,8 @@ for pair in pairs:
         
         
 # log all data from the session and print/push summary-------------------------
+print(f'tor: {total_open_risk}')
+print(f'or list: {[round(x, 2) for x in sorted(or_list, reverse=True)]}')
 strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
 
 benchmark = uf.log(live, strat, fixed_risk, market_data, spreads, now_start, 

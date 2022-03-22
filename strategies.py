@@ -429,7 +429,7 @@ class DoubleSTLO:
     description = 'regular supertrend for bias with tight supertrend for entries/exits'
     max_length = 201
     counts_dict = {'stop_count': 0, 'open_count': 0, 'add_count': 0, 'tp_count': 0, 'close_count': 0, 
-                   'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 
+                   'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 'too_much_or': 0, 
                    'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0}
     
     def __init__(self, lb, mult):

@@ -28,7 +28,7 @@ def open_trade_stats(now, k, v):
     open_time = v[0].get('timestamp') / 1000
     duration = round((now.timestamp() - open_time) / 3600, 1)
     
-    trig = float(v[0].get('exe_price'))
+    trig = float(v[0].get('trig_price'))
     sl = float(v[0].get('hard_stop'))
     r = 100 * (trig-sl) / sl
     

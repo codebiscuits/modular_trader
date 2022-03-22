@@ -596,7 +596,7 @@ def top_up_bnb(usdt_size):
     return order
 
 
-def create_trade_dict(order, live):
+def create_trade_dict(order, price, live):
     '''collects and returns the details of the order in a dictionary'''
     pair = order.get('symbol')
     if live:
@@ -608,7 +608,7 @@ def create_trade_dict(order, live):
 
         trade_dict = {'timestamp': order.get('transactTime'),
                       'pair': pair,
-                      'trig_price': order.get('price'),
+                      'trig_price': str(price),
                       'exe_price': str(avg_price),
                       'size': str(qty),
                       'base_size': order.get('executedQty'),
@@ -622,7 +622,7 @@ def create_trade_dict(order, live):
 
     else:
         trade_dict = {"pair": pair, 
-                     "trig_price": str(order.get('price')),
+                     "trig_price": str(price),
                      "base_size": str(order.get('base_size')),
                      "quote_size": str(order.get('quote_size')),
                      "fee": '0',
@@ -757,55 +757,6 @@ def clear_stop(pair, live):
                 # print(result.get('status'))
             else:
                 print('no stop to cancel')
-
-
-def reduce_risk_old(sizing, signals, params, fixed_risk, live):
-    r_limit = params.get('total_r_limit')
-    
-    # create a list of open positions in profit and their open risk value
-    positions = [(p, r.get('or_R')) for p, r in sizing.items() if r.get('or_R') and r.get('or_R') > 0]
-    
-    trade_notes = []
-    if positions:
-        # sort the list so biggest open risk is first
-        sorted_pos = sorted(positions, key=lambda x: x[1], reverse=True)
-        # pprint(sorted_pos)
-
-        # # create a new list with just the R values
-        r_list = [x.get('or_R') for x in sizing.values() if x.get('or_R')]
-        total_r = sum(r_list)
-        num_pos = len(r_list)
-
-        for pos in sorted_pos:
-            if (total_r > r_limit or num_pos >= r_limit) and pos[1] > 1.5:
-                pair = pos[0] + 'USDT'
-                now = datetime.now().strftime('%d/%m/%y %H:%M')
-                price = get_price(pair)
-                note = f"reduce risk {pair} @ {price}"
-                print(now, note)
-                if live:
-                    # push = pb.push_note(now, note)
-                    clear_stop(pair, live)
-                    api_order = sell_asset(pair, live)
-                    sell_order = create_trade_dict(api_order, live)
-                    sell_order['type'] = 'close_long'
-                    sell_order['reason'] = 'portfolio risk limiting'
-                    trade_notes.append(sell_order)
-                    total_r -= pos[1]
-                    del sizing[pos[0]]
-                else:
-                    # push = pb.push_note(now, f'sim reduce risk {pair}')
-                    clear_stop(pair, live)
-                    sell_order = sell_asset(pair, live)
-                    sell_order['type'] = 'close_long'
-                    sell_order['reason'] = 'portfolio risk limiting'
-                    trade_notes.append(sell_order)
-                    total_r -= pos[1]
-                    del sizing[pos[0]]
-            else:
-                break
-
-    return trade_notes
 
 
 #-#-#- Margin Account Functions
