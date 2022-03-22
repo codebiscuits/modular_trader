@@ -178,7 +178,7 @@ def current_positions(strat, fr):  # used to be current sizing
                     pct = round(100 * value / total_bal, 5)
                     size_dict[asset] = {'qty': quant,
                                         'value': round(value, 2), 'pf%': pct,
-                                        'pnl': ots.get('pnl_R')}
+                                        'pnl_R': ots.get('pnl_R')}
 
     return size_dict
 
@@ -759,7 +759,7 @@ def clear_stop(pair, live):
                 print('no stop to cancel')
 
 
-def reduce_risk(sizing, signals, params, fixed_risk, live):
+def reduce_risk_old(sizing, signals, params, fixed_risk, live):
     r_limit = params.get('total_r_limit')
     
     # create a list of open positions in profit and their open risk value
@@ -786,7 +786,8 @@ def reduce_risk(sizing, signals, params, fixed_risk, live):
                 if live:
                     # push = pb.push_note(now, note)
                     clear_stop(pair, live)
-                    sell_order = sell_asset(pair, live)
+                    api_order = sell_asset(pair, live)
+                    sell_order = create_trade_dict(api_order, live)
                     sell_order['type'] = 'close_long'
                     sell_order['reason'] = 'portfolio risk limiting'
                     trade_notes.append(sell_order)

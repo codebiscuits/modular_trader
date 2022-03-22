@@ -289,27 +289,31 @@ def read_trade_records(market_data, strat_name):
 def find_bad_keys(c_data):
     bad_keys = []
     for k, v in c_data.items():
-        init_base = 0
-        add_base = 0
-        tp_base = 0
-        close_base = 0
-        for x in v:
-            if x.get('type')[:4] == 'open':
-                init_base = float(x.get('base_size'))
-            elif x.get('type')[:3] == 'add':
-                add_base += float(x.get('base_size'))
-            elif x.get('type')[:2] == 'tp':
-                tp_base += float(x.get('base_size'))
-            elif x.get('type')[:5] in ['close', 'stop_']:
-                close_base = float(x.get('base_size'))
-        
-        gross_buy = init_base + add_base
-        gross_sell = tp_base + close_base
-        diff = (gross_buy - gross_sell) / gross_buy
-        pair = x.get('pair')
-        if abs(diff) > 0.03:
-            # print(f'{k} {pair} - bought: {gross_buy} sold: {gross_sell}')
-            bad_keys.append({'key': k, 'pair': pair, 'buys': gross_buy, 'sells': gross_sell})
+        try:
+            init_base = 0
+            add_base = 0
+            tp_base = 0
+            close_base = 0
+            for x in v:
+                if x.get('type')[:4] == 'open':
+                    init_base = float(x.get('base_size'))
+                elif x.get('type')[:3] == 'add':
+                    add_base += float(x.get('base_size'))
+                elif x.get('type')[:2] == 'tp':
+                    tp_base += float(x.get('base_size'))
+                elif x.get('type')[:5] in ['close', 'stop_']:
+                    close_base = float(x.get('base_size'))
+            
+            gross_buy = init_base + add_base
+            gross_sell = tp_base + close_base
+            diff = (gross_buy - gross_sell) / gross_buy
+            pair = x.get('pair')
+            if abs(diff) > 0.03:
+                # print(f'{k} {pair} - bought: {gross_buy} sold: {gross_sell}')
+                bad_keys.append({'key': k, 'pair': pair, 'buys': gross_buy, 'sells': gross_sell})
+        except:
+            print('bad key:', k)
+            continue
     
     return bad_keys
 

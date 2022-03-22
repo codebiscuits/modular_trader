@@ -83,7 +83,7 @@ num_open_positions = len(pairs_in_pos)
 
 for pair in pairs:
     asset = pair[:-1*len(params.get('quote_asset'))]
-    in_pos = pair in pairs_in_pos
+    in_pos = asset in strat.sizing.keys()
     
 # get data --------------------------------------------------------------------
     df = funcs.prepare_ohlc(pair, live)
@@ -122,7 +122,7 @@ for pair in pairs:
     
 # update positions dictionary with current pair's open_risk values ------------
     if in_pos:
-        strat.sizing[asset] = funcs.update_pos(asset, strat.bal, inval_dist, pos_fr_dol)
+        strat.sizing[asset].update(funcs.update_pos(asset, strat.bal, inval_dist, pos_fr_dol))
     
 # execute orders --------------------------------------------------------------
     tp_trades = []
@@ -142,7 +142,7 @@ for pair in pairs:
         # TODO max init risk should be based on average inval dist of signals, not fixed risk setting
         if risk > mir:
             strat.counts_dict['too_risky'] += 1
-            print('too risky')
+            # print('too risky')
             continue
         size, usdt_size = funcs.get_size(price, fixed_risk, strat.bal, risk)
         usdt_depth = funcs.get_depth(pair, 'buy', params.get('max_spread'))
@@ -163,32 +163,33 @@ for pair in pairs:
                 strat.counts_dict['books_too_thin'] += 1
         if not enough_size:
             strat.counts_dict['too_small'] += 1
-            print(f'too small, size: ${usdt_size}')
+            # print(f'too small, size: ${usdt_size}')
         
         if enough_size and enough_depth:            
-# check total risk and close profitable positions if necessary ----------------
-            tp_trades = funcs.reduce_risk(strat.sizing, signals, params, fixed_risk, live)
+# check total open risk and close profitable positions if necessary -----------
+            # tp_trades = funcs.reduce_risk_old(strat.sizing, signals, params, fixed_risk, live)
+            open_trades, closed_trades, next_id = omf.reduce_risk(strat, params, open_trades, closed_trades, market_data, next_id, live)
             strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
             
 # transfer trade records from reduce_risk into json records -------------------
-            for t in tp_trades:
-                sym = t.get('pair')
-                if open_trades.get(sym):
-                    trade_record = open_trades.get(sym)
-                else:
-                    trade_record = []
-                trade_record.append(t)
-                if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
-                    trade_id = trade_record[0].get('timestamp')
-                    closed_trades[trade_id] = trade_record
-                else:
-                    closed_trades[next_id] = trade_record
-                uf.record_closed_trades(strat.name, market_data, closed_trades)
-                next_id += 1
-                if open_trades[sym]:
-                    del open_trades[sym]
-                    uf.record_open_trades(strat.name, market_data, open_trades)
-                strat.counts_dict['close_count'] += 1
+            # for t in tp_trades:
+            #     sym = t.get('pair')
+            #     if open_trades.get(sym):
+            #         trade_record = open_trades.get(sym)
+            #     else:
+            #         trade_record = []
+            #     trade_record.append(t)
+            #     if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
+            #         trade_id = trade_record[0].get('timestamp')
+            #         closed_trades[trade_id] = trade_record
+            #     else:
+            #         closed_trades[next_id] = trade_record
+            #     uf.record_closed_trades(strat.name, market_data, closed_trades)
+            #     next_id += 1
+            #     if open_trades[sym]:
+            #         del open_trades[sym]
+            #         uf.record_open_trades(strat.name, market_data, open_trades)
+            #     strat.counts_dict['close_count'] += 1
             
 # make sure there aren't too many open positions now --------------------------
             or_list = [v.get('or_R') for v in strat.sizing.values() if v.get('or_R')]
@@ -196,7 +197,7 @@ for pair in pairs:
             num_open_positions = len(or_list)
             if num_open_positions >= max_positions or total_open_risk > params.get('total_r_limit'):
                 strat.counts_dict['too_many_pos'] += 1
-                print(f'max exposure reached: {total_open_risk = }, {num_open_positions = }')
+                # print(f'max exposure reached: {total_open_risk = }, {num_open_positions = }')
                 continue
             
             usdt_bal = funcs.free_usdt()
