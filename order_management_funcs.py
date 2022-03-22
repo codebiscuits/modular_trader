@@ -30,7 +30,7 @@ def spot_buy(strat, pair, fixed_risk, size, usdt_size, price, stp, inval_dist, p
             uf.record_open_trades(strat.name, market_data, open_trades)
             stop_order = funcs.set_stop(pair, stp, live)
             in_pos = True
-            strat.sizing[asset].update(funcs.update_pos(asset, strat.bal, inval_dist, pos_fr_dol))
+            strat.sizing[asset] = funcs.update_pos(asset, strat.bal, inval_dist, pos_fr_dol)
             strat.sizing[asset]['pnl_R'] = 0
             strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
             strat.counts_dict['open_count'] += 1
