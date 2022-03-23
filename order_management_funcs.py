@@ -213,7 +213,7 @@ def spot_risk_limit_tp(strat, pair, tp_pct, price, price_delta, trade_record, op
             strat.counts_dict['tp_count'] += 1
         
     else:
-        note = f"sim {pair} take profit"
+        note = f"{pair} take profit {tp_pct}% @ {price}, {round(price_delta*100, 2)}% from entry"
         print(now, note)
         funcs.clear_stop(pair, live)
         api_order = funcs.sell_asset(pair, live, pct=tp_pct)
@@ -230,7 +230,6 @@ def spot_risk_limit_tp(strat, pair, tp_pct, price, price_delta, trade_record, op
         pf = strat.sizing.get(asset).get('pf%') / 2
         or_R = strat.sizing.get(asset).get('or_R') / 2
         or_dol = strat.sizing.get(asset).get('or_$') / 2
-        print(strat.sizing[asset])
         strat.sizing[asset].update({'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol})
         strat.counts_dict['tp_count'] += 1
     
@@ -240,7 +239,7 @@ def reduce_risk(strat, params, open_trades, closed_trades, market_data, next_id,
     r_limit = params.get('total_r_limit')
     
     # create a list of open positions in profit and their open risk value
-    positions = [(p, r.get('or_R')) 
+    positions = [(p, r.get('or_R'), r.get('pnl_%')) 
                  for p, r in strat.sizing.items() 
                  if r.get('or_R') and r.get('or_R') > 0]
     
@@ -255,12 +254,12 @@ def reduce_risk(strat, params, open_trades, closed_trades, market_data, next_id,
         counted = len(r_list)        
         
         for pos in sorted_pos:
-            if total_r > r_limit and pos[1] > 1:
+            if total_r > r_limit and pos[1] > 1.1 and pos[2] > 0.3:
                 print(f'*** tor: {total_r:.1f}, reducing risk ***')
                 pair = pos[0] + 'USDT'
                 now = datetime.now().strftime('%d/%m/%y %H:%M')
                 price = funcs.get_price(pair)
-                note = f"reduce risk {pair} @ {price}"
+                note = f"reduce risk {pair}, or: {pos[1]}R, pnl: {pos[2]}%"
                 
                 print(now, note)
                 if live:

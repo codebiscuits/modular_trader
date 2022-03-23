@@ -178,7 +178,8 @@ def current_positions(strat, fr):  # used to be current sizing
                     pct = round(100 * value / total_bal, 5)
                     size_dict[asset] = {'qty': quant,
                                         'value': round(value, 2), 'pf%': pct,
-                                        'pnl_R': ots.get('pnl_R')}
+                                        'pnl_R': ots.get('pnl_R'),
+                                        'pnl_%': ots.get('pnl_%')}
 
     return size_dict
 
