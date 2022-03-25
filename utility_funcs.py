@@ -496,10 +496,11 @@ def set_fixed_risk(strat, market_data, total_bal):
         fr = fr_min
         
     if fr != fr_prev:
-        pb.push_note(now, f'fixed risk adjusted from {fr_prev} to {fr}')
+        note = f'fixed risk adjusted from {round(fr_prev*10000, 1)}bps to {round(fr*10000, 1)}bps'
+        pb.push_note(now, note)
     
     print(f'fixed risk perf score: {score}')
-    return fr
+    return round(fr, 5)
 
 def sync_test_records(strat, market_data):
     with open(f"{market_data}/{strat.name}_bal_history.txt", "r") as file:
