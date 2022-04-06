@@ -143,7 +143,7 @@ def market_benchmark(live):
         valid = False
     
     if live:
-        print(f'pairs with recent data: {len(all_1d)} / {len(ohlc_data.glob("*.*"))}')
+        print(f'pairs with recent data: {len(all_1d)} / {len(list(ohlc_data.glob("*.*")))}')
     
     return {'btc_1d': btc_1d, 'btc_1w': btc_1w, 'btc_1m': btc_1m, 
             'eth_1d': eth_1d, 'eth_1w': eth_1w, 'eth_1m': eth_1m, 
