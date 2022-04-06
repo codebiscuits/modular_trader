@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import statistics as stats
 from pushbullet import Pushbullet
 import time
+from pprint import pprint
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
@@ -94,7 +95,7 @@ def backup_trade_records(strat_name, market_data, ot, ct):
     else:
         pb.push_note(now, 'closed trades file empty')
 
-def market_benchmark():
+def market_benchmark(live):
     all_1d = []
     all_1w = []
     all_1m = []
@@ -107,15 +108,16 @@ def market_benchmark():
         
     for x in ohlc_data.glob('*.*'):
         df = pd.read_pickle(x)
-        # need to resample to 4h ohlc
+        df = df.tail(721)
+        df.reset_index(inplace=True)
         last_idx = len(df) - 1
         last_stamp = df.at[last_idx, 'timestamp']
         now = datetime.now()
         window = timedelta(hours=4)
-        if last_stamp > now - window: # if there is data up to the last 4 hours
-            df['roc_1d'] = df.close.pct_change(6)
-            df['roc_1w'] = df.close.pct_change(42)
-            df['roc_1m'] = df.close.pct_change(181)
+        if last_stamp > now - window: # if there is data up to the last 4 hours and 1 month of history
+            df['roc_1d'] = df.close.pct_change(24)
+            df['roc_1w'] = df.close.pct_change(168)
+            df['roc_1m'] = df.close.pct_change(720)
             all_1d.append(df.at[last_idx, 'roc_1d'])
             all_1w.append(df.at[last_idx, 'roc_1w'])
             all_1m.append(df.at[last_idx, 'roc_1m'])
@@ -133,12 +135,20 @@ def market_benchmark():
     
     all_pairs = len(list(ohlc_data.glob('*.*')))
     valid_pairs = len(all_1d)
-    if valid_pairs and all_pairs / valid_pairs > 1.5:
-        print('warning (strat benchmark): lots of pairs ohlc data not up to date')
+    if valid_pairs:
+        valid = True
+        if all_pairs / valid_pairs > 1.5:
+            print('warning (strat benchmark): lots of pairs ohlc data not up to date')
+    else:
+        valid = False
+    
+    if live:
+        print(f'pairs with recent data: {len(all_1d)} / {len(ohlc_data.glob("*.*"))}')
     
     return {'btc_1d': btc_1d, 'btc_1w': btc_1w, 'btc_1m': btc_1m, 
             'eth_1d': eth_1d, 'eth_1w': eth_1w, 'eth_1m': eth_1m, 
-            'market_1d': market_1d, 'market_1w': market_1w, 'market_1m': market_1m, }
+            'market_1d': market_1d, 'market_1w': market_1w, 'market_1m': market_1m, 
+            'valid': valid}
 
 def strat_benchmark(market_data, strat, benchmark):
     now = datetime.now()
@@ -198,7 +208,7 @@ def log(live, strat, fixed_risk, market_data, spreads,
             file.write('\n')
     
     # if live:
-    benchmark = market_benchmark()
+    benchmark = market_benchmark(live)
     benchmark = strat_benchmark(market_data, strat, benchmark)
 
     # save a json of any trades that have happened with relevant data
@@ -212,36 +222,39 @@ def log(live, strat, fixed_risk, market_data, spreads,
     return benchmark
 
 def interpret_benchmark(benchmark):
-    d_ranking = [
-        ('btc', round(benchmark['btc_1d']*100, 3)), 
-        ('eth', round(benchmark['eth_1d']*100, 3)), 
-        ('mkt', round(benchmark['market_1d']*100, 3)), 
-        ('strat', round(benchmark['strat_1d']*100, 3))
-        ]
-    d_ranking = sorted(d_ranking, key=lambda x: x[1], reverse=True)
-    print('1 day stats')
-    for e, r in enumerate(d_ranking):
-        print(f'rank {e+1}: {r[0]} {r[1]}%')
-    w_ranking = [
-        ('btc', round(benchmark['btc_1w']*100, 2)), 
-        ('eth', round(benchmark['eth_1w']*100, 2)), 
-        ('mkt', round(benchmark['market_1w']*100, 2)), 
-        ('strat', round(benchmark['strat_1w']*100, 2))
-        ]
-    w_ranking = sorted(w_ranking, key=lambda x: x[1], reverse=True)
-    print('1 week stats')
-    for e, r in enumerate(w_ranking):
-        print(f'rank {e+1}: {r[0]} {r[1]}%')
-    m_ranking = [
-        ('btc', round(benchmark['btc_1m']*100, 1)), 
-        ('eth', round(benchmark['eth_1m']*100, 1)), 
-        ('mkt', round(benchmark['market_1m']*100, 1)), 
-        ('strat', round(benchmark['strat_1m']*100, 1))
-        ]
-    m_ranking = sorted(m_ranking, key=lambda x: x[1], reverse=True)
-    print('1 month stats')
-    for e, r in enumerate(m_ranking):
-        print(f'rank {e+1}: {r[0]} {r[1]}%')
+    if benchmark['valid']:
+        d_ranking = [
+            ('btc', round(benchmark['btc_1d']*100, 3)), 
+            ('eth', round(benchmark['eth_1d']*100, 3)), 
+            ('mkt', round(benchmark['market_1d']*100, 3)), 
+            ('strat', round(benchmark['strat_1d']*100, 3))
+            ]
+        d_ranking = sorted(d_ranking, key=lambda x: x[1], reverse=True)
+        print('1 day stats')
+        for e, r in enumerate(d_ranking):
+            print(f'rank {e+1}: {r[0]} {r[1]}%')
+        w_ranking = [
+            ('btc', round(benchmark['btc_1w']*100, 2)), 
+            ('eth', round(benchmark['eth_1w']*100, 2)), 
+            ('mkt', round(benchmark['market_1w']*100, 2)), 
+            ('strat', round(benchmark['strat_1w']*100, 2))
+            ]
+        w_ranking = sorted(w_ranking, key=lambda x: x[1], reverse=True)
+        print('1 week stats')
+        for e, r in enumerate(w_ranking):
+            print(f'rank {e+1}: {r[0]} {r[1]}%')
+        m_ranking = [
+            ('btc', round(benchmark['btc_1m']*100, 1)), 
+            ('eth', round(benchmark['eth_1m']*100, 1)), 
+            ('mkt', round(benchmark['market_1m']*100, 1)), 
+            ('strat', round(benchmark['strat_1m']*100, 1))
+            ]
+        m_ranking = sorted(m_ranking, key=lambda x: x[1], reverse=True)
+        print('1 month stats')
+        for e, r in enumerate(m_ranking):
+            print(f'rank {e+1}: {r[0]} {r[1]}%')
+    else:
+        print('no benchmarking data available')
 
 def count_trades(counts):
     count_list = []
@@ -262,29 +275,29 @@ def count_trades(counts):
     
     return counts_str
 
-def read_trade_records(market_data, strat_name):
-    ot_path = f"{market_data}/{strat_name}_open_trades.json"
+def read_trade_records(market_data, strat):
+    ot_path = f"{market_data}/{strat.name}_open_trades.json"
     if Path(ot_path).exists():
         with open(ot_path, "r") as ot_file:
             try:
                 open_trades = json.load(ot_file)
             except JSONDecodeError:
                 open_trades = {}
-    ct_path = f"{market_data}/{strat_name}_closed_trades.json"
+    ct_path = f"{market_data}/{strat.name}_closed_trades.json"
     if Path(ct_path).exists():
         with open(ct_path, "r") as ct_file:
             try:
                 closed_trades = json.load(ct_file)
                 if closed_trades.keys():
                     key_ints = [int(x) for x in closed_trades.keys()]
-                    next_id = sorted(key_ints)[-1] + 1
+                    strat.next_id = sorted(key_ints)[-1] + 1
                 else:
-                    next_id = 0
+                    strat.next_id = 0
             except JSONDecodeError:
                 closed_trades = {}
-                next_id = 0
+                strat.next_id = 0
     
-    return open_trades, closed_trades, next_id
+    return open_trades, closed_trades
 
 def find_bad_keys(c_data):
     bad_keys = []
@@ -312,13 +325,14 @@ def find_bad_keys(c_data):
                 # print(f'{k} {pair} - bought: {gross_buy} sold: {gross_sell}')
                 bad_keys.append({'key': k, 'pair': pair, 'buys': gross_buy, 'sells': gross_sell})
         except:
-            print('bad key:', k)
+            bad_keys.append({'key': k, 'pair': pair, 'buys': gross_buy, 'sells': gross_sell})
+            # print('bad key:', k)
             continue
     
     return bad_keys
 
 def record_stopped_trades(open_trades, closed_trades, pairs_in_pos, now_start, 
-                          next_id, strat, market_data):
+                          strat, market_data):
     # create list of trade records which don't match current positions
     open_trades_list = list(open_trades.keys())
     stopped_trades = [st for st in open_trades_list if st not in pairs_in_pos] # these positions must have been stopped out
@@ -391,16 +405,14 @@ def record_stopped_trades(open_trades, closed_trades, pairs_in_pos, now_start,
             trade_id = trade_record[0].get('timestamp')
             closed_trades[trade_id] = trade_record
         else:
-            closed_trades[next_id] = trade_record
+            closed_trades[strat.next_id] = trade_record
             print(f'warning, trade record for {t.get("symbol")} missing trade open')
         record_closed_trades(strat.name, market_data, closed_trades)
         strat.counts_dict['stop_count'] += 1
-        next_id += 1
+        strat.next_id += 1
         if open_trades[i]:
             del open_trades[i]
             record_open_trades(strat.name, market_data, open_trades)
-    
-    return next_id
 
 def recent_perf_str(strat, market_data):
     '''generates a string of + and - to represent recent strat performance'''
@@ -444,63 +456,6 @@ def scanner_summary(strat, market_data, all_start, benchmark, live):
     
     if live:
         pb.push_note(now, final_msg)
-
-def set_fixed_risk(strat, market_data, total_bal):
-    '''calculates fixed risk setting for new trades based on recent performance 
-    and previous setting. if recent performance is very good, fr is increased slightly.
-    if not, fr is decreased by thirds'''
-    
-    def reduce_fr(factor, fr_prev, fr_min, fr_inc):
-        '''reduces fixed_risk by factor (with the floor value being fr_min)'''
-        ideal = (fr_prev - fr_min) * factor
-        reduce = max(ideal, fr_inc)
-        return max((fr_prev-reduce), fr_min)
-    
-    now = datetime.now().strftime('%d/%m/%y %H:%M')
-    
-    with open(f"{market_data}/{strat.name}_bal_history.txt", "r") as file:
-        bal_data = file.readlines()
-    
-    fr_prev = json.loads(bal_data[-1]).get('fr')
-    fr_min = params.get('fr_range')[0]
-    fr_max = params.get('fr_range')[1]
-    fr_inc = (fr_max - fr_min) / 10 # increment fr in 10% steps of the range
-    
-    bal_0 = total_bal
-    bal_1 = json.loads(bal_data[-1]).get('balance')
-    bal_2 = json.loads(bal_data[-2]).get('balance')
-    bal_3 = json.loads(bal_data[-3]).get('balance')
-    bal_4 = json.loads(bal_data[-4]).get('balance')
-    
-    score = 0
-    if bal_0 > bal_1:
-        score += 1
-    if (bal_1 > bal_2):
-        score += 0.75
-    if (bal_2 > bal_3):
-        score += 0.5
-    if (bal_3 > bal_4):
-        score += 0.25
-    
-    if score == 2.5:
-        fr = min(fr_prev + (2*fr_inc), fr_max)
-    elif score > 2:
-        fr = min(fr_prev + fr_inc, fr_max)
-    elif score >= 1.25:
-        fr = fr_prev
-    elif score >= 0.75:
-        fr = reduce_fr(0.333, fr_prev, fr_min, fr_inc)
-    elif score >= 0.5:
-        fr = reduce_fr(0.5, fr_prev, fr_min, fr_inc)
-    else:
-        fr = fr_min
-        
-    if fr != fr_prev:
-        note = f'fixed risk adjusted from {round(fr_prev*10000, 1)}bps to {round(fr*10000, 1)}bps'
-        pb.push_note(now, note)
-    
-    print(f'fixed risk perf score: {score}')
-    return round(fr, 5)
 
 def sync_test_records(strat, market_data):
     with open(f"{market_data}/{strat.name}_bal_history.txt", "r") as file:

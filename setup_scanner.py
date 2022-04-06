@@ -15,6 +15,7 @@ from pushbullet import Pushbullet
 from config import not_pairs, params, market_data
 from pprint import pprint
 import utility_funcs as uf
+import adaptive_funcs as af
 from pathlib import Path
 from random import shuffle
 
@@ -34,7 +35,6 @@ if live:
     print('-:-' * 20)
 else:
     print('*** Warning: Not Live ***')
-    del strat
 
 # strat = strats.RSI_ST_EMA(4, 45, 96)
 strat = strats.DoubleSTLO(3, 1.2)    
@@ -49,25 +49,19 @@ other_pairs = [p for p in all_pairs if (not p in pairs_in_pos) and (not p in not
 pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked first
 
 
-# counts_dict = {'stop_count': 0, 'open_count': 0, 'add_count': 0, 'tp_count': 0, 'close_count': 0, 
-#                'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 
-#                'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0}
-
 # update trade records --------------------------------------------------------
-open_trades, closed_trades, next_id = uf.read_trade_records(market_data, strat.name)
+open_trades, closed_trades = uf.read_trade_records(market_data, strat)
 if not live:
     uf.sync_test_records(strat, market_data)
     # now that trade records have been loaded, path can be changed
     market_data = Path('test_records')
 uf.backup_trade_records(strat.name, market_data, open_trades, closed_trades)
-next_id = uf.record_stopped_trades(open_trades, closed_trades, 
-                                                pairs_in_pos, now_start, 
-                                                next_id, strat, 
-                                                market_data)
+uf.record_stopped_trades(open_trades, closed_trades, pairs_in_pos, 
+                         now_start, strat, market_data)
 
 # set fixed risk
 total_bal = funcs.account_bal()
-fixed_risk = uf.set_fixed_risk(strat, market_data, total_bal)
+fixed_risk = af.set_fixed_risk(strat, market_data, total_bal)
 max_init_r = fixed_risk * params.get('total_r_limit')
 fixed_risk_dol = fixed_risk * strat.bal
 
@@ -130,11 +124,13 @@ for pair in pairs:
     tp_trades = []
     
     if signals.get('tp_spot'):
-        trade_record = omf.spot_tp(strat, pair, price, stp, inval_dist, pos_fr_dol, trade_record, 
+        # eventually tp_pct will be defined adaptively in the strat object
+        tp_pct = 50 if strat.sizing.get(asset)['value'] > 24 else 100
+        trade_record = omf.spot_tp(strat, pair, price, stp, tp_pct, inval_dist, pos_fr_dol, trade_record, 
                                                 open_trades, market_data, live)
         
     elif signals.get('close_spot'):
-        open_trades, closed_trades, in_pos = omf.spot_sell(strat, pair, price, next_id, trade_record, open_trades, 
+        open_trades, closed_trades, in_pos = omf.spot_sell(strat, pair, price, trade_record, open_trades, 
                                                                                 closed_trades, market_data, live)
     
     elif signals.get('open_spot'):        
@@ -170,7 +166,7 @@ for pair in pairs:
         if enough_size and enough_depth:            
 # check total open risk and close profitable positions if necessary -----------
             # tp_trades = funcs.reduce_risk_old(strat.sizing, signals, params, fixed_risk, live)
-            open_trades, closed_trades, next_id = omf.reduce_risk(strat, params, open_trades, closed_trades, market_data, next_id, live)
+            open_trades, closed_trades = omf.reduce_risk(strat, params, open_trades, closed_trades, market_data, live)
             strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
             
 # make sure there aren't too many open positions now --------------------------
@@ -227,10 +223,10 @@ for pair in pairs:
     
 # take profit on risky positions ----------------------------------------------
             if open_risk_r > params.get('indiv_r_limit') and price_delta > 0.001:
-                tp_pct = 50 if pos_bal > 30 else 100
+                tp_pct = 50 if pos_bal > 24 else 100
                 open_trades, closed_trades, in_pos = omf.spot_risk_limit_tp(strat, pair, tp_pct, price, 
                                                                             price_delta, trade_record, open_trades, 
-                                                                            closed_trades, next_id, market_data, stp, 
+                                                                            closed_trades, market_data, stp, 
                                                                             inval_dist, pos_fr_dol, in_pos, live)
             
             or_list = [v.get('or_R') for v in strat.sizing.values() if v.get('or_R')]

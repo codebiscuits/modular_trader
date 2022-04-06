@@ -60,7 +60,7 @@ def spot_buy(strat, pair, fixed_risk, size, usdt_size, price, stp, inval_dist, p
     
     return open_trades, in_pos
 
-def spot_strat_tp(strat, pair, price, stp, inval_dist, pos_fr_dol, trade_record, open_trades, market_data, live):
+def spot_strat_tp(strat, pair, price, stp, tp_pct, inval_dist, pos_fr_dol, trade_record, open_trades, market_data, live):
     asset = pair[:-4]
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     note = f"{pair} take-profit @ {price}"
@@ -74,7 +74,6 @@ def spot_strat_tp(strat, pair, price, stp, inval_dist, pos_fr_dol, trade_record,
             tp_order['reason'] = 'trade over-extended'
             stop_order = funcs.set_stop(pair, stp, live)
             tp_order['hard_stop'] = stp
-            tp_order['reason'] = 'position R limit exceeded'
             trade_record.append(tp_order)
             open_trades['pair'] = trade_record
             uf.record_open_trades(strat.name, market_data, open_trades)
@@ -98,11 +97,12 @@ def spot_strat_tp(strat, pair, price, stp, inval_dist, pos_fr_dol, trade_record,
             trade_record.append(tp_order)
             open_trades['pair'] = trade_record
             uf.record_open_trades(strat.name, 'test_records', open_trades)
-            qty = strat.sizing.get(asset).get('qty') / 2
-            val = strat.izing.get(asset).get('value') / 2
-            pf = strat.sizing.get(asset).get('pf%') / 2
-            or_R = strat.sizing.get(asset).get('or_R') / 2
-            or_dol = strat.sizing.get(asset).get('or_$') / 2
+            tp_scalar = 1 - (100 / tp_pct)
+            qty = strat.sizing.get(asset).get('qty') * tp_scalar
+            val = strat.sizing.get(asset).get('value') * tp_scalar
+            pf = strat.sizing.get(asset).get('pf%') * tp_scalar
+            or_R = strat.sizing.get(asset).get('or_R') * tp_scalar
+            or_dol = strat.sizing.get(asset).get('or_$') * tp_scalar
             strat.sizing[asset].update({'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol})
             strat.counts_dict['tp_count'] += 1
         except BinanceAPIException as e:
@@ -112,7 +112,7 @@ def spot_strat_tp(strat, pair, price, stp, inval_dist, pos_fr_dol, trade_record,
             
     return trade_record
 
-def spot_sell(strat, pair, price, next_id, trade_record, open_trades, closed_trades, market_data, live):
+def spot_sell(strat, pair, price, trade_record, open_trades, closed_trades, market_data, live):
     asset = pair[:-4]
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     note = f"{pair} hit trailing stop @ {price}"
@@ -129,9 +129,9 @@ def spot_sell(strat, pair, price, next_id, trade_record, open_trades, closed_tra
                 trade_id = trade_record[0].get('timestamp')
                 closed_trades[trade_id] = trade_record
             else:
-                closed_trades[next_id] = trade_record
+                closed_trades[strat.next_id] = trade_record
             uf.record_closed_trades(strat.name, market_data, closed_trades)
-            next_id += 1
+            strat.next_id += 1
             if open_trades[pair]:
                 del open_trades[pair]
                 uf.record_open_trades(strat.name, market_data, open_trades)
@@ -155,8 +155,8 @@ def spot_sell(strat, pair, price, next_id, trade_record, open_trades, closed_tra
                 trade_id = trade_record[0].get('timestamp')
                 closed_trades[trade_id] = trade_record
             else:
-                closed_trades[next_id] = trade_record
-                next_id += 1
+                closed_trades[strat.next_id] = trade_record
+                strat.next_id += 1
             uf.record_closed_trades(strat.name, 'test_records', closed_trades)
             if open_trades[pair]:
                 del open_trades[pair]
@@ -172,7 +172,7 @@ def spot_sell(strat, pair, price, next_id, trade_record, open_trades, closed_tra
             
     return open_trades, closed_trades, in_pos
 
-def spot_risk_limit_tp(strat, pair, tp_pct, price, price_delta, trade_record, open_trades, closed_trades, next_id, market_data, stp, inval_dist, pos_fr_dol, in_pos, live):
+def spot_risk_limit_tp(strat, pair, tp_pct, price, price_delta, trade_record, open_trades, closed_trades, market_data, stp, inval_dist, pos_fr_dol, in_pos, live):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     asset = pair[:-4]
     if live:
@@ -184,15 +184,14 @@ def spot_risk_limit_tp(strat, pair, tp_pct, price, price_delta, trade_record, op
         if tp_pct == 100:
             tp_order['type'] = 'close_long'
             tp_order['reason'] = 'position R limit exceeded'
-            trade_record.append(tp_order)  
-            
+            trade_record.append(tp_order)
             if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
                 trade_id = trade_record[0].get('timestamp')
                 closed_trades[trade_id] = trade_record
             else:
-                closed_trades[next_id] = trade_record
+                closed_trades[strat.next_id] = trade_record
             uf.record_closed_trades(strat.name, market_data, closed_trades)
-            next_id += 1
+            strat.next_id += 1
             if open_trades[pair]:
                 del open_trades[pair]
                 uf.record_open_trades(strat.name, market_data, open_trades)
@@ -218,24 +217,45 @@ def spot_risk_limit_tp(strat, pair, tp_pct, price, price_delta, trade_record, op
         funcs.clear_stop(pair, live)
         api_order = funcs.sell_asset(pair, live, pct=tp_pct)
         tp_order = funcs.create_trade_dict(api_order, price, live)
-        tp_order['type'] = 'tp_long'
-        stop_order = funcs.set_stop(pair, stp, live)
-        tp_order['hard_stop'] = stp
-        tp_order['reason'] = 'position R limit exceeded'
-        trade_record.append(tp_order)
-        open_trades[pair] = trade_record
-        uf.record_open_trades(strat.name, 'test_records', open_trades)
-        qty = strat.sizing.get(asset).get('qty') / 2
-        val = strat.sizing.get(asset).get('value') / 2
-        pf = strat.sizing.get(asset).get('pf%') / 2
-        or_R = strat.sizing.get(asset).get('or_R') / 2
-        or_dol = strat.sizing.get(asset).get('or_$') / 2
-        strat.sizing[asset].update({'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol})
-        strat.counts_dict['tp_count'] += 1
+        if tp_pct == 100:
+            tp_order['type'] = 'close_long'
+            tp_order['reason'] = 'position R limit exceeded'
+            trade_record.append(tp_order)  
+            
+            if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
+                trade_id = trade_record[0].get('timestamp')
+                closed_trades[trade_id] = trade_record
+            else:
+                closed_trades[strat.next_id] = trade_record
+            strat.next_id += 1
+            if open_trades[pair]:
+                del open_trades[pair]
+            in_pos = False
+            strat.sizing['USDT']['qty'] += strat.sizing[asset].get('value')
+            strat.sizing['USDT']['value'] += strat.sizing[asset].get('value')
+            strat.sizing['USDT']['pf%'] += strat.sizing[asset].get('pf%')
+            del strat.sizing[asset]
+            strat.counts_dict['close_count'] += 1
+        else:
+            tp_order['type'] = 'tp_long'
+            stop_order = funcs.set_stop(pair, stp, live)
+            tp_order['hard_stop'] = stp
+            tp_order['reason'] = 'position R limit exceeded'
+            trade_record.append(tp_order)
+            open_trades[pair] = trade_record
+            uf.record_open_trades(strat.name, 'test_records', open_trades)
+            tp_scalar = 1 - (100 / tp_pct)
+            qty = strat.sizing.get(asset).get('qty') * tp_scalar
+            val = strat.sizing.get(asset).get('value') * tp_scalar
+            pf = strat.sizing.get(asset).get('pf%') * tp_scalar
+            or_R = strat.sizing.get(asset).get('or_R') * tp_scalar
+            or_dol = strat.sizing.get(asset).get('or_$') * tp_scalar
+            strat.sizing[asset].update({'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol})
+            strat.counts_dict['tp_count'] += 1
     
     return open_trades, closed_trades, in_pos
 
-def reduce_risk(strat, params, open_trades, closed_trades, market_data, next_id, live):
+def reduce_risk(strat, params, open_trades, closed_trades, market_data, live):
     r_limit = params.get('total_r_limit')
     
     # create a list of open positions in profit and their open risk value
@@ -279,9 +299,9 @@ def reduce_risk(strat, params, open_trades, closed_trades, market_data, next_id,
                             trade_id = trade_record[0].get('timestamp')
                             closed_trades[trade_id] = trade_record
                         else:
-                            closed_trades[next_id] = trade_record
+                            closed_trades[strat.next_id] = trade_record
                         uf.record_closed_trades(strat.name, market_data, closed_trades)
-                        next_id += 1
+                        strat.next_id += 1
                         if open_trades[pair]:
                             del open_trades[pair]
                             uf.record_open_trades(strat.name, market_data, open_trades)
@@ -307,17 +327,20 @@ def reduce_risk(strat, params, open_trades, closed_trades, market_data, next_id,
                         trade_id = trade_record[0].get('timestamp')
                         closed_trades[trade_id] = trade_record
                     else:
-                        closed_trades[next_id] = trade_record
+                        closed_trades[strat.next_id] = trade_record
                     uf.record_closed_trades(strat.name, 'test_records', closed_trades)
-                    next_id += 1
+                    strat.next_id += 1
                     if open_trades[pair]:
                         del open_trades[pair]
                         uf.record_open_trades(strat.name, 'test_records', open_trades)
                     strat.counts_dict['close_count'] += 1
                     total_r -= pos[1]
+                    strat.sizing['USDT']['qty'] += strat.sizing[pos[0]].get('value')
+                    strat.sizing['USDT']['value'] += strat.sizing[pos[0]].get('value')
+                    strat.sizing['USDT']['pf%'] += strat.sizing[pos[0]].get('pf%')
                     del strat.sizing[pos[0]]
     
-    return open_trades, closed_trades, next_id
+    return open_trades, closed_trades
 
 
 
@@ -344,7 +367,7 @@ def margin_open_long(strat, pair, size, stp, inval_dist, pos_fr_dol, open_trades
         strat.sizing['USDT'] = funcs.update_usdt_M(strat.bal)
         strat.counts_dict['open_count'] += 1
     else:
-        api_order = {'symbol': pair, 'price': funcs.get_price(pair), 'quote_size': usdt_size}
+        api_order = {'symbol': pair, 'price': price, 'quote_size': usdt_size}
         long_order = funcs.create_trade_dict(api_order, price, live)
         long_order['type'] = 'open_long'
         long_order['score'] = 'signal score'
@@ -354,14 +377,51 @@ def margin_open_long(strat, pair, size, stp, inval_dist, pos_fr_dol, open_trades
         
     return in_pos
 
-def margin_tp_long(pair, pct, stp, live):
+def margin_tp_long(strat, pair, pct, stp, inval_dist, pos_fr_dol, trade_record, open_trades, closed_trades, market_data, live):
     price = funcs.get_price(pair)
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     note = f"tp long {pct} {pair} @ {price}, new stop @ {stp:.5}"
     print(now, note)
+    asset = pair[:-4]
     
     if live:
         api_order = funcs.close_long(pair, pct)
+        tp_order = funcs.create_trade_dict(api_order, price, live)
+        if pct == 100:
+            tp_order['type'] = 'close_long'
+            tp_order['reason'] = 'trade over-extended'
+            trade_record.append(tp_order)            
+            if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
+                trade_id = trade_record[0].get('timestamp')
+                closed_trades[trade_id] = trade_record
+            else:
+                closed_trades[strat.next_id] = trade_record
+            uf.record_closed_trades(strat.name, market_data, closed_trades)
+            strat.next_id += 1
+            if open_trades[pair]:
+                del open_trades[pair]
+                uf.record_open_trades(strat.name, market_data, open_trades)
+            in_pos = False
+            del strat.sizing[asset]
+            strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
+            strat.counts_dict['close_count'] += 1
+            
+            open_trades['pair'] = trade_record
+            uf.record_open_trades(strat.name, market_data, open_trades)
+            strat.sizing[asset].update(funcs.update_pos(asset, strat.bal, inval_dist, pos_fr_dol))
+            strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
+            strat.counts_dict['close_count'] += 1
+        else:
+            tp_order['type'] = 'tp_long'
+            tp_order['reason'] = 'trade over-extended'
+            stop_order = funcs.set_stop(pair, stp, live)
+            tp_order['hard_stop'] = stp
+            trade_record.append(tp_order)
+            open_trades['pair'] = trade_record
+            uf.record_open_trades(strat.name, market_data, open_trades)
+            strat.sizing[asset].update(funcs.update_pos(asset, strat.bal, inval_dist, pos_fr_dol))
+            strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
+            strat.counts_dict['tp_count'] += 1
     else:
         pass
 
