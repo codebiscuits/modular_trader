@@ -10,20 +10,31 @@ import statistics as stats
 from pushbullet import Pushbullet
 import time
 from pprint import pprint
+from decimal import Decimal
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 # now = datetime.now().strftime('%d/%m/%y %H:%M')
 
 
-def open_trade_stats(now, k, v):
+def open_trade_stats(now, total_bal, v):
     '''inputs are key and value from the open trades dictionary
-    returns current profit denominated in R'''
+    returns current profit denominated in R and in %'''
+    
+    pair = v[0].get('pair')
+    
     if v[0].get('type')[:4] != 'open':
         print('Warning - {pair} record missing open trade')
+    
+    current_base_size = 0
+    for i in v:
+        if i.get('type') in ['open_long', 'add_long', 'tp_short', 'close_short']:
+            current_base_size += Decimal(i.get('base_size'))
+        elif i.get('type') in ['open_short', 'add_short', 'tp_long', 'close_long']:
+            current_base_size -= Decimal(i.get('base_size'))
+    
     entry_price = float(v[0].get('exe_price'))
-    # curr_price = funcs.get_price(k)
-    curr_price = float(client.get_ticker(symbol=k).get('lastPrice'))
+    curr_price = funcs.get_price(pair)
     pnl = 100 * (curr_price - entry_price) / entry_price
     
     open_time = v[0].get('timestamp') / 1000
@@ -33,7 +44,12 @@ def open_trade_stats(now, k, v):
     sl = float(v[0].get('hard_stop'))
     r = 100 * (trig-sl) / sl
     
-    return {'pnl_R': pnl / r, 'pnl_%': pnl, 'entry_price': entry_price, 'duration': duration}
+    value = round(float(current_base_size) * curr_price, 2)
+    pf_pct = round(100 * value / total_bal, 5)
+    
+    return {'qty': str(current_base_size), 'value': str(value), 'pf%': pf_pct, 
+            'pnl_R': round(pnl / r, 5), 'pnl_%': round(pnl, 5), 
+            'entry_price': entry_price, 'duration (h)': duration}
 
 def adjust_max_positions(max_pos, sizing):
     '''the max_pos input tells the function what the strategy has as a default
@@ -74,26 +90,57 @@ def max_init_risk(n, target_risk):
         
     return round(output, 2)
 
-def record_open_trades(strat_name, market_data, ot):
-    with open(f"{market_data}/{strat_name}_open_trades.json", "w") as ot_file:
-        json.dump(ot, ot_file)
+def record_open_trades(strat):
+    with open(f"{strat.market_data}/{strat.name}_open_trades.json", "w") as ot_file:
+        json.dump(strat.open_trades, ot_file)
 
-def record_closed_trades(strat_name, market_data, ct):
-    with open(f"{market_data}/{strat_name}_closed_trades.json", "w") as ct_file:
-        json.dump(ct, ct_file)
+def record_sim_trades(strat):
+    with open(f"{strat.market_data}/{strat.name}_sim_trades.json", "w") as st_file:
+        json.dump(strat.sim_trades, st_file)
 
-def backup_trade_records(strat_name, market_data, ot, ct):
+def record_tracked_trades(strat):
+    with open(f"{strat.market_data}/{strat.name}_tracked_trades.json", "w") as tr_file:
+        json.dump(strat.tracked_trades, tr_file)
+
+def record_closed_trades(strat):
+    with open(f"{strat.market_data}/{strat.name}_closed_trades.json", "w") as ct_file:
+        json.dump(strat.closed_trades, ct_file)
+
+def record_closed_sim_trades(strat):
+    with open(f"{strat.market_data}/{strat.name}_closed_sim_trades.json", "w") as cs_file:
+        json.dump(strat.closed_sim_trades, cs_file)
+
+def backup_trade_records(strat):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
-    if ot:
-        with open(f"{market_data}/{strat_name}_ot_backup.json", "w") as ot_file:
-            json.dump(ot, ot_file)
+    if strat.open_trades:
+        with open(f"{strat.market_data}/{strat.name}_ot_backup.json", "w") as ot_file:
+            json.dump(strat.open_trades, ot_file)
     else:
         pb.push_note(now, 'open trades file empty')
-    if ct:
-        with open(f"{market_data}/{strat_name}_ct_backup.json", "w") as ct_file:
-            json.dump(ct, ct_file)
+    
+    if strat.sim_trades:
+        with open(f"{strat.market_data}/{strat.name}_st_backup.json", "w") as st_file:
+            json.dump(strat.sim_trades, st_file)
+    else:
+        pb.push_note(now, 'sim trades file empty')
+    
+    if strat.tracked_trades:
+        with open(f"{strat.market_data}/{strat.name}_tr_backup.json", "w") as tr_file:
+            json.dump(strat.tracked_trades, tr_file)
+    else:
+        pb.push_note(now, 'tracked trades file empty')
+    
+    if strat.closed_trades:
+        with open(f"{strat.market_data}/{strat.name}_ct_backup.json", "w") as ct_file:
+            json.dump(strat.closed_trades, ct_file)
     else:
         pb.push_note(now, 'closed trades file empty')
+    
+    if strat.closed_sim_trades:
+        with open(f"{strat.market_data}/{strat.name}_cs_backup.json", "w") as cs_file:
+            json.dump(strat.closed_sim_trades, cs_file)
+    else:
+        pb.push_note(now, 'closed sim trades file empty')
 
 def market_benchmark(live):
     all_1d = []
@@ -108,19 +155,23 @@ def market_benchmark(live):
         
     for x in ohlc_data.glob('*.*'):
         df = pd.read_pickle(x)
-        df = df.tail(721)
-        df.reset_index(inplace=True)
+        if len(df) > 721:
+            df = df.tail(721)
+            df.reset_index(inplace=True)
         last_idx = len(df) - 1
         last_stamp = df.at[last_idx, 'timestamp']
         now = datetime.now()
         window = timedelta(hours=4)
-        if last_stamp > now - window: # if there is data up to the last 4 hours and 1 month of history
-            df['roc_1d'] = df.close.pct_change(24)
-            df['roc_1w'] = df.close.pct_change(168)
-            df['roc_1m'] = df.close.pct_change(720)
-            all_1d.append(df.at[last_idx, 'roc_1d'])
-            all_1w.append(df.at[last_idx, 'roc_1w'])
-            all_1m.append(df.at[last_idx, 'roc_1m'])
+        if last_stamp > now - window: # if there is data up to the last 4 hours
+            if len(df) >= 25:
+                df['roc_1d'] = df.close.pct_change(24)
+                all_1d.append(df.at[last_idx, 'roc_1d'])
+            if len(df) >= 169:
+                df['roc_1w'] = df.close.pct_change(168)
+                all_1w.append(df.at[last_idx, 'roc_1w'])
+            if len(df) >= 721:
+                df['roc_1m'] = df.close.pct_change(720)
+                all_1m.append(df.at[last_idx, 'roc_1m'])
             if x.stem == 'BTCUSDT':
                 btc_1d = df.at[last_idx, 'roc_1d']
                 btc_1w = df.at[last_idx, 'roc_1w']
@@ -129,9 +180,12 @@ def market_benchmark(live):
                 eth_1d = df.at[last_idx, 'roc_1d']
                 eth_1w = df.at[last_idx, 'roc_1w']
                 eth_1m = df.at[last_idx, 'roc_1m']
-    market_1d = stats.median(all_1d) if all_1d else 0
-    market_1w = stats.median(all_1w) if all_1w else 0
-    market_1m = stats.median(all_1m) if all_1m else 0
+    market_1d = stats.median(all_1d) if len(all_1d)>3 else 0
+    market_1w = stats.median(all_1w) if len(all_1w)>3 else 0
+    market_1m = stats.median(all_1m) if len(all_1m)>3 else 0
+    print(f'1d median based on {len(all_1d)} data points')
+    print(f'1w median based on {len(all_1w)} data points')
+    print(f'1m median based on {len(all_1m)} data points')
     
     all_pairs = len(list(ohlc_data.glob('*.*')))
     valid_pairs = len(all_1d)
@@ -150,7 +204,7 @@ def market_benchmark(live):
             'market_1d': market_1d, 'market_1w': market_1w, 'market_1m': market_1m, 
             'valid': valid}
 
-def strat_benchmark(market_data, strat, benchmark):
+def strat_benchmark(strat, benchmark):
     now = datetime.now()
     day_ago = now - timedelta(days=1)
     week_ago = now - timedelta(days=7)
@@ -158,7 +212,7 @@ def strat_benchmark(market_data, strat, benchmark):
     
     bal_now, bal_1d, bal_1w, bal_1m = None, None, None, None
     
-    with open(f"{market_data}/{strat.name}_bal_history.txt", "r") as file:
+    with open(f"{strat.market_data}/{strat.name}_bal_history.txt", "r") as file:
         bal_data = file.readlines()
     
     bal_now = json.loads(bal_data[-1]).get('balance')
@@ -193,31 +247,32 @@ def strat_benchmark(market_data, strat, benchmark):
     
     return benchmark 
 
-def log(live, strat, fixed_risk, market_data, spreads, 
-        now_start, tp_trades, ot, closed_trades):    
+def log(live, strat, fixed_risk, spreads, now_start):    
     
     # check total balance and record it in a file for analysis
     total_bal = funcs.account_bal()
+    
     bal_record = {'timestamp': now_start, 'balance': round(total_bal, 2), 'fr': 
                   fixed_risk, 'positions': strat.sizing, 'params': params, 
-                  'trade_counts': strat.counts_dict}
+                  'trade_counts': strat.counts_dict, 
+                  'realised_pnl': strat.realised_pnl, 'sim_r_pnl': strat.sim_pnl}
     new_line = json.dumps(bal_record)
     if live:
-        with open(f"{market_data}/{strat.name}_bal_history.txt", "a") as file:
+        with open(f"{strat.market_data}/{strat.name}_bal_history.txt", "a") as file:
             file.write(new_line)
             file.write('\n')
     
     # if live:
     benchmark = market_benchmark(live)
-    benchmark = strat_benchmark(market_data, strat, benchmark)
+    benchmark = strat_benchmark(strat, benchmark)
 
     # save a json of any trades that have happened with relevant data
     if live:
         # should be able to remove these two function calls
-        with open(f"{market_data}/{strat.name}_open_trades.json", "w") as ot_file:
-            json.dump(ot, ot_file)            
-        with open(f"{market_data}/{strat.name}_closed_trades.json", "w") as ct_file:
-            json.dump(closed_trades, ct_file)
+        with open(f"{strat.market_data}/{strat.name}_open_trades.json", "w") as ot_file:
+            json.dump(strat.open_trades, ot_file)            
+        with open(f"{strat.market_data}/{strat.name}_closed_trades.json", "w") as ct_file:
+            json.dump(strat.closed_trades, ct_file)
     
     return benchmark
 
@@ -275,30 +330,6 @@ def count_trades(counts):
     
     return counts_str
 
-def read_trade_records(market_data, strat):
-    ot_path = f"{market_data}/{strat.name}_open_trades.json"
-    if Path(ot_path).exists():
-        with open(ot_path, "r") as ot_file:
-            try:
-                open_trades = json.load(ot_file)
-            except JSONDecodeError:
-                open_trades = {}
-    ct_path = f"{market_data}/{strat.name}_closed_trades.json"
-    if Path(ct_path).exists():
-        with open(ct_path, "r") as ct_file:
-            try:
-                closed_trades = json.load(ct_file)
-                if closed_trades.keys():
-                    key_ints = [int(x) for x in closed_trades.keys()]
-                    strat.next_id = sorted(key_ints)[-1] + 1
-                else:
-                    strat.next_id = 0
-            except JSONDecodeError:
-                closed_trades = {}
-                strat.next_id = 0
-    
-    return open_trades, closed_trades
-
 def find_bad_keys(c_data):
     bad_keys = []
     for k, v in c_data.items():
@@ -331,15 +362,34 @@ def find_bad_keys(c_data):
     
     return bad_keys
 
-def record_stopped_trades(open_trades, closed_trades, pairs_in_pos, now_start, 
-                          strat, market_data):
+def realised_pnl(strat, trade_record):
+    entry = float(trade_record[0].get('exe_price'))
+    init_stop = float(trade_record[0].get('hard_stop'))
+    init_size = float(trade_record[0].get('base_size'))
+    final_exit = float(trade_record[-1].get('exe_price'))
+    final_size = float(trade_record[-1].get('base_size'))
+    r_val = (entry - init_stop) / entry
+    trade_pnl = (final_exit - entry) / entry
+    trade_r = round(trade_pnl / r_val, 3)
+    
+    if trade_record[-1].get('state') == 'real':
+        scalar = final_size / init_size
+        realised_r = trade_r * scalar
+        strat.realised_pnl += realised_r
+    elif trade_record[-1].get('state') == 'sim':
+        strat.sim_pnl += trade_r # realised sim pnl ignores trade size because it's often 0
+    else:
+        print(f'state in record: {trade_record[-1].get("state")}')
+        print(f'{trade_r = }')
+
+def record_stopped_trades(pairs_in_pos, now_start, strat):
     # create list of trade records which don't match current positions
-    open_trades_list = list(open_trades.keys())
+    open_trades_list = list(strat.open_trades.keys())
     stopped_trades = [st for st in open_trades_list if st not in pairs_in_pos] # these positions must have been stopped out
 
     # look for stopped out positions and complete trade records
     for i in stopped_trades:
-        trade_record = open_trades.get(i)
+        trade_record = strat.open_trades.get(i)
         
         # work out how much base size has been bought vs sold
         init_base = 0
@@ -401,23 +451,102 @@ def record_stopped_trades(open_trades, closed_trades, pairs_in_pos, now_start,
         print(now_start, note)
         # push = pb.push_note(now_start, note)
         trade_record.append(trade_dict)
+        
         if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
             trade_id = trade_record[0].get('timestamp')
-            closed_trades[trade_id] = trade_record
+            strat.closed_trades[trade_id] = trade_record
         else:
-            closed_trades[strat.next_id] = trade_record
+            strat.closed_trades[strat.next_id] = trade_record
             print(f'warning, trade record for {t.get("symbol")} missing trade open')
-        record_closed_trades(strat.name, market_data, closed_trades)
+        record_closed_trades(strat)
         strat.counts_dict['stop_count'] += 1
         strat.next_id += 1
-        if open_trades[i]:
-            del open_trades[i]
-            record_open_trades(strat.name, market_data, open_trades)
+        if strat.open_trades[i]:
+            del strat.open_trades[i]
+            record_open_trades(strat)
+        realised_pnl(strat, trade_record)
 
-def recent_perf_str(strat, market_data):
+def record_stopped_sim_trades(strat, now_start):
+    '''goes through all trades in the sim_trades file and checks their recent 
+    price action against their most recent hard_stop to see if any of them would have 
+    got stopped out'''
+    
+    for k, v in strat.sim_trades.items():
+        # first filter out all trades which started out real
+        if v[0].get('real'):
+            continue
+        
+        pair = v[0].get('pair')
+        long_trade = True if v[0].get('type')[-4:] == 'long' else False
+        
+        # calculate current base size
+        base_size = 0
+        for i in v:
+            if i.get('type') in ['open_long', 'add_long', 'tp_short']:
+                base_size += float(i.get('base_size'))
+            else:
+                base_size -= float(i.get('base_size'))
+        
+        # find most recent hard stop
+        for i in v[-1::-1]:
+            if i.get('hard_stop'):
+                stop = float(i.get('hard_stop'))
+                stop_time = i.get('timestamp')
+                break
+            
+        # check lowest low since stop was set
+        klines = client.get_historical_klines(pair, Client.KLINE_INTERVAL_1HOUR, stop_time)
+        cols = ['timestamp', 'open', 'high', 'low', 'close', 'base vol', 'close time',
+                'volume', 'num trades', 'taker buy base vol', 'taker buy quote vol', 'ignore']
+        df = pd.DataFrame(klines, columns=cols)
+        df['timestamp'] = df['timestamp'] * 1000000
+        df = df.astype(float)
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        
+        if long_trade:
+            trade_type = 'stop_long'
+            ll = df.low.min()
+            # stop_time = find timestamp of that lowest low candle
+            stopped = ll < stop
+            overshoot_pct = round((100 * (stop - ll) / stop), 3) # % distance that price broke through the stop
+        else:
+            trade_type = 'stop_short'
+            hh = df.high.max()
+            # stop_time = find timestamp of that highest high candle
+            stopped = hh > stop
+            overshoot_pct = round((100 * (hh - stop) / stop), 3) # % distance that price broke through the stop
+        
+        if stopped:
+            # create trade dict
+            trade_dict = {'timestamp': stop_time, 
+                          'pair': pair, 
+                          'type': trade_type, 
+                          'exe_price': str(stop), 
+                          'base_size': str(base_size), 
+                          'quote_size': str(round(base_size * stop, 2)), 
+                          'fee': 0, 
+                          'fee_currency': 'BNB', 
+                          'reason': 'hit hard stop', 
+                          }
+            note = f"stopped out {pair} @ {stop}"
+            print(now_start, note)
+            # push = pb.push_note(now_start, note)
+            trade_record = v
+            trade_record.append(trade_dict)
+            
+            # calculate and record realised pnl
+            realised_pnl(strat, trade_record)
+            
+            strat.sim_trades[pair] = trade_record
+            record_sim_trades(strat)
+            strat.counts_dict['stop_count'] += 1
+            
+        
+
+def recent_perf_str(strat):
     '''generates a string of + and - to represent recent strat performance'''
     
-    with open(f"{market_data}/{strat.name}_bal_history.txt", "r") as file:
+    with open(f"{strat.market_data}/{strat.name}_bal_history.txt", "r") as file:
         bal_data = file.readlines()
     
     bal_0 = json.loads(bal_data[-1]).get('balance')
@@ -433,7 +562,7 @@ def recent_perf_str(strat, market_data):
     
     return f'  {a} | {b} {c} {d}'
 
-def scanner_summary(strat, market_data, all_start, benchmark, live):
+def scanner_summary(strat, all_start, benchmark, live):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     # all_end = time.perf_counter()
     # all_time = all_end - all_start
@@ -449,7 +578,7 @@ def scanner_summary(strat, market_data, all_start, benchmark, live):
     live_str = '' if live else '*not live* '
     elapsed_str = '' # f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s, '
     count_str = count_trades(strat.counts_dict)
-    perf_str = recent_perf_str(strat, market_data)
+    perf_str = recent_perf_str(strat)
     bench_str = f"1m perf: strat {round(benchmark.get('strat_1m')*100, 2)}%, mkt {round(benchmark.get('market_1m')*100, 2)}%"
     final_msg = f'{live_str}{elapsed_str}total bal: ${total_bal:.2f} {perf_str}\npositions {num_open_positions}, exposure {vol_exp}% {count_str}\n{bench_str}'
     print(final_msg)
@@ -457,26 +586,59 @@ def scanner_summary(strat, market_data, all_start, benchmark, live):
     if live:
         pb.push_note(now, final_msg)
 
-def sync_test_records(strat, market_data):
-    with open(f"{market_data}/{strat.name}_bal_history.txt", "r") as file:
+def sync_test_records(strat):
+    with open(f"{strat.market_data}/{strat.name}_bal_history.txt", "r") as file:
         bal_data = file.readlines()
     with open(f"test_records/{strat.name}_bal_history.txt", "w") as file:
         file.writelines(bal_data)
     
     
-    with open(f'{market_data}/{strat.name}_open_trades.json', 'r') as file:
-        o_data = json.load(file)
-    with open(f'test_records/{strat.name}_open_trades.json', 'w') as file:
-        json.dump(o_data, file)
+    try:
+        with open(f'{strat.market_data}/{strat.name}_open_trades.json', 'r') as file:
+            o_data = json.load(file)
+        with open(f'test_records/{strat.name}_open_trades.json', 'w') as file:
+            json.dump(o_data, file)
+    except JSONDecodeError:
+        print('open_trades file empty')
     
     
-    with open(f'{market_data}/{strat.name}_closed_trades.json', 'r') as file:
-        c_data = json.load(file)
-    with open(f'test_records/{strat.name}_closed_trades.json', 'w') as file:
-        json.dump(c_data, file)
+    try:
+        with open(f'{strat.market_data}/{strat.name}_sim_trades.json', 'r') as file:
+            s_data = json.load(file)
+        with open(f'test_records/{strat.name}_sim_trades.json', 'w') as file:
+            json.dump(s_data, file)
+    except JSONDecodeError:
+        print('sim_trades file empty')
+    
+    
+    try:
+        with open(f'{strat.market_data}/{strat.name}_tracked_trades.json', 'r') as file:
+            tr_data = json.load(file)
+        with open(f'test_records/{strat.name}_tracked_trades.json', 'w') as file:
+            json.dump(tr_data, file)
+    except JSONDecodeError:
+        print('tracked_trades file empty')
+    
+    
+    try:
+        with open(f'{strat.market_data}/{strat.name}_closed_trades.json', 'r') as file:
+            c_data = json.load(file)
+        with open(f'test_records/{strat.name}_closed_trades.json', 'w') as file:
+            json.dump(c_data, file)
+    except JSONDecodeError:
+        print('closed_trades file empty')
 
 
-    with open(f'{market_data}/binance_liquidity_history.txt', 'r') as file:
+    try:
+        with open(f'{strat.market_data}/{strat.name}_closed_sim_trades.json', 'r') as file:
+            cs_data = json.load(file)
+        with open(f'test_records/{strat.name}_closed_sim_trades.json', 'w') as file:
+            json.dump(cs_data, file)
+    except JSONDecodeError:
+        print('closed_sim_trades file empty')
+
+
+    with open(f'{strat.market_data}/binance_liquidity_history.txt', 'r') as file:
         book_data = file.readlines()
     with open('test_records/binance_liquidity_history.txt', 'w') as file:
         file.writelines(book_data)
@@ -492,8 +654,8 @@ def set_max_pos(sizing, params):
     else:
         return 20
 
-def calc_pos_fr_dol(trade_record, fixed_risk_dol, in_pos):   
-    if in_pos and trade_record and trade_record[0].get('type')[0] == 'o':
+def calc_pos_fr_dol(trade_record, fixed_risk_dol, in_pos, switch):   
+    if in_pos[switch] and trade_record and trade_record[0].get('type')[0] == 'o':
         qs = float(trade_record[0].get('quote_size'))
         ep = float(trade_record[0].get('exe_price'))
         hs = trade_record[0].get('hard_stop')
@@ -502,5 +664,27 @@ def calc_pos_fr_dol(trade_record, fixed_risk_dol, in_pos):
         ep = None # i refer to this later and need it to exist even if it has no value
         pos_fr_dol = fixed_risk_dol
     
-    return pos_fr_dol, ep
+    in_pos[f'{switch}_pfrd'] = pos_fr_dol
+    in_pos[f'{switch}_ep'] = ep
+
+    return in_pos
+
+def calc_sizing_non_live_tp(strat, asset, tp_pct, switch):
+    tp_scalar = 1 - (100 / tp_pct)
+    qty = strat.sizing.get(asset).get('qty') * tp_scalar
+    val = strat.sizing.get(asset).get('value') * tp_scalar
+    pf = strat.sizing.get(asset).get('pf%') * tp_scalar
+    or_R = strat.sizing.get(asset).get('or_R') * tp_scalar
+    or_dol = strat.sizing.get(asset).get('or_$') * tp_scalar
+    if switch == 'real':
+        strat.sizing[asset].update({'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol})
+    elif switch == 'sim':
+        strat.sim_pos[asset].update({'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol})
+
+def too_new(df, in_pos):
+    if in_pos['real'] or in_pos['sim'] or in_pos['tracked']:
+        no_pos = False
+    else:
+        no_pos = True    
+    return len(df) <= 200 and no_pos
 

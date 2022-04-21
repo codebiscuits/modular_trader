@@ -7,7 +7,7 @@ import binance.enums as be
 from pushbullet import Pushbullet
 from decimal import Decimal
 from pprint import pprint
-from config import ohlc_data, market_data
+from config import ohlc_data#, market_data
 from pathlib import Path
 from datetime import datetime
 import utility_funcs as uf
@@ -75,8 +75,13 @@ def order_by_volsm(pairs, lookback):
 
 
 def get_size(price, fr, balance, risk):
-    trade_risk = risk / fr
-    usdt_size = float(balance / trade_risk)
+    if fr:
+        trade_risk = risk / fr
+        usdt_size = float(balance / trade_risk)
+    else:
+        trade_risk = 0
+        usdt_size = 0
+    
     asset_quantity = float(usdt_size / price)
 
     return asset_quantity, usdt_size
@@ -134,10 +139,39 @@ def account_bal():
     return total
 
 
-def current_positions(strat, fr):  # used to be current sizing
+def current_positions(strat, switch:str):
+    '''creates a dictionary of open positions by checking either 
+    open_trades.json, sim_trades.json or tracked_trades.json'''
+        
+    filepath = Path(f'{strat.market_data}/{strat.name}_{switch}_trades.json')
+    with open(filepath, 'r') as file:
+        try:
+            data = json.load(file)
+        except:
+            data = {}
+    
+    size_dict = {}
+    now = datetime.now()
+    total_bal = account_bal()
+    
+    for k, v in data.items():
+        if switch == 'open':
+            asset = k[:-4]
+            size_dict[asset] = uf.open_trade_stats(now, total_bal, v)
+        elif switch == 'sim':
+            asset = v[0].get('pair')[:-4]
+            size_dict[asset] = uf.open_trade_stats(now, total_bal, v)
+        elif switch == 'tracked':
+            asset = v[0].get('pair')[:-4]
+            size_dict[asset] = {}
+    
+    return size_dict
+        
+
+def current_positions_old(market_data, strat_name, fr):  # used to be current sizing
     '''returns a dict with assets as keys and various expressions of positioning as values'''
     
-    o_path = Path(f'{market_data}/{strat}_open_trades.json')
+    o_path = Path(f'{market_data}/{strat_name}_open_trades.json')
     with open(o_path, 'r') as file:
         try:
             o_data = json.load(file)
@@ -167,7 +201,7 @@ def current_positions(strat, fr):  # used to be current sizing
                 continue
             if pair in o_data.keys():
                 now = datetime.now()
-                ots = uf.open_trade_stats(now, pair, o_data.get(pair))
+                ots = uf.open_trade_stats(now, total_bal, pair, o_data.get(pair))
                 quant = float(b.get('free')) + float(b.get('locked'))
                 value = price * quant
                 if asset == 'BNB' and value < 20:
@@ -189,7 +223,25 @@ def free_usdt():
     return float(usdt_bals.get('free'))
 
 
-def update_pos(asset, total_bal, inval, pos_fr_dol):
+def update_pos(asset, base_bal, total_bal, inval, pos_fr_dol):
+    '''checks for the current balance of a particular asset and returns it in 
+    the correct format for the sizing dict. also calculates the open risk for 
+    a given asset and returns it in R and $ denominations'''
+
+    pair = asset + 'USDT'
+    price = get_price(pair)
+    value = price * float(base_bal)
+    pct = round(100 * value / total_bal, 5)
+    open_risk = value - (value / inval)
+    if pos_fr_dol:
+        open_risk_r = open_risk / pos_fr_dol
+    else:
+        open_risk_r = 0
+
+    return {'qty': base_bal, 'value': value, 'pf%': pct, 'or_R': open_risk_r, 'or_$': open_risk}
+
+
+def update_pos_old(asset, total_bal, inval, pos_fr_dol):
     '''checks for the current balance of a particular asset and returns it in 
     the correct format for the sizing dict. also calculates the open risk for 
     a given asset and returns it in R and $ denominations'''
@@ -201,7 +253,10 @@ def update_pos(asset, total_bal, inval, pos_fr_dol):
     value = price * base_bal
     pct = round(100 * value / total_bal, 5)
     open_risk = value - (value / inval)
-    open_risk_r = open_risk / pos_fr_dol
+    if pos_fr_dol:
+        open_risk_r = open_risk / pos_fr_dol
+    else:
+        open_risk_r = 0
 
     return {'qty': base_bal, 'value': value, 'pf%': pct, 'or_R': open_risk_r, 'or_$': open_risk}
 
@@ -220,6 +275,10 @@ def update_usdt(total_bal):
 
 
 def get_price(pair):
+    return float(client.get_ticker(symbol=pair).get('lastPrice'))
+
+
+def get_mid_price(pair):
     '''returns the midpoint between first bid and ask price on the orderbook 
     for the pair in question'''
     t = client.get_orderbook_ticker(symbol=pair)
@@ -624,6 +683,7 @@ def create_trade_dict(order, price, live):
     else:
         trade_dict = {"pair": pair, 
                      "trig_price": str(price),
+                     "exe_price": str(price),
                      "base_size": str(order.get('base_size')),
                      "quote_size": str(order.get('quote_size')),
                      "fee": '0',
@@ -664,7 +724,30 @@ def buy_asset(pair, usdt_size, live):
     return order
 
 
-def sell_asset(pair, live, pct=100):
+def sell_asset(pair, asset_bal, live, pct=100):
+    # print(f'selling {pair}')
+    asset = pair[:-4]
+    usdt_price = get_price(pair)
+
+    # make sure order size has the right number of decimal places
+    trade_size = Decimal(asset_bal) * Decimal(pct / 100)
+    order_size = valid_size(pair, trade_size)
+    # print(f'{pair} Sell Order - raw size: {asset_bal:.5}, step size: {step_size:.2}, final size: {order_size:.5}')
+
+    if live:
+        order = client.create_order(symbol=pair,
+                                    side=be.SIDE_SELL,
+                                    type=be.ORDER_TYPE_MARKET,
+                                    quantity=order_size)
+        
+    else:
+        order = {'symbol': pair, 'price': usdt_price, 
+                 'base_size': order_size, 'quote_size': (order_size*Decimal(usdt_price))}
+        
+    return order
+
+
+def sell_asset_old(pair, live, pct=100):
     # print(f'selling {pair}')
     asset = pair[:-4]
     usdt_price = get_price(pair)
@@ -775,7 +858,7 @@ def account_bal_M():
 def current_positions_M(strat, fr):  # used to be current sizing
     '''returns a dict with assets as keys and various expressions of positioning as values'''
     
-    o_path = Path(f'{market_data}/{strat}_open_trades.json')
+    o_path = Path(f'{strat.market_data}/{strat}_open_trades.json')
     with open(o_path, 'r') as file:
         try:
             o_data = json.load(file)

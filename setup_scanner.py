@@ -12,7 +12,7 @@ import order_management_funcs as omf
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 from pushbullet import Pushbullet
-from config import not_pairs, params, market_data
+from config import not_pairs, params
 from pprint import pprint
 import utility_funcs as uf
 import adaptive_funcs as af
@@ -37,40 +37,40 @@ else:
     print('*** Warning: Not Live ***')
 
 # strat = strats.RSI_ST_EMA(4, 45, 96)
-strat = strats.DoubleSTLO(3, 1.2)    
-
+strat = strats.DoubleSTLO(3, 1.2)
 
 # compile and sort list of pairs to loop through ------------------------------
 all_pairs = funcs.get_pairs()
 shuffle(all_pairs)
-positions = list(funcs.current_positions(strat.name, params.get('fr_range')[0]).keys())
+strat.sizing = funcs.current_positions(strat, 'open')
+strat.sim_pos = funcs.current_positions(strat, 'sim')
+strat.tracked = funcs.current_positions(strat, 'tracked')
+positions = list(strat.sizing.keys())
 pairs_in_pos = [p + 'USDT' for p in positions if p != 'USDT']
 other_pairs = [p for p in all_pairs if (not p in pairs_in_pos) and (not p in not_pairs)]
 pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked first
 
 
 # update trade records --------------------------------------------------------
-open_trades, closed_trades = uf.read_trade_records(market_data, strat)
 if not live:
-    uf.sync_test_records(strat, market_data)
+    uf.sync_test_records(strat)
     # now that trade records have been loaded, path can be changed
-    market_data = Path('test_records')
-uf.backup_trade_records(strat.name, market_data, open_trades, closed_trades)
-uf.record_stopped_trades(open_trades, closed_trades, pairs_in_pos, 
-                         now_start, strat, market_data)
+    strat.market_data = Path('test_records')
+uf.backup_trade_records(strat)
 
-# set fixed risk
-total_bal = funcs.account_bal()
-fixed_risk = af.set_fixed_risk(strat, market_data, total_bal)
+uf.record_stopped_trades(pairs_in_pos, now_start, strat)
+uf.record_stopped_sim_trades(strat, now_start)
+
+# set fixed risk, max_init_r and fixed_risk_dol
+fixed_risk = af.set_fixed_risk(strat, strat.bal)
 max_init_r = fixed_risk * params.get('total_r_limit')
-fixed_risk_dol = fixed_risk * strat.bal
+strat.fixed_risk_dol = fixed_risk * strat.bal
 
 print(f"Current time: {now_start}, {strat}, fixed risk: {fixed_risk}")
 
 funcs.top_up_bnb(15)
 spreads = funcs.binance_spreads('USDT') # dict
 
-strat.sizing = funcs.current_positions(strat.name, fixed_risk)
 strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
 max_positions = uf.set_max_pos(strat.sizing, params)
 if max_positions > 20:
@@ -79,12 +79,30 @@ num_open_positions = len(pairs_in_pos)
 
 for pair in pairs:
     asset = pair[:-1*len(params.get('quote_asset'))]
-    in_pos = asset in strat.sizing.keys()
+    
+# set in_pos and look up or calculate $ fixed risk ----------------------------
+    in_pos = {'real':False, 'sim':False, 'tracked':False}
+    if asset in strat.sizing.keys():
+        in_pos['real'] = True
+        trade_record = strat.open_trades.get(pair)
+        # calculate dollar denominated fixed-risk per position
+        in_pos = uf.calc_pos_fr_dol(trade_record, strat.fixed_risk_dol, in_pos, 'real')
+    if asset in strat.sim_pos.keys():
+        in_pos['sim'] = True
+        trade_record = strat.sim_trades.get(pair)
+        # calculate dollar denominated fixed-risk per position
+        in_pos = uf.calc_pos_fr_dol(trade_record, strat.fixed_risk_dol, in_pos, 'sim')
+    if asset in strat.tracked.keys():
+        in_pos['tracked'] = True
+        trade_record = strat.tracked_trades.get(pair)
+        # calculate dollar denominated fixed-risk per position
+        in_pos = uf.calc_pos_fr_dol(trade_record, strat.fixed_risk_dol, in_pos, 'tracked')
+        
     
 # get data --------------------------------------------------------------------
     df = funcs.prepare_ohlc(pair, live)
     
-    if len(df) <= 200 and not in_pos:
+    if uf.too_new(df, in_pos):
         continue
     
     if len(df) > strat.max_length:
@@ -107,90 +125,103 @@ for pair in pairs:
         push = pb.push_note(now, note)
         continue
     
-# look up or calculate $ fixed risk -------------------------------------------
-
-    if open_trades.get(pair):
-        trade_record = open_trades.get(pair)
-    else:
-        trade_record = []
-
-    pos_fr_dol, ep = uf.calc_pos_fr_dol(trade_record, fixed_risk_dol, in_pos)
-    
 # update positions dictionary with current pair's open_risk values ------------
-    if in_pos:
-        strat.sizing[asset].update(funcs.update_pos(asset, strat.bal, inval_dist, pos_fr_dol))
+    if in_pos['real']:
+        real_qty = strat.sizing[asset]['qty']
+        strat.sizing[asset].update(funcs.update_pos(asset, real_qty, strat.bal, inval_dist, in_pos['real_pfrd']))
+        if in_pos['real_ep']:
+            price_delta = (price - in_pos['real_ep']) / in_pos['real_ep'] # how much has price moved since entry
+            
+    if in_pos['sim']:
+        sim_qty = strat.sim_pos[asset]['qty']
+        strat.sim_pos[asset].update(funcs.update_pos(asset, sim_qty, strat.bal, inval_dist, in_pos['sim_pfrd']))
+        if in_pos['sim_ep'] and not in_pos['real_ep']:
+            price_delta = (price - in_pos['sim_ep']) / in_pos['sim_ep']
     
 # execute orders --------------------------------------------------------------
-    tp_trades = []
-    
-    if signals.get('tp_spot'):
-        # eventually tp_pct will be defined adaptively in the strat object
-        tp_pct = 50 if strat.sizing.get(asset)['value'] > 24 else 100
-        trade_record = omf.spot_tp(strat, pair, price, stp, tp_pct, inval_dist, pos_fr_dol, trade_record, 
-                                                open_trades, market_data, live)
+    if signals.get('signal') == 'tp':
+        try:
+            in_pos = omf.spot_tp(strat, pair, in_pos, price, price_delta, 
+                                 stp, inval_dist, trade_record, live)
+        except BinanceAPIException as e:
+            print(f'problem with tp order for {pair}')
+            print(e)
+            pb.push_note(now, f'exeption during {pair} tp order')
+            continue
         
-    elif signals.get('close_spot'):
-        open_trades, closed_trades, in_pos = omf.spot_sell(strat, pair, price, trade_record, open_trades, 
-                                                                                closed_trades, market_data, live)
+    elif signals.get('signal') == 'close':
+        try:
+            in_pos = omf.spot_sell(strat, pair, in_pos, price, trade_record, live)
+        except BinanceAPIException as e:
+            print(f'problem with buy order for {pair}')
+            print(e)
+            pb.push_note(now, f'exeption during {pair} buy order')
+            continue
     
-    elif signals.get('open_spot'):        
+    elif signals.get('signal') == 'open':        
         risk = (price - stp) / price
         mir = uf.max_init_risk(num_open_positions, params.get('target_risk'))
-        # print(f'risk: {risk}, max_init_risk: {mir}, open positions: {num_open_positions}')
-        # TODO max init risk should be based on average inval dist of signals, not fixed risk setting
-        if risk > mir:
-            strat.counts_dict['too_risky'] += 1
-            # print('too risky')
-            continue
         size, usdt_size = funcs.get_size(price, fixed_risk, strat.bal, risk)
         usdt_depth = funcs.get_depth(pair, 'buy', params.get('max_spread'))
-        if usdt_depth < usdt_size and usdt_depth > (usdt_size/2): # only trim size if books are a bit too thin
+        
+        if usdt_size > usdt_depth > (usdt_size / 2): # only trim size if books are a bit too thin
             trim_size = f'{now} {pair} books too thin, reducing size from {usdt_size:.3} to {usdt_depth:.3}'
             print(trim_size)
             usdt_size = usdt_depth
-            strat.counts_dict['books_too_thin'] += 1
         
-        enough_depth = usdt_depth >= usdt_size
-        enough_size = usdt_size > (21 * (1 + risk)) # this ensures size will be
-        # big enough for init stop to be set on half the position
-        
-        if not enough_depth:
-            if usdt_depth == 0:
-                strat.counts_dict['too_much_spread'] += 1
-            else:
-                strat.counts_dict['books_too_thin'] += 1
-        if not enough_size:
+        if usdt_size < 30 and not in_pos['sim']:
             strat.counts_dict['too_small'] += 1
-            # print(f'too small, size: ${usdt_size}')
-        
-        if enough_size and enough_depth:            
+            in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, 'too_small', in_pos)
+            continue
+        elif risk > mir and not in_pos['sim']:
+            strat.counts_dict['too_risky'] += 1
+            in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, 'too_risky', in_pos)
+            continue
+        elif usdt_depth == 0 and not in_pos['sim']:
+            strat.counts_dict['too_much_spread'] += 1
+            in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, 'too_much_spread', in_pos)
+            continue
+        elif usdt_depth < usdt_size and not in_pos['sim']:
+            strat.counts_dict['books_too_thin'] += 1
+            in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, 'books_too_thin', in_pos)
+            continue
+                    
 # check total open risk and close profitable positions if necessary -----------
-            # tp_trades = funcs.reduce_risk_old(strat.sizing, signals, params, fixed_risk, live)
-            open_trades, closed_trades = omf.reduce_risk(strat, params, open_trades, closed_trades, market_data, live)
-            strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
+        omf.reduce_risk(strat, params, live)
+        strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
             
 # make sure there aren't too many open positions now --------------------------
-            or_list = [v.get('or_R') for v in strat.sizing.values() if v.get('or_R')]
-            total_open_risk = sum(or_list)
-            num_open_positions = len(or_list)
-            if num_open_positions >= max_positions:
-                strat.counts_dict['too_many_pos'] += 1
-            if total_open_risk > params.get('total_r_limit'):
-                strat.counts_dict['too_much_or'] += 1
-                # print(f'max exposure reached: {total_open_risk = }, {num_open_positions = }')
-                continue
-            
-            usdt_bal = funcs.free_usdt()
-            enough_usdt = usdt_bal > usdt_size
-            if not enough_usdt:
-                strat.counts_dict['not_enough_usdt'] += 1
-                continue
+        or_list = [v.get('or_R') for v in strat.sizing.values() if v.get('or_R')]
+        total_open_risk = sum(or_list)
+        num_open_positions = len(or_list)
+        if num_open_positions >= max_positions and not in_pos['sim']:
+            strat.counts_dict['too_many_pos'] += 1
+            reason = 'too_many_pos'
+            in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, reason, in_pos)
+            continue
+        elif total_open_risk > params.get('total_r_limit') and not in_pos['sim']:
+            strat.counts_dict['too_much_or'] += 1
+            reson = 'too_much_or'
+            in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, reason, in_pos)
+            continue
+        elif strat.sizing['USDT']['qty'] < usdt_size and not in_pos['sim']:
+            strat.counts_dict['not_enough_usdt'] += 1
+            reason = 'not_enough_usdt'
+            in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, reason, in_pos)
+            continue
             
 # open new position -----------------------------------------------------------
-            open_trades, in_pos = omf.spot_buy(strat, pair, fixed_risk, size, usdt_size, price, stp, 
-                                                                    inval_dist, pos_fr_dol, 
-                                                                    params, market_data, open_trades, live)            
+        if not in_pos['real']:
+            try:
+                in_pos = omf.spot_buy(strat, pair, in_pos, fixed_risk, size, usdt_size, 
+                                  price, stp, inval_dist, params, live) 
+            except BinanceAPIException as e:
+                print(f'problem with buy order for {pair}')
+                print(e)
+                pb.push_note(now, f'exeption during {pair} buy order')
+                continue
             
+# margin execution ------------------------------------------------------------
     elif signals.get('open_long'):
         pass
     
@@ -212,41 +243,35 @@ for pair in pairs:
     
 
 # calculate open risk and take profit if necessary ----------------------------
-    if in_pos:
+    if in_pos['real'] or in_pos['sim']:
         pos_bal = strat.sizing.get(asset)['value']
         open_risk = strat.sizing.get(asset)['or_$']
         open_risk_r = strat.sizing.get(asset)['or_R']
         
-# calculate how much price has moved since entry ------------------------------
-        if ep:
-            price_delta = (price - ep) / ep
-    
-# take profit on risky positions ----------------------------------------------
-            if open_risk_r > params.get('indiv_r_limit') and price_delta > 0.001:
-                tp_pct = 50 if pos_bal > 24 else 100
-                open_trades, closed_trades, in_pos = omf.spot_risk_limit_tp(strat, pair, tp_pct, price, 
-                                                                            price_delta, trade_record, open_trades, 
-                                                                            closed_trades, market_data, stp, 
-                                                                            inval_dist, pos_fr_dol, in_pos, live)
-            
-            or_list = [v.get('or_R') for v in strat.sizing.values() if v.get('or_R')]
-            total_open_risk = round(sum(or_list), 2)
-            num_open_positions = len(or_list)
+        if open_risk_r > params.get('indiv_r_limit') and price_delta and (price_delta > 0.001):
+            in_pos = omf.spot_tp(strat, pair, in_pos, price, price_delta, 
+                                 stp, inval_dist, trade_record, live)
+        or_list = [v.get('or_R') for v in strat.sizing.values() if v.get('or_R')]
+        total_open_risk = round(sum(or_list), 2)
+        num_open_positions = len(or_list)
         
         
 # log all data from the session and print/push summary-------------------------
+print(f'realised real pnl: {strat.realised_pnl}R, realised sim pnl: {strat.sim_pnl}R')
 print(f'tor: {total_open_risk}')
 print(f'or list: {[round(x, 2) for x in sorted(or_list, reverse=True)]}')
 strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
 
-benchmark = uf.log(live, strat, fixed_risk, market_data, spreads, now_start, 
-                   tp_trades, open_trades, closed_trades)
+benchmark = uf.log(live, strat, fixed_risk, spreads, now_start)
 if not live:
+    print('*** sizing ***')
     pprint(strat.sizing)
+    # print('*** sim pos ***')
+    # pprint(strat.sim_pos)
     uf.interpret_benchmark(benchmark)
     print('warning: logging directed to test_records')
 
-uf.scanner_summary(strat, market_data, all_start, benchmark, live)
+uf.scanner_summary(strat, all_start, benchmark, live)
 
 pprint(strat.counts_dict)
 print('-:-' * 20)

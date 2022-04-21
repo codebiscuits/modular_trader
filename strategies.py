@@ -4,6 +4,11 @@ import numpy as np
 from ta.momentum import RSIIndicator
 import indicators as ind
 import binance_funcs as funcs
+import utility_funcs as uf
+from pathlib import Path
+import json
+from json.decoder import JSONDecodeError
+from datetime import datetime
 
 ### Backtesting Strategies
 
@@ -428,7 +433,10 @@ class DoubleSTLO:
     name = 'double_st_lo'
     description = 'regular supertrend for bias with tight supertrend for entries/exits'
     max_length = 201
-    counts_dict = {'stop_count': 0, 'open_count': 0, 'add_count': 0, 'tp_count': 0, 'close_count': 0, 
+    realised_pnl = 0
+    sim_pnl = 0
+    counts_dict = {'real_stop': 0, 'real_open': 0, 'real_add': 0, 'real_tp': 0, 'real_close': 0, 
+                   'sim_stop': 0, 'sim_open': 0, 'sim_add': 0, 'sim_tp': 0, 'sim_close': 0, 
                    'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 'too_much_or': 0, 
                    'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0}
     
@@ -436,6 +444,13 @@ class DoubleSTLO:
         self.lb = lb
         self.mult = mult
         self.bal = funcs.account_bal()
+        self.market_data = self.mkt_data_path()
+        self.open_trades = self.read_open_trade_records()
+        self.sim_trades = self.read_sim_trade_records()
+        self.tracked_trades = self.read_tracked_trade_records()
+        self.closed_trades = self.read_closed_trade_records()
+        self.closed_sim_trades = self.read_closed_sim_trade_records()
+        
         
     def __str__(self):
         return f'{self.name} st2: {self.lb}-{self.mult}'
@@ -452,24 +467,96 @@ class DoubleSTLO:
         bullish_tight = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st']
         bearish_tight = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st']
         
-        # bullish_book = bid_ask_ratio > 1
-        # bearish_book = bid_ask_ratio < 1
-        # bullish_volume = price rising on low volume or price falling on high volume
-        # bearish_volume = price rising on high volume or price falling on low volume
-        
-        open_spot = bullish_ema and bullish_loose and bullish_tight and not in_pos # and bullish_book
-        add_spot = False
-        tp_spot = False
-        close_spot = bearish_tight and in_pos
+        if bullish_ema and bullish_loose and bullish_tight:
+            signal = 'open'
+        elif bearish_tight:
+            signal = 'close'
+        else:
+            signal = None
         
         if df.at[len(df)-1, 'st']:
             inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
         else:
             inval = 100000
             
-        return {'open_spot': open_spot, 'close_spot': close_spot, 
-                'tp_spot': tp_spot, 'add_spot': add_spot,   
-                'inval': inval}
+        return {'signal': signal, 'inval': inval}
+    
+    def mkt_data_path(self):
+        now = datetime.now().strftime('%d/%m/%y %H:%M')
+        market_data = None
+        poss_paths = [Path('/media/coding/market_data'), 
+                      Path('/mnt/pi_2/market_data')]
+        
+        for md_path in poss_paths:
+            if md_path.exists():
+                market_data = md_path
+                break
+        if not market_data:
+            note = 'none of the paths for market_data are available'
+            print(note)
+        
+        return market_data
+    
+    def read_open_trade_records(self):
+        ot_path = f"{self.market_data}/{self.name}_open_trades.json"
+        if Path(ot_path).exists():
+            with open(ot_path, "r") as ot_file:
+                try:
+                    open_trades = json.load(ot_file)
+                except JSONDecodeError:
+                    open_trades = {}
+        
+        return open_trades
+
+    def read_sim_trade_records(self):
+        st_path = f"{self.market_data}/{self.name}_sim_trades.json"
+        if Path(st_path).exists():
+            with open(st_path, "r") as st_file:
+                try:
+                    sim_trades = json.load(st_file)
+                except JSONDecodeError:
+                    sim_trades = {}
+        
+        return sim_trades
+
+    def read_tracked_trade_records(self):
+        tr_path = f"{self.market_data}/{self.name}_tracked_trades.json"
+        if Path(tr_path).exists():
+            with open(tr_path, "r") as tr_file:
+                try:
+                    tracked_trades = json.load(tr_file)
+                except JSONDecodeError:
+                    tracked_trades = {}
+        
+        return tracked_trades
+
+    def read_closed_trade_records(self):
+        ct_path = f"{self.market_data}/{self.name}_closed_trades.json"
+        if Path(ct_path).exists():
+            with open(ct_path, "r") as ct_file:
+                try:
+                    closed_trades = json.load(ct_file)
+                    if closed_trades.keys():
+                        key_ints = [int(x) for x in closed_trades.keys()]
+                        self.next_id = len(key_ints) + 1
+                    else:
+                        self.next_id = 0
+                except JSONDecodeError:
+                    closed_trades = {}
+                    self.next_id = 0
+        
+        return closed_trades
+
+    def read_closed_sim_trade_records(self):
+        cs_path = f"{self.market_data}/{self.name}_closed_sim_trades.json"
+        if Path(cs_path).exists():
+            with open(cs_path, "r") as cs_file:
+                try:
+                    closed_sim_trades = json.load(cs_file)
+                except JSONDecodeError:
+                    closed_sim_trades = {}
+        
+        return closed_sim_trades
 
 class DoubleST:
     #class attributes

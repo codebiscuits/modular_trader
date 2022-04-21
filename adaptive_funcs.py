@@ -14,7 +14,7 @@ client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 
-def set_fixed_risk(strat, market_data, total_bal):
+def set_fixed_risk(strat, total_bal):
     '''calculates fixed risk setting for new trades based on recent performance 
     and previous setting. if recent performance is very good, fr is increased slightly.
     if not, fr is decreased by thirds'''
@@ -27,7 +27,7 @@ def set_fixed_risk(strat, market_data, total_bal):
     
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     
-    with open(f"{market_data}/{strat.name}_bal_history.txt", "r") as file:
+    with open(f"{strat.market_data}/{strat.name}_bal_history.txt", "r") as file:
         bal_data = file.readlines()
     
     fr_prev = json.loads(bal_data[-1]).get('fr')
@@ -64,7 +64,7 @@ def set_fixed_risk(strat, market_data, total_bal):
     else:
         fr = fr_min
         
-    print(f'{fr_prev = }, fr range: {fr_min}-{fr_max}, {bal_0 = }, {bal_1 = }, {bal_2 = }, {bal_3 = }, {bal_4 = }, {score = }')
+    # print(f'{fr_prev = }, fr range: {fr_min}-{fr_max}, {bal_0 = }, {bal_1 = }, {bal_2 = }, {bal_3 = }, {bal_4 = }, {score = }')
     if fr != fr_prev:
         note = f'fixed risk adjusted from {round(fr_prev*10000, 1)}bps to {round(fr*10000, 1)}bps'
         pb.push_note(now, note)
@@ -72,7 +72,7 @@ def set_fixed_risk(strat, market_data, total_bal):
     print(f'fixed risk perf score: {score}')
     return round(fr, 5)
 
-# def set_ind_r_lim(strat, market_data):
+# def set_ind_r_lim(strat):
 #     '''this function sets the limit for open risk per position. so any open 
 #     position which gets to over-extended will trigger the take-profit function. 
     
