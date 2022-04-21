@@ -446,6 +446,7 @@ def record_stopped_trades(pairs_in_pos, now_start, strat):
                       'fee': tot_fee, 
                       'fee_currency': t.get('commissionAsset'), 
                       'reason': 'hit hard stop', 
+                      'state': 'real', 
                       }
         note = f"stopped out {t.get('symbol')} @ {t.get('price')}"
         print(now_start, note)
@@ -459,7 +460,7 @@ def record_stopped_trades(pairs_in_pos, now_start, strat):
             strat.closed_trades[strat.next_id] = trade_record
             print(f'warning, trade record for {t.get("symbol")} missing trade open')
         record_closed_trades(strat)
-        strat.counts_dict['stop_count'] += 1
+        strat.counts_dict['real_stop'] += 1
         strat.next_id += 1
         if strat.open_trades[i]:
             del strat.open_trades[i]
@@ -471,12 +472,13 @@ def record_stopped_sim_trades(strat, now_start):
     price action against their most recent hard_stop to see if any of them would have 
     got stopped out'''
     
-    for k, v in strat.sim_trades.items():
+    for asset, v in strat.sim_trades.items():
         # first filter out all trades which started out real
-        if v[0].get('real'):
+        if v[0].get('real') or asset == 'ALPACAUSDT':
             continue
         
-        pair = v[0].get('pair')
+        pair = asset + 'USDT'
+        print(pair)
         long_trade = True if v[0].get('type')[-4:] == 'long' else False
         
         # calculate current base size
@@ -527,19 +529,18 @@ def record_stopped_sim_trades(strat, now_start):
                           'fee': 0, 
                           'fee_currency': 'BNB', 
                           'reason': 'hit hard stop', 
+                          'state': 'sim', 
                           }
-            note = f"stopped out {pair} @ {stop}"
+            note = f"*sim* stopped out {pair} @ {stop}"
             print(now_start, note)
             # push = pb.push_note(now_start, note)
-            trade_record = v
-            trade_record.append(trade_dict)
             
-            # calculate and record realised pnl
-            realised_pnl(strat, trade_record)
+            v.append(trade_dict)
             
-            strat.sim_trades[pair] = trade_record
-            record_sim_trades(strat)
-            strat.counts_dict['stop_count'] += 1
+            realised_pnl(strat, v)            
+            strat.counts_dict['sim_stop'] += 1
+            
+    record_sim_trades(strat)
             
         
 
@@ -658,7 +659,7 @@ def calc_pos_fr_dol(trade_record, fixed_risk_dol, in_pos, switch):
     if in_pos[switch] and trade_record and trade_record[0].get('type')[0] == 'o':
         qs = float(trade_record[0].get('quote_size'))
         ep = float(trade_record[0].get('exe_price'))
-        hs = trade_record[0].get('hard_stop')
+        hs = float(trade_record[0].get('hard_stop'))
         pos_fr_dol = qs * ((ep - hs) / ep)
     else:
         ep = None # i refer to this later and need it to exist even if it has no value

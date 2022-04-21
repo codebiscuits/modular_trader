@@ -44,7 +44,7 @@ def sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, reason, i
 def spot_buy(strat, pair, in_pos, fixed_risk, size, usdt_size, price, stp, inval_dist, params, live):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     asset = pair[:-4]
-    note = f"buy {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
+    note = f"buy {float(size):.5} {pair} ({float(usdt_size):.5} usdt) @ {price}, stop @ {float(stp):.5}"
     print(now, note)
     
     api_order = funcs.buy_asset(pair, usdt_size, live)
@@ -75,11 +75,12 @@ def spot_buy(strat, pair, in_pos, fixed_risk, size, usdt_size, price, stp, inval
     
     return in_pos
 
-def spot_tp(strat, pair, in_pos, price, price_delta, stp, inval_dist, trade_record, live):
+def spot_tp(strat, pair, in_pos, price, price_delta, stp, inval_dist, live):
     asset = pair[:-4]
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     
     if in_pos['real']:
+        trade_record = strat.open_trades.get(pair)
         real_bal = Decimal(strat.sizing[asset]['qty'])
         funcs.clear_stop(pair, live)
         tp_pct = 50 if real_bal > 24 else 100
@@ -140,6 +141,7 @@ def spot_tp(strat, pair, in_pos, price, price_delta, stp, inval_dist, trade_reco
             uf.realised_pnl(strat, trade_record)
             
     if in_pos['sim']:
+        trade_record = strat.sim_trades.get(pair)
         sim_bal = Decimal(strat.sim_pos[asset]['qty'])
         funcs.clear_stop(pair, False)
         api_order = funcs.sell_asset(pair, sim_bal, False, pct=tp_pct)
@@ -155,7 +157,7 @@ def spot_tp(strat, pair, in_pos, price, price_delta, stp, inval_dist, trade_reco
             
             trade_record.append(tp_order)
             
-            strat.sim_trades[pair] = trade_record
+            strat.sim_trades[asset] = trade_record
             uf.record_sim_trades(strat)
             
             strat.sim_pos[asset] = {'qty': 0, 'value': 0, 'pf%': 0, 'or_R': 0, 'or_$': 0}
@@ -174,7 +176,7 @@ def spot_tp(strat, pair, in_pos, price, price_delta, stp, inval_dist, trade_reco
             
             trade_record.append(tp_order)
             
-            strat.sim_trades[pair] = trade_record
+            strat.sim_trades[asset] = trade_record
             uf.record_sim_trades(strat)
             
             uf.calc_sizing_non_live_tp(strat, asset, tp_pct, 'sim')
@@ -183,7 +185,8 @@ def spot_tp(strat, pair, in_pos, price, price_delta, stp, inval_dist, trade_reco
             uf.realised_pnl(strat, trade_record)
             
     if in_pos['tracked']:
-        api_order = funcs.sell_asset(pair, real_bal, False, pct=tp_pct)
+        trade_record = strat.tracked_trades.get(pair)
+        api_order = funcs.sell_asset(pair, 0, False, pct=tp_pct)
         tp_order = funcs.create_trade_dict(api_order, price, False)
         tp_order['type'] = 'tp_long'
         tp_order['state'] = 'tracked'
@@ -199,10 +202,11 @@ def spot_tp(strat, pair, in_pos, price, price_delta, stp, inval_dist, trade_reco
     
     return in_pos
 
-def spot_sell(strat, pair, in_pos, price, trade_record, live):
+def spot_sell(strat, pair, in_pos, price, live):
     asset = pair[:-4]
     
     if in_pos['real']:
+        trade_record = strat.open_trades.get(pair)
         now = datetime.now().strftime('%d/%m/%y %H:%M')
         note = f"{pair} closed on signal @ {price}"
         print(now, note)
@@ -241,12 +245,13 @@ def spot_sell(strat, pair, in_pos, price, trade_record, live):
         uf.realised_pnl(strat, trade_record)
 
     if in_pos['sim']:
+        trade_record = strat.sim_trades.get(asset)
         now = datetime.now().strftime('%d/%m/%y %H:%M')
         note = f"*sim* {pair} closed on signal @ {price}"
         print(now, note)
         sim_bal = Decimal(strat.sim_pos[asset]['qty'])
         funcs.clear_stop(pair, False)
-        api_order = funcs.sell_asset(pair, real_bal, False)
+        api_order = funcs.sell_asset(pair, sim_bal, False)
         sell_order = funcs.create_trade_dict(api_order, price, False)
         sell_order['type'] = 'close_long'
         sell_order['state'] = 'sim'
@@ -261,8 +266,8 @@ def spot_sell(strat, pair, in_pos, price, trade_record, live):
             strat.next_id += 1
         uf.record_closed_sim_trades(strat)
         
-        if strat.sim_trades[pair]:
-            del strat.sim_trades[pair]
+        if strat.sim_trades[asset]:
+            del strat.sim_trades[asset]
             uf.record_sim_trades(strat)
         
         in_pos['sim'] = False
@@ -273,6 +278,7 @@ def spot_sell(strat, pair, in_pos, price, trade_record, live):
         uf.realised_pnl(strat, trade_record)
     
     if in_pos['tracked']:
+        trade_record = strat.tracked_trades.get(pair)
         api_order = funcs.sell_asset(pair, 0, False)
         sell_order = funcs.create_trade_dict(api_order, price, False)
         sell_order['type'] = 'close_long'

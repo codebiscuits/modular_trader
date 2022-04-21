@@ -84,19 +84,19 @@ for pair in pairs:
     in_pos = {'real':False, 'sim':False, 'tracked':False}
     if asset in strat.sizing.keys():
         in_pos['real'] = True
-        trade_record = strat.open_trades.get(pair)
+        real_trade_record = strat.open_trades.get(pair)
         # calculate dollar denominated fixed-risk per position
-        in_pos = uf.calc_pos_fr_dol(trade_record, strat.fixed_risk_dol, in_pos, 'real')
+        in_pos = uf.calc_pos_fr_dol(real_trade_record, strat.fixed_risk_dol, in_pos, 'real')
     if asset in strat.sim_pos.keys():
         in_pos['sim'] = True
-        trade_record = strat.sim_trades.get(pair)
+        sim_trade_record = strat.sim_trades.get(pair)
         # calculate dollar denominated fixed-risk per position
-        in_pos = uf.calc_pos_fr_dol(trade_record, strat.fixed_risk_dol, in_pos, 'sim')
+        in_pos = uf.calc_pos_fr_dol(sim_trade_record, strat.fixed_risk_dol, in_pos, 'sim')
     if asset in strat.tracked.keys():
         in_pos['tracked'] = True
-        trade_record = strat.tracked_trades.get(pair)
+        tracked_trade_record = strat.tracked_trades.get(pair)
         # calculate dollar denominated fixed-risk per position
-        in_pos = uf.calc_pos_fr_dol(trade_record, strat.fixed_risk_dol, in_pos, 'tracked')
+        in_pos = uf.calc_pos_fr_dol(tracked_trade_record, strat.fixed_risk_dol, in_pos, 'tracked')
         
     
 # get data --------------------------------------------------------------------
@@ -142,7 +142,7 @@ for pair in pairs:
     if signals.get('signal') == 'tp':
         try:
             in_pos = omf.spot_tp(strat, pair, in_pos, price, price_delta, 
-                                 stp, inval_dist, trade_record, live)
+                                 stp, inval_dist, live)
         except BinanceAPIException as e:
             print(f'problem with tp order for {pair}')
             print(e)
@@ -151,11 +151,11 @@ for pair in pairs:
         
     elif signals.get('signal') == 'close':
         try:
-            in_pos = omf.spot_sell(strat, pair, in_pos, price, trade_record, live)
+            in_pos = omf.spot_sell(strat, pair, in_pos, price, live)
         except BinanceAPIException as e:
-            print(f'problem with buy order for {pair}')
+            print(f'problem with sell order for {pair}')
             print(e)
-            pb.push_note(now, f'exeption during {pair} buy order')
+            pb.push_note(now, f'exeption during {pair} sell order')
             continue
     
     elif signals.get('signal') == 'open':        
@@ -250,7 +250,7 @@ for pair in pairs:
         
         if open_risk_r > params.get('indiv_r_limit') and price_delta and (price_delta > 0.001):
             in_pos = omf.spot_tp(strat, pair, in_pos, price, price_delta, 
-                                 stp, inval_dist, trade_record, live)
+                                 stp, inval_dist, live)
         or_list = [v.get('or_R') for v in strat.sizing.values() if v.get('or_R')]
         total_open_risk = round(sum(or_list), 2)
         num_open_positions = len(or_list)
