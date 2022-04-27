@@ -875,16 +875,14 @@ def clear_stop(pair, trade_record, live):
     bal = client.get_asset_balance(asset=pair[:-4])
     if Decimal(bal.get('locked')) == 0:
         print('no stop to cancel')
-    
     else:
+        print(f'{pair} locked balance = {bal.get("locked")}')
         _, stop_id, _ = uf.latest_stop_id(trade_record)
         
         if not stop_id: # if the function above didn't find anything
             orders = client.get_open_orders(symbol=pair)
-            if orders and orders[-1].get(type) == 'STOP_LOSS_LIMIT':
+            if orders and orders[-1].get('type') == 'STOP_LOSS_LIMIT':
                 stop_id = orders[-1].get('orderId')
-            else:
-                print('no stop to cancel')
         
         if live and stop_id:
             result = client.cancel_order(symbol=pair, orderId=stop_id)
