@@ -559,6 +559,11 @@ class DoubleSTLO:
         
         return closed_sim_trades
 
+    def calc_tor(self):
+        self.or_list = [v.get('or_R') for v in self.sizing.values() if v.get('or_R')]
+        self.total_open_risk = sum(self.or_list)
+        self.num_open_positions = len(self.or_list)
+
 class DoubleST:
     #class attributes
     name = 'double_st'

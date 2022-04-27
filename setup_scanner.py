@@ -75,7 +75,8 @@ strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
 max_positions = uf.set_max_pos(strat.sizing, params)
 if max_positions > 20:
     print(f'{max_positions = }')
-num_open_positions = len(pairs_in_pos)
+# num_open_positions = len(pairs_in_pos)
+strat.calc_tor()
 
 for pair in pairs:
     asset = pair[:-1*len(params.get('quote_asset'))]
@@ -162,7 +163,7 @@ for pair in pairs:
     
     elif signals.get('signal') == 'open':        
         risk = (price - stp) / price
-        mir = uf.max_init_risk(num_open_positions, params.get('target_risk'))
+        mir = uf.max_init_risk(strat.num_open_positions, params.get('target_risk'))
         size, usdt_size = funcs.get_size(price, fixed_risk, strat.bal, risk)
         usdt_depth = funcs.get_depth(pair, 'buy', params.get('max_spread'))
         
@@ -197,15 +198,15 @@ for pair in pairs:
         strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
             
 # make sure there aren't too many open positions now --------------------------
-        or_list = [v.get('or_R') for v in strat.sizing.values() if v.get('or_R')]
-        total_open_risk = sum(or_list)
-        num_open_positions = len(or_list)
-        if num_open_positions >= max_positions:
+        # or_list = [v.get('or_R') for v in strat.sizing.values() if v.get('or_R')]
+        # total_open_risk = sum(or_list)
+        strat.calc_tor()
+        if strat.num_open_positions >= max_positions:
             strat.counts_dict['too_many_pos'] += 1
             if not in_pos['sim']:
                 in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, 'too_many_pos', in_pos)
             continue
-        elif total_open_risk > params.get('total_r_limit'):
+        elif strat.total_open_risk > params.get('total_r_limit'):
             strat.counts_dict['too_much_or'] += 1
             if not in_pos['sim']:
                 in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, 'too_much_or', in_pos)
@@ -257,17 +258,16 @@ for pair in pairs:
         if open_risk_r > params.get('indiv_r_limit') and price_delta and (price_delta > 0.001):
             in_pos = omf.spot_tp(strat, pair, in_pos, price, price_delta, 
                                  stp, inval_dist, live)
-        or_list = [v.get('or_R') for v in strat.sizing.values() if v.get('or_R')]
-        total_open_risk = round(sum(or_list), 2)
-        num_open_positions = len(or_list)
+        # or_list = [v.get('or_R') for v in strat.sizing.values() if v.get('or_R')]
+        # total_open_risk = round(sum(or_list), 2)
+        strat.calc_tor()
         
         
 # log all data from the session and print/push summary-------------------------
-or_list = [v.get('or_R') for v in strat.sizing.values() if v.get('or_R')]
-total_open_risk = sum(or_list)
+strat.calc_tor()
 print(f'realised real pnl: {strat.realised_pnl:.1f}R, realised sim pnl: {strat.sim_pnl:.1f}R')
-print(f'tor: {total_open_risk}')
-print(f'or list: {[round(x, 2) for x in sorted(or_list, reverse=True)]}')
+print(f'tor: {strat.total_open_risk}')
+print(f'or list: {[round(x, 2) for x in sorted(strat.or_list, reverse=True)]}')
 strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
 
 benchmark = uf.log(live, strat, fixed_risk, spreads, now_start)

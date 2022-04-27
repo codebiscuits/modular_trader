@@ -676,7 +676,6 @@ def create_trade_dict(order, price, live):
                       'pair': pair,
                       'trig_price': str(price),
                       'exe_price': str(avg_price),
-                      'size': str(qty),
                       'base_size': order.get('executedQty'),
                       'quote_size': order.get('cummulativeQuoteQty'),
                       'fee': str(fee),
