@@ -36,7 +36,7 @@ def sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, reason, i
                  'fee_currency': 'BNB', 
                  'state': 'sim'}
     trade_record = [buy_order]
-    strat.sim_trades[asset] = trade_record
+    strat.sim_trades[pair] = trade_record
     
     uf.record_sim_trades(strat)
     

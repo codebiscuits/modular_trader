@@ -598,7 +598,6 @@ def record_stopped_sim_trades(strat, now_start):
         if v[0].get('real'):
             continue
         
-        asset = pair[:-4]
         long_trade = True if v[0].get('type')[-4:] == 'long' else False
         
         # calculate current base size
