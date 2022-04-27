@@ -15,12 +15,13 @@ client = Client(keys.bPkey, keys.bSkey)
 
 
 def sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, reason, in_pos):
-    print(f'sim buy {pair} because {reason}')
+    # note = f'*sim* buy {pair} because {reason}'
+    # print(note)
     asset = pair[:-4]
     timestamp = round(datetime.utcnow().timestamp() * 1000)
     in_pos['sim'] = True
     in_pos['sim_pfrd'] = strat.fixed_risk_dol
-    strat.sim_pos[asset] = funcs.update_pos(asset, size, strat.bal, inval_dist, in_pos['sim_pfrd'])
+    strat.sim_pos[asset] = funcs.update_pos(strat, asset, size, inval_dist, in_pos['sim_pfrd'])
     strat.sim_pos[asset]['pnl_R'] = 0
     buy_order = {'pair': pair, 
                  'exe_price': str(price), 
@@ -54,15 +55,17 @@ def spot_buy(strat, pair, in_pos, fixed_risk, size, usdt_size, price, stp, inval
     buy_order['reason'] = 'buy conditions met'
     buy_order['hard_stop'] = stp
     
+    stop_size = Decimal(buy_order['base_size'])
+    stop_order = funcs.set_stop(pair, stop_size, stp, live)
+    buy_order['stop_id'] = stop_order.get('orderId')
+    
     strat.open_trades[pair] = [buy_order]
     uf.record_open_trades(strat)
-    
-    stop_order = funcs.set_stop(pair, stp, live)
     
     in_pos['real'] = True
     
     if live:
-        strat.sizing[asset] = funcs.update_pos(asset, size, strat.bal, inval_dist, in_pos['real_pfrd'])
+        strat.sizing[asset] = funcs.update_pos(strat, asset, size, inval_dist, in_pos['real_pfrd'])
         strat.sizing[asset]['pnl_R'] = 0
         strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
     else:
@@ -82,7 +85,7 @@ def spot_tp(strat, pair, in_pos, price, price_delta, stp, inval_dist, live):
     if in_pos['real']:
         trade_record = strat.open_trades.get(pair)
         real_bal = Decimal(strat.sizing[asset]['qty'])
-        funcs.clear_stop(pair, live)
+        funcs.clear_stop(pair, trade_record, live)
         tp_pct = 50 if real_bal > 24 else 100
         note = f"{pair} take profit {tp_pct}% @ {price}, {round(price_delta*100, 2)}% from entry"
         print(now, note)
@@ -122,7 +125,9 @@ def spot_tp(strat, pair, in_pos, price, price_delta, stp, inval_dist, live):
             tp_order['type'] = 'tp_long'
             tp_order['state'] = 'real'
             tp_order['reason'] = 'trade over-extended'
-            stop_order = funcs.set_stop(pair, stp, live)
+            
+            new_size = real_bal - Decimal(tp_order['base_size'])
+            stop_order = funcs.set_stop(pair, new_size, stp, live)
             tp_order['hard_stop'] = stp
             
             trade_record.append(tp_order)
@@ -131,8 +136,7 @@ def spot_tp(strat, pair, in_pos, price, price_delta, stp, inval_dist, live):
             uf.record_open_trades(strat)
            
             if live:
-                new_size = real_bal - tp_order['base_size']
-                strat.sizing[asset].update(funcs.update_pos(asset, new_size, strat.bal, inval_dist, in_pos['real_pfrd']))
+                strat.sizing[asset].update(funcs.update_pos(strat, asset, new_size, inval_dist, in_pos['real_pfrd']))
                 strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
             else:
                 uf.calc_sizing_non_live_tp(strat, asset, tp_pct, 'real')
@@ -143,12 +147,11 @@ def spot_tp(strat, pair, in_pos, price, price_delta, stp, inval_dist, live):
     if in_pos['sim']:
         trade_record = strat.sim_trades.get(pair)
         sim_bal = Decimal(strat.sim_pos[asset]['qty'])
-        funcs.clear_stop(pair, False)
         api_order = funcs.sell_asset(pair, sim_bal, False, pct=tp_pct)
         tp_order = funcs.create_trade_dict(api_order, price, False)
         tp_pct = 50 if sim_bal > 24 else 100
-        note = f"{pair} take profit {tp_pct}% @ {price}, {round(price_delta*100, 2)}% from entry"
-        print(now, note)
+        # note = f"{pair} take profit {tp_pct}% @ {price}, {round(price_delta*100, 2)}% from entry"
+        # print(note)
         if tp_pct == 100:
             # coming from sim_trades, staying in sim_trades
             tp_order['type'] = 'close_long'
@@ -157,7 +160,7 @@ def spot_tp(strat, pair, in_pos, price, price_delta, stp, inval_dist, live):
             
             trade_record.append(tp_order)
             
-            strat.sim_trades[asset] = trade_record
+            strat.sim_trades[pair] = trade_record
             uf.record_sim_trades(strat)
             
             strat.sim_pos[asset] = {'qty': 0, 'value': 0, 'pf%': 0, 'or_R': 0, 'or_$': 0}
@@ -176,7 +179,7 @@ def spot_tp(strat, pair, in_pos, price, price_delta, stp, inval_dist, live):
             
             trade_record.append(tp_order)
             
-            strat.sim_trades[asset] = trade_record
+            strat.sim_trades[pair] = trade_record
             uf.record_sim_trades(strat)
             
             uf.calc_sizing_non_live_tp(strat, asset, tp_pct, 'sim')
@@ -212,7 +215,7 @@ def spot_sell(strat, pair, in_pos, price, live):
         print(now, note)
         # coming from open_trades, moving to closed_trades
         real_bal = Decimal(strat.sizing[asset]['qty'])
-        funcs.clear_stop(pair, live)
+        funcs.clear_stop(pair, trade_record, live)
         api_order = funcs.sell_asset(pair, real_bal, live)
         sell_order = funcs.create_trade_dict(api_order, price, live)
         sell_order['type'] = 'close_long'
@@ -245,12 +248,10 @@ def spot_sell(strat, pair, in_pos, price, live):
         uf.realised_pnl(strat, trade_record)
 
     if in_pos['sim']:
-        trade_record = strat.sim_trades.get(asset)
-        now = datetime.now().strftime('%d/%m/%y %H:%M')
-        note = f"*sim* {pair} closed on signal @ {price}"
-        print(now, note)
+        trade_record = strat.sim_trades.get(pair)
+        # note = f"*sim* {pair} closed on signal @ {price}"
+        # print(note)
         sim_bal = Decimal(strat.sim_pos[asset]['qty'])
-        funcs.clear_stop(pair, False)
         api_order = funcs.sell_asset(pair, sim_bal, False)
         sell_order = funcs.create_trade_dict(api_order, price, False)
         sell_order['type'] = 'close_long'
@@ -266,8 +267,8 @@ def spot_sell(strat, pair, in_pos, price, live):
             strat.next_id += 1
         uf.record_closed_sim_trades(strat)
         
-        if strat.sim_trades[asset]:
-            del strat.sim_trades[asset]
+        if strat.sim_trades[pair]:
+            del strat.sim_trades[pair]
             uf.record_sim_trades(strat)
         
         in_pos['sim'] = False
@@ -334,7 +335,12 @@ def reduce_risk(strat, params, live):
                 print(now, note)
                 try:
                     # push = pb.push_note(now, note)
-                    funcs.clear_stop(pair, live)
+                    if strat.open_trades.get(pair):
+                        trade_record = strat.open_trades.get(pair)
+                    else:
+                        trade_record = []
+                    
+                    funcs.clear_stop(pair, trade_record, live)
                     api_order = funcs.sell_asset(pair, live)
                     
                     sell_order = funcs.create_trade_dict(api_order, price, live)
@@ -342,10 +348,6 @@ def reduce_risk(strat, params, live):
                     sell_order['state'] = 'real'
                     sell_order['reason'] = 'portfolio risk limiting'
                     
-                    if strat.open_trades.get(pair):
-                        trade_record = strat.open_trades.get(pair)
-                    else:
-                        trade_record = []
                     trade_record.append(sell_order)
                     
                     strat.sim_trades[pair] = trade_record

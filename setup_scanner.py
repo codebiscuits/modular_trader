@@ -39,6 +39,16 @@ else:
 # strat = strats.RSI_ST_EMA(4, 45, 96)
 strat = strats.DoubleSTLO(3, 1.2)
 
+# update trade records --------------------------------------------------------
+if not live:
+    uf.sync_test_records(strat)
+    # now that trade records have been loaded, path can be changed
+    strat.market_data = Path('test_records')
+uf.backup_trade_records(strat)
+
+uf.record_stopped_trades(strat, now_start, live)
+uf.record_stopped_sim_trades(strat, now_start)
+
 # compile and sort list of pairs to loop through ------------------------------
 all_pairs = funcs.get_pairs()
 shuffle(all_pairs)
@@ -50,16 +60,6 @@ pairs_in_pos = [p + 'USDT' for p in positions if p != 'USDT']
 other_pairs = [p for p in all_pairs if (not p in pairs_in_pos) and (not p in not_pairs)]
 pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked first
 
-
-# update trade records --------------------------------------------------------
-if not live:
-    uf.sync_test_records(strat)
-    # now that trade records have been loaded, path can be changed
-    strat.market_data = Path('test_records')
-uf.backup_trade_records(strat)
-
-uf.record_stopped_trades(pairs_in_pos, now_start, strat)
-uf.record_stopped_sim_trades(strat, now_start)
 
 # set fixed risk, max_init_r and fixed_risk_dol
 fixed_risk = af.set_fixed_risk(strat, strat.bal)
@@ -81,7 +81,9 @@ for pair in pairs:
     asset = pair[:-1*len(params.get('quote_asset'))]
     
 # set in_pos and look up or calculate $ fixed risk ----------------------------
-    in_pos = {'real':False, 'sim':False, 'tracked':False}
+    in_pos = {'real':False, 'sim':False, 'tracked':False, 
+              'real_ep': None, 'sim_ep': None, 'tracked_ep': None, 
+              'real_pfrd': None, 'sim_pfrd': None, 'tracked_pfrd': None}
     if asset in strat.sizing.keys():
         in_pos['real'] = True
         real_trade_record = strat.open_trades.get(pair)
@@ -128,13 +130,13 @@ for pair in pairs:
 # update positions dictionary with current pair's open_risk values ------------
     if in_pos['real']:
         real_qty = strat.sizing[asset]['qty']
-        strat.sizing[asset].update(funcs.update_pos(asset, real_qty, strat.bal, inval_dist, in_pos['real_pfrd']))
+        strat.sizing[asset].update(funcs.update_pos(strat, asset, real_qty, inval_dist, in_pos['real_pfrd']))
         if in_pos['real_ep']:
             price_delta = (price - in_pos['real_ep']) / in_pos['real_ep'] # how much has price moved since entry
             
     if in_pos['sim']:
         sim_qty = strat.sim_pos[asset]['qty']
-        strat.sim_pos[asset].update(funcs.update_pos(asset, sim_qty, strat.bal, inval_dist, in_pos['sim_pfrd']))
+        strat.sim_pos[asset].update(funcs.update_pos(strat, asset, sim_qty, inval_dist, in_pos['sim_pfrd']))
         if in_pos['sim_ep'] and not in_pos['real_ep']:
             price_delta = (price - in_pos['sim_ep']) / in_pos['sim_ep']
     
@@ -169,21 +171,25 @@ for pair in pairs:
             print(trim_size)
             usdt_size = usdt_depth
         
-        if usdt_size < 30 and not in_pos['sim']:
+        if usdt_size < 30:
             strat.counts_dict['too_small'] += 1
-            in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, 'too_small', in_pos)
+            if not in_pos['sim']:
+                in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, 'too_small', in_pos)
             continue
-        elif risk > mir and not in_pos['sim']:
+        elif risk > mir:
             strat.counts_dict['too_risky'] += 1
-            in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, 'too_risky', in_pos)
+            if not in_pos['sim']:
+                in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, 'too_risky', in_pos)
             continue
-        elif usdt_depth == 0 and not in_pos['sim']:
+        elif usdt_depth == 0:
             strat.counts_dict['too_much_spread'] += 1
-            in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, 'too_much_spread', in_pos)
+            if not in_pos['sim']:
+                in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, 'too_much_spread', in_pos)
             continue
-        elif usdt_depth < usdt_size and not in_pos['sim']:
+        elif usdt_depth < usdt_size:
             strat.counts_dict['books_too_thin'] += 1
-            in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, 'books_too_thin', in_pos)
+            if not in_pos['sim']:
+                in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, 'books_too_thin', in_pos)
             continue
                     
 # check total open risk and close profitable positions if necessary -----------
@@ -194,20 +200,20 @@ for pair in pairs:
         or_list = [v.get('or_R') for v in strat.sizing.values() if v.get('or_R')]
         total_open_risk = sum(or_list)
         num_open_positions = len(or_list)
-        if num_open_positions >= max_positions and not in_pos['sim']:
+        if num_open_positions >= max_positions:
             strat.counts_dict['too_many_pos'] += 1
-            reason = 'too_many_pos'
-            in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, reason, in_pos)
+            if not in_pos['sim']:
+                in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, 'too_many_pos', in_pos)
             continue
-        elif total_open_risk > params.get('total_r_limit') and not in_pos['sim']:
+        elif total_open_risk > params.get('total_r_limit'):
             strat.counts_dict['too_much_or'] += 1
-            reson = 'too_much_or'
-            in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, reason, in_pos)
+            if not in_pos['sim']:
+                in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, 'too_much_or', in_pos)
             continue
-        elif strat.sizing['USDT']['qty'] < usdt_size and not in_pos['sim']:
+        elif strat.sizing['USDT']['qty'] < usdt_size:
             strat.counts_dict['not_enough_usdt'] += 1
-            reason = 'not_enough_usdt'
-            in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, reason, in_pos)
+            if not in_pos['sim']:
+                in_pos = omf.sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, 'not_enough_usdt', in_pos)
             continue
             
 # open new position -----------------------------------------------------------
@@ -243,7 +249,7 @@ for pair in pairs:
     
 
 # calculate open risk and take profit if necessary ----------------------------
-    if in_pos['real'] or in_pos['sim']:
+    if in_pos['real']:
         pos_bal = strat.sizing.get(asset)['value']
         open_risk = strat.sizing.get(asset)['or_$']
         open_risk_r = strat.sizing.get(asset)['or_R']
@@ -257,7 +263,9 @@ for pair in pairs:
         
         
 # log all data from the session and print/push summary-------------------------
-print(f'realised real pnl: {strat.realised_pnl}R, realised sim pnl: {strat.sim_pnl}R')
+or_list = [v.get('or_R') for v in strat.sizing.values() if v.get('or_R')]
+total_open_risk = sum(or_list)
+print(f'realised real pnl: {strat.realised_pnl:.1f}R, realised sim pnl: {strat.sim_pnl:.1f}R')
 print(f'tor: {total_open_risk}')
 print(f'or list: {[round(x, 2) for x in sorted(or_list, reverse=True)]}')
 strat.sizing['USDT'] = funcs.update_usdt(strat.bal)

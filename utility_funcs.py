@@ -382,13 +382,134 @@ def realised_pnl(strat, trade_record):
         print(f'state in record: {trade_record[-1].get("state")}')
         print(f'{trade_r = }')
 
-def record_stopped_trades(pairs_in_pos, now_start, strat):
+def latest_stop_id(trade_record):
+    '''looks through trade_record for a stop id and retrieves the pair, id and 
+    timestamp for when the stop was set. if nothing is found, just retreives the 
+    pair and timestamp from the start of the trade_record'''
+    pair = None
+    stop_id = None
+    stop_time = None
+    for i in trade_record[::-1]:
+        if i.get('stop_id'):
+            pair = i.get('pair')
+            stop_id = i.get('stop_id')
+            stop_time = i.get('timestamp')
+            break
+    if not pair:
+        pair = trade_record[0].get('pair')
+        stop_time = trade_record[0].get('timestamp')
+            
+    
+    return pair, stop_id, stop_time
+
+def create_stop_dict(order):
+    '''collects and returns the details of filled stop-loss order in a dictionary'''
+    
+    pair = order.get('symbol')
+    quote_qty = order.get('cummulativeQuoteQty')
+    base_qty = order.get('executedQty')
+    avg_price = round(float(quote_qty) / float(base_qty), 8)
+    
+    bnb_fee = funcs.calc_fee_bnb(quote_qty)
+
+    trade_dict = {'timestamp': order.get('updateTime'),
+                  'pair': pair,
+                  'trig_price': order.get('stopPrice'), 
+                  'limit_price': order.get('price'), 
+                  'exe_price': str(avg_price),
+                  'base_size': base_qty,
+                  'quote_size': quote_qty,
+                  'fee': str(bnb_fee),
+                  'fee_currency': 'BNB'
+                  }
+    if order.get('status') != 'FILLED':
+        print(f'{pair} order not filled')
+        pb.push_note('Warning', f'{pair} stop-loss hit but not filled')
+    
+    return trade_dict
+
+def record_stopped_trades(strat, now, live):
+    # loop through strat.open_trades and call latest_stop_id(trade_record) to
+    # compile a list of order ids for each open trade's stop loss orders, then 
+    # check binance to find which don't have an active stop-loss
+    stop_ids = [latest_stop_id(v) for v in strat.open_trades.values()]
+    
+    open_orders = client.get_open_orders()
+    ids_remaining = [i.get('orderId') for i in open_orders]
+    symbols_remaining = [i.get('symbol') for i in open_orders]
+    
+    stopped = []
+    for pair, sid, time in stop_ids:
+        if sid:
+            if sid not in ids_remaining:
+                stopped.append((pair, sid, time))
+            else:
+                continue
+        elif pair not in symbols_remaining:
+            stopped.append((pair, sid, time))
+    
+    # for any that don't, assume that the stop was hit and check for exchange records
+    for pair, sid, time in stopped:
+        order_list = client.get_all_orders(symbol=pair, orderId=sid, startTime=time-10000)
+        
+        if order_list and sid:
+            order = None
+            for o in order_list:
+                if o.get('order_id'):
+                    order = o
+                    break
+        elif order_list and not sid:
+            order = None
+            for o in order_list[::-1]:
+                if o.get('type') == 'STOP_LOSS_LIMIT':
+                    order = o
+                    break
+        else:
+            print(f'No orders on binance for {pair}')
+            
+        if order:
+            trade_type = 'stop_short' if (order.get('side') == 'BUY') else 'stop_long'
+            
+            stop_dict = create_stop_dict(order)
+            stop_dict['type'] = trade_type                
+            stop_dict['state'] = 'real'
+            stop_dict['reason'] = 'hit hard stop'
+            
+            trade_record = strat.open_trades.get(pair)
+            trade_record.append(stop_dict)
+            
+            strat.sim_trades[pair] = trade_record
+            record_sim_trades(strat)
+            del strat.open_trades[pair]
+            record_open_trades(strat)
+            
+            strat.counts_dict['real_stop'] += 1
+            realised_pnl(strat, trade_record)
+            
+        else:
+            # check for a free balance matching the size. if there is, that means 
+            # the stop was never set in the first place and needs to be set
+            print(f'getting {pair[:-4]} free balance')
+            free_bal = float(client.get_asset_balance(pair[:-4]).get('free'))
+            print(f'getting {pair} price')
+            price = funcs.get_price(pair)
+            value = free_bal * price
+            if value > 10:
+                note = f'{pair} in position with no stop-loss'
+                pb.push_note(now, note)
+
+def record_stopped_trades_old(pairs_in_pos, now_start, strat):
+    print('running record_stopped_trades')
     # create list of trade records which don't match current positions
     open_trades_list = list(strat.open_trades.keys())
     stopped_trades = [st for st in open_trades_list if st not in pairs_in_pos] # these positions must have been stopped out
-
+    
+    print(open_trades_list)
+    print(stopped_trades)
+    
     # look for stopped out positions and complete trade records
     for i in stopped_trades:
+        print(i)
         trade_record = strat.open_trades.get(i)
         
         # work out how much base size has been bought vs sold
@@ -472,13 +593,12 @@ def record_stopped_sim_trades(strat, now_start):
     price action against their most recent hard_stop to see if any of them would have 
     got stopped out'''
     
-    for asset, v in strat.sim_trades.items():
+    for pair, v in strat.sim_trades.items():
         # first filter out all trades which started out real
-        if v[0].get('real') or asset == 'ALPACAUSDT':
+        if v[0].get('real'):
             continue
         
-        pair = asset + 'USDT'
-        print(pair)
+        asset = pair[:-4]
         long_trade = True if v[0].get('type')[-4:] == 'long' else False
         
         # calculate current base size
@@ -532,8 +652,7 @@ def record_stopped_sim_trades(strat, now_start):
                           'state': 'sim', 
                           }
             note = f"*sim* stopped out {pair} @ {stop}"
-            print(now_start, note)
-            # push = pb.push_note(now_start, note)
+            # print(now_start, note)
             
             v.append(trade_dict)
             
@@ -541,8 +660,6 @@ def record_stopped_sim_trades(strat, now_start):
             strat.counts_dict['sim_stop'] += 1
             
     record_sim_trades(strat)
-            
-        
 
 def recent_perf_str(strat):
     '''generates a string of + and - to represent recent strat performance'''
@@ -606,6 +723,8 @@ def sync_test_records(strat):
     try:
         with open(f'{strat.market_data}/{strat.name}_sim_trades.json', 'r') as file:
             s_data = json.load(file)
+        print('printing from uf.sync_test_records')
+        print(s_data.keys())
         with open(f'test_records/{strat.name}_sim_trades.json', 'w') as file:
             json.dump(s_data, file)
     except JSONDecodeError:

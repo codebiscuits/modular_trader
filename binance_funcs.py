@@ -102,6 +102,12 @@ def calc_stop(st, spread,  price, min_risk=0.01):
         return float(st) * (1 + buffer)
 
 
+def calc_fee_bnb(usdt_size, fee_rate=0.00075):
+    bnb_price = get_price('BNBUSDT')
+    fee_usdt = float(usdt_size) * fee_rate
+    return fee_usdt / bnb_price
+
+
 #-#-#- Account Functions
 
 
@@ -223,7 +229,7 @@ def free_usdt():
     return float(usdt_bals.get('free'))
 
 
-def update_pos(asset, base_bal, total_bal, inval, pos_fr_dol):
+def update_pos(strat, asset, base_bal, inval, pos_fr_dol):
     '''checks for the current balance of a particular asset and returns it in 
     the correct format for the sizing dict. also calculates the open risk for 
     a given asset and returns it in R and $ denominations'''
@@ -231,7 +237,7 @@ def update_pos(asset, base_bal, total_bal, inval, pos_fr_dol):
     pair = asset + 'USDT'
     price = get_price(pair)
     value = price * float(base_bal)
-    pct = round(100 * value / total_bal, 5)
+    pct = round(100 * value / strat.bal, 5)
     open_risk = value - (value / inval)
     if pos_fr_dol:
         open_risk_r = open_risk / pos_fr_dol
@@ -778,7 +784,45 @@ def sell_asset_old(pair, live, pct=100):
     return order
 
 
-def set_stop(pair, price, live):
+def set_stop(pair, base_size, price, live):
+    # print(f'setting {pair} stop @ {price}')
+    asset = pair[:-4]
+
+    info = client.get_symbol_info(pair)
+    tick_size = info.get('filters')[0].get('tickSize')
+    step_size = Decimal(info.get('filters')[2].get('stepSize'))
+
+    reserve = 10 / price  # amount of BNB that would be worth $10 at stop price
+
+    order_size = step_round(base_size, step_size)  # - step_size
+    spread = get_spread(pair)
+    lower_price = price * (1 - (spread * 30))
+    trigger_price = step_round(price, tick_size)
+    limit_price = step_round(lower_price, tick_size)
+    # print(f'{pair} Stop Order - trigger: {trigger_price:.5}, limit: {limit_price:.5}, size: {order_size:.5}')
+
+    if live:
+        order = client.create_order(symbol=pair,
+                                    side=be.SIDE_SELL,
+                                    type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
+                                    timeInForce=be.TIME_IN_FORCE_GTC,
+                                    stopPrice=trigger_price,
+                                    quantity=order_size,
+                                    price=limit_price)
+    else:
+        order = {"pair": pair, 
+                "trig_price": Decimal(trigger_price),
+                "base_size": Decimal(order_size),
+                "quote_size": Decimal(order_size) * Decimal(trigger_price),
+                "fee": 0,
+                "fee_currency": "BNB"
+                }
+
+    # print('-')
+    return order
+
+
+def set_stop_old(pair, price, live):
     # print(f'setting {pair} stop @ {price}')
     asset = pair[:-4]
 
@@ -822,7 +866,31 @@ def set_stop(pair, price, live):
     return order
 
 
-def clear_stop(pair, live):
+def clear_stop(pair, trade_record, live):
+    '''finds the order id of the most recent stop-loss from the trade record
+    and cancels that specific order. if no such id can be found, blindly cancels 
+    the most recent stop-limit order relating to the pair'''
+
+    # sanity check
+    bal = client.get_asset_balance(asset=pair[:-4])
+    if Decimal(bal.get('locked')) == 0:
+        print('no stop to cancel')
+    
+    else:
+        _, stop_id, _ = uf.latest_stop_id(trade_record)
+        
+        if not stop_id: # if the function above didn't find anything
+            orders = client.get_open_orders(symbol=pair)
+            if orders and orders[-1].get(type) == 'STOP_LOSS_LIMIT':
+                stop_id = orders[-1].get('orderId')
+            else:
+                print('no stop to cancel')
+        
+        if live and stop_id:
+            result = client.cancel_order(symbol=pair, orderId=stop_id)
+
+
+def clear_stop_old(pair, live):
     '''blindly cancels the first resting order relating to the pair in question.
     works as a "clear stop" function only when the strategy sets one 
     stop-loss per position and uses no other resting orders'''

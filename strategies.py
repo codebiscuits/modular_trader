@@ -510,6 +510,7 @@ class DoubleSTLO:
 
     def read_sim_trade_records(self):
         st_path = f"{self.market_data}/{self.name}_sim_trades.json"
+        print(st_path)
         if Path(st_path).exists():
             with open(st_path, "r") as st_file:
                 try:
