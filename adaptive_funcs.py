@@ -3,7 +3,7 @@ from json.decoder import JSONDecodeError
 import binance_funcs as funcs
 from binance.client import Client
 from pathlib import Path
-from config import ohlc_data, params
+from config import ohlc_data
 import pandas as pd
 from datetime import datetime, timedelta
 import statistics as stats
@@ -14,7 +14,7 @@ client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 
-def set_fixed_risk(strat, total_bal):
+def set_fixed_risk_old(strat, total_bal):
     '''calculates fixed risk setting for new trades based on recent performance 
     and previous setting. if recent performance is very good, fr is increased slightly.
     if not, fr is decreased by thirds'''

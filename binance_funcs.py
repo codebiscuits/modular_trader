@@ -145,7 +145,7 @@ def account_bal():
     return total
 
 
-def current_positions(strat, switch:str):
+def current_positions_old(strat, switch:str):
     '''creates a dictionary of open positions by checking either 
     open_trades.json, sim_trades.json or tracked_trades.json'''
         

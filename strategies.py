@@ -9,6 +9,10 @@ from pathlib import Path
 import json
 from json.decoder import JSONDecodeError
 from datetime import datetime
+from pushbullet import Pushbullet
+import statistics as stats
+
+pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 ### Backtesting Strategies
 
@@ -435,6 +439,13 @@ class DoubleSTLO:
     max_length = 201
     realised_pnl = 0
     sim_pnl = 0
+    quote_asset = 'USDT'
+    fr_range = (0, 0.001) # 0.0025 makes good use of total balance
+    max_spread = 0.5
+    indiv_r_limit = 1.4
+    total_r_limit = 20
+    target_risk = 0.1
+    max_pos = 20
     counts_dict = {'real_stop': 0, 'real_open': 0, 'real_add': 0, 'real_tp': 0, 'real_close': 0, 
                    'sim_stop': 0, 'sim_open': 0, 'sim_add': 0, 'sim_tp': 0, 'sim_close': 0, 
                    'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 'too_much_or': 0, 
@@ -450,6 +461,11 @@ class DoubleSTLO:
         self.tracked_trades = self.read_tracked_trade_records()
         self.closed_trades = self.read_closed_trade_records()
         self.closed_sim_trades = self.read_closed_sim_trade_records()
+        self.sizing = self.current_positions('open')
+        self.sim_pos = self.current_positions('sim')
+        self.tracked = self.current_positions('tracked')
+        self.fixed_risk = self.set_fixed_risk()
+        self.max_positions = self.set_max_pos()
         
         
     def __str__(self):
@@ -563,6 +579,138 @@ class DoubleSTLO:
         self.or_list = [v.get('or_R') for v in self.sizing.values() if v.get('or_R')]
         self.total_open_risk = sum(self.or_list)
         self.num_open_positions = len(self.or_list)
+    
+    def set_fixed_risk(self):
+        '''calculates fixed risk setting for new trades based on recent performance 
+        and previous setting. if recent performance is very good, fr is increased slightly.
+        if not, fr is decreased by thirds'''
+        
+        def reduce_fr(factor, fr_prev, fr_min, fr_inc):
+            '''reduces fixed_risk by factor (with the floor value being fr_min)'''
+            ideal = (fr_prev - fr_min) * factor
+            reduce = max(ideal, fr_inc)
+            return max((fr_prev-reduce), fr_min)
+        
+        now = datetime.now().strftime('%d/%m/%y %H:%M')
+        
+        with open(f"{self.market_data}/{self.name}_bal_history.txt", "r") as file:
+            bal_data = file.readlines()
+        
+        fr_prev = json.loads(bal_data[-1]).get('fr')
+        fr_min = self.fr_range[0]
+        fr_max = self.fr_range[1]
+        fr_inc = (fr_max - fr_min) / 10 # increment fr in 10% steps of the range
+        
+        rpnl1 = json.loads(bal_data[-1]).get('realised_pnl')
+        rpnl2 = json.loads(bal_data[-2]).get('realised_pnl')
+        rpnl3 = json.loads(bal_data[-3]).get('realised_pnl')
+        rpnl4 = json.loads(bal_data[-4]).get('realised_pnl')
+        rpnl5 = json.loads(bal_data[-5]).get('realised_pnl')
+        
+        spnl1 = json.loads(bal_data[-1]).get('sim_r_pnl')
+        spnl2 = json.loads(bal_data[-2]).get('sim_r_pnl')
+        spnl3 = json.loads(bal_data[-3]).get('sim_r_pnl')
+        spnl4 = json.loads(bal_data[-4]).get('sim_r_pnl')
+        spnl5 = json.loads(bal_data[-5]).get('sim_r_pnl')
+        
+        real_score = 0
+        if rpnl1 > 0:
+            real_score += 1
+        if rpnl2 > 0:
+            real_score += 0.8
+        if rpnl3 > 0:
+            real_score += 0.6
+        if rpnl4 > 0:
+            real_score += 0.4
+        if rpnl5 > 0:
+            real_score += 0.2
+        
+        sim_score = 0
+        if spnl1 > 0:
+            sim_score += 1
+        if spnl2 > 0:
+            sim_score += 0.8
+        if spnl3 > 0:
+            sim_score += 0.6
+        if spnl4 > 0:
+            sim_score += 0.4
+        if spnl5 > 0:
+            sim_score += 0.2
+        
+        if real_score:
+            score = real_score
+        else:
+            score = sim_score
+        
+        prev_bal = json.loads(bal_data[-1]).get('balance')
+        bal_change_pct = 100 * (self.bal - prev_bal) / prev_bal
+        if bal_change_pct < -0.1:
+            score -= 1
+        
+        print(f'{real_score = }, {sim_score = }, {bal_change_pct = }, {score = }')
+        
+        if score == 3:
+            fr = min(fr_prev + (2*fr_inc), fr_max)
+        elif score >= 2.6:
+            fr = min(fr_prev + fr_inc, fr_max)
+        elif score >= 1.8:
+            fr = fr_prev
+        elif score >= 1.2:
+            fr = reduce_fr(0.333, fr_prev, fr_min, fr_inc)
+        elif score >= 0.8:
+            fr = reduce_fr(0.5, fr_prev, fr_min, fr_inc)
+        else:
+            fr = fr_min
+            
+        # print(f'{fr_prev = }, fr range: {fr_min}-{fr_max}, {bal_0 = }, {bal_1 = }, {bal_2 = }, {bal_3 = }, {bal_4 = }, {score = }')
+        if fr != fr_prev:
+            note = f'fixed risk adjusted from {round(fr_prev*10000, 1)}bps to {round(fr*10000, 1)}bps'
+            pb.push_note(now, note)
+        
+        print(f'fixed risk perf score: {score}')
+        return round(fr, 5)
+    
+    def set_max_pos(self):
+        max_pos = 20
+        if self.sizing:
+            open_pnls = [v.get('pnl') for v in self.sizing.values() if v.get('pnl')]
+            if open_pnls:
+                avg_open_pnl = stats.median(open_pnls)
+            else:
+                avg_open_pnl = 0
+            max_pos = 20 if avg_open_pnl <= 0 else 50
+        
+        return max_pos
+    
+    def current_positions(self, switch:str):
+        '''creates a dictionary of open positions by checking either 
+        open_trades.json, sim_trades.json or tracked_trades.json'''
+            
+        filepath = Path(f'{self.market_data}/{self.name}_{switch}_trades.json')
+        with open(filepath, 'r') as file:
+            try:
+                data = json.load(file)
+            except:
+                data = {}
+        
+        size_dict = {}
+        now = datetime.now()
+        total_bal = self.bal
+        
+        for k, v in data.items():
+            if switch == 'open':
+                asset = k[:-4]
+                size_dict[asset] = uf.open_trade_stats(now, total_bal, v)
+            elif switch == 'sim':
+                asset = v[0].get('pair')[:-4]
+                size_dict[asset] = uf.open_trade_stats(now, total_bal, v)
+            elif switch == 'tracked':
+                asset = v[0].get('pair')[:-4]
+                size_dict[asset] = {}
+        
+        return size_dict
+
+
 
 class DoubleST:
     #class attributes

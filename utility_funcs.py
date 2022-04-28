@@ -3,7 +3,7 @@ from json.decoder import JSONDecodeError
 import binance_funcs as funcs
 from binance.client import Client
 from pathlib import Path
-from config import ohlc_data, params
+from config import ohlc_data
 import pandas as pd
 from datetime import datetime, timedelta
 import statistics as stats
@@ -252,6 +252,14 @@ def log(live, strat, fixed_risk, spreads, now_start):
     # check total balance and record it in a file for analysis
     total_bal = funcs.account_bal()
     
+    params = {'quote_asset': 'USDT', 
+              'fr_range': strat.fr_range,
+              'max_spread': strat.max_spread, 
+              'indiv_r_limit': strat.indiv_r_limit, 
+              'total_r_limit': strat.total_r_limit, 
+              'target_risk': strat.target_risk, 
+              'max_pos': strat.max_positions}
+    
     bal_record = {'timestamp': now_start, 'balance': round(total_bal, 2), 'fr': 
                   fixed_risk, 'positions': strat.sizing, 'params': params, 
                   'trade_counts': strat.counts_dict, 
@@ -478,8 +486,9 @@ def record_stopped_trades(strat, now, live):
             trade_record = strat.open_trades.get(pair)
             trade_record.append(stop_dict)
             
-            strat.sim_trades[pair] = trade_record
-            record_sim_trades(strat)
+            ts_id = trade_record[0].get('timestamp')
+            strat.closed_trades[ts_id] = trade_record
+            record_closed_trades(strat)
             del strat.open_trades[pair]
             record_open_trades(strat)
             
@@ -593,6 +602,7 @@ def record_stopped_sim_trades(strat, now_start):
     price action against their most recent hard_stop to see if any of them would have 
     got stopped out'''
     
+    del_pairs = []
     for pair, v in strat.sim_trades.items():
         # first filter out all trades which started out real
         if v[0].get('real'):
@@ -655,9 +665,15 @@ def record_stopped_sim_trades(strat, now_start):
             
             v.append(trade_dict)
             
+            ts_id = v[0].get('timestamp')
+            strat.closed_sim_trades[ts_id] = v
+            record_closed_sim_trades(strat)
+            
             realised_pnl(strat, v)            
             strat.counts_dict['sim_stop'] += 1
             
+    for p in del_pairs:
+        del strat.sim_trades[pair]
     record_sim_trades(strat)
 
 def recent_perf_str(strat):
@@ -722,8 +738,6 @@ def sync_test_records(strat):
     try:
         with open(f'{strat.market_data}/{strat.name}_sim_trades.json', 'r') as file:
             s_data = json.load(file)
-        print('printing from uf.sync_test_records')
-        print(s_data.keys())
         with open(f'test_records/{strat.name}_sim_trades.json', 'w') as file:
             json.dump(s_data, file)
     except JSONDecodeError:
@@ -762,16 +776,16 @@ def sync_test_records(strat):
     with open('test_records/binance_liquidity_history.txt', 'w') as file:
         file.writelines(book_data)
 
-def set_max_pos(sizing, params):
-    if sizing:
-        open_pnls = [v.get('pnl') for v in sizing.values() if v.get('pnl')]
+def set_max_pos_old(strat):
+    if strat.sizing:
+        open_pnls = [v.get('pnl') for v in strat.sizing.values() if v.get('pnl')]
         if open_pnls:
             avg_open_pnl = stats.median(open_pnls)
         else:
             avg_open_pnl = 0
-        return params.get('max_pos') if avg_open_pnl <= 0 else 50
+        strat.max_pos = 20 if avg_open_pnl <= 0 else 50
     else:
-        return 20
+        strat.max_pos = 20
 
 def calc_pos_fr_dol(trade_record, fixed_risk_dol, in_pos, switch):   
     if in_pos[switch] and trade_record and trade_record[0].get('type')[0] == 'o':

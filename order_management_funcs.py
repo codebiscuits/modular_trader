@@ -42,7 +42,7 @@ def sim_spot_buy(strat, pair, size, usdt_size, price, stp, inval_dist, reason, i
     
     return in_pos
 
-def spot_buy(strat, pair, in_pos, fixed_risk, size, usdt_size, price, stp, inval_dist, params, live):
+def spot_buy(strat, pair, in_pos, size, usdt_size, price, stp, inval_dist, live):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     asset = pair[:-4]
     note = f"buy {float(size):.5} {pair} ({float(usdt_size):.5} usdt) @ {price}, stop @ {float(stp):.5}"
@@ -70,7 +70,7 @@ def spot_buy(strat, pair, in_pos, fixed_risk, size, usdt_size, price, stp, inval
         strat.sizing['USDT'] = funcs.update_usdt(strat.bal)
     else:
         pf = usdt_size / strat.bal
-        or_dol = strat.bal * fixed_risk
+        or_dol = strat.bal * strat.fixed_risk
         strat.sizing[asset] = {'qty': size, 'value': usdt_size, 'pf%': pf, 'or_R': 1, 'or_$': or_dol}
     
     strat.counts_dict['real_open'] += 1
@@ -296,7 +296,7 @@ def spot_sell(strat, pair, in_pos, price, live):
         uf.record_closed_trades(strat)
         strat.next_id += 1
         
-        del strat.tracked_pos[asset]
+        del strat.tracked[asset]
         
         del strat.tracked_trades[pair]
         uf.record_tracked_trades(strat)
@@ -307,8 +307,8 @@ def spot_sell(strat, pair, in_pos, price, live):
             
     return in_pos
 
-def reduce_risk(strat, params, live):
-    r_limit = params.get('total_r_limit')
+def reduce_risk(strat, live):
+    r_limit = strat.total_r_limit
     
     # create a list of open positions in profit and their open risk value
     positions = [(p, r.get('or_R'), r.get('pnl_%')) 
