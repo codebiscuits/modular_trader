@@ -601,41 +601,34 @@ class DoubleSTLO:
         fr_max = self.fr_range[1]
         fr_inc = (fr_max - fr_min) / 10 # increment fr in 10% steps of the range
         
-        rpnl1 = json.loads(bal_data[-1]).get('realised_pnl')
-        rpnl2 = json.loads(bal_data[-2]).get('realised_pnl')
-        rpnl3 = json.loads(bal_data[-3]).get('realised_pnl')
-        rpnl4 = json.loads(bal_data[-4]).get('realised_pnl')
-        rpnl5 = json.loads(bal_data[-5]).get('realised_pnl')
+        def score_accum(switch):
+            with open(f"{self.market_data}/{self.name}_bal_history.txt", "r") as file:
+                bal_data = file.readlines()
+            
+            prev_bal = json.loads(bal_data[-1]).get('balance')
+            bal_change_pct = 100 * (self.bal - prev_bal) / prev_bal
+            
+            lookup = 'realised_pnl' if switch == 'real' else 'sim_r_pnl'
+            pnls = {}
+            for i in range(1, 6):
+                pnls[i] = json.loads(bal_data[-1*i]).get(lookup)
+            
+            score = 0
+            if pnls[1] > 0:
+                score += 1
+            if pnls[2] > 0:
+                score += 0.8
+            if pnls[3] > 0:
+                score += 0.6
+            if pnls[4] > 0:
+                score += 0.4
+            if pnls[5] > 0:
+                score += 0.2
+            
+            return score
         
-        spnl1 = json.loads(bal_data[-1]).get('sim_r_pnl')
-        spnl2 = json.loads(bal_data[-2]).get('sim_r_pnl')
-        spnl3 = json.loads(bal_data[-3]).get('sim_r_pnl')
-        spnl4 = json.loads(bal_data[-4]).get('sim_r_pnl')
-        spnl5 = json.loads(bal_data[-5]).get('sim_r_pnl')
-        
-        real_score = 0
-        if rpnl1 > 0:
-            real_score += 1
-        if rpnl2 > 0:
-            real_score += 0.8
-        if rpnl3 > 0:
-            real_score += 0.6
-        if rpnl4 > 0:
-            real_score += 0.4
-        if rpnl5 > 0:
-            real_score += 0.2
-        
-        sim_score = 0
-        if spnl1 > 0:
-            sim_score += 1
-        if spnl2 > 0:
-            sim_score += 0.8
-        if spnl3 > 0:
-            sim_score += 0.6
-        if spnl4 > 0:
-            sim_score += 0.4
-        if spnl5 > 0:
-            sim_score += 0.2
+        real_score = score_accum('real')
+        sim_score = score_accum('sim')
         
         if real_score:
             score = real_score
@@ -643,7 +636,7 @@ class DoubleSTLO:
             score = sim_score
         
         prev_bal = json.loads(bal_data[-1]).get('balance')
-        bal_change_pct = 100 * (self.bal - prev_bal) / prev_bal
+        bal_change_pct = round(100 * (self.bal - prev_bal) / prev_bal, 3)
         if bal_change_pct < -0.1:
             score -= 1
         

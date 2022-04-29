@@ -677,6 +677,60 @@ def record_stopped_sim_trades(strat, now_start):
     record_sim_trades(strat)
 
 def recent_perf_str(strat):
+    '''generates a string of + and - to represent recent strat performance'''    
+    
+    def score_accum(switch):
+        with open(f"{strat.market_data}/{strat.name}_bal_history.txt", "r") as file:
+            bal_data = file.readlines()
+        
+        prev_bal = json.loads(bal_data[-1]).get('balance')
+        bal_change_pct = 100 * (strat.bal - prev_bal) / prev_bal
+        
+        lookup = 'realised_pnl' if switch == 'real' else 'sim_r_pnl'
+        pnls = {}
+        for i in range(1, 6):
+            pnls[i] = json.loads(bal_data[-1*i]).get(lookup)
+        
+        score = 0
+        if pnls[1] > 0:
+            score += 1
+        if pnls[2] > 0:
+            score += 0.8
+        if pnls[3] > 0:
+            score += 0.6
+        if pnls[4] > 0:
+            score += 0.4
+        if pnls[5] > 0:
+            score += 0.2
+        
+        if bal_change_pct > 0.1:
+            perf_str = '+ | '
+        elif bal_change_pct < -0.1:
+            perf_str = '- | '
+        else:
+            perf_str = '0 |'
+        
+        for j in range(1, 6):
+            if pnls[j] > 0:
+                perf_str += ' +'
+            elif pnls[j] < 0:
+                perf_str += ' -'
+            else:
+                perf_str += ' 0'
+        
+        return score, perf_str
+    
+    real_score, real_perf_str = score_accum('real')
+    if real_score:
+        perf_str = real_perf_str
+    else:
+        sim_score, perf_str = score_accum('sim')
+    
+    full_perf_str = f'real score: {real_score}, sim score: {sim_score} {perf_str}'
+    
+    return full_perf_str
+
+def recent_perf_str_old(strat):
     '''generates a string of + and - to represent recent strat performance'''
     
     with open(f"{strat.market_data}/{strat.name}_bal_history.txt", "r") as file:
@@ -697,8 +751,6 @@ def recent_perf_str(strat):
 
 def scanner_summary(strat, all_start, benchmark, live):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
-    # all_end = time.perf_counter()
-    # all_time = all_end - all_start
     
     total_bal = funcs.account_bal()
     
@@ -709,12 +761,11 @@ def scanner_summary(strat, all_start, benchmark, live):
     vol_exp = round(100 - strat.sizing.get('USDT').get('pf%'))
     
     live_str = '' if live else '*not live* '
-    elapsed_str = '' # f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s, '
     count_str = count_trades(strat.counts_dict)
     perf_str = recent_perf_str(strat)
     bench_str = f"1m perf: strat {round(benchmark.get('strat_1m')*100, 2)}%, mkt {round(benchmark.get('market_1m')*100, 2)}%"
-    final_msg = f'{live_str}{elapsed_str}total bal: ${total_bal:.2f} {perf_str}\npositions {num_open_positions}, exposure {vol_exp}% {count_str}\n{bench_str}'
-    print(final_msg)
+    final_msg = f'{live_str}total bal: ${total_bal:.2f}\n{perf_str}\npositions {num_open_positions}, exposure {vol_exp}% {count_str}\n{bench_str}'
+    print('-\n', final_msg, '\n-')
     
     if live:
         pb.push_note(now, final_msg)
