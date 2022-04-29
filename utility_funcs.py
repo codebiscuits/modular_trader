@@ -726,7 +726,7 @@ def recent_perf_str(strat):
     else:
         sim_score, perf_str = score_accum('sim')
     
-    full_perf_str = f'real score: {real_score}, sim score: {sim_score} {perf_str}'
+    full_perf_str = f'{perf_str} real: {real_score}, sim: {sim_score}'
     
     return full_perf_str
 
@@ -764,7 +764,7 @@ def scanner_summary(strat, all_start, benchmark, live):
     count_str = count_trades(strat.counts_dict)
     perf_str = recent_perf_str(strat)
     bench_str = f"1m perf: strat {round(benchmark.get('strat_1m')*100, 2)}%, mkt {round(benchmark.get('market_1m')*100, 2)}%"
-    final_msg = f'{live_str}total bal: ${total_bal:.2f}\n{perf_str}\npositions {num_open_positions}, exposure {vol_exp}% {count_str}\n{bench_str}'
+    final_msg = f'{live_str}${total_bal:.2f}\n{perf_str}\npositions {num_open_positions}, exposure {vol_exp}% {count_str}\n{bench_str}'
     print('-\n', final_msg, '\n-')
     
     if live:
