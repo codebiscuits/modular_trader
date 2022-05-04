@@ -440,7 +440,7 @@ class DoubleSTLO:
     realised_pnl = 0
     sim_pnl = 0
     quote_asset = 'USDT'
-    fr_range = (0, 0.001) # 0.0025 makes good use of total balance
+    fr_range = (0, 0.0025) # 0.0025 makes good use of total balance
     max_spread = 0.5
     indiv_r_limit = 1.4
     total_r_limit = 20
