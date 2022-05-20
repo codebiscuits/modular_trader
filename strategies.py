@@ -404,43 +404,16 @@ class RSI_ST_EMA:
                     'tp_spot': tp_spot, 'add_spot': False, 
                     'inval': inval}
 
-def double_st(df, in_pos):
-    df['st_loose'], df['st_loose_u'], df['st_loose_d'] = ind.supertrend(df.high, df.low, df.close, 10, 3)
-    df['st'], df['st_u'], df['st_d'] = ind.supertrend(df.high, df.low, df.close, 3, 1.5)
-    
-    bullish_loose = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st_loose']
-    bearish_loose = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st_loose']
-    bullish_tight = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st']
-    bearish_tight = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st']
-    
-    # bullish_book = bid_ask_ratio > 1
-    # bearish_book = bid_ask_ratio < 1
-    # bullish_volume = price rising on low volume or price falling on high volume
-    # bearish_volume = price rising on high volume or price falling on low volume
-    
-    open_long = bullish_loose and bullish_tight and not in_pos # and bullish_book
-    close_long = bearish_tight and in_pos
-    open_short = bearish_loose and bearish_tight and not in_pos # and bearish_book
-    close_short = bullish_tight and in_pos
-    
-    inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
-    
-    return {'open_long': open_long, 'close_long': close_long,  
-            'tp_long': False, 'add_long': False, 
-            'open_short': open_short, 'close_short': close_short, 
-            'tp_short': False, 'add_short': False, 
-            'open_spot': False, 'close_spot': False, 
-            'tp_spot': False, 'add_spot': False,   
-            'inval': inval}
-    
-class DoubleSTLO:
-    name = 'double_st_lo'
+class DoubleST:
+    name = 'double_st'
     description = 'regular supertrend for bias with tight supertrend for entries/exits'
     max_length = 201
-    realised_pnl = 0
-    sim_pnl = 0
+    realised_pnl_long = 0
+    realised_pnl_short = 0
+    sim_pnl_long = 0
+    sim_pnl_short = 0
     quote_asset = 'USDT'
-    fr_range = (0, 0.001) # 0.0025 makes good use of total balance
+    fr_range = (0, 0.0005) # 0.0025 makes good use of total balance
     max_spread = 0.5
     indiv_r_limit = 1.4
     total_r_limit = 20
@@ -448,30 +421,44 @@ class DoubleSTLO:
     max_pos = 20
     counts_dict = {'real_stop': 0, 'real_open': 0, 'real_add': 0, 'real_tp': 0, 'real_close': 0, 
                    'sim_stop': 0, 'sim_open': 0, 'sim_add': 0, 'sim_tp': 0, 'sim_close': 0, 
+                   'real_stop_long': 0, 'real_open_long': 0, 'real_add_long': 0, 'real_tp_long': 0, 'real_close_long': 0, 
+                   'sim_stop_long': 0, 'sim_open_long': 0, 'sim_add_long': 0, 'sim_tp_long': 0, 'sim_close_long': 0, 
+                   'real_stop_short': 0, 'real_open_short': 0, 'real_add_short': 0, 'real_tp_short': 0, 'real_close_short': 0, 
+                   'sim_stop_short': 0, 'sim_open_short': 0, 'sim_add_short': 0, 'sim_tp_short': 0, 'sim_close_short': 0, 
                    'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 'too_much_or': 0, 
                    'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0}
     
     def __init__(self, lb, mult):
         self.lb = lb
         self.mult = mult
-        self.bal = funcs.account_bal()
+        self.bal = funcs.account_bal_M()
         self.market_data = self.mkt_data_path()
-        self.open_trades = self.read_open_trade_records()
-        self.sim_trades = self.read_sim_trade_records()
-        self.tracked_trades = self.read_tracked_trade_records()
+        self.live = self.set_live()
+        if not self.live:
+            self.sync_test_records()
+        self.open_trades = self.read_open_trade_records('open')
+        self.sim_trades = self.read_open_trade_records('sim')
+        self.tracked_trades = self.read_open_trade_records('tracked')
         self.closed_trades = self.read_closed_trade_records()
         self.closed_sim_trades = self.read_closed_sim_trade_records()
-        self.sizing = self.current_positions('open')
+        self.backup_trade_records()
+        self.real_pos = self.current_positions('open')
         self.sim_pos = self.current_positions('sim')
         self.tracked = self.current_positions('tracked')
-        self.fixed_risk = self.set_fixed_risk()
+        self.fixed_risk_l = self.set_fixed_risk('long')
+        self.fixed_risk_s = self.set_fixed_risk('short')
         self.max_positions = self.set_max_pos()
+        self.now_start = datetime.now().strftime('%d/%m/%y %H:%M')
+        self.max_init_r_l = self.fixed_risk_l * self.total_r_limit
+        self.max_init_r_s = self.fixed_risk_s * self.total_r_limit
+        self.fixed_risk_dol_l = self.fixed_risk_l * self.bal
+        self.fixed_risk_dol_s = self.fixed_risk_s * self.bal
         
         
     def __str__(self):
         return f'{self.name} st2: {self.lb}-{self.mult}'
     
-    def live_signals(self, df, in_pos):
+    def spot_signals(self, df):
         
         df['ema200'] = df.close.ewm(200).mean()
         ind.supertrend_new(df, 10, 3)
@@ -484,11 +471,46 @@ class DoubleSTLO:
         bearish_tight = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st']
         
         if bullish_ema and bullish_loose and bullish_tight:
-            signal = 'open'
+            signal = 'spot_open'
         elif bearish_tight:
-            signal = 'close'
+            signal = 'spot_close'
         else:
             signal = None
+        
+        if df.at[len(df)-1, 'st']:
+            inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
+        else:
+            inval = 100000
+            
+        return {'signal': signal, 'inval': inval}
+    
+    def margin_signals(self, df):
+        
+        df['ema200'] = df.close.ewm(200).mean()
+        ind.supertrend_new(df, 10, 3)
+        df.rename(columns={'st': 'st_loose', 'st_u': 'st_loose_u', 'st_d': 'st_loose_d'}, inplace=True)
+        ind.supertrend_new(df, self.lb, self.mult)
+        
+        bullish_ema = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'ema200']
+        bearish_ema = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'ema200']
+        bullish_loose = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st_loose']
+        bearish_loose = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st_loose']
+        bullish_tight = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st']
+        bearish_tight = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st']
+        
+        # bullish_book = bid_ask_ratio > 1
+        # bearish_book = bid_ask_ratio < 1
+        # bullish_volume = price rising on low volume or price falling on high volume
+        # bearish_volume = price rising on high volume or price falling on low volume
+        
+        if bullish_ema and bullish_loose and bullish_tight: # and bullish_book
+            signal = 'open_long'
+        if bearish_tight:
+            signal = 'close_long'
+        if bearish_ema and bearish_loose and bearish_tight: # and bearish_book
+            signal = 'open_short'
+        if bullish_tight:
+            signal = 'close_short'
         
         if df.at[len(df)-1, 'st']:
             inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
@@ -513,42 +535,64 @@ class DoubleSTLO:
         
         return market_data
     
-    def read_open_trade_records(self):
-        ot_path = f"{self.market_data}/{self.name}_open_trades.json"
+    def set_live(self):
+        live = Path('/home/ubuntu/rpi_2.txt').exists()
+        
+        if live:
+            print('-:-' * 20)
+        else:
+            print('*** Warning: Not Live ***')
+        
+        return live
+    
+    def sync_test_records(self):
+        with open(f"{self.market_data}/{self.name}/bal_history.txt", "r") as file:
+            bal_data = file.readlines()
+        if bal_data:
+            with open(f"test_records/{self.name}/bal_history.txt", "w") as file:
+                file.writelines(bal_data)
+        
+        with open(f'{self.market_data}/binance_liquidity_history.txt', 'r') as file:
+            book_data = file.readlines()
+        if book_data:
+            with open('test_records/binance_liquidity_history.txt', 'w') as file:
+                file.writelines(book_data)
+        
+        def sync_trades_records(switch):        
+            try:
+                with open(f'{self.market_data}/{self.name}/{switch}_trades.json', 'r') as file:
+                    data = json.load(file)
+                if data:
+                    with open(f'test_records/{self.name}/{switch}_trades.json', 'w') as file:
+                        json.dump(data, file)
+            except JSONDecodeError:
+                print(f'{switch}_trades file empty')
+        
+        sync_trades_records('open')
+        sync_trades_records('sim')
+        sync_trades_records('tracked')
+        sync_trades_records('closed')
+        sync_trades_records('closed_sim')
+        
+        # now that trade records have been loaded, path can be changed
+        self.market_data = Path('test_records')
+
+    def read_open_trade_records(self, switch):
+        ot_path = f"{self.market_data}/{self.name}/{switch}_trades.json"
         if Path(ot_path).exists():
             with open(ot_path, "r") as ot_file:
                 try:
                     open_trades = json.load(ot_file)
                 except JSONDecodeError:
                     open_trades = {}
+        else:
+            open_trades = {}
+            print(f'{ot_path} not found')
         
         return open_trades
 
-    def read_sim_trade_records(self):
-        st_path = f"{self.market_data}/{self.name}_sim_trades.json"
-        print(st_path)
-        if Path(st_path).exists():
-            with open(st_path, "r") as st_file:
-                try:
-                    sim_trades = json.load(st_file)
-                except JSONDecodeError:
-                    sim_trades = {}
-        
-        return sim_trades
-
-    def read_tracked_trade_records(self):
-        tr_path = f"{self.market_data}/{self.name}_tracked_trades.json"
-        if Path(tr_path).exists():
-            with open(tr_path, "r") as tr_file:
-                try:
-                    tracked_trades = json.load(tr_file)
-                except JSONDecodeError:
-                    tracked_trades = {}
-        
-        return tracked_trades
-
     def read_closed_trade_records(self):
-        ct_path = f"{self.market_data}/{self.name}_closed_trades.json"
+        ct_path = f"{self.market_data}/{self.name}/closed_trades.json"
         if Path(ct_path).exists():
             with open(ct_path, "r") as ct_file:
                 try:
@@ -565,7 +609,7 @@ class DoubleSTLO:
         return closed_trades
 
     def read_closed_sim_trade_records(self):
-        cs_path = f"{self.market_data}/{self.name}_closed_sim_trades.json"
+        cs_path = f"{self.market_data}/{self.name}/closed_sim_trades.json"
         if Path(cs_path).exists():
             with open(cs_path, "r") as cs_file:
                 try:
@@ -575,12 +619,49 @@ class DoubleSTLO:
         
         return closed_sim_trades
 
+    def backup_trade_records(self):
+        now = datetime.now().strftime('%d/%m/%y %H:%M')
+        if self.open_trades:
+            with open(f"{self.market_data}/{self.name}/ot_backup.json", "w") as ot_file:
+                json.dump(self.open_trades, ot_file)
+        else:
+            if self.live:
+                pb.push_note(now, 'open trades file empty')
+        
+        if self.sim_trades:
+            with open(f"{self.market_data}/{self.name}/st_backup.json", "w") as st_file:
+                json.dump(self.sim_trades, st_file)
+        else:
+            if self.live:
+                pb.push_note(now, 'sim trades file empty')
+        
+        if self.tracked_trades:
+            with open(f"{self.market_data}/{self.name}/tr_backup.json", "w") as tr_file:
+                json.dump(self.tracked_trades, tr_file)
+        else:
+            if self.live:
+                pb.push_note(now, 'tracked trades file empty')
+        
+        if self.closed_trades:
+            with open(f"{self.market_data}/{self.name}/ct_backup.json", "w") as ct_file:
+                json.dump(self.closed_trades, ct_file)
+        else:
+            if self.live:
+                pb.push_note(now, 'closed trades file empty')
+        
+        if self.closed_sim_trades:
+            with open(f"{self.market_data}/{self.name}/cs_backup.json", "w") as cs_file:
+                json.dump(self.closed_sim_trades, cs_file)
+        else:
+            if self.live:
+                pb.push_note(now, 'closed sim trades file empty')
+    
     def calc_tor(self):
-        self.or_list = [v.get('or_R') for v in self.sizing.values() if v.get('or_R')]
+        self.or_list = [v.get('or_R') for v in self.real_pos.values() if v.get('or_R')]
         self.total_open_risk = sum(self.or_list)
         self.num_open_positions = len(self.or_list)
     
-    def set_fixed_risk(self):
+    def set_fixed_risk(self, direction:str):
         '''calculates fixed risk setting for new trades based on recent performance 
         and previous setting. if recent performance is very good, fr is increased slightly.
         if not, fr is decreased by thirds'''
@@ -593,69 +674,95 @@ class DoubleSTLO:
         
         now = datetime.now().strftime('%d/%m/%y %H:%M')
         
-        with open(f"{self.market_data}/{self.name}_bal_history.txt", "r") as file:
+        with open(f"{self.market_data}/{self.name}/bal_history.txt", "r") as file:
             bal_data = file.readlines()
         
-        fr_prev = json.loads(bal_data[-1]).get('fr')
+        if bal_data:
+            fr_prev = json.loads(bal_data[-1]).get(f'fr_{direction}', 0) # default to 0 if no history
+        else:
+            fr_prev = 0
         fr_min = self.fr_range[0]
         fr_max = self.fr_range[1]
         fr_inc = (fr_max - fr_min) / 10 # increment fr in 10% steps of the range
         
-        def score_accum(switch):
-            with open(f"{self.market_data}/{self.name}_bal_history.txt", "r") as file:
+        def score_accum(direction:str, switch:str):
+            with open(f"{self.market_data}/{self.name}/bal_history.txt", "r") as file:
                 bal_data = file.readlines()
             
-            prev_bal = json.loads(bal_data[-1]).get('balance')
+            if bal_data:
+                prev_bal = json.loads(bal_data[-1]).get('balance')
+            else:
+                prev_bal = self.bal
             bal_change_pct = 100 * (self.bal - prev_bal) / prev_bal
             
             lookup = 'realised_pnl' if switch == 'real' else 'sim_r_pnl'
+            if direction == 'long':
+                lookup += '_long'
+            else:
+                lookup += '_short'
             pnls = {}
             for i in range(1, 6):
-                pnls[i] = json.loads(bal_data[-1*i]).get(lookup)
+                if bal_data and len(bal_data) > 5:
+                    pnls[i] = json.loads(bal_data[-1*i]).get(lookup, -1)
+                else:
+                    pnls[i] = -1 # if there's no data yet, return -1 instead
             
-            score = 0
-            if pnls[1] > 0:
+            score = 15
+            if pnls.get(1) > 0:
+                score += 5
+            elif pnls.get(1) < 0:
+                score -= 5
+            if pnls.get(2) > 0:
+                score += 4
+            elif pnls.get(2) < 0:
+                score -= 4
+            if pnls.get(3) > 0:
+                score += 3
+            elif pnls.get(3) < 0:
+                score -= 3
+            if pnls.get(4) > 0:
+                score += 2
+            elif pnls.get(4) < 0:
+                score -= 2
+            if pnls.get(5) > 0:
                 score += 1
-            if pnls[2] > 0:
-                score += 0.8
-            if pnls[3] > 0:
-                score += 0.6
-            if pnls[4] > 0:
-                score += 0.4
-            if pnls[5] > 0:
-                score += 0.2
+            elif pnls.get(5) < 0:
+                score -= 1
             
             return score
         
-        real_score = score_accum('real')
-        sim_score = score_accum('sim')
+        real_score = score_accum(direction, 'real')
+        sim_score = score_accum(direction, 'sim')
         
         if real_score:
             score = real_score
         else:
             score = sim_score
         
-        prev_bal = json.loads(bal_data[-1]).get('balance')
+        if bal_data:
+            prev_bal = json.loads(bal_data[-1]).get('balance')
+        else:
+            prev_bal = self.bal
         bal_change_pct = round(100 * (self.bal - prev_bal) / prev_bal, 3)
         if bal_change_pct < -0.1:
             score -= 1
         
-        print(f'{real_score = }, {sim_score = }, {bal_change_pct = }, {score = }')
+        print('-')
+        print(f'{direction} - {real_score = }, {sim_score = }, {bal_change_pct = }, {score = }')
         
-        if score == 3:
+        if score == 30:
             fr = min(fr_prev + (2*fr_inc), fr_max)
-        elif score >= 2.6:
+        elif score >= 26:
             fr = min(fr_prev + fr_inc, fr_max)
-        elif score >= 1.8:
+        elif score >= 18:
             fr = fr_prev
-        elif score >= 1.2:
+        elif score >= 12:
             fr = reduce_fr(0.333, fr_prev, fr_min, fr_inc)
-        elif score >= 0.8:
+        elif score >= 8:
             fr = reduce_fr(0.5, fr_prev, fr_min, fr_inc)
         else:
             fr = fr_min
             
-        # print(f'{fr_prev = }, fr range: {fr_min}-{fr_max}, {bal_0 = }, {bal_1 = }, {bal_2 = }, {bal_3 = }, {bal_4 = }, {score = }')
         if fr != fr_prev:
             note = f'fixed risk adjusted from {round(fr_prev*10000, 1)}bps to {round(fr*10000, 1)}bps'
             pb.push_note(now, note)
@@ -665,8 +772,8 @@ class DoubleSTLO:
     
     def set_max_pos(self):
         max_pos = 20
-        if self.sizing:
-            open_pnls = [v.get('pnl') for v in self.sizing.values() if v.get('pnl')]
+        if self.real_pos:
+            open_pnls = [v.get('pnl') for v in self.real_pos.values() if v.get('pnl')]
             if open_pnls:
                 avg_open_pnl = stats.median(open_pnls)
             else:
@@ -679,7 +786,7 @@ class DoubleSTLO:
         '''creates a dictionary of open positions by checking either 
         open_trades.json, sim_trades.json or tracked_trades.json'''
             
-        filepath = Path(f'{self.market_data}/{self.name}_{switch}_trades.json')
+        filepath = Path(f'{self.market_data}/{self.name}/{switch}_trades.json')
         with open(filepath, 'r') as file:
             try:
                 data = json.load(file)
@@ -691,75 +798,14 @@ class DoubleSTLO:
         total_bal = self.bal
         
         for k, v in data.items():
-            if switch == 'open':
+            if switch == 'tracked':
+                asset = k[:-4]
+                size_dict[asset] = {}
+            else:
                 asset = k[:-4]
                 size_dict[asset] = uf.open_trade_stats(now, total_bal, v)
-            elif switch == 'sim':
-                asset = v[0].get('pair')[:-4]
-                size_dict[asset] = uf.open_trade_stats(now, total_bal, v)
-            elif switch == 'tracked':
-                asset = v[0].get('pair')[:-4]
-                size_dict[asset] = {}
         
         return size_dict
 
-
-
-class DoubleST:
-    #class attributes
-    name = 'double_st'
-    description = 'regular supertrend for bias with tight supertrend for entries/exits'
-    max_length = 201
-    counts_dict = {'stop_count': 0, 'open_count': 0, 'add_count': 0, 'tp_count': 0, 'close_count': 0, 
-                   'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 
-                   'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0}
-    
-    def __init__(self, lb, mult):
-        # instance attributes
-        self.lb = lb
-        self.mult = mult
-        self.bal = funcs.account_bal_M()
-        
-    def __str__(self):
-        return f'{self.name} st2: {self.lb}-{self.mult}'
-    
-    def live_signals(self, df, in_pos):
-        
-        df['ema200'] = df.close.ewm(200).mean()
-        ind.supertrend_new(df, 10, 3)
-        df.rename(columns={'st': 'st_loose', 'st_u': 'st_loose_u', 'st_d': 'st_loose_d'}, inplace=True)
-        ind.supertrend_new(df, self.lb, self.mult)
-        
-        bullish_ema = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'ema200']
-        bearish_ema = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'ema200']
-        bullish_loose = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st_loose']
-        bearish_loose = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st_loose']
-        bullish_tight = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st']
-        bearish_tight = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st']
-        
-        # bullish_book = bid_ask_ratio > 1
-        # bearish_book = bid_ask_ratio < 1
-        # bullish_volume = price rising on low volume or price falling on high volume
-        # bearish_volume = price rising on high volume or price falling on low volume
-        
-        open_long = bullish_ema and bullish_loose and bullish_tight and not in_pos # and bullish_book
-        add_long = False
-        tp_long = False
-        close_long = bearish_tight and in_pos
-        open_short = bearish_ema and bearish_loose and bearish_tight and not in_pos # and bearish_book
-        add_short = False
-        tp_short = False
-        close_short = bullish_tight and in_pos
-        
-        if df.at[len(df)-1, 'st']:
-            inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
-        else:
-            inval = 100000
-            
-        return {'open_long': open_long, 'close_long': close_long,  
-                'tp_long': tp_long, 'add_long': add_long, 
-                'open_short': open_short, 'close_short': close_short, 
-                'tp_short': tp_short, 'add_short': add_short, 
-                'inval': inval}
 
 

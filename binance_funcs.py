@@ -149,7 +149,7 @@ def current_positions_old(strat, switch:str):
     '''creates a dictionary of open positions by checking either 
     open_trades.json, sim_trades.json or tracked_trades.json'''
         
-    filepath = Path(f'{strat.market_data}/{strat.name}_{switch}_trades.json')
+    filepath = Path(f'{strat.market_data}/{strat.name}/{switch}_trades.json')
     with open(filepath, 'r') as file:
         try:
             data = json.load(file)
@@ -174,7 +174,7 @@ def current_positions_old(strat, switch:str):
     return size_dict
         
 
-def current_positions_old(market_data, strat_name, fr):  # used to be current sizing
+def current_positions_oldest(market_data, strat_name, fr):  # used to be current sizing
     '''returns a dict with assets as keys and various expressions of positioning as values'''
     
     o_path = Path(f'{market_data}/{strat_name}_open_trades.json')
@@ -671,13 +671,18 @@ def create_trade_dict(order, price, live):
         qty = sum([Decimal(fill.get('qty')) for fill in fills])
         exe_prices = [Decimal(fill.get('price')) for fill in fills]
         avg_price = stats.mean(exe_prices)
+        
+        if float(order.get('cummulativeQuoteQty')):
+            quote_qty = order.get('cummulativeQuoteQty')
+        else:
+            quote_qty = str(qty * avg_price)
 
         trade_dict = {'timestamp': order.get('transactTime'),
                       'pair': pair,
                       'trig_price': str(price),
                       'exe_price': str(avg_price),
                       'base_size': order.get('executedQty'),
-                      'quote_size': order.get('cummulativeQuoteQty'),
+                      'quote_size': quote_qty,
                       'fee': str(fee),
                       'fee_currency': fills[0].get('commissionAsset')
                       }
@@ -686,14 +691,15 @@ def create_trade_dict(order, price, live):
             pb.push_note('Warning', f'{pair} order not filled')
 
     else:
-        trade_dict = {"pair": pair, 
-                     "trig_price": str(price),
-                     "exe_price": str(price),
-                     "base_size": str(order.get('base_size')),
-                     "quote_size": str(order.get('quote_size')),
-                     "fee": '0',
-                     "fee_currency": "BNB"
-                     }
+        trade_dict = {'timestamp': order.get('transactTime'),
+                      "pair": pair, 
+                      "trig_price": str(price),
+                      "exe_price": str(price),
+                      "base_size": str(order.get('base_size')),
+                      "quote_size": str(order.get('cummulativeQuoteQty')),
+                      "fee": '0',
+                      "fee_currency": "BNB"
+                      }
     
     return trade_dict
 
@@ -706,13 +712,24 @@ def valid_size(pair, size):
     return step_round(size, step_size)
 
 
+def valid_price(pair, price):
+    '''rounds the desired order price to the correct step size for binance'''
+    info = client.get_symbol_info(pair)
+    step_size = Decimal(info.get('filters')[0].get('tickSize'))
+    
+    return str(step_round(price, step_size))
+
+
 def buy_asset(pair, usdt_size, live):
     '''takes the pair and the dollar value of the desired position, and 
     calculates the exact amount to order. then executes a market buy.'''
-
+    timestamp = round(datetime.utcnow().timestamp() * 1000)
+    
     # calculate the exact size of the order
     usdt_price = get_price(pair)
     order_size = valid_size(pair, usdt_size/usdt_price)
+    if not order_size:
+        order_size = 0
     print(f'order size: {order_size}')
     
     # send the order
@@ -723,7 +740,7 @@ def buy_asset(pair, usdt_size, live):
                                     quantity=order_size)
         
     else:
-        order = {'symbol': pair, 'price': get_price(pair), 
+        order = {'symbol': pair, 'timestamp': timestamp, 'price': get_price(pair), 
                  'base_size': order_size, 'quote_size': usdt_size}
     
     return order
@@ -731,12 +748,15 @@ def buy_asset(pair, usdt_size, live):
 
 def sell_asset(pair, asset_bal, live, pct=100):
     # print(f'selling {pair}')
+    timestamp = round(datetime.utcnow().timestamp() * 1000)
     asset = pair[:-4]
     usdt_price = get_price(pair)
 
     # make sure order size has the right number of decimal places
     trade_size = Decimal(asset_bal) * Decimal(pct / 100)
     order_size = valid_size(pair, trade_size)
+    if not order_size:
+        order_size = 0
     # print(f'{pair} Sell Order - raw size: {asset_bal:.5}, step size: {step_size:.2}, final size: {order_size:.5}')
 
     if live:
@@ -746,7 +766,7 @@ def sell_asset(pair, asset_bal, live, pct=100):
                                     quantity=order_size)
         
     else:
-        order = {'symbol': pair, 'price': usdt_price, 
+        order = {'symbol': pair, 'timestamp': timestamp, 'price': usdt_price, 
                  'base_size': order_size, 'quote_size': (order_size*Decimal(usdt_price))}
         
     return order
@@ -768,6 +788,8 @@ def sell_asset_old(pair, live, pct=100):
     # make sure order size has the right number of decimal places
     trade_size = asset_bal * Decimal(pct / 100)
     order_size = valid_size(pair, trade_size)
+    if not order_size:
+        order_size = 0
     # print(f'{pair} Sell Order - raw size: {asset_bal:.5}, step size: {step_size:.2}, final size: {order_size:.5}')
 
     if live:
@@ -920,52 +942,6 @@ def account_bal_M():
     return round(usdt_total_net, 2)
 
 
-def current_positions_M(strat, fr):  # used to be current sizing
-    '''returns a dict with assets as keys and various expressions of positioning as values'''
-    
-    o_path = Path(f'{strat.market_data}/{strat}_open_trades.json')
-    with open(o_path, 'r') as file:
-        try:
-            o_data = json.load(file)
-        except:
-            o_data = {}
-        
-    total_bal = account_bal_M()
-    # should be 1R, but also no less than min order size
-    threshold_bal = max(total_bal * fr, 12)
-
-    info = client.get_margin_account()
-    assets = info.get('userAssets')
-    
-    prices = client.get_all_tickers()
-    price_dict = {x.get('symbol'): float(x.get('price')) for x in prices}
-
-    size_dict = {}
-    for a in assets:        
-        asset = a.get('asset')
-        if asset not in ['USDT', 'USDC', 'BUSD']:
-            pair = asset + 'USDT'
-            price = price_dict.get(pair)
-            if price == None:
-                continue
-            if pair in o_data.keys():
-                now = datetime.now()
-                ots = uf.open_trade_stats(now, pair, o_data.get(pair))
-                quant = float(a.get('netAsset'))
-                value = price * quant
-                if asset == 'BNB' and value < 20:
-                    continue
-                elif asset == 'BNB' and value >= 20:
-                    value -= 10
-                if value >= threshold_bal:
-                    pct = round(100 * value / total_bal, 5)
-                    size_dict[asset] = {'qty': quant,
-                                        'value': round(value, 2), 'pf%': pct,
-                                        'pnl': ots.get('pnl_R')}
-
-    return size_dict
-
-
 def free_usdt_M():
     info = client.get_margin_account()
     assets = info.get('userAssets')
@@ -980,10 +956,13 @@ def asset_bal_M(asset):
     info = client.get_margin_account()
     bals = info.get('userAssets')
     
-    balance = 0
+    balance = {}
     for bal in bals:
         if bal.get('asset') == asset:
-            balance = bal.get('netAsset')
+            balance['net'] = bal.get('netAsset')
+            balance['locked'] = bal.get('locked')
+            balance['borrowed'] = bal.get('borrowed')
+            balance['free'] = bal.get('free')
     
     return balance
 
@@ -998,29 +977,40 @@ def free_bal_M(asset):
     return bal
 
 
-def update_pos_M(asset, total_bal, inval, pos_fr_dol):
+def update_pos_M(strat, asset, new_bal, inval, direction, pfrd):
     '''checks for the current balance of a particular asset and returns it in 
     the correct format for the sizing dict. also calculates the open risk for 
     a given asset and returns it in R and $ denominations'''
 
     pair = asset + 'USDT'
     price = get_price(pair)
-    bal = asset_bal_M(asset)
-    value = price * bal
-    pct = round(100 * value / total_bal, 5)
-    open_risk = value - (value / inval)
-    open_risk_r = open_risk / pos_fr_dol
+    value = price * new_bal
+    pct = round(100 * value / strat.bal, 5)
+    
+    if direction == 'long':
+        open_risk = value - (value / inval)
+    elif direction == 'short':
+        open_risk = (value / inval) - value
+    else:
+        open_risk = 0
+    
+    if pfrd:
+        open_risk_r = open_risk / pfrd
+    else:
+        open_risk_r = 0
 
-    return {'qty': bal, 'value': value, 'pf%': pct, 'or_R': open_risk_r, 'or_$': open_risk}
+    return {'qty': new_bal, 'value': value, 'pf%': pct, 'or_R': open_risk_r, 'or_$': open_risk}
 
 
 def update_usdt_M(total_bal):
     '''checks current usdt balance and returns a dictionary for updating the sizing dict'''
     bal = asset_bal_M('USDT')
-    value = round(bal, 2)
+    net = float(bal.get('net'))
+    value = round(net, 2)
     pct = round(100 * value / total_bal, 5)
+    # print(f'usdt stats: {bal = }, {net = }, {value = }, {pct = }, {total_bal = }')
     
-    return {'qty': bal, 'value': value, 'pf%': pct}
+    return {'qty': bal.get('free'), 'owed': bal.get('borrowed'), 'value': value, 'pf%': pct}
 
 
 #-#-#- Margin Trading Functions
@@ -1078,73 +1068,135 @@ def top_up_bnb_M(usdt_size):
     return order, repay
 
 
-def open_long(trade_pair, usdt_size):
-    # borrow usdt
-    print(f'amount: {usdt_size}')
-    usdt_borrow = client.create_margin_loan(asset='USDT', amount=usdt_size)
-    # pprint(usdt_borrow)
-    
-    # execute trade
-    long_order = client.create_margin_order(
-        symbol=trade_pair,
-        side=be.SIDE_BUY,
-        type=be.ORDER_TYPE_MARKET,
-        quoteOrderQty=usdt_size)
-    # pprint(long_order)
-    
-    return long_order
+def buy_asset_M(pair, size, is_base, live):
+    if live and is_base:
+        base_size = valid_size(pair, size)
+        buy_order = client.create_margin_order(symbol=pair,side=be.SIDE_BUY,type=be.ORDER_TYPE_MARKET,quantity=base_size)
+    elif live and not is_base:
+        buy_order = client.create_margin_order(symbol=pair,side=be.SIDE_BUY,type=be.ORDER_TYPE_MARKET,quoteOrderQty=size)
+    else:
+        now = int(datetime.now().timestamp() * 1000)
+        price = get_price(pair)
+        if is_base:
+            base_size = size
+            usdt_size = round(size * price, 2)
+        else:
+            base_size = valid_size(pair, size / price)
+            if not base_size: # if size == 0, valid_size will output None
+                base_size = 0
+            usdt_size = size
+        buy_order = {'clientOrderId': '111111',
+         'cummulativeQuoteQty': str(usdt_size),
+         'executedQty': str(base_size),
+         'fills': [{'commission': '0',
+                    'commissionAsset': 'BNB',
+                    'price': str(valid_price(pair, get_price(pair))),
+                    'qty': str(base_size)}],
+         'isIsolated': False,
+         'orderId': 123456,
+         'origQty': str(base_size),
+         'price': '0',
+         'side': 'BUY',
+         'status': 'FILLED',
+         'symbol': pair,
+         'timeInForce': 'GTC',
+         'transactTime': now,
+         'type': 'MARKET'}
+        
+    return buy_order
 
 
-def close_long(trade_pair, pct=1):
-    asset = trade_pair[:-4]
+def sell_asset_M(pair, base_size, live):
+    base_size = valid_size(pair, base_size)
+    if not base_size: # if size == 0, valid_size will output None
+        base_size = 0
+    if live:
+        sell_order = client.create_margin_order(symbol=pair, side=be.SIDE_SELL, type=be.ORDER_TYPE_MARKET, quantity=base_size)
+    else:
+        now = int(datetime.now().timestamp() * 1000)
+        price = get_price(pair)
+        usdt_size = valid_size(pair, float(base_size) * price)
+        if not usdt_size:
+            usdt_size = 0
+        sell_order = {
+                    'clientOrderId': '111111',
+                    'cummulativeQuoteQty': str(usdt_size),
+                    'executedQty': str(base_size),
+                    'fills': [{'commission': '0',
+                               'commissionAsset': 'BNB',
+                               'price': str(valid_price(pair, get_price(pair))),
+                               'qty': str(base_size)}],
+                    'isIsolated': False,
+                    'orderId': 123456,
+                    'origQty': str(base_size),
+                    'price': '0',
+                    'side': 'SELL',
+                    'status': 'FILLED',
+                    'symbol': pair,
+                    'timeInForce': 'GTC',
+                    'transactTime': now,
+                    'type': 'MARKET'}
     
-    # calculate size
-    bal = free_bal_M(asset)
-    order_size = valid_size(trade_pair, float(bal)*pct)
-    
-    # execute trade
-    order = client.create_margin_order(
-        symbol=trade_pair,
-        side=be.SIDE_SELL,
-        type=be.ORDER_TYPE_MARKET,
-        quantity=order_size)
-    pprint(order)
-    
-    # repay loan
-    info = client.get_margin_account()
-    for i in info.get('userAssets'):
-        if i.get('asset') == 'USDT':
-            fre = i.get('free')
-            bor = i.get('borrowed')
-    max_repay = min(float(fre), float(bor))
-    usdt_repay = client.repay_margin_loan(asset='USDT', amount=max_repay)
-    
-    return order
+    return sell_order
 
 
-def set_stop_M(pair, order, side, trigger, limit):
-    info = client.get_symbol_info(pair)
-    tick_size = info.get('filters')[0].get('tickSize')
-    stop_size = Decimal(order.get('executedQty'))
-    stop_sell_order = client.create_margin_order(
-        symbol=pair,
-        side=side,
-        type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
-        timeInForce=be.TIME_IN_FORCE_GTC,
-        stopPrice=str(step_round(trigger, tick_size)),
-        quantity=stop_size,
-        price=str(step_round(limit, tick_size)))
-    pprint(stop_sell_order)
-    
+def borrow_asset_M(asset, qty, live):
+    if live:
+        client.create_margin_loan(asset=asset, amount=round(qty, 8))
+
+
+def repay_asset_M(asset, qty, live):
+    if live:
+        client.repay_margin_loan(asset=asset, amount=round(float(qty), 8))
+
+
+def set_stop_M(pair, size, side, trigger, limit, live):
+    trigger = valid_price(pair, trigger)
+    limit = valid_price(pair, limit)
+    stop_size = valid_size(pair, size)
+    if live:
+        stop_sell_order = client.create_margin_order(symbol=pair,
+                                                 side=side,
+                                                 type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
+                                                 timeInForce=be.TIME_IN_FORCE_GTC,
+                                                 stopPrice=trigger,
+                                                 quantity=stop_size,
+                                                 price=limit)
+    else:
+        stop_sell_order = {'orderId': 'not live'}
     return stop_sell_order
 
 
-def clear_stop_M(pair):
-    orders = client.get_all_margin_orders(symbol=pair)
-    if orders[-1].get('type') == 'STOP_LOSS_LIMIT':
-        stop_id = orders[-1].get('orderId')
-        client.cancel_margin_order(symbol=pair, orderId=stop_id)
+def clear_stop_M(pair, trade_record, live):
+    '''finds the order id of the most recent stop-loss from the trade record
+    and cancels that specific order. if no such id can be found, blindly cancels 
+    the most recent stop-limit order relating to the pair'''
+    
+    # sanity check
+    bal = client.get_asset_balance(asset=pair[:-4])
+    if Decimal(bal.get('locked')) == 0:
+        print('no stop to cancel')
     else:
-        print('no stop to clear')
+        print(f'{pair} locked balance = {bal.get("locked")}')
+        _, stop_id, _ = uf.latest_stop_id(trade_record)
+    
+    clear, base_size = None, None
+    if live:
+        if stop_id:
+            clear = client.cancel_margin_order(symbol=pair, orderId=stop_id)
+            base_size = Decimal(clear.get('origQty'))
+        else:
+            print(f'no recorded stop id for {pair}')
+            orders = client.get_all_margin_orders(symbol=pair)
+            if orders[-1].get('type') == 'STOP_LOSS_LIMIT':
+                stop_id = orders[-1].get('orderId')
+                clear = client.cancel_margin_order(symbol=pair, orderId=stop_id)
+                base_size = Decimal(clear.get('origQty'))
+            else:
+                print('no stop to clear')
+                clear = {}
+                base_size = Decimal(0)
+    
+    return clear, base_size
 
 
