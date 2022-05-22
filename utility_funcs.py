@@ -730,7 +730,7 @@ def record_stopped_sim_trades(strat):
 def recent_perf_str(strat):
     '''generates a string of + and - to represent recent strat performance'''    
     
-    def score_accum(switch):
+    def score_accum(state, direction):
         with open(f"{strat.market_data}/{strat.name}/bal_history.txt", "r") as file:
             bal_data = file.readlines()
         
@@ -743,7 +743,7 @@ def recent_perf_str(strat):
         d = -1 # default value
         pnls = {1:d, 2:d, 3:d, 4:d, 5:d}
         if bal_data and (len(bal_data) >= 5):
-            lookup = 'realised_pnl' if switch == 'real' else 'sim_r_pnl'
+            lookup = f'realised_pnl_{direction}' if state == 'real' else 'sim_r_pnl_{direction}'
             for i in range(1, 6):
                 pnls[i] = json.loads(bal_data[-1*i]).get(lookup, d)
         
@@ -786,12 +786,15 @@ def recent_perf_str(strat):
         
         return score, perf_str
     
-    real_score, real_perf_str = score_accum('real')
-    sim_score, sim_perf_str = score_accum('sim')
+    real_score_l, real_perf_str_l = score_accum('real', 'l')
+    real_score_s, real_perf_str_s = score_accum('real', 's')
+    sim_score_l, sim_perf_str_l = score_accum('sim', 'l')
+    sim_score_s, sim_perf_str_s = score_accum('sim', 's')
     
-    perf_str = real_perf_str if real_score else sim_perf_str
+    perf_str_l = real_perf_str_l if real_score_l else sim_perf_str_l
+    perf_str_s = real_perf_str_s if real_score_s else sim_perf_str_s
     
-    full_perf_str = f'{perf_str} real: {real_score}, sim: {sim_score}'
+    full_perf_str = f'long: {perf_str_l} real: {real_score_l}, sim: {sim_score_l}\nshort: {perf_str_s} real: {real_score_s}, sim: {sim_score_s}'
     
     return full_perf_str
 
