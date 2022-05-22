@@ -794,7 +794,7 @@ def recent_perf_str(strat):
     perf_str_l = real_perf_str_l if real_score_l else sim_perf_str_l
     perf_str_s = real_perf_str_s if real_score_s else sim_perf_str_s
     
-    full_perf_str = f'long: {perf_str_l} real: score {real_score_l} rpnl {strat.realised_pnl_long}, sim: score {sim_score_l} rpnl {strat.sim_pnl_long}\nshort: {perf_str_s} real: score {real_score_s} rpnl {strat.relised_pnl_short}, sim: score {sim_score_s} rpnl {strat.sim_pnl_short}'
+    full_perf_str = f'long: {perf_str_l} real: score {real_score_l} rpnl {strat.realised_pnl_long}, sim: score {sim_score_l} rpnl {strat.sim_pnl_long}\nshort: {perf_str_s} real: score {real_score_s} rpnl {strat.realised_pnl_short}, sim: score {sim_score_s} rpnl {strat.sim_pnl_short}'
     
     return full_perf_str
 
