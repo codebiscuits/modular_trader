@@ -794,7 +794,7 @@ def recent_perf_str(strat):
     perf_str_l = real_perf_str_l if real_score_l else sim_perf_str_l
     perf_str_s = real_perf_str_s if real_score_s else sim_perf_str_s
     
-    full_perf_str = f'long: {perf_str_l} real: score {real_score_l} rpnl {strat.realised_pnl_long}, sim: score {sim_score_l} rpnl {strat.sim_pnl_long}\nshort: {perf_str_s} real: score {real_score_s} rpnl {strat.realised_pnl_short}, sim: score {sim_score_s} rpnl {strat.sim_pnl_short}'
+    full_perf_str = f'long: {perf_str_l} real: score {real_score_l} rpnl {strat.realised_pnl_long:.1f}, sim: score {sim_score_l} rpnl {strat.sim_pnl_long:.1f}\nshort: {perf_str_s} real: score {real_score_s} rpnl {strat.realised_pnl_short:.1f}, sim: score {sim_score_s} rpnl {strat.sim_pnl_short:.1f}'
     
     return full_perf_str
 
@@ -831,8 +831,9 @@ def scanner_summary(strat, all_start, benchmark):
     live_str = '' if strat.live else '*not live* '
     count_str = count_trades(strat.counts_dict)
     perf_str = recent_perf_str(strat)
+    ema_str = f'pairs above 200 ema: {strat.above_200_ema[0]}/{strat.above_200_ema[1]}'
     bench_str = f"1m perf: strat {round(benchmark.get('strat_1m')*100, 2)}%, mkt {round(benchmark.get('market_1m')*100, 2)}%"
-    final_msg = f'{live_str}{perf_str}\npositions {num_open_positions}, exposure {vol_exp}% {count_str}\n{bench_str}'
+    final_msg = f'{live_str}{perf_str}\npositions {num_open_positions}, exposure {vol_exp}% {count_str}\n{bench_str} {ema_str}'
     print('-\n', final_msg, '\n-')
     
     if strat.live:
