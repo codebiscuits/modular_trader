@@ -202,40 +202,45 @@ def strat_benchmark(strat, benchmark):
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
     
-    bal_now, bal_1d, bal_1w, bal_1m = strat.bal, strat.bal, strat.bal, strat.bal
+    bal_now, bal_1d, bal_1w, bal_1m = strat.bal, None, None, None
     
     with open(f"{strat.market_data}/{strat.name}/bal_history.txt", "r") as file:
         bal_data = file.readlines()
     
     if bal_data:
-        bal_now = json.loads(bal_data[-1]).get('balance')
-    
         for row in bal_data[-1:0:-1]:
             row = json.loads(row)
             row_dt = datetime.strptime(row.get('timestamp'), '%d/%m/%y %H:%M')
-            if row_dt < month_ago and not bal_1m:
+            if row_dt > month_ago:# and not bal_1m:
                 try:
                     bal_1m = row.get('balance')
                 except AttributeError:
                     continue 
-            if row_dt < week_ago and not bal_1w:
+            if row_dt > week_ago:# and not bal_1w:
                 try:
                     bal_1w = row.get('balance')
                 except AttributeError:
                     continue
-            if row_dt < day_ago and not bal_1d:
+            if row_dt > day_ago:# and not bal_1d:
                 try:
                     bal_1d = row.get('balance')
                 except AttributeError:
                     continue
-            
-        strat_1d = (bal_now - bal_1d) / bal_1d
-        strat_1w = (bal_now - bal_1w) / bal_1w
-        strat_1m = (bal_now - bal_1m) / bal_1m
+                
+        if bal_1d:
+            benchmark['strat_1d'] = (bal_now - bal_1d) / bal_1d
+        else:
+            benchmark['strat_1d'] = 0
         
-        benchmark['strat_1d'] = strat_1d
-        benchmark['strat_1w'] = strat_1w
-        benchmark['strat_1m'] = strat_1m
+        if bal_1w:
+            benchmark['strat_1w'] = (bal_now - bal_1w) / bal_1w
+        else:
+            benchmark['strat_1w'] = 0
+        
+        if bal_1m:
+            benchmark['strat_1m'] = (bal_now - bal_1m) / bal_1m
+        else:
+            benchmark['strat_1m'] = 0
     
     else:
         bal_now = strat.bal
@@ -248,9 +253,6 @@ def strat_benchmark(strat, benchmark):
 
 def log(strat, spreads):    
     
-    # check total balance and record it in a file for analysis
-    total_bal = funcs.account_bal()
-    
     params = {'quote_asset': 'USDT', 
               'fr_range': strat.fr_range,
               'max_spread': strat.max_spread, 
@@ -259,7 +261,7 @@ def log(strat, spreads):
               'target_risk': strat.target_risk, 
               'max_pos': strat.max_positions}
     
-    bal_record = {'timestamp': strat.now_start, 'balance': round(total_bal, 2), 
+    bal_record = {'timestamp': strat.now_start, 'balance': round(strat.bal, 2), 
                   'fr_long': strat.fixed_risk_l, 'fr_short': strat.fixed_risk_s, 
                   'positions': strat.real_pos, 'params': params, 'trade_counts': strat.counts_dict, 
                   'realised_pnl_long': strat.realised_pnl_long, 'sim_r_pnl_long': strat.sim_pnl_long, 
@@ -819,19 +821,18 @@ def recent_perf_str_old(strat):
 
 def scanner_summary(strat, all_start, benchmark):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
-    total_bal = funcs.account_bal()
-    title = f'{now} ${total_bal:.2f}'
+    title = f'{now} ${strat.bal:.2f}'
     
     or_list = [v.get('or_$') for v in strat.real_pos.values() if v.get('or_$')]
     # dollar_tor = round(sum(or_list), 2)
     num_open_positions = len(or_list)
-    # rfb = round(total_bal-dollar_tor, 2)
+    # rfb = round(strat.bal-dollar_tor, 2)
     vol_exp = round(100 - strat.real_pos.get('USDT').get('pf%'))
     
     live_str = '' if strat.live else '*not live* '
     count_str = count_trades(strat.counts_dict)
     perf_str = recent_perf_str(strat)
-    ema_str = f'pairs above 200 ema: {strat.above_200_ema[0]}/{strat.above_200_ema[1]}'
+    ema_str = f'above ema: {strat.above_200_ema[0]}/{strat.above_200_ema[1]}'
     bench_str = f"1m perf: strat {round(benchmark.get('strat_1m')*100, 2)}%, mkt {round(benchmark.get('market_1m')*100, 2)}%"
     final_msg = f'{live_str}{perf_str}\npositions {num_open_positions}, exposure {vol_exp}% {count_str}\n{bench_str} {ema_str}'
     print('-\n', final_msg, '\n-')

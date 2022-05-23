@@ -111,7 +111,7 @@ def calc_fee_bnb(usdt_size, fee_rate=0.00075):
 #-#-#- Account Functions
 
 
-def account_bal():
+def account_bal_old():
     info = client.get_account()
     bals = info.get('balances')
 
