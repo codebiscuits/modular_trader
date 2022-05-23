@@ -419,6 +419,7 @@ class DoubleST:
     total_r_limit = 20
     target_risk = 0.1
     max_pos = 20
+    above_200_ema = [0, 0]
     counts_dict = {'real_stop': 0, 'real_open': 0, 'real_add': 0, 'real_tp': 0, 'real_close': 0, 
                    'sim_stop': 0, 'sim_open': 0, 'sim_add': 0, 'sim_tp': 0, 'sim_close': 0, 
                    'real_stop_long': 0, 'real_open_long': 0, 'real_add_long': 0, 'real_tp_long': 0, 'real_close_long': 0, 
@@ -470,6 +471,12 @@ class DoubleST:
         bullish_tight = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st']
         bearish_tight = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st']
         
+        if bullish_ema:
+            self.above_200_ema[0] += 1
+            self.above_200_ema[1] += 1
+        else:
+            self.above_200_ema[1] += 1
+        
         if bullish_ema and bullish_loose and bullish_tight:
             signal = 'spot_open'
         elif bearish_tight:
@@ -497,6 +504,12 @@ class DoubleST:
         bearish_loose = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st_loose']
         bullish_tight = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st']
         bearish_tight = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st']
+        
+        if bullish_ema:
+            self.above_200_ema[0] += 1
+            self.above_200_ema[1] += 1
+        else:
+            self.above_200_ema[1] += 1
         
         # bullish_book = bid_ask_ratio > 1
         # bearish_book = bid_ask_ratio < 1
