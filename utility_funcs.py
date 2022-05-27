@@ -40,7 +40,7 @@ def open_trade_stats(now, total_bal, v):
     entry_price = float(v[0].get('exe_price'))
     curr_price = funcs.get_price(pair)
     
-    open_time = v[0].get('timestamp', 1000000000) / 1000
+    open_time = v[0].get('timestamp') / 1000
     if open_time == 1000000:
         print('used default timestamp value in open_trade_stats')
     duration = round((now.timestamp() - open_time) / 3600, 1)
@@ -114,27 +114,25 @@ def max_init_risk(n, target_risk):
         
     return round(output, 2)
 
-def record_open_trades(strat):
-    with open(f"{strat.market_data}/{strat.name}/open_trades.json", "w") as ot_file:
-        json.dump(strat.open_trades, ot_file)
-
-def record_sim_trades(strat):
-    with open(f"{strat.market_data}/{strat.name}/sim_trades.json", "w") as st_file:
-        json.dump(strat.sim_trades, st_file)
-
-def record_tracked_trades(strat):
-    with open(f"{strat.market_data}/{strat.name}/tracked_trades.json", "w") as tr_file:
-        json.dump(strat.tracked_trades, tr_file)
-
-def record_closed_trades(strat):
-    with open(f"{strat.market_data}/{strat.name}/closed_trades.json", "w") as ct_file:
-        json.dump(strat.closed_trades, ct_file)
-
-def record_closed_sim_trades(strat):
-    with open(f"{strat.market_data}/{strat.name}/closed_sim_trades.json", "w") as cs_file:
-        json.dump(strat.closed_sim_trades, cs_file)
-
-def market_benchmark(live):
+def record_trades(session, agent, switch):
+    filepath = Path(f"{session.market_data}/{agent.name}/{switch}_trades.json")
+    if not filepath.exists():
+        print('filepath doesnt exist')
+        filepath.touch()
+    with open(filepath, "w") as file:
+        print(f'record {switch} trades')
+        if switch == 'open':
+            json.dump(agent.open_trades, file)
+        if switch == 'sim':
+            json.dump(agent.sim_trades, file)
+        if switch == 'tracked':
+            json.dump(agent.tracked_trades, file)
+        if switch == 'closed':
+            json.dump(agent.closed_trades, file)
+        if switch == 'closed_sim':
+            json.dump(agent.closed_sim_trades, file)
+        
+def market_benchmark(session):
     all_1d = []
     all_1w = []
     all_1m = []
@@ -188,23 +186,23 @@ def market_benchmark(live):
     else:
         valid = False
     
-    if live:
+    if session.live:
         print(f'pairs with recent data: {len(all_1d)} / {len(list(ohlc_data.glob("*.*")))}')
     
-    return {'btc_1d': btc_1d, 'btc_1w': btc_1w, 'btc_1m': btc_1m, 
+    session.benchmark = {'btc_1d': btc_1d, 'btc_1w': btc_1w, 'btc_1m': btc_1m, 
             'eth_1d': eth_1d, 'eth_1w': eth_1w, 'eth_1m': eth_1m, 
             'market_1d': market_1d, 'market_1w': market_1w, 'market_1m': market_1m, 
             'valid': valid}
 
-def strat_benchmark(strat, benchmark):
+def strat_benchmark(session, agent):
     now = datetime.now()
     day_ago = now - timedelta(days=1)
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
     
-    bal_now, bal_1d, bal_1w, bal_1m = strat.bal, None, None, None
+    bal_now, bal_1d, bal_1w, bal_1m = session.bal, None, None, None
     
-    with open(f"{strat.market_data}/{strat.name}/bal_history.txt", "r") as file:
+    with open(f"{session.market_data}/{agent.name}/bal_history.txt", "r") as file:
         bal_data = file.readlines()
     
     if bal_data:
@@ -227,6 +225,7 @@ def strat_benchmark(strat, benchmark):
                 except AttributeError:
                     continue
                 
+        benchmark = {}
         if bal_1d:
             benchmark['strat_1d'] = (bal_now - bal_1d) / bal_1d
         else:
@@ -243,87 +242,95 @@ def strat_benchmark(strat, benchmark):
             benchmark['strat_1m'] = 0
     
     else:
-        bal_now = strat.bal
+        bal_now = session.bal
         benchmark['strat_1d'] = 0
         benchmark['strat_1w'] = 0
         benchmark['strat_1m'] = 0
     
     
-    return benchmark 
+    agent.benchmark = benchmark 
 
-def log(strat, spreads):    
+def log(session, agents):    
     
-    params = {'quote_asset': 'USDT', 
-              'fr_range': strat.fr_range,
-              'max_spread': strat.max_spread, 
-              'indiv_r_limit': strat.indiv_r_limit, 
-              'total_r_limit': strat.total_r_limit, 
-              'target_risk': strat.target_risk, 
-              'max_pos': strat.max_positions}
+    for agent in agents:
+        params = {'quote_asset': 'USDT', 
+                  'fr_max': session.fr_max,
+                  'max_spread': session.max_spread, 
+                  'indiv_r_limit': agent.indiv_r_limit, 
+                  'total_r_limit': agent.total_r_limit, 
+                  'target_risk': agent.target_risk, 
+                  'max_pos': agent.max_positions}
+        
+        bal_record = {'timestamp': session.now_start, 'balance': round(session.bal, 2), 
+                      'fr_long': agent.fixed_risk_l, 'fr_short': agent.fixed_risk_s, 
+                      'positions': agent.real_pos, 'params': params, 'trade_counts': agent.counts_dict, 
+                      'realised_pnl_long': agent.realised_pnl_long, 'sim_r_pnl_long': agent.sim_pnl_long, 
+                      'realised_pnl_short': agent.realised_pnl_short, 'sim_r_pnl_short': agent.sim_pnl_short, 
+                      'median_spread': stats.median(session.spreads.values())}
+        new_line = json.dumps(bal_record)
+        if session.live:
+            filepath = Path(f"{session.market_data}/{agent.name}/bal_history.txt")
+            filepath.touch(exist_ok=True)
+            with open(filepath, "a") as file:
+                file.write(new_line)
+                file.write('\n')
+        else:
+            filepath = Path(f"/home/ross/Documents/backtester_2021/test_records/{agent.name}/bal_history.txt")
+            filepath.touch(exist_ok=True)
+            with open(filepath, "a") as file:
+                file.write(new_line)
+                file.write('\n')
+        
+        # if live:
+        market_benchmark(session)
+        strat_benchmark(session, agent)
     
-    bal_record = {'timestamp': strat.now_start, 'balance': round(strat.bal, 2), 
-                  'fr_long': strat.fixed_risk_l, 'fr_short': strat.fixed_risk_s, 
-                  'positions': strat.real_pos, 'params': params, 'trade_counts': strat.counts_dict, 
-                  'realised_pnl_long': strat.realised_pnl_long, 'sim_r_pnl_long': strat.sim_pnl_long, 
-                  'realised_pnl_short': strat.realised_pnl_short, 'sim_r_pnl_short': strat.sim_pnl_short}
-    new_line = json.dumps(bal_record)
-    if strat.live:
-        with open(f"{strat.market_data}/{strat.name}/bal_history.txt", "a") as file:
-            file.write(new_line)
-            file.write('\n')
-    else:
-        with open(f"test_records/{strat.name}/bal_history.txt", "a") as file:
-            file.write(new_line)
-            file.write('\n')
-    
-    # if live:
-    benchmark = market_benchmark(strat.live)
-    benchmark = strat_benchmark(strat, benchmark)
+        # save a json of any trades that have happened with relevant data
+        if session.live:
+            # should be able to remove these two function calls
+            with open(f"{session.market_data}/{agent.name}/open_trades.json", "w") as ot_file:
+                json.dump(agent.open_trades, ot_file)            
+            with open(f"{session.market_data}/{agent.name}/closed_trades.json", "w") as ct_file:
+                json.dump(agent.closed_trades, ct_file)
 
-    # save a json of any trades that have happened with relevant data
-    if strat.live:
-        # should be able to remove these two function calls
-        with open(f"{strat.market_data}/{strat.name}/open_trades.json", "w") as ot_file:
-            json.dump(strat.open_trades, ot_file)            
-        with open(f"{strat.market_data}/{strat.name}/closed_trades.json", "w") as ct_file:
-            json.dump(strat.closed_trades, ct_file)
+def interpret_benchmark(session, agents):
+    mkt_bench = session.benchmark
     
-    return benchmark
-
-def interpret_benchmark(benchmark):
-    if benchmark['valid']:
-        d_ranking = [
-            ('btc', round(benchmark['btc_1d']*100, 3)), 
-            ('eth', round(benchmark['eth_1d']*100, 3)), 
-            ('mkt', round(benchmark['market_1d']*100, 3)), 
-            ('strat', round(benchmark['strat_1d']*100, 3))
-            ]
-        d_ranking = sorted(d_ranking, key=lambda x: x[1], reverse=True)
-        print('1 day stats')
-        for e, r in enumerate(d_ranking):
-            print(f'rank {e+1}: {r[0]} {r[1]}%')
-        w_ranking = [
-            ('btc', round(benchmark['btc_1w']*100, 2)), 
-            ('eth', round(benchmark['eth_1w']*100, 2)), 
-            ('mkt', round(benchmark['market_1w']*100, 2)), 
-            ('strat', round(benchmark['strat_1w']*100, 2))
-            ]
-        w_ranking = sorted(w_ranking, key=lambda x: x[1], reverse=True)
-        print('1 week stats')
-        for e, r in enumerate(w_ranking):
-            print(f'rank {e+1}: {r[0]} {r[1]}%')
-        m_ranking = [
-            ('btc', round(benchmark['btc_1m']*100, 1)), 
-            ('eth', round(benchmark['eth_1m']*100, 1)), 
-            ('mkt', round(benchmark['market_1m']*100, 1)), 
-            ('strat', round(benchmark['strat_1m']*100, 1))
-            ]
-        m_ranking = sorted(m_ranking, key=lambda x: x[1], reverse=True)
-        print('1 month stats')
-        for e, r in enumerate(m_ranking):
-            print(f'rank {e+1}: {r[0]} {r[1]}%')
-    else:
-        print('no benchmarking data available')
+    for agent in agents:
+        agent_bench = agent.benchmark
+        if mkt_bench['valid']:
+            d_ranking = [
+                ('btc', round(mkt_bench['btc_1d']*100, 3)), 
+                ('eth', round(mkt_bench['eth_1d']*100, 3)), 
+                ('mkt', round(mkt_bench['market_1d']*100, 3)), 
+                ('strat', round(agent_bench['strat_1d']*100, 3))
+                ]
+            d_ranking = sorted(d_ranking, key=lambda x: x[1], reverse=True)
+            print('1 day stats')
+            for e, r in enumerate(d_ranking):
+                print(f'rank {e+1}: {r[0]} {r[1]}%')
+            w_ranking = [
+                ('btc', round(mkt_bench['btc_1w']*100, 2)), 
+                ('eth', round(mkt_bench['eth_1w']*100, 2)), 
+                ('mkt', round(mkt_bench['market_1w']*100, 2)), 
+                ('strat', round(agent_bench['strat_1w']*100, 2))
+                ]
+            w_ranking = sorted(w_ranking, key=lambda x: x[1], reverse=True)
+            print('1 week stats')
+            for e, r in enumerate(w_ranking):
+                print(f'rank {e+1}: {r[0]} {r[1]}%')
+            m_ranking = [
+                ('btc', round(mkt_bench['btc_1m']*100, 1)), 
+                ('eth', round(mkt_bench['eth_1m']*100, 1)), 
+                ('mkt', round(mkt_bench['market_1m']*100, 1)), 
+                ('strat', round(agent_bench['strat_1m']*100, 1))
+                ]
+            m_ranking = sorted(m_ranking, key=lambda x: x[1], reverse=True)
+            print('1 month stats')
+            for e, r in enumerate(m_ranking):
+                print(f'rank {e+1}: {r[0]} {r[1]}%')
+        else:
+            print(f'no benchmarking data available for {agent.name}')
 
 def count_trades(counts):
     count_list = []
@@ -376,7 +383,7 @@ def find_bad_keys(c_data):
     
     return bad_keys
 
-def realised_pnl(strat, trade_record, side):
+def realised_pnl(agent, trade_record, side):
     entry = float(trade_record[0].get('exe_price'))
     init_stop = float(trade_record[0].get('hard_stop'))
     init_size = float(trade_record[0].get('base_size'))
@@ -390,14 +397,14 @@ def realised_pnl(strat, trade_record, side):
         scalar = final_size / init_size
         realised_r = trade_r * scalar
         if side == 'long':
-            strat.realised_pnl_long += realised_r
+            agent.realised_pnl_long += realised_r
         else:
-            strat.realised_pnl_short += realised_r
+            agent.realised_pnl_short += realised_r
     elif trade_record[-1].get('state') == 'sim':
         if side == 'long':
-            strat.sim_pnl_long += trade_r # realised sim pnl ignores trade size because it's often 0
+            agent.sim_pnl_long += trade_r # realised sim pnl ignores trade size because it's often 0
         else:
-            strat.sim_pnl_short += trade_r
+            agent.sim_pnl_short += trade_r
     else:
         print(f'state in record: {trade_record[-1].get("state")}')
         print(f'{trade_r = }')
@@ -406,6 +413,14 @@ def latest_stop_id(trade_record):
     '''looks through trade_record for a stop id and retrieves the pair, id and 
     timestamp for when the stop was set. if nothing is found, just retreives the 
     pair and timestamp from the start of the trade_record'''
+    
+    # define the oldest timestamp i want to search back to, to find the id
+    now = datetime.now()
+    offset = timedelta(weeks=26)
+    lookback = int((now - offset).timestamp() * 1000)
+    oldest = max(1653328875886, lookback)
+    # long num is the binance ts of the first trade done with this strat
+    
     pair = None
     stop_id = None
     stop_time = None
@@ -417,8 +432,8 @@ def latest_stop_id(trade_record):
             break
     if not pair:
         pair = trade_record[0].get('pair')
-        stop_time = trade_record[0].get('timestamp', 1000000000)
-        if stop_time == 1000000000:
+        stop_time = trade_record[0].get('timestamp', oldest)
+        if stop_time == oldest:
             print('used default timestamp value in latest_stop_id')
             
     
@@ -469,11 +484,11 @@ def create_stop_dict(order):
     
     return trade_dict
 
-def record_stopped_trades(strat):
-    # loop through strat.open_trades and call latest_stop_id(trade_record) to
+def record_stopped_trades(session, agent):
+    # loop through agent.open_trades and call latest_stop_id(trade_record) to
     # compile a list of order ids for each open trade's stop loss orders, then 
     # check binance to find which don't have an active stop-loss
-    stop_ids = [latest_stop_id(v) for v in strat.open_trades.values()]
+    stop_ids = [latest_stop_id(v) for v in agent.open_trades.values()]
     
     open_orders = client.get_open_orders()
     ids_remaining = [i.get('orderId') for i in open_orders]
@@ -489,9 +504,10 @@ def record_stopped_trades(strat):
         elif pair not in symbols_remaining:
             stopped.append((pair, sid, time))
     
+    print(f'number of stopped trades: {len(stopped)}')
     # for any that don't, assume that the stop was hit and check for exchange records
     for pair, sid, time in stopped:
-        trade_record = strat.open_trades.get(pair)
+        trade_record = agent.open_trades.get(pair)
         # order_list = client.get_all_orders(symbol=pair, orderId=sid, startTime=time-10000)
         if sid == 'not live':
             continue
@@ -516,11 +532,11 @@ def record_stopped_trades(strat):
                 trade_type = 'stop_short'
                 asset = pair[:-4]
                 stop_size = Decimal(order.get('executedQty'))
-                funcs.repay_asset_M(asset, stop_size, strat.live)
+                funcs.repay_asset_M(asset, stop_size, session.live)
             else:
                 trade_type = 'stop_long'
                 stop_size = Decimal(order.get('cummulativeQuoteQty'))
-                funcs.repay_asset_M('USDT', stop_size, strat.live)
+                funcs.repay_asset_M('USDT', stop_size, session.live)
             
             
             stop_dict = create_stop_dict(order)
@@ -532,17 +548,17 @@ def record_stopped_trades(strat):
             trade_record.append(stop_dict)
             
             ts_id = trade_record[0].get('timestamp')
-            strat.closed_trades[ts_id] = trade_record
-            record_closed_trades(strat)
-            del strat.open_trades[pair]
-            record_open_trades(strat)
+            agent.closed_trades[ts_id] = trade_record
+            record_trades(session, agent, 'closed')
+            del agent.open_trades[pair]
+            record_trades(session, agent, 'open')
             
             if trade_type == 'stop_long':
-                realised_pnl(strat, trade_record, 'long')
-                strat.counts_dict['real_stop_long'] += 1
+                realised_pnl(agent, trade_record, 'long')
+                agent.counts_dict['real_stop_long'] += 1
             else:
-                realised_pnl(strat, trade_record, 'short')
-                strat.counts_dict['real_stop_short'] += 1
+                realised_pnl(agent, trade_record, 'short')
+                agent.counts_dict['real_stop_short'] += 1
             
         else:
             # check for a free balance matching the size. if there is, that means 
@@ -554,12 +570,12 @@ def record_stopped_trades(strat):
             value = free_bal * price
             if value > 10:
                 note = f'{pair} in position with no stop-loss'
-                pb.push_note(strat.now_start, note)
+                pb.push_note(session.now_start, note)
 
-def record_stopped_trades_old(pairs_in_pos, now_start, strat):
+def record_stopped_trades_old(pairs_in_pos, session, agent):
     print('running record_stopped_trades')
     # create list of trade records which don't match current positions
-    open_trades_list = list(strat.open_trades.keys())
+    open_trades_list = list(session.open_trades.keys())
     stopped_trades = [st for st in open_trades_list if st not in pairs_in_pos] # these positions must have been stopped out
     
     print(open_trades_list)
@@ -568,7 +584,7 @@ def record_stopped_trades_old(pairs_in_pos, now_start, strat):
     # look for stopped out positions and complete trade records
     for i in stopped_trades:
         print(i)
-        trade_record = strat.open_trades.get(i)
+        trade_record = session.open_trades.get(i)
         
         # work out how much base size has been bought vs sold
         init_base = 0
@@ -628,31 +644,31 @@ def record_stopped_trades_old(pairs_in_pos, now_start, strat):
                       'state': 'real', 
                       }
         note = f"stopped out {t.get('symbol')} @ {t.get('price')}"
-        print(now_start, note)
-        # push = pb.push_note(now_start, note)
+        print(session.now_start, note)
+        # push = pb.push_note(session.now_start, note)
         trade_record.append(trade_dict)
         
         if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
             trade_id = trade_record[0].get('timestamp')
-            strat.closed_trades[trade_id] = trade_record
+            session.closed_trades[trade_id] = trade_record
         else:
-            strat.closed_trades[strat.next_id] = trade_record
+            session.closed_trades[session.next_id] = trade_record
             print(f'warning, trade record for {t.get("symbol")} missing trade open')
-        record_closed_trades(strat)
-        strat.counts_dict['real_stop'] += 1
-        strat.next_id += 1
-        if strat.open_trades[i]:
-            del strat.open_trades[i]
-            record_open_trades(strat)
-        realised_pnl(strat, trade_record)
+        record_trades(session, agent, 'closed')
+        session.counts_dict['real_stop'] += 1
+        session.next_id += 1
+        if session.open_trades[i]:
+            del session.open_trades[i]
+            record_trades(session, agent, 'open')
+        realised_pnl(session, trade_record)
 
-def record_stopped_sim_trades(strat):
+def record_stopped_sim_trades(session, agent):
     '''goes through all trades in the sim_trades file and checks their recent 
     price action against their most recent hard_stop to see if any of them would have 
     got stopped out'''
     
     del_pairs = []
-    for pair, v in strat.sim_trades.items():
+    for pair, v in agent.sim_trades.items():
         # first filter out all trades which started out real
         if v[0].get('real'):
             continue
@@ -708,39 +724,43 @@ def record_stopped_sim_trades(strat):
                           'fee_currency': 'BNB', 
                           'reason': 'hit hard stop', 
                           'state': 'sim', 
+                          'overshoot': overshoot_pct
                           }
             note = f"*sim* stopped out {pair} @ {stop}"
-            # print(now_start, note)
+            print(session.now_start, note)
             
             v.append(trade_dict)
             
             ts_id = v[0].get('timestamp')
-            strat.closed_sim_trades[ts_id] = v
-            record_closed_sim_trades(strat)
+            agent.closed_sim_trades[ts_id] = v
+            record_trades(session, agent, 'closed_sim')
             
             if long_trade:
-                realised_pnl(strat, v, 'long')
-                strat.counts_dict['sim_stop_long'] += 1
+                realised_pnl(agent, v, 'long')
+                agent.counts_dict['sim_stop_long'] += 1
             else:
-                realised_pnl(strat, v, 'short')
-                strat.counts_dict['sim_stop_short'] += 1
-            
+                realised_pnl(agent, v, 'short')
+                agent.counts_dict['sim_stop_short'] += 1
+            del_pairs.append(pair)
+        
+    print(f"number of stopped trades: {agent.counts_dict['sim_stop_long'] +  agent.counts_dict['sim_stop_short']}")        
+    
     for p in del_pairs:
-        del strat.sim_trades[pair]
-    record_sim_trades(strat)
+        del agent.sim_trades[p]
+    record_trades(session, agent, 'sim')
 
-def recent_perf_str(strat):
+def recent_perf_str(session, agent):
     '''generates a string of + and - to represent recent strat performance'''    
     
     def score_accum(state, direction):
-        with open(f"{strat.market_data}/{strat.name}/bal_history.txt", "r") as file:
+        with open(f"{session.market_data}/{agent.name}/bal_history.txt", "r") as file:
             bal_data = file.readlines()
         
         if bal_data:
             prev_bal = json.loads(bal_data[-1]).get('balance')
         else:
-            prev_bal = strat.bal
-        bal_change_pct = 100 * (strat.bal - prev_bal) / prev_bal
+            prev_bal = session.bal
+        bal_change_pct = 100 * (session.bal - prev_bal) / prev_bal
         
         d = -1 # default value
         pnls = {1:d, 2:d, 3:d, 4:d, 5:d}
@@ -796,122 +816,106 @@ def recent_perf_str(strat):
     perf_str_l = real_perf_str_l if real_score_l else sim_perf_str_l
     perf_str_s = real_perf_str_s if real_score_s else sim_perf_str_s
     
-    full_perf_str = f'long: {perf_str_l} real: score {real_score_l} rpnl {strat.realised_pnl_long:.1f}, sim: score {sim_score_l} rpnl {strat.sim_pnl_long:.1f}\nshort: {perf_str_s} real: score {real_score_s} rpnl {strat.realised_pnl_short:.1f}, sim: score {sim_score_s} rpnl {strat.sim_pnl_short:.1f}'
+    full_perf_str = f'long: {perf_str_l} real: score {real_score_l} rpnl {agent.realised_pnl_long:.1f}, sim: score {sim_score_l} rpnl {agent.sim_pnl_long:.1f}\nshort: {perf_str_s} real: score {real_score_s} rpnl {agent.realised_pnl_short:.1f}, sim: score {sim_score_s} rpnl {agent.sim_pnl_short:.1f}'
     
     return full_perf_str
 
-def recent_perf_str_old(strat):
-    '''generates a string of + and - to represent recent strat performance'''
-    
-    with open(f"{strat.market_data}/{strat.name}/bal_history.txt", "r") as file:
-        bal_data = file.readlines()
-    
-    bal_0 = json.loads(bal_data[-1]).get('balance')
-    bal_1 = json.loads(bal_data[-2]).get('balance')
-    bal_2 = json.loads(bal_data[-3]).get('balance')
-    bal_3 = json.loads(bal_data[-4]).get('balance')
-    bal_4 = json.loads(bal_data[-5]).get('balance')
-    
-    a = '+' if bal_0 > bal_1 else '-'
-    b = '+' if bal_1 > bal_2 else '-'
-    c = '+' if bal_2 > bal_3 else '-'
-    d = '+' if bal_3 > bal_4 else '-'
-    
-    return f'  {a} | {b} {c} {d}'
-
-def scanner_summary(strat, all_start, benchmark):
+def scanner_summary(session, agents):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
-    title = f'{now} ${strat.bal:.2f}'
+    title = f'{now} ${session.bal:.2f}'
+    live_str = '' if session.live else '*not live* '
+    above_ema = len(session.above_200_ema)
+    below_ema = len(session.below_200_ema)
+    ema_str = f'above ema: {above_ema}/{above_ema + below_ema}'
+    final_msg = f'{live_str} {ema_str}'
     
-    or_list = [v.get('or_$') for v in strat.real_pos.values() if v.get('or_$')]
-    # dollar_tor = round(sum(or_list), 2)
-    num_open_positions = len(or_list)
-    # rfb = round(strat.bal-dollar_tor, 2)
-    vol_exp = round(100 - strat.real_pos.get('USDT').get('pf%'))
+    for agent in agents:
+        or_list = [v.get('or_$') for v in agent.real_pos.values() if v.get('or_$')]
+        num_open_positions = len(or_list)
+        vol_exp = round(100 - agent.real_pos.get('USDT').get('pf%'))
+        
+        count_str = count_trades(agent.counts_dict)
+        perf_str = recent_perf_str(session, agent)
+        agent_bench = agent.benchmark
+        mkt_bench = session.benchmark
+        bench_str = f"1m perf: strat {round(agent_bench.get('strat_1m')*100, 2)}%, mkt {round(mkt_bench.get('market_1m')*100, 2)}%"
+        agent_msg = f'\n{perf_str}\npositions {num_open_positions}, exposure {vol_exp}% {count_str}\n{bench_str}'
+        final_msg += agent_msg
     
-    live_str = '' if strat.live else '*not live* '
-    count_str = count_trades(strat.counts_dict)
-    perf_str = recent_perf_str(strat)
-    ema_str = f'above ema: {strat.above_200_ema[0]}/{strat.above_200_ema[1]}'
-    bench_str = f"1m perf: strat {round(benchmark.get('strat_1m')*100, 2)}%, mkt {round(benchmark.get('market_1m')*100, 2)}%"
-    final_msg = f'{live_str}{perf_str}\npositions {num_open_positions}, exposure {vol_exp}% {count_str}\n{bench_str} {ema_str}'
-    print('-\n', final_msg, '\n-')
+    print(f'-\n{title}\n{final_msg}\n-')
     
-    if strat.live:
-        pb.push_note(now, final_msg)
+    if session.live:
+        pb.push_note(title, final_msg)
 
-def sync_test_records(strat):
-    with open(f"{strat.market_data}/{strat.name}/bal_history.txt", "r") as file:
+def sync_test_records(session, agent):
+    with open(f"{session.market_data}/{agent.name}/bal_history.txt", "r") as file:
         bal_data = file.readlines()
-    with open(f"test_records/{strat.name}/bal_history.txt", "w") as file:
+    with open(f"/home/ross/Documents/backtester_2021/test_records/{agent.name}/bal_history.txt", "w") as file:
         file.writelines(bal_data)
     
     
     try:
-        with open(f'{strat.market_data}/{strat.name}/open_trades.json', 'r') as file:
+        with open(f'{session.market_data}/{agent.name}/open_trades.json', 'r') as file:
             o_data = json.load(file)
-        with open(f'test_records/{strat.name}/open_trades.json', 'w') as file:
+        with open(f'/home/ross/Documents/backtester_2021/test_records/{agent.name}/open_trades.json', 'w') as file:
             json.dump(o_data, file)
     except JSONDecodeError:
         print('open_trades file empty')
     
     
     try:
-        with open(f'{strat.market_data}/{strat.name}/sim_trades.json', 'r') as file:
+        with open(f'{session.market_data}/{agent.name}/sim_trades.json', 'r') as file:
             s_data = json.load(file)
-        with open(f'test_records/{strat.name}/sim_trades.json', 'w') as file:
+        with open(f'/home/ross/Documents/backtester_2021/test_records/{agent.name}/sim_trades.json', 'w') as file:
             json.dump(s_data, file)
     except JSONDecodeError:
         print('sim_trades file empty')
     
     
     try:
-        with open(f'{strat.market_data}/{strat.name}/tracked_trades.json', 'r') as file:
+        with open(f'{session.market_data}/{agent.name}/tracked_trades.json', 'r') as file:
             tr_data = json.load(file)
-        with open(f'test_records/{strat.name}/tracked_trades.json', 'w') as file:
+        with open(f'/home/ross/Documents/backtester_2021/test_records/{agent.name}/tracked_trades.json', 'w') as file:
             json.dump(tr_data, file)
     except JSONDecodeError:
         print('tracked_trades file empty')
     
     
     try:
-        with open(f'{strat.market_data}/{strat.name}/closed_trades.json', 'r') as file:
+        with open(f'{session.market_data}/{agent.name}/closed_trades.json', 'r') as file:
             c_data = json.load(file)
-        with open(f'test_records/{strat.name}/closed_trades.json', 'w') as file:
+        with open(f'/home/ross/Documents/backtester_2021/test_records/{agent.name}/closed_trades.json', 'w') as file:
             json.dump(c_data, file)
     except JSONDecodeError:
         print('closed_trades file empty')
 
 
     try:
-        with open(f'{strat.market_data}/{strat.name}/closed_sim_trades.json', 'r') as file:
+        with open(f'{session.market_data}/{agent.name}/closed_sim_trades.json', 'r') as file:
             cs_data = json.load(file)
-        with open(f'test_records/{strat.name}/closed_sim_trades.json', 'w') as file:
+        with open(f'/home/ross/Documents/backtester_2021/test_records/{agent.name}/closed_sim_trades.json', 'w') as file:
             json.dump(cs_data, file)
     except JSONDecodeError:
         print('closed_sim_trades file empty')
 
 
-    with open(f'{strat.market_data}/binance_liquidity_history.txt', 'r') as file:
+    with open(f'{session.market_data}/binance_liquidity_history.txt', 'r') as file:
         book_data = file.readlines()
-    with open('test_records/binance_liquidity_history.txt', 'w') as file:
+    with open('/home/ross/Documents/backtester_2021/test_records/binance_liquidity_history.txt', 'w') as file:
         file.writelines(book_data)
-    
-    # now that trade records have been loaded, path can be changed
-    strat.market_data = Path('test_records')
 
-def set_max_pos_old(strat):
-    if strat.real_pos:
-        open_pnls = [v.get('pnl') for v in strat.real_pos.values() if v.get('pnl')]
+def set_max_pos_old(agent):
+    if agent.real_pos:
+        open_pnls = [v.get('pnl') for v in agent.real_pos.values() if v.get('pnl')]
         if open_pnls:
             avg_open_pnl = stats.median(open_pnls)
         else:
             avg_open_pnl = 0
-        strat.max_pos = 20 if avg_open_pnl <= 0 else 50
+        agent.max_pos = 20 if avg_open_pnl <= 0 else 50
     else:
-        strat.max_pos = 20
+        agent.max_pos = 20
 
-def calc_pos_fr_dol(trade_record, fixed_risk_dol, in_pos, switch):   
+def calc_pos_fr_dol_old(trade_record, fixed_risk_dol, in_pos, switch):   
     if in_pos[switch] and trade_record and trade_record[0].get('type')[0] == 'o':
         qs = float(trade_record[0].get('quote_size'))
         ep = float(trade_record[0].get('exe_price'))
@@ -928,32 +932,27 @@ def calc_pos_fr_dol(trade_record, fixed_risk_dol, in_pos, switch):
 
     return in_pos
 
-def calc_sizing_non_live_tp(strat, in_pos, asset, tp_pct, switch):
+def calc_sizing_non_live_tp(agent, asset, tp_pct, switch):
     '''updates sizing dictionaries (real/sim) with with new open trade stats when 
     state is sim or real but not live and a take-profit is triggered'''
     tp_scalar = 1 - (100 / tp_pct)
-    qty = strat.real_pos.get(asset).get('qty') * tp_scalar
-    val = strat.real_pos.get(asset).get('value') * tp_scalar
-    pf = strat.real_pos.get(asset).get('pf%') * tp_scalar
-    or_R = strat.real_pos.get(asset).get('or_R') * tp_scalar
-    or_dol = strat.real_pos.get(asset).get('or_$') * tp_scalar
+    qty = agent.real_pos.get(asset).get('qty') * tp_scalar
+    val = agent.real_pos.get(asset).get('value') * tp_scalar
+    pf = agent.real_pos.get(asset).get('pf%') * tp_scalar
+    or_R = agent.real_pos.get(asset).get('or_R') * tp_scalar
+    or_dol = agent.real_pos.get(asset).get('or_$') * tp_scalar
     
-    entry = in_pos['sim_ep']
-    stop = in_pos['sim_hs']
+    entry = agent.in_pos['sim_ep']
+    stop = agent.in_pos['sim_hs']
     curr_price = funcs.get_price(asset+'USDT')
     r = (entry - stop) / entry
     pnl = (curr_price - entry) / entry
     pnl_r = pnl / r
     
     if switch == 'real':
-        strat.real_pos[asset].update({'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol, 'pnl_R': pnl_r})
+        agent.real_pos[asset].update({'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol, 'pnl_R': pnl_r})
     elif switch == 'sim':
-        strat.sim_pos[asset].update({'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol, 'pnl_R': pnl_r})
+        agent.sim_pos[asset].update({'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol, 'pnl_R': pnl_r})
 
-def too_new(df, in_pos):
-    if in_pos['real'] or in_pos['sim'] or in_pos['tracked']:
-        no_pos = False
-    else:
-        no_pos = True    
-    return len(df) <= 200 and no_pos
+
 

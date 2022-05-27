@@ -74,7 +74,16 @@ def order_by_volsm(pairs, lookback):
     return tup_list
 
 
-def get_size(price, fr, balance, risk):
+def get_size(agent, price, balance, risk):
+    usdt_size_l = balance * agent.fixed_risk_l / risk
+    asset_size_l = float(usdt_size_l / price)
+
+    usdt_size_s = balance * agent.fixed_risk_s / risk
+    asset_size_s = float(usdt_size_s / price)
+    
+    return asset_size_l, usdt_size_l, asset_size_s, usdt_size_s
+
+def get_size_old(price, fr, balance, risk):
     if fr:
         trade_risk = risk / fr
         usdt_size = float(balance / trade_risk)
@@ -145,11 +154,11 @@ def account_bal_old():
     return total
 
 
-def current_positions_old(strat, switch:str):
+def current_positions_old(session, agent, switch:str):
     '''creates a dictionary of open positions by checking either 
     open_trades.json, sim_trades.json or tracked_trades.json'''
         
-    filepath = Path(f'{strat.market_data}/{strat.name}/{switch}_trades.json')
+    filepath = Path(f'{session.market_data}/{agent.name}/{switch}_trades.json')
     with open(filepath, 'r') as file:
         try:
             data = json.load(file)
@@ -158,15 +167,14 @@ def current_positions_old(strat, switch:str):
     
     size_dict = {}
     now = datetime.now()
-    total_bal = account_bal()
     
     for k, v in data.items():
         if switch == 'open':
             asset = k[:-4]
-            size_dict[asset] = uf.open_trade_stats(now, total_bal, v)
+            size_dict[asset] = uf.open_trade_stats(now, session.bal, v)
         elif switch == 'sim':
             asset = v[0].get('pair')[:-4]
-            size_dict[asset] = uf.open_trade_stats(now, total_bal, v)
+            size_dict[asset] = uf.open_trade_stats(now, session.bal, v)
         elif switch == 'tracked':
             asset = v[0].get('pair')[:-4]
             size_dict[asset] = {}
@@ -174,62 +182,12 @@ def current_positions_old(strat, switch:str):
     return size_dict
         
 
-def current_positions_oldest(market_data, strat_name, fr):  # used to be current sizing
-    '''returns a dict with assets as keys and various expressions of positioning as values'''
-    
-    o_path = Path(f'{market_data}/{strat_name}_open_trades.json')
-    with open(o_path, 'r') as file:
-        try:
-            o_data = json.load(file)
-        except:
-            o_data = {}
-        
-    total_bal = account_bal()
-    # should be 1R, but also no less than min order size
-    threshold_bal = max(total_bal * fr, 12)
-
-    info = client.get_account()
-    bals = info.get('balances')
-
-    prices = client.get_all_tickers()
-    price_dict = {x.get('symbol'): float(x.get('price')) for x in prices}
-
-    size_dict = {}
-    for b in bals:
-        asset = b.get('asset')
-        if asset not in ['USDT', 'USDC', 'BUSD']:
-        #     quant = float(b.get('free')) + float(b.get('locked'))
-        #     value = quant
-        # else:
-            pair = asset + 'USDT'
-            price = price_dict.get(pair)
-            if price == None:
-                continue
-            if pair in o_data.keys():
-                now = datetime.now()
-                ots = uf.open_trade_stats(now, total_bal, pair, o_data.get(pair))
-                quant = float(b.get('free')) + float(b.get('locked'))
-                value = price * quant
-                if asset == 'BNB' and value < 20:
-                    continue
-                elif asset == 'BNB' and value >= 20:
-                    value -= 10
-                if value >= threshold_bal:
-                    pct = round(100 * value / total_bal, 5)
-                    size_dict[asset] = {'qty': quant,
-                                        'value': round(value, 2), 'pf%': pct,
-                                        'pnl_R': ots.get('pnl_R'),
-                                        'pnl_%': ots.get('pnl_%')}
-
-    return size_dict
-
-
 def free_usdt():
     usdt_bals = client.get_asset_balance(asset='USDT')
     return float(usdt_bals.get('free'))
 
 
-def update_pos(strat, asset, base_bal, inval, pos_fr_dol):
+def update_pos(session, asset, base_bal, inval, pos_fr_dol):
     '''checks for the current balance of a particular asset and returns it in 
     the correct format for the sizing dict. also calculates the open risk for 
     a given asset and returns it in R and $ denominations'''
@@ -237,7 +195,7 @@ def update_pos(strat, asset, base_bal, inval, pos_fr_dol):
     pair = asset + 'USDT'
     price = get_price(pair)
     value = price * float(base_bal)
-    pct = round(100 * value / strat.bal, 5)
+    pct = round(100 * value / session.bal, 5)
     open_risk = value - (value / inval)
     if pos_fr_dol:
         open_risk_r = open_risk / pos_fr_dol
@@ -319,7 +277,40 @@ def get_spread(pair):  # possibly unused
         return 'na'
 
 
-def get_depth(pair, side, max_slip=1):
+def get_depth(pair, max_slip=1):
+    '''returns the quantity (in the quote currency) that could be bought/sold 
+    within the % range of price set by the max_slip param'''
+
+    price = get_price(pair)
+    book = client.get_order_book(symbol=pair)
+
+    price = float(book.get('bids')[0][0])
+    # max_price is x% above price
+    max_price = price * (1 + (max_slip / 100))
+    depth_l = 0
+    for i in book.get('asks'):
+        if float(i[0]) <= max_price:
+            depth_l += float(i[1])
+        else:
+            break
+
+    price = float(book.get('asks')[0][0])
+    # max_price is x% above price
+    min_price = price * (1 - (max_slip / 100))
+    depth_s = 0
+    for i in book.get('bids'):
+        if float(i[0]) >= min_price:
+            depth_s += float(i[1])
+        else:
+            break
+    
+    usdt_depth_l = depth_l * price
+    usdt_depth_s = depth_s * price
+
+    return usdt_depth_l, usdt_depth_s
+
+
+def get_depth_old(pair, side, max_slip=1):
     '''returns the quantity (in the quote currency) that could be bought/sold 
     within the % range of price set by the max_slip param'''
 
@@ -581,21 +572,25 @@ def prepare_ohlc(pair, is_live, timeframe='4H', bars=2190):
     '''checks if there is old data already, if so it loads the old data and 
     downloads an update, if not it downloads all data from scratch, then 
     resamples all data to desired timeframe'''
+    
+    ####### if there is an exception with this code ##########
+    # put the name of the exception in the try / except blocks so they
+    # work properly
 
     if is_live:
         filepath = Path(f'{ohlc_data}/{pair}.pkl')
     else:
-        filepath = Path(f'bin_ohlc/{pair}.pkl')
+        filepath = Path(f'/home/ross/Documents/backtester_2021/bin_ohlc/{pair}.pkl')
     if filepath.exists():
-        try:
-            df = pd.read_pickle(filepath)
-            if len(df) > 2:
-                df = df.iloc[:-1, ]
-                df = update_ohlc(pair, '1h', df)
-        except:
-            print('-')
-            print(f'read_pickle went wrong with {pair}, downloading old data')
-            df = get_ohlc(pair, '1h', '1 year ago UTC')
+        # try:
+        df = pd.read_pickle(filepath)
+        if len(df) > 2:
+            df = df.iloc[:-1, ]
+            df = update_ohlc(pair, '1h', df)
+        # except:
+        #     print('-')
+        #     print(f'read_pickle went wrong with {pair}, downloading old data')
+        #     df = get_ohlc(pair, '1h', '1 year ago UTC')
 
     else:
         df = get_ohlc(pair, '1h', '1 year ago UTC')
@@ -604,12 +599,12 @@ def prepare_ohlc(pair, is_live, timeframe='4H', bars=2190):
     if len(df) > 17520:  # 17520 is 2 year's worth of 1h periods
         df = df.tail(17520)
         df.reset_index(drop=True, inplace=True)
-    try:
-        df.to_pickle(filepath)
-    except:
-        print('-')
-        print(f'to_pickle went wrong with {pair}')
-        print('-')
+    # try:
+    df.to_pickle(filepath)
+    # except:
+    #     print('-')
+    #     print(f'to_pickle went wrong with {pair}')
+    #     print('-')
 
     df = df.resample(timeframe, on='timestamp').agg({'open': 'first',
                                                      'high': 'max',
@@ -977,7 +972,7 @@ def free_bal_M(asset):
     return bal
 
 
-def update_pos_M(strat, asset, new_bal, inval, direction, pfrd):
+def update_pos_M(session, asset, new_bal, inval, direction, pfrd):
     '''checks for the current balance of a particular asset and returns it in 
     the correct format for the sizing dict. also calculates the open risk for 
     a given asset and returns it in R and $ denominations'''
@@ -985,7 +980,7 @@ def update_pos_M(strat, asset, new_bal, inval, direction, pfrd):
     pair = asset + 'USDT'
     price = get_price(pair)
     value = price * new_bal
-    pct = round(100 * value / strat.bal, 5)
+    pct = round(100 * value / session.bal, 5)
     
     if direction == 'long':
         open_risk = value - (value / inval)
