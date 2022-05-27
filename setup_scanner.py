@@ -352,6 +352,8 @@ print(f'realised real long pnl: {agent_1.realised_pnl_long:.1f}R, realised sim l
 print(f'realised real short pnl: {agent_1.realised_pnl_short:.1f}R, realised sim short pnl: {agent_1.sim_pnl_short:.1f}R')
 print(f'tor: {agent_1.total_open_risk}')
 print(f'or list: {[round(x, 2) for x in sorted(agent_1.or_list, reverse=True)]}')
+print(f"real open pnl: {agent_1.open_pnl('real'):.1f}R")
+print(f"sim open pnl: {agent_1.open_pnl('sim'):.1f}R")
 agent_1.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
 
 benchmark = uf.log(session, [agent_1])
