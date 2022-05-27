@@ -74,7 +74,8 @@ print(f'{len(agent_1.sim_trades.keys()) = }')
 print(f'{len(agent_1.sim_pos.keys()) = }')
 
 # now that trade records have been loaded, path can be changed
-session.market_data = Path('/home/ross/Documents/backtester_2021/test_records')
+if not session.live:
+    session.market_data = Path('/home/ross/Documents/backtester_2021/test_records')
 
 # update trade records --------------------------------------------------------
 print('-')
