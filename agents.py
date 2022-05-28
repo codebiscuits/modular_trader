@@ -96,7 +96,6 @@ class DoubleST():
                     with open(trades_path, 'r') as file:
                         data = json.load(file)
                     if data:
-                        print(f'dumping live data: {data = }')
                         with open(test_trades, 'w') as file:
                             json.dump(data, file)
                 except JSONDecodeError:
@@ -441,6 +440,20 @@ class DoubleST():
             no_pos = True    
         return len(df) <= 200 and no_pos
 
+    def open_pnl(self, switch):
+        total = 0
+        if switch == 'real':
+            pos_dict = self.real_pos.values()
+        elif switch == 'sim':
+            pos_dict = self.sim_pos.values()
+            for pos in pos_dict:
+                if pos.get('pnl_R'):
+                    total += pos['pnl_R']
+        else:
+            print('open_pnl requires argument real or sim')
+        
+        return total
+    
     def spot_signals(self, session, df):
         
         df['ema200'] = df.close.ewm(200).mean()
