@@ -7,6 +7,7 @@ import binance_funcs as funcs
 import statistics as stats
 import numpy as np
 from pathlib import Path
+import indicators as ind
 
 plt.style.use('fivethirtyeight')
 plt.rcParams['figure.figsize'] = (20,10)
@@ -46,6 +47,8 @@ for short in [x**2 for x in range(2, 7)]:
             df.reset_index(inplace=True)
             
             # calculations
+            df['snr'] = ind.signal_noise_ratio(df, 10)
+            # snr not currently working
             df['momentum'] = df.close.ewm(short).mean() / df.close.ewm(long).mean()
             df['low_wick'] = 100 * (df.low - df.open) / df.open
             df['high_wick'] = 100 * (df.high - df.open) / df.open

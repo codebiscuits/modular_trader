@@ -186,6 +186,20 @@ def k_candles(df):
     
     return df
 
+def signal_noise_ratio(df, periods):
+    df['hh'] = df.high.rolling(periods).max()
+    df['ll'] = df.low.rolling(periods).min()
+    df['mid'] = (df.hh + df.ll) / 2
+    df['signal'] = (df.hh - df.ll) / df.mid
+    
+    df['abs_range'] = df.high - df.low
+    df['range_mid'] = (df.high + df.low) / 2
+    df['pct_range'] = df.abs_range / df.range_mid
+    df['noise'] = df.pct_range.rolling(periods).mean()
+    df['snr'] = df.signal / df.noise
+    
+    df.drop(['hh', 'll', 'mid', 'signal', 'abs_range', 'noise'], axis=1, inplace=True)
+
 def stochastic(data, lookback):
     pass
     

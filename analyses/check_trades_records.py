@@ -3,19 +3,19 @@ import keys
 import json
 from json.decoder import JSONDecodeError
 import utility_funcs as uf
-from config import market_data
 from pprint import pprint
 import binance_funcs as funcs
 import statistics as stats
 from datetime import datetime as dt
 from binance.client import Client
 from pushbullet import Pushbullet
+import strategies as strats
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
-strat = 'double_st_lo' # 'rsi_st_ema'
-print_all = 2 # 0 = minimal, 1 = print open trades, 2 = print all trades
+strat = strats.DoubleST(3, 1.2)
+print_all = 1 # 0 = minimal, 1 = print open trades, 2 = print all trades
 window = 50 # lookback window for how many closed trades to include in statistics
 
 pi2path = Path('/home/ubuntu/rpi_2.txt')
@@ -23,10 +23,12 @@ live = pi2path.exists()
 now = dt.now()
 print(now.strftime('%d/%m/%y %H:%M'))
 
+market_data = Path('/mnt/pi_2/market_data')
+
 ############################################################################
 
-o_path = Path(f'{market_data}/{strat}_open_trades.json')
-c_path = Path(f'{market_data}/{strat}_closed_trades.json')
+o_path = Path(f'{market_data}/{strat.name}/sim_trades.json')
+c_path = Path(f'{market_data}/{strat.name}/closed_sim_trades.json')
 
 with open(o_path, 'r') as file:
     o_data = json.load(file)
@@ -46,7 +48,7 @@ with open(c_path, 'r') as file:
     
 ############################################################################
 
-positions = list(funcs.current_positions(strat, 0.001).keys())
+positions = list(funcs.current_positions_old(strat, 'sim').keys())
 pairs_in_pos = [p + 'USDT' for p in positions if p != 'USDT']
 
 # create list of trade records which don't match current positions
@@ -65,13 +67,13 @@ if stopped_trades:
         close_base = 0
         for x in trade_record:
             if x.get('type')[:4] == 'open':
-                init_base = x.get('base_size')
+                init_base = float(x.get('base_size'))
             elif x.get('type')[:3] == 'add':
-                add_base += x.get('base_size')
+                add_base += float(x.get('base_size'))
             elif x.get('type')[:2] == 'tp':
-                tp_base += x.get('base_size')
+                tp_base += float(x.get('base_size'))
             elif x.get('type')[:5] in ['close', 'stop_']:
-                close_base = x.get('base_size')
+                close_base = float(x.get('base_size'))
         
         diff = (init_base + add_base) - (tp_base + close_base)        
         
@@ -125,10 +127,10 @@ if stopped_trades:
     
         if not live:
             market_data = 'test_records'
-        uf.record_closed_trades(strat, market_data, c_data)
+        uf.record_closed_trades(strat.name, c_data)
         if o_data[i]:
             del o_data[i]
-            uf.record_open_trades(strat, market_data, o_data)
+            uf.record_open_trades(strat.name, o_data)
 
 
 ############################################################################
@@ -141,8 +143,11 @@ total_r = 0
 winning = 0
 losing = 0
 
+total_bal = funcs.account_bal()
+
 for pair, v in o_data.items():
-    ots = uf.open_trade_stats(now, pair, v)
+    ots = uf.open_trade_stats(now, total_bal, v)
+    # print(ots)
     
     total_r += ots.get('pnl_R')
     if ots.get('pnl_R') >= 0:
@@ -151,8 +156,9 @@ for pair, v in o_data.items():
         losing += 1
     
     if print_all:
-        print(f"{pair} :: entry: {ots.get('entry_price'):.3} :: current pnl: \
-{ots.get('pnl_R'):.2}R :: duration: {ots.get('duration')} hours\n")
+        print(f"{pair} :: {'long' if ots.get('long') else 'short'} :: \
+entry: {ots.get('entry_price'):.3} :: current pnl: \
+{ots.get('pnl_R'):.2}R :: duration: {ots.get('duration (h)')} hours\n")
 
 print(f'Open Total PnL: {float(total_r):.1f}R, {winning} in profit, {losing} in loss')
 
@@ -166,8 +172,10 @@ all_open_dates = []
 
 if c_data:
     
-    bad_keys = uf.find_bad_keys(c_data)
-    bad_keys = [k.get('key') for k in bad_keys]
+    print(f'num closed trades {len(c_data.keys())}')
+    
+    # bad_keys = uf.find_bad_keys(c_data)
+    # bad_keys = [k.get('key') for k in bad_keys]
     
     add_counts = []
     tp_counts = []
@@ -184,11 +192,14 @@ if c_data:
     
     for x, y in enumerate(c_data.items()):
         k = y[0]
+        # if k in bad_keys:
+        #     print(f'ignoring {k}, bad key')
+        #     continue
         trade = y[1]
-        adds = 0
-        n_adds = 0
-        tps = 0
-        n_tps = 0
+        adds = 0 # total value of adds
+        n_adds = 0 # total number of adds
+        tps = 0 # total value of take-profits
+        n_tps = 0 # total number of take-profits
         for n, i in enumerate(trade):
             if i.get('type')[:4] == 'open':
                 entry = trade[n]
@@ -200,17 +211,19 @@ if c_data:
                 n_tps += 1
             elif i.get('type')[:5] in ['close', 'stop_']:
                 close = trade[n]
+                # pprint(close)
                 exit_type = i.get('type')
             
         pair = entry.get('pair')
         
         if n_adds:
             add_counts.append(n_adds)
+        else:
+            add_counts.append(0)
         if n_tps:
             tp_counts.append(n_tps)
-        
-        if k in bad_keys:
-            print(f"{pair} record {k} doesn't add up")
+        else:
+            tp_counts.append(0)
         
         # if pair == 'MATICUSDT':
         #     pprint(trade)
@@ -220,20 +233,26 @@ if c_data:
         # TODO this calc needs a lot of work, i'm not getting all the data about each trade yet
         entry_net = float(entry.get('quote_size')) + adds
         exit_net = float(close.get('quote_size')) + tps
-        
+        if entry_net == 0:
+            continue        
         
         pnl = 100 * (exit_net - entry_net) / entry_net
         # print(f'{entry_net = }, {exit_net = }, pnl = {pnl}%')
         
-        trig = entry.get('trig_price')
-        sl = entry.get('hard_stop')
+        trig = float(entry.get('exe_price'))
+        sl = float(entry.get('hard_stop'))
         r = 100 * (trig-sl) / sl
         final_r = pnl / r
         
         all_r.append(final_r)
         
         trade_start = entry.get('timestamp') / 1000
-        trade_end = close.get('timestamp') / 1000
+        
+        if close.get('timestamp'):
+            trade_end = close.get('timestamp') / 1000
+        else:
+            trade_end = trade_start + 3600
+        
         duration = round((trade_end - trade_start) / 3600, 1)
         
         all_open_dates.append(trade_start)
@@ -262,13 +281,23 @@ if c_data:
             print(f'{pair} {exit_str}, final pnl: {final_r:.2f}R, duration: {duration} hours {win}\n')
     
     # all trades
-    print('\n-- All Trades --')
-    tps_in_wins = len(tp_trade_wins) / len(wins_count)
-    tps_in_losses = len(tp_trade_losses) / len(losses_count)
-    tp_ws_over_tp_ls = len(tp_trade_wins) / len(tp_trade_losses)
-    print(f'{tps_in_wins*100:.2f}% of wins took profit ({len(tp_trade_wins)}/{len(wins_count)})')
-    print(f'{tps_in_losses*100:.2f}% of losses took profit ({len(tp_trade_losses)}/{len(losses_count)})')
-    print(f'{tp_ws_over_tp_ls*100:.2f}% of trades with TPs were wins ({len(tp_trade_wins)}/{len(tp_trade_losses)})')
+    q = len(tp_trade_wins)
+    s = len(wins_count)
+    u = len(tp_trade_losses)
+    v = len(losses_count)
+    if s:
+        tps_in_wins = q / s
+    else:
+        tps_in_wins = 0
+    if v:
+        tps_in_losses = u / v
+    else:
+        tps_in_losses = 0
+    tp_ws_over_tp_ls = q / (u + q)
+    print(f'\n-- All Trades ({s+v}) --')
+    print(f'{tps_in_wins*100:.2f}% of wins took profit ({q}/{s})')
+    print(f'{tps_in_losses*100:.2f}% of losses took profit ({u}/{v})')
+    print(f'{tp_ws_over_tp_ls*100:.2f}% of trades with TPs were wins ({q}/{u + q})')
     print(f'Total closed trades: {len(all_r)}\n')
     
     # last 50 trades
@@ -291,10 +320,12 @@ if c_data:
     
     add_tp_str = ''
     add_counts = add_counts[-1*window:]
+    add_counts = [a for a in add_counts if a]
     tp_counts = tp_counts[-1*window:]
+    tp_counts = [t for t in tp_counts if t]
     if add_counts:
         trade_adds = len(add_counts)
-        add_tp_str = add_tp_str + str(trade_adds) + ' trades added'
+        add_tp_str = add_tp_str + str(trade_adds) + ' trades added '
     if tp_counts:
         trade_tps = len(tp_counts)
         add_tp_str = add_tp_str + str(trade_tps) + ' trades TPed'
