@@ -70,8 +70,6 @@ session = sessions.MARGIN_SESSION()
 agent_1 = DoubleST(session, *dst_presets[3])
 agents = [agent_1]
 session.name = '-'.join([n.name for n in agents])
-print(f'{len(agent_1.sim_trades.keys()) = }')
-print(f'{len(agent_1.sim_pos.keys()) = }')
 
 # now that trade records have been loaded, path can be changed
 if not session.live:
@@ -81,13 +79,9 @@ if not session.live:
 print('-')
 uf.record_stopped_trades(session, agent_1)
 uf.record_stopped_sim_trades(session, agent_1)
-print(f'{len(agent_1.sim_trades.keys()) = }')
-print(f'{len(agent_1.sim_pos.keys()) = }')
 agent_1.real_pos = agent_1.current_positions('open')
 agent_1.sim_pos = agent_1.current_positions('sim')
 agent_1.tracked = agent_1.current_positions('tracked')
-print(f'{len(agent_1.sim_trades.keys()) = }')
-print(f'{len(agent_1.sim_pos.keys()) = }')
 
 print(f'{agent_1.realised_pnl_long = }')
 print(f'{agent_1.realised_pnl_short = }')
@@ -102,7 +96,6 @@ positions = list(agent_1.real_pos.keys())
 pairs_in_pos = [p + 'USDT' for p in positions if p != 'USDT']
 other_pairs = [p for p in all_pairs if (not p in pairs_in_pos) and (not p in not_pairs)]
 pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked first
-print(f'{len(pairs) = }')
 
 print(f"Current time: {session.now_start}, {session.name}, fixed risk l: {agent_1.fixed_risk_l}, fixed risk s: {agent_1.fixed_risk_s}")
 
@@ -162,13 +155,13 @@ for n, pair in enumerate(pairs):
         real_qty = float(agent_1.real_pos[asset]['qty'])
         agent_1.real_pos[asset].update(funcs.update_pos_M(session, asset, real_qty, inval_dist, agent_1.in_pos['real'], agent_1.in_pos['real_pfrd']))
         if agent_1.in_pos['real_ep']:
-            price_delta = (price - agent_1.in_pos['real_ep']) / agent_1.in_pos['real_ep'] # how much has price moved since entry
+            agent_1.in_pos['real_price_delta'] = (price - agent_1.in_pos['real_ep']) / agent_1.in_pos['real_ep'] # how much has price moved since entry
             
     if agent_1.in_pos['sim']:
         sim_qty = float(agent_1.sim_pos[asset]['qty'])
         agent_1.sim_pos[asset].update(funcs.update_pos_M(session, asset, sim_qty, inval_dist, agent_1.in_pos['sim'], agent_1.in_pos['sim_pfrd']))
-        if agent_1.in_pos['sim_ep'] and not agent_1.in_pos['real_ep']:
-            price_delta = (price - agent_1.in_pos['sim_ep']) / agent_1.in_pos['sim_ep']
+        if agent_1.in_pos['sim_ep']:
+            agent_1.in_pos['sim_price_delta'] = (price - agent_1.in_pos['sim_ep']) / agent_1.in_pos['sim_ep']
     
             
 # margin order execution ------------------------------------------------------
@@ -323,26 +316,25 @@ for n, pair in enumerate(pairs):
     
 
 # calculate open risk and take profit if necessary ----------------------------
-    if agent_1.in_pos['real'] == 'long':
-        open_risk_r = agent_1.real_pos.get(asset)['or_R']
-        if (open_risk_r > agent_1.indiv_r_limit) and price_delta and (price_delta > 0.001):
-            try:
-                omf.tp_long(session, agent_1, pair, stp, inval_dist)
-            except BinanceAPIException as e:
-                print(f'problem with tp_long order for {pair}')
-                print(e)
-                pb.push_note(now, f'exeption during {pair} tp_long order')
-                continue
-    elif agent_1.in_pos['real'] == 'long':
-        open_risk_r = agent_1.real_pos.get(asset)['or_R']
-        if (open_risk_r > agent_1.indiv_r_limit) and price_delta and (price_delta > 0.001):
-            try:
-                omf.tp_short(session, agent_1, pair, stp, inval_dist)
-            except BinanceAPIException as e:
-                print(f'problem with tp_short order for {pair}')
-                print(e)
-                pb.push_note(now, f'exeption during {pair} tp_short order')
-                continue
+    agent_1.tp_signals(asset)
+    if agent_1.in_pos.get('real_tp_sig') or agent_1.in_pos.get('sim_tp_sig'):
+        pprint(agent_1.in_pos)
+    if agent_1.in_pos['real'] == 'long' or agent_1.in_pos['sim'] == 'long':
+        try:
+            omf.tp_long(session, agent_1, pair, stp, inval_dist)
+        except BinanceAPIException as e:
+            print(f'problem with tp_long order for {pair}')
+            print(e)
+            pb.push_note(now, f'exeption during {pair} tp_long order')
+            continue
+    elif agent_1.in_pos['real'] == 'short' or agent_1.in_pos['sim'] == 'short':
+        try:
+            omf.tp_short(session, agent_1, pair, stp, inval_dist)
+        except BinanceAPIException as e:
+            print(f'problem with tp_short order for {pair}')
+            print(e)
+            pb.push_note(now, f'exeption during {pair} tp_short order')
+            continue
     
     agent_1.calc_tor()
         

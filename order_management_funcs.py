@@ -63,6 +63,8 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
         agent.counts_dict['real_open_long'] +=1
         
     if agent.in_pos['sim'] == None and sim_reason:
+        usdt_size = 100
+        size = round(usdt_size / price, 8)
         note = f"open sim long {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
         print(now, note)
         
@@ -96,7 +98,7 @@ def tp_long(session, agent, pair, stp, inval):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     session.bal = funcs.account_bal_M()
     
-    if agent.in_pos['real'] == 'long':        
+    if agent.in_pos.get('real_tp_sig'):        
         trade_record = agent.open_trades.get(pair)
         real_bal = abs(float(agent.real_pos[asset]['qty']))
         real_val = abs(float(agent.real_pos[asset]['value']))
@@ -183,7 +185,7 @@ def tp_long(session, agent, pair, stp, inval):
             agent.counts_dict['real_tp_long'] += 1
             uf.realised_pnl(session, trade_record, 'long')
         
-    if agent.in_pos['sim'] == 'long':
+    if agent.in_pos.get('sim_tp_sig'):
         note = f"sim take-profit {pair} long 50% @ {price}"
         print(now, note)
         
@@ -218,7 +220,7 @@ def tp_long(session, agent, pair, stp, inval):
         agent.in_pos['sim_pfrd'] = agent.in_pos['sim_pfrd'] / 2
         uf.realised_pnl(session, trade_record, 'long')
         
-    if agent.in_pos['tracked'] == 'long':
+    if agent.in_pos.get('tracked_tp_sig'):
         note = f"tracked take-profit {pair} long 50% @ {price}"
         print(now, note)
         
@@ -448,6 +450,8 @@ def open_short(session, agent, pair, size, stp, inval, sim_reason):
         agent.counts_dict['real_open_short'] +=1
         
     if agent.in_pos['sim'] == None and sim_reason:
+        usdt_size = 100
+        size = round(usdt_size / price, 8)
         note = f"sim open short {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
         print(now, note)
         
@@ -481,7 +485,7 @@ def tp_short(session, agent, pair, stp, inval):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     session.bal = funcs.account_bal_M()
     
-    if agent.in_pos['real'] == 'short':        
+    if agent.in_pos.get('real_tp_sig'):        
         trade_record = agent.open_trades.get(pair)
         real_bal = abs(float(agent.real_pos[asset]['qty']))
         real_val = abs(float(agent.real_pos[asset]['value']))
@@ -563,7 +567,7 @@ def tp_short(session, agent, pair, stp, inval):
             agent.counts_dict['real_tp_short'] += 1
             uf.realised_pnl(session, trade_record, 'short')
         
-    if agent.in_pos['sim'] == 'short':
+    if agent.in_pos.get('sim_tp_sig'):
         note = f"sim take-profit {pair} short 50% @ {price}"
         print(now, note) 
         
@@ -598,7 +602,7 @@ def tp_short(session, agent, pair, stp, inval):
         agent.counts_dict['sim_tp_short'] += 1
         uf.realised_pnl(session, trade_record, 'short')
         
-    if agent.in_pos['tracked'] == 'short':
+    if agent.in_pos.get('tracked_tp_sig'):
         note = f"tracked take-profit {pair} short 50% @ {price}"
         print(now, note) 
         

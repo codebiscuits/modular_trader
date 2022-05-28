@@ -140,8 +140,6 @@ class DoubleST():
                 try:
                     open_trades = json.load(ot_file)
                 except JSONDecodeError as e:
-                    print(f'JSONDecodeError while loading {switch}_trades records')
-                    print(ot_path)
                     open_trades = {}
         else:
             print("ot_path doesn't exist")
@@ -453,6 +451,21 @@ class DoubleST():
             print('open_pnl requires argument real or sim')
         
         return total
+    
+    def tp_signals(self, asset):
+        if self.real_pos.get(asset):
+            real_or = self.real_pos.get(asset).get('or_R')
+            print(f"{(real_or > self.indiv_r_limit) = }")
+            self.in_pos['real_tp_sig'] = ((real_or > self.indiv_r_limit) and 
+                                          (abs(self.in_pos.get('real_price_delta', 0)) > 0.001))
+        if self.sim_pos.get(asset):
+            sim_or = self.sim_pos.get(asset).get('or_R')
+            print(sim_or)
+            print(f"{(sim_or > self.indiv_r_limit) = }")
+            self.in_pos['sim_tp_sig'] = ((sim_or > self.indiv_r_limit) and 
+                                         (abs(self.in_pos.get('sim_price_delta', 0)) > 0.001))
+        print(asset)
+        print(f"{self.in_pos.get('sim_tp_sig')}, {self.in_pos.get('sim_price_delta', 0)}")
     
     def spot_signals(self, session, df):
         
