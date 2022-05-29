@@ -453,7 +453,6 @@ class DoubleST():
         return total
     
     def tp_signals(self, asset):
-        print(asset)
         if self.real_pos.get(asset):
             real_or = self.real_pos.get(asset).get('or_R')
             print(f"{(real_or > self.indiv_r_limit) = }")

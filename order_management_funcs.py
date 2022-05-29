@@ -189,7 +189,7 @@ def tp_long(session, agent, pair, stp, inval):
         note = f"sim take-profit {pair} long 50% @ {price}"
         print(now, note)
         
-        trade_record = agent.open_trades.get(pair)
+        trade_record = agent.sim_trades.get(pair)
         sim_bal = abs(float(agent.sim_pos[asset]['qty']))
         timestamp = round(datetime.utcnow().timestamp() * 1000)
         order_size = sim_bal / 2
@@ -571,7 +571,7 @@ def tp_short(session, agent, pair, stp, inval):
         note = f"sim take-profit {pair} short 50% @ {price}"
         print(now, note) 
         
-        trade_record = agent.open_trades.get(pair)
+        trade_record = agent.sim_trades.get(pair)
         sim_bal = abs(float(agent.sim_pos[asset]['qty']))
         timestamp = round(datetime.utcnow().timestamp() * 1000)
         order_size = sim_bal / 2
