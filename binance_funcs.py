@@ -982,12 +982,13 @@ def update_pos_M(session, asset, new_bal, inval, direction, pfrd):
     value = price * new_bal
     pct = round(100 * value / session.bal, 5)
     
-    if direction == 'long':
-        open_risk = value - (value / inval)
-    elif direction == 'short':
-        open_risk = (value / inval) - value
-    else:
-        open_risk = 0
+    open_risk = value - (value / inval)
+    # if direction == 'long':
+    #     open_risk = value - (value / inval)
+    # elif direction == 'short':
+    #     open_risk = (value / inval) - value
+    # else:
+    #     open_risk = 0
     
     if pfrd:
         open_risk_r = open_risk / pfrd

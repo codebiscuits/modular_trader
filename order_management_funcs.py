@@ -153,7 +153,7 @@ def tp_long(session, agent, pair, stp, inval):
                 agent.real_pos['USDT']['pf%'] = pf_pct + float(agent.real_pos[asset].get('pf%'))
             
             agent.counts_dict['real_close_long'] += 1
-            uf.realised_pnl(session, trade_record, 'long')
+            uf.realised_pnl(agent, trade_record, 'long')
         
         
         else: # if pct < 100%
@@ -183,7 +183,7 @@ def tp_long(session, agent, pair, stp, inval):
                 uf.calc_sizing_non_live_tp(session, asset, pct, 'real')
             
             agent.counts_dict['real_tp_long'] += 1
-            uf.realised_pnl(session, trade_record, 'long')
+            uf.realised_pnl(agent, trade_record, 'long')
         
     if agent.in_pos.get('sim_tp_sig'):
         note = f"sim take-profit {pair} long 50% @ {price}"
@@ -218,7 +218,7 @@ def tp_long(session, agent, pair, stp, inval):
     
         agent.counts_dict['sim_tp_long'] += 1
         agent.in_pos['sim_pfrd'] = agent.in_pos['sim_pfrd'] / 2
-        uf.realised_pnl(session, trade_record, 'long')
+        uf.realised_pnl(agent, trade_record, 'long')
         
     if agent.in_pos.get('tracked_tp_sig'):
         note = f"tracked take-profit {pair} long 50% @ {price}"
@@ -309,7 +309,7 @@ def close_long(session, agent, pair):
         
         # save records and update counts
         agent.counts_dict['real_close_long'] +=1
-        uf.realised_pnl(session, trade_record, 'long')
+        uf.realised_pnl(agent, trade_record, 'long')
     
     if agent.in_pos['sim'] == 'long':
         note = f"sim close long {pair} @ {price}"
@@ -353,7 +353,7 @@ def close_long(session, agent, pair):
         del agent.sim_pos[asset]
         
         agent.counts_dict['sim_close_long'] += 1
-        uf.realised_pnl(session, trade_record, 'long')
+        uf.realised_pnl(agent, trade_record, 'long')
         
     if agent.in_pos['tracked'] == 'long':
         note = f"tracked close long {pair} @ {price}"
@@ -536,7 +536,7 @@ def tp_short(session, agent, pair, stp, inval):
             agent.tracked[asset] = {'qty': 0, 'value': 0, 'pf%': 0, 'or_R': 0, 'or_$': 0}                
             
             agent.counts_dict['real_close_short'] += 1
-            uf.realised_pnl(session, trade_record, 'short')
+            uf.realised_pnl(agent, trade_record, 'short')
         
         else: # if pct < 100%
             # create trade dict
@@ -565,7 +565,7 @@ def tp_short(session, agent, pair, stp, inval):
                 uf.calc_sizing_non_live_tp(session, asset, pct, 'real')
             
             agent.counts_dict['real_tp_short'] += 1
-            uf.realised_pnl(session, trade_record, 'short')
+            uf.realised_pnl(agent, trade_record, 'short')
         
     if agent.in_pos.get('sim_tp_sig'):
         note = f"sim take-profit {pair} short 50% @ {price}"
@@ -600,7 +600,7 @@ def tp_short(session, agent, pair, stp, inval):
         uf.calc_sizing_non_live_tp(session, agent.in_pos, asset, 50, 'sim')
     
         agent.counts_dict['sim_tp_short'] += 1
-        uf.realised_pnl(session, trade_record, 'short')
+        uf.realised_pnl(agent, trade_record, 'short')
         
     if agent.in_pos.get('tracked_tp_sig'):
         note = f"tracked take-profit {pair} short 50% @ {price}"
@@ -690,8 +690,8 @@ def close_short(session, agent, pair):
             agent.real_pos['USDT']['owed'] = owed - float(base_size * price)
         
         # save records and update counts
-        agent.counts_dict['real_close_long'] +=1
-        uf.realised_pnl(session, trade_record, 'short')
+        agent.counts_dict['real_close_short'] +=1
+        uf.realised_pnl(agent, trade_record, 'short')
     
     if agent.in_pos['sim'] == 'short':
         note = f"sim close short {pair} @ {price}"
@@ -734,8 +734,8 @@ def close_short(session, agent, pair):
         agent.in_pos['sim'] = None
         agent.in_pos['sim_pfrd'] = 0        
         
-        agent.counts_dict['sim_close_long'] += 1
-        uf.realised_pnl(session, trade_record, 'short')
+        agent.counts_dict['sim_close_short'] += 1
+        uf.realised_pnl(agent, trade_record, 'short')
         
     if agent.in_pos['tracked'] == 'short':
         note = f"tracked close short {pair} @ {price}"
@@ -778,7 +778,7 @@ def close_short(session, agent, pair):
         agent.in_pos['tracked'] = None
         agent.in_pos['tracked_pfrd'] = 0        
         
-        agent.counts_dict['tracked_close_long'] += 1
+        agent.counts_dict['tracked_close_short'] += 1
 
 def reduce_risk_M(session, agent):
     # create a list of open positions in profit and their open risk value
@@ -864,7 +864,7 @@ def reduce_risk_M(session, agent):
                         agent.real_pos['USDT']['owed'] -= float(base_size * price)
                     
                     del agent.real_pos[asset]
-                    uf.realised_pnl(session, trade_record, 'long')
+                    uf.realised_pnl(agent, trade_record, 'long')
                 except BinanceAPIException as e:
                     print(f'problem with sell order for {pair}')
                     print(e)

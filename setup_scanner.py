@@ -162,10 +162,10 @@ for n, pair in enumerate(pairs):
         agent_1.sim_pos[asset].update(funcs.update_pos_M(session, asset, sim_qty, inval_dist, agent_1.in_pos['sim'], agent_1.in_pos['sim_pfrd']))
         if agent_1.in_pos['sim_ep']:
             agent_1.in_pos['sim_price_delta'] = (price - agent_1.in_pos['sim_ep']) / agent_1.in_pos['sim_ep']
-    
+        
             
 # margin order execution ------------------------------------------------------
-    elif signals.get('signal') == 'open_long':
+    if signals.get('signal') == 'open_long':
         # risk = (price - stp) / price
         # mir = uf.max_init_risk(agent_1.num_open_positions, agent_1.target_risk)
         # size, usdt_size = funcs.get_size(price, agent_1.fixed_risk_l, session.bal, risk)

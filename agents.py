@@ -49,6 +49,7 @@ class DoubleST():
         self.tracked = self.current_positions('tracked')
         self.fixed_risk_l = self.set_fixed_risk('long')
         self.fixed_risk_s = self.set_fixed_risk('short')
+        print(self.fixed_risk_s)
         self.max_positions = self.set_max_pos()
         self.max_init_r_l = self.fixed_risk_l * self.total_r_limit
         self.max_init_r_s = self.fixed_risk_s * self.total_r_limit
@@ -387,7 +388,7 @@ class DoubleST():
             qs = float(trade_record[0].get('quote_size'))
             ep = float(trade_record[0].get('exe_price'))
             hs = float(trade_record[0].get('hard_stop'))
-            pos_fr_dol = qs * ((ep - hs) / ep)
+            pos_fr_dol = qs * ((ep - hs) / ep) if direction == 'long' else qs * ((hs - ep) / ep)
         else:
             ep = None # i refer to this later and need it to exist even if it has no value
             hs = None
@@ -455,16 +456,12 @@ class DoubleST():
     def tp_signals(self, asset):
         if self.real_pos.get(asset):
             real_or = self.real_pos.get(asset).get('or_R')
-            print(f"{(real_or > self.indiv_r_limit) = }")
             self.in_pos['real_tp_sig'] = ((real_or > self.indiv_r_limit) and 
                                           (abs(self.in_pos.get('real_price_delta', 0)) > 0.001))
         if self.sim_pos.get(asset):
             sim_or = self.sim_pos.get(asset).get('or_R')
-            print('sim_or:', sim_or)
-            print(f"{(sim_or > self.indiv_r_limit) = }")
             self.in_pos['sim_tp_sig'] = ((sim_or > self.indiv_r_limit) and 
                                          (abs(self.in_pos.get('sim_price_delta', 0)) > 0.001))
-        print(f"{self.in_pos.get('sim_tp_sig')}, {self.in_pos.get('sim_price_delta', 0)}")
     
     def spot_signals(self, session, df):
         

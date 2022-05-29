@@ -816,7 +816,7 @@ def recent_perf_str(session, agent):
     perf_str_l = real_perf_str_l if real_score_l else sim_perf_str_l
     perf_str_s = real_perf_str_s if real_score_s else sim_perf_str_s
     
-    full_perf_str = f'long: {perf_str_l} real: score {real_score_l} rpnl {agent.realised_pnl_long:.1f}, sim: score {sim_score_l} rpnl {agent.sim_pnl_long:.1f}\nshort: {perf_str_s} real: score {real_score_s} rpnl {agent.realised_pnl_short:.1f}, sim: score {sim_score_s} rpnl {agent.sim_pnl_short:.1f}'
+    full_perf_str = f'long: {perf_str_l}\nreal: score {real_score_l} rpnl {agent.realised_pnl_long:.1f},\nsim: score {sim_score_l} rpnl {agent.sim_pnl_long:.1f}\nshort: {perf_str_s}\nreal: score {real_score_s} rpnl {agent.realised_pnl_short:.1f},\nsim: score {sim_score_s} rpnl {agent.sim_pnl_short:.1f}'
     
     return full_perf_str
 
@@ -839,7 +839,7 @@ def scanner_summary(session, agents):
         agent_bench = agent.benchmark
         mkt_bench = session.benchmark
         bench_str = f"1m perf: strat {round(agent_bench.get('strat_1m')*100, 2)}%, mkt {round(mkt_bench.get('market_1m')*100, 2)}%"
-        agent_msg = f'\n{perf_str}\npositions {num_open_positions}, exposure {vol_exp}% {count_str}\n{bench_str}'
+        agent_msg = f'\n{agent.name}\n{perf_str}\npositions {num_open_positions}, exposure {vol_exp}% {count_str}\n{bench_str}'
         final_msg += agent_msg
     
     print(f'-\n{title}\n{final_msg}\n-')
