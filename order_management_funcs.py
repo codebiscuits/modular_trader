@@ -180,7 +180,7 @@ def tp_long(session, agent, pair, stp, inval):
                 agent.real_pos[asset].update(funcs.update_pos_M(session, asset, new_size, inval, agent.in_pos['real'], agent.in_pos['real_pfrd']))
                 agent.real_pos['USDT'] = funcs.update_usdt(session.bal)
             else:
-                uf.calc_sizing_non_live_tp(session, asset, pct, 'real')
+                uf.calc_sizing_non_live_tp(agent, asset, pct, 'real')
             
             agent.counts_dict['real_tp_long'] += 1
             uf.realised_pnl(agent, trade_record, 'long')
@@ -214,7 +214,7 @@ def tp_long(session, agent, pair, stp, inval):
         uf.record_trades(session, agent, 'sim')
         
         # update sim_pos
-        uf.calc_sizing_non_live_tp(session, agent.in_pos, asset, 50, 'sim')
+        uf.calc_sizing_non_live_tp(agent, asset, 50, 'sim')
     
         agent.counts_dict['sim_tp_long'] += 1
         agent.in_pos['sim_pfrd'] = agent.in_pos['sim_pfrd'] / 2
@@ -562,7 +562,7 @@ def tp_short(session, agent, pair, stp, inval):
                 agent.real_pos[asset].update(funcs.update_pos_M(session, asset, new_size, inval, agent.in_pos['real'], agent.in_pos['real_pfrd']))
                 agent.real_pos['USDT'] = funcs.update_usdt(session.bal)
             else:
-                uf.calc_sizing_non_live_tp(session, asset, pct, 'real')
+                uf.calc_sizing_non_live_tp(agent, asset, pct, 'real')
             
             agent.counts_dict['real_tp_short'] += 1
             uf.realised_pnl(agent, trade_record, 'short')
@@ -597,7 +597,7 @@ def tp_short(session, agent, pair, stp, inval):
         uf.record_trades(session, agent, 'sim')
         
         # update sim_pos
-        uf.calc_sizing_non_live_tp(session, agent.in_pos, asset, 50, 'sim')
+        uf.calc_sizing_non_live_tp(agent, asset, 50, 'sim')
     
         agent.counts_dict['sim_tp_short'] += 1
         uf.realised_pnl(agent, trade_record, 'short')
