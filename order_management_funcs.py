@@ -592,7 +592,7 @@ def tp_short(session, agent, pair, stp, inval):
         trade_record.append(tp_order)
         
         # update records
-        agent.in_pos['sim_pfrd'] = agent.in_pos['sim_pfrd'] * (pct / 100)
+        agent.in_pos['sim_pfrd'] = agent.in_pos['sim_pfrd'] / 2
         agent.sim_trades[pair] = trade_record
         uf.record_trades(session, agent, 'sim')
         

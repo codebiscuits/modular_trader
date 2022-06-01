@@ -501,7 +501,7 @@ class DoubleST():
         ind.supertrend_new(df, 10, 3)
         df.rename(columns={'st': 'st_loose', 'st_u': 'st_loose_u', 'st_d': 'st_loose_d'}, inplace=True)
         ind.supertrend_new(df, self.lb, self.mult)
-        
+    
         bullish_ema = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'ema200']
         bearish_ema = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'ema200']
         bullish_loose = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st_loose']

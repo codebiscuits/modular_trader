@@ -76,18 +76,19 @@ if not session.live:
     session.market_data = Path('/home/ross/Documents/backtester_2021/test_records')
 
 # update trade records --------------------------------------------------------
-print('-')
-uf.record_stopped_trades(session, agent_1)
-uf.record_stopped_sim_trades(session, agent_1)
-agent_1.real_pos = agent_1.current_positions('open')
-agent_1.sim_pos = agent_1.current_positions('sim')
-agent_1.tracked = agent_1.current_positions('tracked')
-
-print(f'{agent_1.realised_pnl_long = }')
-print(f'{agent_1.realised_pnl_short = }')
-print(f'{agent_1.sim_pnl_long = }')
-print(f'{agent_1.sim_pnl_short = }')
-print('-')
+for agent in agents:
+    print('-')
+    uf.record_stopped_trades(session, agent)
+    uf.record_stopped_sim_trades(session, agent)
+    agent.real_pos = agent.current_positions('open')
+    agent.sim_pos = agent.current_positions('sim')
+    agent.tracked = agent.current_positions('tracked')
+    
+    print(f'{agent.realised_pnl_long = }')
+    print(f'{agent.realised_pnl_short = }')
+    print(f'{agent.sim_pnl_long = }')
+    print(f'{agent.sim_pnl_short = }')
+    print('-')
 
 # compile and sort list of pairs to loop through ------------------------------
 all_pairs = funcs.get_pairs(market='CROSS')
@@ -97,32 +98,30 @@ pairs_in_pos = [p + 'USDT' for p in positions if p != 'USDT']
 other_pairs = [p for p in all_pairs if (not p in pairs_in_pos) and (not p in not_pairs)]
 pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked first
 
-print(f"Current time: {session.now_start}, {session.name}, fixed risk l: {agent_1.fixed_risk_l}, fixed risk s: {agent_1.fixed_risk_s}")
+print(f"Current time: {session.now_start}, {session.name}")
+for agent in agents:
+    print(f"{agent.name} fixed risk l: {agent.fixed_risk_l}, fixed risk s: {agent.fixed_risk_s}")
 
 funcs.top_up_bnb_M(15)
 session.spreads = funcs.binance_spreads('USDT') # dict
 
-agent_1.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
-if agent_1.max_positions > 20:
-    print(f'max positions: {agent_1.max_positions}')
-agent_1.calc_tor()
+for agent in agents:
+    agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
+    if agent.max_positions > 20:
+        print(f'max positions: {agent.max_positions}')
+    agent.calc_tor()
 
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 
 for n, pair in enumerate(pairs):
-    len_trades = len(agent_1.sim_trades.keys())
-    len_pos = len(agent_1.sim_pos.keys())
-    if len_trades != len_pos:
-        print(f'pair number {n}')
-        print(f'{len_trades = }')
-        print(f'{len_pos = }')
     
     asset = pair[:-1*len(session.quote_asset)]
-    agent_1.init_in_pos(pair)    
+    for agent in agents:
+        agent.init_in_pos(pair)    
     df = funcs.prepare_ohlc(pair, session.live)
     
-    if agent_1.too_new(df):
+    if len(df) < 10:
         continue
     
     if len(df) > session.max_length:
@@ -132,7 +131,6 @@ for n, pair in enumerate(pairs):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     
 # generate signals ------------------------------------------------------------
-    # signals = session.spot_signals(df)
     signals = agent_1.margin_signals(session, df, pair)
     
     price = df.at[len(df)-1, 'close']
@@ -337,7 +335,9 @@ for n, pair in enumerate(pairs):
             continue
     
     agent_1.calc_tor()
-        
+
+#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
+#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#   
         
 # log all data from the session and print/push summary-------------------------
 print(f'realised real long pnl: {agent_1.realised_pnl_long:.1f}R, realised sim long pnl: {agent_1.sim_pnl_long:.1f}R')

@@ -9,15 +9,6 @@ not_pairs = ['GBPUSDT', 'AUDUSDT', 'BUSDUSDT', 'EURUSDT', 'TUSDUSDT',
              'USDCUSDT', 'PAXUSDT', 'COCOSUSDT', 'SUSDUSDT', 'USDPUSDT', 
              'USTUSDT']
 
-# constants
-# params = {'quote_asset': 'USDT', 
-#           'fr_range': (0, 0.001), # 0.0025 makes good use of total balance
-#           'max_spread': 0.5, 
-#           'indiv_r_limit': 1.4, 
-#           'total_r_limit': 20, 
-#           'target_risk': 0.1, 
-#           'max_pos': 20}
-
 # ohlc data paths
 ohlc_data = None
 possible_paths = [Path('/media/coding/ohlc_binance_1h'), 

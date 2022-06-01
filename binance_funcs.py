@@ -7,7 +7,7 @@ import binance.enums as be
 from pushbullet import Pushbullet
 from decimal import Decimal
 from pprint import pprint
-from config import ohlc_data#, market_data
+from config import ohlc_data, not_pairs
 from pathlib import Path
 from datetime import datetime
 import utility_funcs as uf
@@ -497,7 +497,8 @@ def get_pairs(quote='USDT', market='SPOT'):
             right_quote = sym.get('quoteAsset') == quote
             right_market = market in sym.get('permissions')
             trading = sym.get('status') == 'TRADING'
-            if right_quote and right_market and trading:
+            allowed = sym.get('symbol') not in not_pairs
+            if right_quote and right_market and trading and allowed:
                 pairs.append(sym.get('symbol'))
     elif market == 'CROSS':
         pairs = []
