@@ -18,12 +18,13 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 
 def open_trade_stats(now, total_bal, v):
-    '''inputs are key and value from the open trades dictionary
-    returns current profit denominated in R and in %'''
+    '''takes an entry from the open trades dictionary, 
+    returns information about that position including 
+    current profit, size and direction'''
     
     pair = v[0].get('pair')
     
-    long = v[0].get('type')[-4] == 'long'
+    long = 'long' in v[0].get('type')
     
     if v[0].get('type')[:4] != 'open':
         print('Warning - {pair} record missing open trade')
@@ -120,7 +121,6 @@ def record_trades(session, agent, switch):
         print('filepath doesnt exist')
         filepath.touch()
     with open(filepath, "w") as file:
-        print(f'record {switch} trades')
         if switch == 'open':
             json.dump(agent.open_trades, file)
         if switch == 'sim':
@@ -182,7 +182,7 @@ def market_benchmark(session):
     if valid_pairs:
         valid = True
         if all_pairs / valid_pairs > 1.5:
-            print('warning (strat benchmark): lots of pairs ohlc data not up to date')
+            print('warning (market benchmark): lots of pairs ohlc data not up to date')
     else:
         valid = False
     
@@ -392,19 +392,20 @@ def realised_pnl(agent, trade_record, side):
     r_val = (entry - init_stop) / entry
     trade_pnl = (final_exit - entry) / entry
     trade_r = round(trade_pnl / r_val, 3)
+    scalar = final_size / init_size
+    realised_r = trade_r * scalar
+    print(f'realised pnl: {realised_r:.1f}R')
     
     if trade_record[-1].get('state') == 'real':
-        scalar = final_size / init_size
-        realised_r = trade_r * scalar
         if side == 'long':
             agent.realised_pnl_long += realised_r
         else:
             agent.realised_pnl_short += realised_r
     elif trade_record[-1].get('state') == 'sim':
         if side == 'long':
-            agent.sim_pnl_long += trade_r # realised sim pnl ignores trade size because it's often 0
+            agent.sim_pnl_long += realised_r
         else:
-            agent.sim_pnl_short += trade_r
+            agent.sim_pnl_short += realised_r
     else:
         print(f'state in record: {trade_record[-1].get("state")}')
         print(f'{trade_r = }')
@@ -673,7 +674,7 @@ def record_stopped_sim_trades(session, agent):
         if v[0].get('real'):
             continue
         
-        long_trade = True if v[0].get('type')[-4:] == 'long' else False
+        long_trade = True if 'long' in v[0].get('type') else False
         
         # calculate current base size
         base_size = 0
@@ -936,23 +937,27 @@ def calc_sizing_non_live_tp(agent, asset, tp_pct, switch):
     '''updates sizing dictionaries (real/sim) with with new open trade stats when 
     state is sim or real but not live and a take-profit is triggered'''
     tp_scalar = 1 - (100 / tp_pct)
-    qty = agent.real_pos.get(asset).get('qty') * tp_scalar
-    val = agent.real_pos.get(asset).get('value') * tp_scalar
-    pf = agent.real_pos.get(asset).get('pf%') * tp_scalar
-    or_R = agent.real_pos.get(asset).get('or_R') * tp_scalar
-    or_dol = agent.real_pos.get(asset).get('or_$') * tp_scalar
+    if switch == 'real':
+        pos_dict = agent.real_pos
+        entry = agent.in_pos['real_ep']
+        stop = agent.in_pos['real_hs']
+    elif switch == 'sim':
+        pos_dict = agent.sim_pos
+        entry = agent.in_pos['sim_ep']
+        stop = agent.in_pos['sim_hs']
     
-    entry = agent.in_pos['sim_ep']
-    stop = agent.in_pos['sim_hs']
+    qty = pos_dict.get(asset).get('qty') * tp_scalar
+    val = pos_dict.get(asset).get('value') * tp_scalar
+    pf = pos_dict.get(asset).get('pf%') * tp_scalar
+    or_R = pos_dict.get(asset).get('or_R') * tp_scalar
+    or_dol = pos_dict.get(asset).get('or_$') * tp_scalar
+    
     curr_price = funcs.get_price(asset+'USDT')
     r = (entry - stop) / entry
     pnl = (curr_price - entry) / entry
     pnl_r = pnl / r
     
-    if switch == 'real':
-        agent.real_pos[asset].update({'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol, 'pnl_R': pnl_r})
-    elif switch == 'sim':
-        agent.sim_pos[asset].update({'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol, 'pnl_R': pnl_r})
+    pos_dict[asset].update({'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol, 'pnl_R': pnl_r})
 
 
 
