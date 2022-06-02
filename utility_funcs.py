@@ -389,12 +389,12 @@ def realised_pnl(agent, trade_record, side):
     init_size = float(trade_record[0].get('base_size'))
     final_exit = float(trade_record[-1].get('exe_price'))
     final_size = float(trade_record[-1].get('base_size'))
-    r_val = (entry - init_stop) / entry
+    r_val = abs((entry - init_stop) / entry)
     trade_pnl = (final_exit - entry) / entry
     trade_r = round(trade_pnl / r_val, 3)
     scalar = final_size / init_size
     realised_r = trade_r * scalar
-    print(f'realised pnl: {realised_r:.1f}R')
+    print(f'\nrealised pnl: {realised_r:.1f}R\n')
     
     if trade_record[-1].get('state') == 'real':
         if side == 'long':
@@ -714,6 +714,7 @@ def record_stopped_sim_trades(session, agent):
             overshoot_pct = round((100 * (hh - stop) / stop), 3) # % distance that price broke through the stop
         
         if stopped:
+            print('stopped')
             # create trade dict
             trade_dict = {'timestamp': stop_time, 
                           'pair': pair, 
@@ -737,14 +738,16 @@ def record_stopped_sim_trades(session, agent):
             record_trades(session, agent, 'closed_sim')
             
             if long_trade:
+                print('running realised_pnl')
                 realised_pnl(agent, v, 'long')
                 agent.counts_dict['sim_stop_long'] += 1
             else:
+                print('running realised_pnl')
                 realised_pnl(agent, v, 'short')
                 agent.counts_dict['sim_stop_short'] += 1
             del_pairs.append(pair)
         
-    print(f"number of stopped trades: {agent.counts_dict['sim_stop_long'] +  agent.counts_dict['sim_stop_short']}")        
+    print(f"number of stopped sim trades: {agent.counts_dict['sim_stop_long'] +  agent.counts_dict['sim_stop_short']}")        
     
     for p in del_pairs:
         del agent.sim_trades[p]
