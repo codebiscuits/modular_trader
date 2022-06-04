@@ -115,7 +115,7 @@ for agent in agents:
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 
 for n, pair in enumerate(pairs):
-    
+    print('\n-\n')
     asset = pair[:-1*len(session.quote_asset)]
     for agent in agents:
         agent.init_in_pos(pair)    

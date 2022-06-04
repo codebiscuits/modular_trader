@@ -33,9 +33,9 @@ def open_trade_stats(now, total_bal, v):
     for i in v:
         if i['base_size'] in ['None', None]:
             i['base_size'] = 0
-        if i.get('type') in ['open_long', 'add_long', 'tp_short', 'close_short']:
+        if i.get('type') in ['open_long', 'open_short', 'add_long', 'add_short']:
             current_base_size += Decimal(i.get('base_size'))
-        elif i.get('type') in ['open_short', 'add_short', 'tp_long', 'close_long']:
+        elif i.get('type') in ['close_long', 'close_short', 'tp_long', 'tp_short']:
             current_base_size -= Decimal(i.get('base_size'))
     
     entry_price = float(v[0].get('exe_price'))
@@ -390,11 +390,17 @@ def realised_pnl(agent, trade_record, side):
     final_exit = float(trade_record[-1].get('exe_price'))
     final_size = float(trade_record[-1].get('base_size'))
     r_val = abs((entry - init_stop) / entry)
-    trade_pnl = (final_exit - entry) / entry
+    if side == 'long':
+        trade_pnl = (final_exit - entry) / entry
+    else:
+        trade_pnl = (entry - final_exit) / entry
     trade_r = round(trade_pnl / r_val, 3)
     scalar = final_size / init_size
     realised_r = trade_r * scalar
-    print(f'\nrealised pnl: {realised_r:.1f}R\n')
+    print(f'\nrealised pnl: {realised_r:.1f}R')
+    print(f'{entry = }, {init_stop = }, {final_exit = }')
+    print(f'{r_val = }, {trade_r = }, {scalar = }')
+    print(f'{init_size = }, {final_size = }\n')
     
     if trade_record[-1].get('state') == 'real':
         if side == 'long':
@@ -679,7 +685,7 @@ def record_stopped_sim_trades(session, agent):
         # calculate current base size
         base_size = 0
         for i in v:
-            if i.get('type') in ['open_long', 'add_long', 'tp_short']:
+            if i.get('type') in ['open_long', 'open_short', 'add_long', 'add_short']:
                 base_size += float(i.get('base_size'))
             else:
                 base_size -= float(i.get('base_size'))
@@ -738,11 +744,9 @@ def record_stopped_sim_trades(session, agent):
             record_trades(session, agent, 'closed_sim')
             
             if long_trade:
-                print('running realised_pnl')
                 realised_pnl(agent, v, 'long')
                 agent.counts_dict['sim_stop_long'] += 1
             else:
-                print('running realised_pnl')
                 realised_pnl(agent, v, 'short')
                 agent.counts_dict['sim_stop_short'] += 1
             del_pairs.append(pair)
