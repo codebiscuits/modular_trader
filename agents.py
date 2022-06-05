@@ -276,7 +276,7 @@ class DoubleST():
                 else:
                     pnls[i] = -1 # if there's no data yet, return -1 instead
             
-            score = 15
+            score = 0
             if pnls.get(1) > 0:
                 score += 5
             elif pnls.get(1) < 0:
@@ -303,7 +303,7 @@ class DoubleST():
         real_score = score_accum(direction, 'real')
         sim_score = score_accum(direction, 'sim')
         
-        if real_score:
+        if real_score > 0:
             score = real_score
         else:
             score = sim_score
@@ -319,15 +319,15 @@ class DoubleST():
         print('-')
         print(f'{direction} - {real_score = }, {sim_score = }, {bal_change_pct = }, {score = }')
         
-        if score == 30:
+        if score == 15:
             fr = min(fr_prev + (2*fr_inc), self.fr_max)
-        elif score >= 26:
+        elif score >= 11:
             fr = min(fr_prev + fr_inc, self.fr_max)
-        elif score >= 18:
+        elif score >= 3:
             fr = fr_prev
-        elif score >= 12:
+        elif score >= -3:
             fr = reduce_fr(0.333, fr_prev, fr_inc)
-        elif score >= 8:
+        elif score >= -7:
             fr = reduce_fr(0.5, fr_prev, fr_inc)
         else:
             fr = 0
