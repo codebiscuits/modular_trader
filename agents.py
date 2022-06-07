@@ -1,13 +1,20 @@
+from binance.client import Client
+import pandas as pd
 import indicators as ind
 import utility_funcs as uf
 from pathlib import Path
 import json
+import keys
 from json.decoder import JSONDecodeError
 from datetime import datetime
 from pushbullet import Pushbullet
 import statistics as stats
 from pprint import pprint
+from timers import Timer
+from decimal import Decimal
+import binance_funcs as funcs
 
+client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 class DoubleST():
@@ -24,6 +31,8 @@ class DoubleST():
     
     
     def __init__(self, session, timeframe, tf_offset, lookback, mult):
+        t = Timer('agent init')
+        t.start()
         self.live = session.live
         self.bal = session.bal
         self.fr_max = session.fr_max
@@ -31,6 +40,12 @@ class DoubleST():
         self.lb = lookback
         self.mult = mult
         self.market_data = self.mkt_data_path()
+        self.counts_dict = {'real_stop_long': 0, 'real_open_long': 0, 'real_add_long': 0, 'real_tp_long': 0, 'real_close_long': 0, 
+                           'sim_stop_long': 0, 'sim_open_long': 0, 'sim_add_long': 0, 'sim_tp_long': 0, 'sim_close_long': 0, 
+                           'real_stop_short': 0, 'real_open_short': 0, 'real_add_short': 0, 'real_tp_short': 0, 'real_close_short': 0, 
+                           'sim_stop_short': 0, 'sim_open_short': 0, 'sim_add_short': 0, 'sim_tp_short': 0, 'sim_close_short': 0, 
+                           'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 'too_much_or': 0, 
+                           'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0}
         if not self.live:
             self.sync_test_records()
         self.open_trades = self.read_open_trade_records('open')
@@ -39,6 +54,10 @@ class DoubleST():
         self.closed_trades = self.read_closed_trade_records()
         self.closed_sim_trades = self.read_closed_sim_trade_records()
         self.backup_trade_records()
+        if not self.live:
+            session.market_data = Path('/home/ross/Documents/backtester_2021/test_records')
+        self.record_stopped_trades(session)
+        self.record_stopped_sim_trades(session)
         self.real_pos = self.current_positions('open')
         self.sim_pos = self.current_positions('sim')
         self.tracked = self.current_positions('tracked')
@@ -49,17 +68,14 @@ class DoubleST():
         self.max_init_r_s = self.fixed_risk_s * self.total_r_limit
         self.fixed_risk_dol_l = self.fixed_risk_l * self.bal
         self.fixed_risk_dol_s = self.fixed_risk_s * self.bal
-        self.counts_dict = {'real_stop_long': 0, 'real_open_long': 0, 'real_add_long': 0, 'real_tp_long': 0, 'real_close_long': 0, 
-                           'sim_stop_long': 0, 'sim_open_long': 0, 'sim_add_long': 0, 'sim_tp_long': 0, 'sim_close_long': 0, 
-                           'real_stop_short': 0, 'real_open_short': 0, 'real_add_short': 0, 'real_tp_short': 0, 'real_close_short': 0, 
-                           'sim_stop_short': 0, 'sim_open_short': 0, 'sim_add_short': 0, 'sim_tp_short': 0, 'sim_close_short': 0, 
-                           'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 'too_much_or': 0, 
-                           'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0}
+        t.stop()
         
     def __str__(self):
         return self.name
     
     def sync_test_records(self):
+        q = Timer('sync_test_records')
+        q.start()
         folder = Path(f"{self.market_data}/{self.name}")
         test_folder = Path(f'/home/ross/Documents/backtester_2021/test_records/{self.name}')
         if not test_folder.exists():
@@ -85,6 +101,8 @@ class DoubleST():
                 file.writelines(book_data)
         
         def sync_trades_records(switch):
+            w = Timer(f'sync_trades_records-{switch}')
+            w.start()
             trades_path = Path(f'{self.market_data}/{self.name}/{switch}_trades.json')
             test_trades = Path(f'/home/ross/Documents/backtester_2021/test_records/{self.name}/{switch}_trades.json')
             if not test_trades.exists():
@@ -103,6 +121,7 @@ class DoubleST():
             else:
                 if self.live:
                     trades_path.touch()
+            w.stop()
         
         sync_trades_records('open')
         sync_trades_records('sim')
@@ -112,8 +131,11 @@ class DoubleST():
         
         # now that trade records have been loaded, path can be changed
         self.market_data = Path('/home/ross/Documents/backtester_2021/test_records')
+        q.stop()
 
     def mkt_data_path(self):
+        u = Timer('mkt_data_path in agent')
+        u.start()
         now = datetime.now().strftime('%d/%m/%y %H:%M')
         market_data = None
         poss_paths = [Path('/media/coding/market_data'), 
@@ -126,10 +148,12 @@ class DoubleST():
         if not market_data:
             note = 'none of the paths for market_data are available'
             print(note)
-        
+        u.stop()
         return market_data
     
     def read_open_trade_records(self, switch):
+        w = Timer(f'read_open_trade_records-{switch}')
+        w.start()
         ot_path = Path(f"{self.market_data}/{self.name}")
         if not ot_path.exists():
             ot_path.mkdir(parents=True)
@@ -148,10 +172,12 @@ class DoubleST():
             print(f'{ot_path} not found')
     
             
-        
+        w.stop()
         return open_trades
 
     def read_closed_trade_records(self):
+        e = Timer('read_closed_trade_records')
+        e.start()
         ct_path = Path(f"{self.market_data}/{self.name}/closed_trades.json")
         if Path(ct_path).exists():
             with open(ct_path, "r") as ct_file:
@@ -168,10 +194,12 @@ class DoubleST():
         else:
             closed_trades = {}
             print(f'{ct_path} not found')
-        
+        e.stop()
         return closed_trades
 
     def read_closed_sim_trade_records(self):
+        r = Timer('read_closed_sim_trade_records')
+        r.start()
         cs_path = Path(f"{self.market_data}/{self.name}/closed_sim_trades.json")
         if Path(cs_path).exists():
             with open(cs_path, "r") as cs_file:
@@ -183,10 +211,12 @@ class DoubleST():
         else:
             closed_sim_trades = {}
             print(f'{cs_path} not found')
-        
+        r.stop()
         return closed_sim_trades
 
     def backup_trade_records(self):
+        y = Timer('backup_trade_records')
+        y.start()
         now = datetime.now().strftime('%d/%m/%y %H:%M')
         if self.open_trades:
             with open(f"{self.market_data}/{self.name}/ot_backup.json", "w") as ot_file:
@@ -222,13 +252,272 @@ class DoubleST():
         # else:
         #     if self.live:
         #         pb.push_note(now, 'closed sim trades file empty')
+        y.stop()
     
     def calc_tor(self):
+        u = Timer('calc_tor')
+        u.start()
         self.or_list = [v.get('or_R') for v in self.real_pos.values() if v.get('or_R')]
         self.total_open_risk = sum(self.or_list)
         self.num_open_positions = len(self.or_list)
+        u.stop()
+    
+    def record_stopped_trades(self, session):
+        m = Timer('record_stopped_trades')
+        m.start()
+        # loop through agent.open_trades and call latest_stop_id(trade_record) to
+        # compile a list of order ids for each open trade's stop loss orders, then 
+        # check binance to find which don't have an active stop-loss
+        stop_ids = [uf.latest_stop_id(v) for v in self.open_trades.values()]
+        
+        open_orders = client.get_open_orders()
+        ids_remaining = [i.get('orderId') for i in open_orders]
+        symbols_remaining = [i.get('symbol') for i in open_orders]
+        
+        stopped = []
+        for pair, sid, time in stop_ids:
+            if sid:
+                if sid not in ids_remaining:
+                    stopped.append((pair, sid, time))
+                else:
+                    continue
+            elif pair not in symbols_remaining:
+                stopped.append((pair, sid, time))
+        
+        # print(f'number of stopped trades: {len(stopped)}')
+        
+        # for any that don't, assume that the stop was hit and check for exchange records
+        for pair, sid, time in stopped:
+            trade_record = self.open_trades.get(pair)
+            # order_list = client.get_all_orders(symbol=pair, orderId=sid, startTime=time-10000)
+            if sid == 'not live':
+                continue
+            order_list = client.get_all_margin_orders(symbol=pair, orderId=sid, startTime=time-10000)
+            
+            order = None
+            if order_list and sid:
+                for o in order_list[::-1]:
+                    if o.get('order_id') == sid and o.get('status') == 'FILLED':
+                        order = o
+                        break
+            elif order_list and not sid:
+                for o in order_list[::-1]:
+                    if o.get('type') == 'STOP_LOSS_LIMIT' and o.get('status') == 'FILLED':
+                        order = o
+                        break
+            else:
+                print(f'No orders on binance for {pair}')
+                
+            if order:
+                if (order.get('side') == 'BUY'):
+                    trade_type = 'stop_short'
+                    asset = pair[:-4]
+                    stop_size = Decimal(order.get('executedQty'))
+                    funcs.repay_asset_M(asset, stop_size, session.live)
+                else:
+                    trade_type = 'stop_long'
+                    stop_size = Decimal(order.get('cummulativeQuoteQty'))
+                    funcs.repay_asset_M('USDT', stop_size, session.live)
+                
+                
+                stop_dict = uf.create_stop_dict(order)
+                stop_dict['type'] = trade_type                
+                stop_dict['state'] = 'real'
+                stop_dict['reason'] = 'hit hard stop'
+                stop_dict['liability'] = uf.update_liability(trade_record, stop_size, 'reduce')
+                
+                trade_record.append(stop_dict)
+                
+                ts_id = trade_record[0].get('timestamp')
+                self.closed_trades[ts_id] = trade_record
+                self.record_trades(session, 'closed')
+                del self.open_trades[pair]
+                self.record_trades(session, 'open')
+                
+                if trade_type == 'stop_long':
+                    self.realised_pnl(trade_record, 'long')
+                    self.counts_dict['real_stop_long'] += 1
+                else:
+                    self.realised_pnl(trade_record, 'short')
+                    self.counts_dict['real_stop_short'] += 1
+                
+            else:
+                # check for a free balance matching the size. if there is, that means 
+                # the stop was never set in the first place and needs to be set
+                print(f'getting {pair[:-4]} free balance')
+                free_bal = float(client.get_asset_balance(pair[:-4]).get('free'))
+                print(f'getting {pair} price')
+                price = funcs.get_price(pair)
+                value = free_bal * price
+                if value > 10:
+                    note = f'{pair} in position with no stop-loss'
+                    pb.push_note(session.now_start, note)   
+        m.stop()
+    
+    def record_stopped_sim_trades(self, session):
+        n = Timer('record_stopped_sim_trades')
+        n.start()
+        '''goes through all trades in the sim_trades file and checks their recent 
+        price action against their most recent hard_stop to see if any of them would have 
+        got stopped out'''
+        
+        del_pairs = []
+        for pair, v in self.sim_trades.items():
+            # first filter out all trades which started out real
+            if v[0].get('real'):
+                continue
+            
+            long_trade = True if 'long' in v[0].get('type') else False
+            
+            x = Timer('calc base size and stop')
+            x.start()
+            # calculate current base size
+            base_size = 0
+            for i in v:
+                if i.get('type') in ['open_long', 'open_short', 'add_long', 'add_short']:
+                    base_size += float(i.get('base_size'))
+                else:
+                    base_size -= float(i.get('base_size'))
+            
+            # find most recent hard stop
+            for i in v[-1::-1]:
+                if i.get('hard_stop'):
+                    stop = float(i.get('hard_stop'))
+                    stop_time = i.get('timestamp')
+                    break
+            x.stop()    
+            # check lowest low since stop was set
+            z = Timer('get_historical_klines')
+            z.start()
+            df = pd.read_pickle(f'{session.ohlc_data}/{pair}.pkl')
+            z.stop()
+            stop_dt = datetime.fromtimestamp(stop_time/1000)
+            df = df.loc[df.timestamp > stop_dt]
+            
+            if df.empty:
+                z = Timer('get_historical_klines')
+                z.start()
+                klines = client.get_historical_klines(pair, Client.KLINE_INTERVAL_1HOUR, stop_time)
+                cols = ['timestamp', 'open', 'high', 'low', 'close', 'base vol', 'close time',
+                        'volume', 'num trades', 'taker buy base vol', 'taker buy quote vol', 'ignore']
+                df = pd.DataFrame(klines, columns=cols)
+                df['timestamp'] = df['timestamp'] * 1000000
+                df = df.astype(float)
+                df['timestamp'] = pd.to_datetime(df['timestamp'])
+                z.stop()
+            
+            print(df.head(3))
+            
+            if long_trade:
+                trade_type = 'stop_long'
+                ll = df.low.min()
+                # stop_time = find timestamp of that lowest low candle
+                stopped = ll < stop
+                overshoot_pct = round((100 * (stop - ll) / stop), 3) # % distance that price broke through the stop
+            else:
+                trade_type = 'stop_short'
+                hh = df.high.max()
+                # stop_time = find timestamp of that highest high candle
+                stopped = hh > stop
+                overshoot_pct = round((100 * (hh - stop) / stop), 3) # % distance that price broke through the stop
+            
+            if stopped:
+                # create trade dict
+                trade_dict = {'timestamp': stop_time, 
+                              'pair': pair, 
+                              'type': trade_type, 
+                              'exe_price': str(stop), 
+                              'base_size': str(base_size), 
+                              'quote_size': str(round(base_size * stop, 2)), 
+                              'fee': 0, 
+                              'fee_currency': 'BNB', 
+                              'reason': 'hit hard stop', 
+                              'state': 'sim', 
+                              'overshoot': overshoot_pct
+                              }
+                note = f"*sim* stopped out {pair} @ {stop}"
+                print(session.now_start, note)
+                
+                v.append(trade_dict)
+                
+                ts_id = v[0].get('timestamp')
+                self.closed_sim_trades[ts_id] = v
+                self.record_trades(session, 'closed_sim')
+                
+                if long_trade:
+                    self.realised_pnl(v, 'long')
+                    self.counts_dict['sim_stop_long'] += 1
+                else:
+                    self.realised_pnl(v, 'short')
+                    self.counts_dict['sim_stop_short'] += 1
+                del_pairs.append(pair)
+            
+        # print(f"number of stopped sim trades: {self.counts_dict['sim_stop_long'] +  self.counts_dict['sim_stop_short']}")        
+        
+        for p in del_pairs:
+            del self.sim_trades[p]
+        n.stop()
+    
+    
+    def realised_pnl(self, trade_record, side):
+        i = Timer(f'realised_pnl {side}')
+        i.start()
+        entry = float(trade_record[0].get('exe_price'))
+        init_stop = float(trade_record[0].get('hard_stop'))
+        init_size = float(trade_record[0].get('base_size'))
+        final_exit = float(trade_record[-1].get('exe_price'))
+        final_size = float(trade_record[-1].get('base_size'))
+        r_val = abs((entry - init_stop) / entry)
+        if side == 'long':
+            trade_pnl = (final_exit - entry) / entry
+        else:
+            trade_pnl = (entry - final_exit) / entry
+        trade_r = round(trade_pnl / r_val, 3)
+        scalar = final_size / init_size
+        realised_r = trade_r * scalar
+        # print(f'\nrealised pnl: {realised_r:.1f}R')
+        # print(f'{entry = }, {init_stop = }, {final_exit = }')
+        # print(f'{r_val = }, {trade_r = }, {scalar = }')
+        # print(f'{init_size = }, {final_size = }\n')
+        
+        if trade_record[-1].get('state') == 'real':
+            if side == 'long':
+                self.realised_pnl_long += realised_r
+            else:
+                self.realised_pnl_short += realised_r
+        elif trade_record[-1].get('state') == 'sim':
+            if side == 'long':
+                self.sim_pnl_long += realised_r
+            else:
+                self.sim_pnl_short += realised_r
+        else:
+            print(f'state in record: {trade_record[-1].get("state")}')
+            print(f'{trade_r = }')
+        i.stop()
+    
+    def record_trades(self, session, switch):
+        b = Timer(f'record_trades {switch}')
+        b.start()
+        filepath = Path(f"{session.market_data}/{self.name}/{switch}_trades.json")
+        if not filepath.exists():
+            print('filepath doesnt exist')
+            filepath.touch()
+        with open(filepath, "w") as file:
+            if switch == 'open':
+                json.dump(self.open_trades, file)
+            if switch == 'sim':
+                json.dump(self.sim_trades, file)
+            if switch == 'tracked':
+                json.dump(self.tracked_trades, file)
+            if switch == 'closed':
+                json.dump(self.closed_trades, file)
+            if switch == 'closed_sim':
+                json.dump(self.closed_sim_trades, file)
+        b.stop()
     
     def set_fixed_risk(self, direction:str):
+        o = Timer(f'set_fixed_risk-{direction}')
+        o.start()
         '''calculates fixed risk setting for new trades based on recent performance 
         and previous setting. if recent performance is very good, fr is increased slightly.
         if not, fr is decreased by thirds'''
@@ -334,10 +623,12 @@ class DoubleST():
         if fr != fr_prev:
             note = f'fixed risk adjusted from {round(fr_prev*10000, 1)}bps to {round(fr*10000, 1)}bps'
             pb.push_note(now, note)
-        
+        o.stop()
         return round(fr, 5)
     
     def set_max_pos(self):
+        p = Timer('set_max_pos')
+        p.start()
         max_pos = 20
         if self.real_pos:
             open_pnls = [v.get('pnl') for v in self.real_pos.values() if v.get('pnl')]
@@ -346,10 +637,12 @@ class DoubleST():
             else:
                 avg_open_pnl = 0
             max_pos = 20 if avg_open_pnl <= 0 else 50
-        
+        p.stop()
         return max_pos
     
     def current_positions(self, switch:str):
+        a = Timer(f'current_positions-{switch}')
+        a.start()
         '''creates a dictionary of open positions by checking either 
         open_trades.json, sim_trades.json or tracked_trades.json'''
             
@@ -378,10 +671,12 @@ class DoubleST():
             else:
                 asset = k[:-4]
                 size_dict[asset] = uf.open_trade_stats(now, total_bal, v)
-        
+        a.stop()
         return size_dict# -*- coding: utf-8 -*-
 
     def calc_pos_fr_dol(self, trade_record, direction, switch):   
+        s = Timer(f'calc_pos_fr_dol {direction} {switch}')
+        s.start()
         if self.in_pos[switch] and trade_record and trade_record[0].get('type')[0] == 'o':
             qs = float(trade_record[0].get('quote_size'))
             ep = float(trade_record[0].get('exe_price'))
@@ -395,8 +690,11 @@ class DoubleST():
         self.in_pos[f'{switch}_pfrd'] = pos_fr_dol
         self.in_pos[f'{switch}_ep'] = ep
         self.in_pos[f'{switch}_hs'] = hs
+        s.stop()
 
     def set_in_pos(self, pair, switch):
+        d = Timer(f'set_in_pos {switch}')
+        d.start()
         asset = pair[:-4]
         if switch == 'real':
             pos_dict = self.real_pos.keys()
@@ -417,8 +715,11 @@ class DoubleST():
                 self.in_pos[switch] = 'short'
                 # calculate dollar denominated fixed-risk per position
                 self.calc_pos_fr_dol(trade_record, 'short', switch)
+        d.stop()
 
     def init_in_pos(self, pair):
+        f = Timer(f'init_in_pos')
+        f.start()
         self.in_pos = {'real':None, 'sim':None, 'tracked':None, 
                   'real_ep': None, 'sim_ep': None, 'tracked_ep': None, 
                   'real_hs': None, 'sim_hs': None, 'tracked_hs': None, 
@@ -427,17 +728,23 @@ class DoubleST():
         self.set_in_pos(pair, 'real')
         self.set_in_pos(pair, 'sim')
         self.set_in_pos(pair, 'tracked')
+        f.stop()
     
     def too_new(self, df):
+        g = Timer('too_new')
+        g.start()
         '''returns True if there is less than 200 hours of history AND if
         there are no current positions in the asset'''
         if self.in_pos['real'] or self.in_pos['sim'] or self.in_pos['tracked']:
             no_pos = False
         else:
             no_pos = True    
+        
         return len(df) <= 200 and no_pos
 
     def open_pnl(self, switch):
+        h = Timer(f'open_pnl {switch}')
+        h.start()
         total = 0
         if switch == 'real':
             pos_dict = self.real_pos.values()
@@ -448,10 +755,12 @@ class DoubleST():
                     total += pos['pnl_R']
         else:
             print('open_pnl requires argument real or sim')
-        
+        h.stop()
         return total
     
     def tp_signals(self, asset):
+        j = Timer('tp_signals')
+        j.start()
         if self.real_pos.get(asset):
             real_or = self.real_pos.get(asset).get('or_R')
             self.in_pos['real_tp_sig'] = ((real_or > self.indiv_r_limit) and 
@@ -460,6 +769,7 @@ class DoubleST():
             sim_or = self.sim_pos.get(asset).get('or_R')
             self.in_pos['sim_tp_sig'] = ((sim_or > self.indiv_r_limit) and 
                                          (abs(self.in_pos.get('sim_price_delta', 0)) > 0.001))
+        j.stop()
     
     def spot_signals(self, session, df):
         
@@ -494,6 +804,8 @@ class DoubleST():
         return {'signal': signal, 'inval': inval}
     
     def margin_signals(self, session, df, pair):
+        k = Timer(f'margin_signals')
+        k.start()
         
         if 'ema200' not in df.columns:
             df['ema200'] = df.close.ewm(200).mean()
@@ -533,7 +845,7 @@ class DoubleST():
             inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
         else:
             inval = 100000
-        
+        k.stop()
         return {'signal': signal, 'inval': inval}
 
 

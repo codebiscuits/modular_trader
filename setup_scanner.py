@@ -17,6 +17,7 @@ import utility_funcs as uf
 from random import shuffle
 import sessions
 from pathlib import Path
+from timers import Timer
 # import argparse
 
 # setup
@@ -62,8 +63,6 @@ dst_presets = {1: ('4h', 0, 1, 1.0),
            }
 
 
-
-
 # session = strats.RSI_ST_EMA(4, 45, 96)
 session = sessions.MARGIN_SESSION()
 agent_1 = DoubleST(session, *dst_presets[3])
@@ -73,16 +72,16 @@ agents = [agent_1, agent_2, agent_3]
 session.name = '-'.join([n.name for n in agents])
 
 # now that trade records have been loaded, path can be changed
-if not session.live:
-    session.market_data = Path('/home/ross/Documents/backtester_2021/test_records')
+# if not session.live:
+#     session.market_data = Path('/home/ross/Documents/backtester_2021/test_records')
 
 # update trade records --------------------------------------------------------
-for agent in agents:
-    uf.record_stopped_trades(session, agent)
-    uf.record_stopped_sim_trades(session, agent)
-    agent.real_pos = agent.current_positions('open')
-    agent.sim_pos = agent.current_positions('sim')
-    agent.tracked = agent.current_positions('tracked')
+# for agent in agents:
+#     uf.record_stopped_trades(session, agent)
+#     uf.record_stopped_sim_trades(session, agent)
+#     agent.real_pos = agent.current_positions('open')
+#     agent.sim_pos = agent.current_positions('sim')
+#     agent.tracked = agent.current_positions('tracked')
 
 # compile and sort list of pairs to loop through ------------------------------
 all_pairs = funcs.get_pairs(market='CROSS')
@@ -94,6 +93,8 @@ for agent in agents:
 pairs_in_pos = [p + 'USDT' for p in positions if p != 'USDT']
 other_pairs = [p for p in all_pairs if (not p in pairs_in_pos) and (not p in not_pairs)]
 pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked first
+
+# pairs = pairs[:10] ############# delete when testing is finished #############
 
 print(f"Current time: {session.now_start}, {session.name}")
 for agent in agents:
@@ -376,6 +377,11 @@ for agent in agents:
         print('-')
     print('-:-' * 20)
 
+for k, v in Timer.timers.items():
+    if v > 1:
+        print(k, round(v))
+
 end = time.perf_counter()
 elapsed = round(end - all_start)
 print(f'Total time taken: {elapsed//60}m, {elapsed%60}s')
+

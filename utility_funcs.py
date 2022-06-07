@@ -115,7 +115,7 @@ def max_init_risk(n, target_risk):
         
     return round(output, 2)
 
-def record_trades(session, agent, switch):
+def record_trades_old(session, agent, switch):
     filepath = Path(f"{session.market_data}/{agent.name}/{switch}_trades.json")
     if not filepath.exists():
         print('filepath doesnt exist')
@@ -383,7 +383,7 @@ def find_bad_keys(c_data):
     
     return bad_keys
 
-def realised_pnl(agent, trade_record, side):
+def realised_pnl_old(agent, trade_record, side):
     entry = float(trade_record[0].get('exe_price'))
     init_stop = float(trade_record[0].get('hard_stop'))
     init_size = float(trade_record[0].get('base_size'))
@@ -491,7 +491,7 @@ def create_stop_dict(order):
     
     return trade_dict
 
-def record_stopped_trades(session, agent):
+def record_stopped_trades_old(session, agent):
     # loop through agent.open_trades and call latest_stop_id(trade_record) to
     # compile a list of order ids for each open trade's stop loss orders, then 
     # check binance to find which don't have an active stop-loss
@@ -580,97 +580,7 @@ def record_stopped_trades(session, agent):
                 note = f'{pair} in position with no stop-loss'
                 pb.push_note(session.now_start, note)
 
-def record_stopped_trades_old(pairs_in_pos, session, agent):
-    print('running record_stopped_trades')
-    # create list of trade records which don't match current positions
-    open_trades_list = list(session.open_trades.keys())
-    stopped_trades = [st for st in open_trades_list if st not in pairs_in_pos] # these positions must have been stopped out
-    
-    print(open_trades_list)
-    print(stopped_trades)
-    
-    # look for stopped out positions and complete trade records
-    for i in stopped_trades:
-        print(i)
-        trade_record = session.open_trades.get(i)
-        
-        # work out how much base size has been bought vs sold
-        init_base = 0
-        add_base = 0
-        tp_base = 0
-        close_base = 0
-        for x in trade_record:
-            if x.get('type')[:4] == 'open':
-                init_base = float(x.get('base_size'))
-            elif x.get('type')[:3] == 'add':
-                add_base += float(x.get('base_size'))
-            elif x.get('type')[:2] == 'tp':
-                tp_base += float(x.get('base_size'))
-            elif x.get('type')[:5] in ['close', 'stop_']:
-                close_base = float(x.get('base_size'))
-        
-        diff = (init_base + add_base) - (tp_base + close_base)        
-        
-        close_is_buy = trade_record[0].get('type') == 'open_short'
-        trades = client.get_my_trades(symbol=i)
-        
-        last_time = trades[-1].get('time')
-        
-        # aggregate trade stats
-        base_size_count = 0
-        agg_price = []
-        agg_base = []
-        agg_quote = []
-        agg_fee = []
-        for t in trades[::-1]:
-            # if t.get('isBuyer') == close_is_buy:
-            if abs((base_size_count / diff) - 1) > 0.03:
-                agg_price.append(float(t.get('price')))
-                agg_base.append(float(t.get('qty')))
-                agg_quote.append(float(t.get('quoteQty')))
-                agg_fee.append(float(t.get('commission')))
-                base_size_count += float(t.get('qty'))
-            else:
-                # print(f'trade record completed, {round(abs((base_size_count / diff) - 1), 3)} of diff unaccounted for')
-                break
-        avg_exe_price = sum([p*b for p,b in zip(agg_price, agg_base)]) / sum(agg_base)
-        tot_base = sum(agg_base)
-        tot_quote = sum(agg_quote)
-        tot_fee = sum(agg_fee)
-        trade_type = 'stop_short' if close_is_buy else 'stop_long'
-        
-        # create dict
-        trade_dict = {'timestamp': last_time, 
-                      'pair': t.get('symbol'), 
-                      'type': trade_type, 
-                      'exe_price': avg_exe_price, 
-                      'base_size': tot_base, 
-                      'quote_size': tot_quote, 
-                      'fee': tot_fee, 
-                      'fee_currency': t.get('commissionAsset'), 
-                      'reason': 'hit hard stop', 
-                      'state': 'real', 
-                      }
-        note = f"stopped out {t.get('symbol')} @ {t.get('price')}"
-        print(session.now_start, note)
-        # push = pb.push_note(session.now_start, note)
-        trade_record.append(trade_dict)
-        
-        if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
-            trade_id = trade_record[0].get('timestamp')
-            session.closed_trades[trade_id] = trade_record
-        else:
-            session.closed_trades[session.next_id] = trade_record
-            print(f'warning, trade record for {t.get("symbol")} missing trade open')
-        record_trades(session, agent, 'closed')
-        session.counts_dict['real_stop'] += 1
-        session.next_id += 1
-        if session.open_trades[i]:
-            del session.open_trades[i]
-            record_trades(session, agent, 'open')
-        realised_pnl(session, trade_record)
-
-def record_stopped_sim_trades(session, agent):
+def record_stopped_sim_trades_old(session, agent):
     '''goes through all trades in the sim_trades file and checks their recent 
     price action against their most recent hard_stop to see if any of them would have 
     got stopped out'''
