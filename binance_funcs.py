@@ -11,6 +11,7 @@ from config import ohlc_data, not_pairs
 from pathlib import Path
 from datetime import datetime
 import utility_funcs as uf
+from timers import Timer
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
@@ -19,13 +20,17 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 #-#-#- Utility Functions
 
 def step_round(x, step):
+    gv = Timer('step_round')
+    gv.start()
     x = Decimal(x)
     step = Decimal(step)
-
+    gv.stop()
     return math.floor(x / step) * step
 
 
 def resample(df, timeframe):
+    hb = Timer('resample')
+    hb.start()
     df = df.resample(timeframe, on='timestamp').agg({'open': 'first',
                                                      'high': 'max',
                                                      'low': 'min',
@@ -33,6 +38,7 @@ def resample(df, timeframe):
                                                      'volume': 'sum'})
     df.reset_index(inplace=True)  # don't use drop=True because i want the
     # timestamp index back as a column
+    hb.stop()
     return df
 
 
@@ -75,25 +81,15 @@ def order_by_volsm(pairs, lookback):
 
 
 def get_size(agent, price, balance, risk):
+    jn = Timer('get_size')
+    jn.start()
     usdt_size_l = balance * agent.fixed_risk_l / risk
     asset_size_l = float(usdt_size_l / price)
 
     usdt_size_s = balance * agent.fixed_risk_s / risk
     asset_size_s = float(usdt_size_s / price)
-    
+    jn.stop()
     return asset_size_l, usdt_size_l, asset_size_s, usdt_size_s
-
-def get_size_old(price, fr, balance, risk):
-    if fr:
-        trade_risk = risk / fr
-        usdt_size = float(balance / trade_risk)
-    else:
-        trade_risk = 0
-        usdt_size = 0
-    
-    asset_quantity = float(usdt_size / price)
-
-    return asset_quantity, usdt_size
 
 
 def calc_stop(st, spread,  price, min_risk=0.01):
@@ -112,8 +108,11 @@ def calc_stop(st, spread,  price, min_risk=0.01):
 
 
 def calc_fee_bnb(usdt_size, fee_rate=0.00075):
+    jm = Timer('calc_fee_bnb')
+    jm.start()
     bnb_price = get_price('BNBUSDT')
     fee_usdt = float(usdt_size) * fee_rate
+    jm.stop()
     return fee_usdt / bnb_price
 
 
@@ -193,29 +192,9 @@ def update_pos(session, asset, base_bal, inval, pos_fr_dol):
     a given asset and returns it in R and $ denominations'''
 
     pair = asset + 'USDT'
-    price = get_price(pair)
+    price = session.prices[pair]
     value = price * float(base_bal)
     pct = round(100 * value / session.bal, 5)
-    open_risk = value - (value / inval)
-    if pos_fr_dol:
-        open_risk_r = open_risk / pos_fr_dol
-    else:
-        open_risk_r = 0
-
-    return {'qty': base_bal, 'value': value, 'pf%': pct, 'or_R': open_risk_r, 'or_$': open_risk}
-
-
-def update_pos_old(asset, total_bal, inval, pos_fr_dol):
-    '''checks for the current balance of a particular asset and returns it in 
-    the correct format for the sizing dict. also calculates the open risk for 
-    a given asset and returns it in R and $ denominations'''
-
-    pair = asset + 'USDT'
-    price = get_price(pair)
-    bal = client.get_asset_balance(asset=asset)
-    base_bal = float(bal.get('free')) + float(bal.get('locked'))
-    value = price * base_bal
-    pct = round(100 * value / total_bal, 5)
     open_risk = value - (value / inval)
     if pos_fr_dol:
         open_risk_r = open_risk / pos_fr_dol
@@ -239,20 +218,26 @@ def update_usdt(total_bal):
 
 
 def get_price(pair):
-    return float(client.get_ticker(symbol=pair).get('lastPrice'))
+    hn = Timer('get_price')
+    hn.start()
+    price = float(client.get_ticker(symbol=pair).get('lastPrice'))
+    hn.stop()    
+    return price
 
 
 def get_mid_price(pair):
+    gb = Timer('get_mid_price')
+    gb.start()
     '''returns the midpoint between first bid and ask price on the orderbook 
     for the pair in question'''
     t = client.get_orderbook_ticker(symbol=pair)
     bid = float(t.get('bidPrice'))
     ask = float(t.get('askPrice'))
-
+    gb.stop()
     return (bid + ask) / 2
 
 
-def get_spread(pair):  # possibly unused
+def get_spread_old(pair):  # possibly unused
     '''returns the proportional distance between the first bid and ask for the 
     pair in question'''
 
@@ -277,16 +262,19 @@ def get_spread(pair):  # possibly unused
         return 'na'
 
 
-def get_depth(pair, max_slip=1):
+def get_depth(session, pair):
+    max_slip = session.max_spread
+    fv = Timer('get_depth')
+    fv.start()
     '''returns the quantity (in the quote currency) that could be bought/sold 
     within the % range of price set by the max_slip param'''
 
-    price = get_price(pair)
+    price = session.prices[pair]
     book = client.get_order_book(symbol=pair)
 
-    price = float(book.get('bids')[0][0])
+    bid_price = float(book.get('bids')[0][0])
     # max_price is x% above price
-    max_price = price * (1 + (max_slip / 100))
+    max_price = bid_price * (1 + (max_slip / 100))
     depth_l = 0
     for i in book.get('asks'):
         if float(i[0]) <= max_price:
@@ -294,9 +282,9 @@ def get_depth(pair, max_slip=1):
         else:
             break
 
-    price = float(book.get('asks')[0][0])
-    # max_price is x% above price
-    min_price = price * (1 - (max_slip / 100))
+    ask_price = float(book.get('asks')[0][0])
+    # min_price is x% below price
+    min_price = ask_price * (1 - (max_slip / 100))
     depth_s = 0
     for i in book.get('bids'):
         if float(i[0]) >= min_price:
@@ -306,46 +294,13 @@ def get_depth(pair, max_slip=1):
     
     usdt_depth_l = depth_l * price
     usdt_depth_s = depth_s * price
-
+    fv.stop()
     return usdt_depth_l, usdt_depth_s
 
 
-def get_depth_old(pair, side, max_slip=1):
-    '''returns the quantity (in the quote currency) that could be bought/sold 
-    within the % range of price set by the max_slip param'''
-
-    price = get_price(pair)
-    book = client.get_order_book(symbol=pair)
-
-    if side == 'buy':
-        price = float(book.get('bids')[0][0])
-        # max_price is x% above price
-        max_price = price * (1 + (max_slip / 100))
-        depth = 0
-        for i in book.get('asks'):
-            if float(i[0]) <= max_price:
-                depth += float(i[1])
-            else:
-                break
-    elif side == 'sell':
-        price = float(book.get('asks')[0][0])
-        # max_price is x% above price
-        min_price = price * (1 - (max_slip / 100))
-        depth = 0
-        for i in book.get('bids'):
-            if float(i[0]) >= min_price:
-                depth += float(i[1])
-            else:
-                break
-    else:
-        print('side param must be either buy or sell')
-
-    usdt_depth = depth * price
-
-    return usdt_depth
-
-
 def get_book_stats(pair, quote, width=2):
+    dc = Timer('get_book_stats')
+    dc.start()
     '''returns a dictionary containing the base asset, the quote asset, 
     the spread, and the bid and ask depth within the % range of price set 
     by the width param in base and quote denominations'''
@@ -381,11 +336,13 @@ def get_book_stats(pair, quote, width=2):
     stats = {'base': base, 'quote': quote, 'spread': spread,
              'base_bids': bid_depth, 'base_asks': ask_depth,
              'quote_bids': q_bid_depth, 'quote_asks': q_ask_depth}
-
+    dc.stop()
     return stats
 
 
 def binance_spreads(quote='USDT'):
+    sx = Timer('binance_spreads')
+    sx.start()
     '''returns a dictionary with pairs as keys and current average spread as values'''
 
     length = len(quote)
@@ -433,11 +390,13 @@ def binance_spreads(quote='USDT'):
 
     for k in s_1:
         avg_spreads[k] = stats.median([s_1.get(k), s_2.get(k), s_3.get(k)])
-
+    sx.stop()
     return avg_spreads
 
 
 def binance_depths(quotes=['USDT', 'BTC']):
+    az = Timer('binance_depths')
+    az.start()
     avg_depths = {}
 
     for quote in quotes:
@@ -482,11 +441,13 @@ def binance_depths(quotes=['USDT', 'BTC']):
         for k in bd_1:
             avg_depths[k] = {'asks': stats.median([bd_1.get(k), bd_2.get(k), bd_3.get(k)]),
                              'bids': stats.median([sd_1.get(k), sd_2.get(k), sd_3.get(k)])}
-
+    az.stop()
     return avg_depths
 
 
 def get_pairs(quote='USDT', market='SPOT'):
+    sa = Timer('get_pairs')
+    sa.start()
     '''possible values for quote are USDT, BTC, BNB etc. possible values for 
     market are SPOT or CROSS'''
     if market == 'SPOT':
@@ -506,7 +467,7 @@ def get_pairs(quote='USDT', market='SPOT'):
         for i in info:
             if i.get('quote') == quote:
                 pairs.append(i.get('symbol'))
-
+    sa.stop()
     return pairs
 
 
@@ -570,6 +531,8 @@ def update_ohlc(pair, timeframe, old_df):
 
 
 def prepare_ohlc(pair, is_live, timeframe='4H', bars=2190):
+    ds = Timer('prepare_ohlc')
+    ds.start()
     '''checks if there is old data already, if so it loads the old data and 
     downloads an update, if not it downloads all data from scratch, then 
     resamples all data to desired timeframe'''
@@ -616,7 +579,7 @@ def prepare_ohlc(pair, is_live, timeframe='4H', bars=2190):
         df = df.tail(bars)
     # drop=False because we want to keep the timestamp column
     df.reset_index(inplace=True)
-
+    ds.stop()
     return df
 
 
@@ -659,6 +622,8 @@ def top_up_bnb(usdt_size):
 
 
 def create_trade_dict(order, price, live):
+    fd = Timer('create_trade_dict')
+    fd.start()
     '''collects and returns the details of the order in a dictionary'''
     pair = order.get('symbol')
     if live:
@@ -696,23 +661,27 @@ def create_trade_dict(order, price, live):
                       "fee": '0',
                       "fee_currency": "BNB"
                       }
-    
+    fd.stop()
     return trade_dict
 
 
 def valid_size(pair, size):
+    gf = Timer('valid_size')
+    gf.start()
     '''rounds the desired order size to the correct step size for binance'''
     info = client.get_symbol_info(pair)
     step_size = Decimal(info.get('filters')[2].get('stepSize'))
-    
+    gf.stop()
     return step_round(size, step_size)
 
 
 def valid_price(pair, price):
+    hg = Timer('valid_price')
+    hg.start()
     '''rounds the desired order price to the correct step size for binance'''
     info = client.get_symbol_info(pair)
     step_size = Decimal(info.get('filters')[0].get('tickSize'))
-    
+    hg.stop()
     return str(step_round(price, step_size))
 
 
@@ -736,7 +705,7 @@ def buy_asset(pair, usdt_size, live):
                                     quantity=order_size)
         
     else:
-        order = {'symbol': pair, 'timestamp': timestamp, 'price': get_price(pair), 
+        order = {'symbol': pair, 'timestamp': timestamp, 'price': usdt_price, 
                  'base_size': order_size, 'quote_size': usdt_size}
     
     return order
@@ -768,39 +737,6 @@ def sell_asset(pair, asset_bal, live, pct=100):
     return order
 
 
-def sell_asset_old(pair, live, pct=100):
-    # print(f'selling {pair}')
-    asset = pair[:-4]
-    usdt_price = get_price(pair)
-
-    # request asset balance from binance
-    bal = client.get_asset_balance(asset=asset)
-    if asset == 'BNB':
-        reserve = 10 / usdt_price  # amount of bnb to reserve ($10 worth)
-        asset_bal = Decimal(bal.get('free')) - reserve  # always keep $10 of bnb
-    else:
-        asset_bal = Decimal(bal.get('free'))
-
-    # make sure order size has the right number of decimal places
-    trade_size = asset_bal * Decimal(pct / 100)
-    order_size = valid_size(pair, trade_size)
-    if not order_size:
-        order_size = 0
-    # print(f'{pair} Sell Order - raw size: {asset_bal:.5}, step size: {step_size:.2}, final size: {order_size:.5}')
-
-    if live:
-        order = client.create_order(symbol=pair,
-                                    side=be.SIDE_SELL,
-                                    type=be.ORDER_TYPE_MARKET,
-                                    quantity=order_size)
-        
-    else:
-        order = {'symbol': pair, 'price': usdt_price, 
-                 'base_size': order_size, 'quote_size': (order_size*Decimal(usdt_price))}
-        
-    return order
-
-
 def set_stop(pair, base_size, price, live):
     # print(f'setting {pair} stop @ {price}')
     asset = pair[:-4]
@@ -812,50 +748,6 @@ def set_stop(pair, base_size, price, live):
     reserve = 10 / price  # amount of BNB that would be worth $10 at stop price
 
     order_size = step_round(base_size, step_size)  # - step_size
-    spread = get_spread(pair)
-    lower_price = price * (1 - (spread * 30))
-    trigger_price = step_round(price, tick_size)
-    limit_price = step_round(lower_price, tick_size)
-    # print(f'{pair} Stop Order - trigger: {trigger_price:.5}, limit: {limit_price:.5}, size: {order_size:.5}')
-
-    if live:
-        order = client.create_order(symbol=pair,
-                                    side=be.SIDE_SELL,
-                                    type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
-                                    timeInForce=be.TIME_IN_FORCE_GTC,
-                                    stopPrice=trigger_price,
-                                    quantity=order_size,
-                                    price=limit_price)
-    else:
-        order = {"pair": pair, 
-                "trig_price": Decimal(trigger_price),
-                "base_size": Decimal(order_size),
-                "quote_size": Decimal(order_size) * Decimal(trigger_price),
-                "fee": 0,
-                "fee_currency": "BNB"
-                }
-
-    # print('-')
-    return order
-
-
-def set_stop_old(pair, price, live):
-    # print(f'setting {pair} stop @ {price}')
-    asset = pair[:-4]
-
-    info = client.get_symbol_info(pair)
-    tick_size = info.get('filters')[0].get('tickSize')
-    step_size = Decimal(info.get('filters')[2].get('stepSize'))
-
-    reserve = 10 / price  # amount of BNB that would be worth $10 at stop price
-
-    bal = client.get_asset_balance(asset=asset)
-    if asset == 'BNB':
-        asset_bal = Decimal(bal.get('free')) - reserve  # always keep $10 of bnb
-    else:
-        asset_bal = Decimal(bal.get('free'))
-
-    order_size = step_round(asset_bal, step_size)  # - step_size
     spread = get_spread(pair)
     lower_price = price * (1 - (spread * 30))
     trigger_price = step_round(price, tick_size)
@@ -905,50 +797,36 @@ def clear_stop(pair, trade_record, live):
             result = client.cancel_order(symbol=pair, orderId=stop_id)
 
 
-def clear_stop_old(pair, live):
-    '''blindly cancels the first resting order relating to the pair in question.
-    works as a "clear stop" function only when the strategy sets one 
-    stop-loss per position and uses no other resting orders'''
-
-    # sanity check
-    bal = client.get_asset_balance(asset=pair[:-4])
-    if Decimal(bal.get('locked')) == 0:
-        print('no stop to cancel')
-    else:
-        # print(f'cancelling {pair} stop')
-        orders = client.get_open_orders(symbol=pair)
-        if live:
-            if orders:
-                ord_id = orders[0].get('orderId')
-                result = client.cancel_order(symbol=pair, orderId=ord_id)
-                # print(result.get('status'))
-            else:
-                print('no stop to cancel')
-
-
 #-#-#- Margin Account Functions
 
 
-def account_bal_M():
+def account_bal_M_old():
+    jh = Timer('account_bal_M')
+    jh.start()
     info = client.get_margin_account()
     total_net = float(info.get('totalNetAssetOfBtc'))
     btc_price = get_price('BTCUSDT')
     usdt_total_net = total_net * btc_price
-    
+    jh.stop()
     return round(usdt_total_net, 2)
 
 
 def free_usdt_M():
+    kj = Timer('free_usdt_M')
+    kj.start()
     info = client.get_margin_account()
     assets = info.get('userAssets')
     bal = 0
     for a in assets:
         if a.get('asset') == 'USDT':
             bal = float(a.get('free'))
+    kj.stop()
     return bal
 
 
 def asset_bal_M(asset):
+    lk = Timer('asset_bal_M')
+    lk.start()
     info = client.get_margin_account()
     bals = info.get('userAssets')
     
@@ -959,27 +837,31 @@ def asset_bal_M(asset):
             balance['locked'] = bal.get('locked')
             balance['borrowed'] = bal.get('borrowed')
             balance['free'] = bal.get('free')
-    
+    lk.stop()
     return balance
 
 
 def free_bal_M(asset):
+    kl = Timer('free_bal_M')
+    kl.start()
     info = client.get_margin_account()
     bal = 0
     for i in info.get('userAssets'):
         if i.get('asset') == asset:
             bal = i.get('free')
-            
+    kl.stop()        
     return bal
 
 
 def update_pos_M(session, asset, new_bal, inval, direction, pfrd):
+    jk = Timer('update_pos_M')
+    jk.start()
     '''checks for the current balance of a particular asset and returns it in 
     the correct format for the sizing dict. also calculates the open risk for 
     a given asset and returns it in R and $ denominations'''
 
     pair = asset + 'USDT'
-    price = get_price(pair)
+    price = session.prices[pair]
     value = price * new_bal
     pct = round(100 * value / session.bal, 5)
     open_risk = value - (value / inval)
@@ -988,18 +870,20 @@ def update_pos_M(session, asset, new_bal, inval, direction, pfrd):
         open_risk_r = open_risk / pfrd
     else:
         open_risk_r = 0
-
+        jk.stop()
     return {'qty': new_bal, 'value': value, 'pf%': pct, 'or_R': open_risk_r, 'or_$': open_risk}
 
 
 def update_usdt_M(total_bal):
+    hj = Timer('update_usdt_M')
+    hj.start()
     '''checks current usdt balance and returns a dictionary for updating the sizing dict'''
     bal = asset_bal_M('USDT')
     net = float(bal.get('net'))
     value = round(net, 2)
     pct = round(100 * value / total_bal, 5)
     # print(f'usdt stats: {bal = }, {net = }, {value = }, {pct = }, {total_bal = }')
-    
+    hj.stop()
     return {'qty': bal.get('free'), 'owed': bal.get('borrowed'), 'value': value, 'pf%': pct}
 
 
@@ -1007,6 +891,8 @@ def update_usdt_M(total_bal):
 
 
 def top_up_bnb_M(usdt_size):
+    gh = Timer('top_up_bnb_M')
+    gh.start()
     '''checks net BNB balance and interest owed, if net is below the threshold,
     buys BNB then repays any interest'''
     now = datetime.now().strftime('%d/%m/%y %H:%M')
@@ -1054,11 +940,13 @@ def top_up_bnb_M(usdt_size):
         repay = client.repay_margin_loan(asset='BNB', amount=str(interest))
     else:
         repay = None
-    
+    gh.stop()
     return order, repay
 
 
-def buy_asset_M(pair, size, is_base, live):
+def buy_asset_M(pair, size, is_base, price, live):
+    fg = Timer('buy_asset_M')
+    fg.start()
     if live and is_base:
         base_size = valid_size(pair, size)
         buy_order = client.create_margin_order(symbol=pair,side=be.SIDE_BUY,type=be.ORDER_TYPE_MARKET,quantity=base_size)
@@ -1066,7 +954,6 @@ def buy_asset_M(pair, size, is_base, live):
         buy_order = client.create_margin_order(symbol=pair,side=be.SIDE_BUY,type=be.ORDER_TYPE_MARKET,quoteOrderQty=size)
     else:
         now = int(datetime.now().timestamp() * 1000)
-        price = get_price(pair)
         if is_base:
             base_size = size
             usdt_size = round(size * price, 2)
@@ -1080,7 +967,7 @@ def buy_asset_M(pair, size, is_base, live):
          'executedQty': str(base_size),
          'fills': [{'commission': '0',
                     'commissionAsset': 'BNB',
-                    'price': str(valid_price(pair, get_price(pair))),
+                    'price': str(valid_price(pair, price)),
                     'qty': str(base_size)}],
          'isIsolated': False,
          'orderId': 123456,
@@ -1092,11 +979,13 @@ def buy_asset_M(pair, size, is_base, live):
          'timeInForce': 'GTC',
          'transactTime': now,
          'type': 'MARKET'}
-        
+    fg.stop()   
     return buy_order
 
 
-def sell_asset_M(pair, base_size, live):
+def sell_asset_M(pair, base_size, price, live):
+    df = Timer('sell_asset_M')
+    df.start()
     base_size = valid_size(pair, base_size)
     if not base_size: # if size == 0, valid_size will output None
         base_size = 0
@@ -1104,7 +993,6 @@ def sell_asset_M(pair, base_size, live):
         sell_order = client.create_margin_order(symbol=pair, side=be.SIDE_SELL, type=be.ORDER_TYPE_MARKET, quantity=base_size)
     else:
         now = int(datetime.now().timestamp() * 1000)
-        price = get_price(pair)
         usdt_size = valid_size(pair, float(base_size) * price)
         if not usdt_size:
             usdt_size = 0
@@ -1114,7 +1002,7 @@ def sell_asset_M(pair, base_size, live):
                     'executedQty': str(base_size),
                     'fills': [{'commission': '0',
                                'commissionAsset': 'BNB',
-                               'price': str(valid_price(pair, get_price(pair))),
+                               'price': str(valid_price(pair, price)),
                                'qty': str(base_size)}],
                     'isIsolated': False,
                     'orderId': 123456,
@@ -1126,7 +1014,7 @@ def sell_asset_M(pair, base_size, live):
                     'timeInForce': 'GTC',
                     'transactTime': now,
                     'type': 'MARKET'}
-    
+    df.stop()
     return sell_order
 
 
@@ -1141,6 +1029,8 @@ def repay_asset_M(asset, qty, live):
 
 
 def set_stop_M(pair, size, side, trigger, limit, live):
+    sd = Timer('set_stop_M')
+    sd.start()
     trigger = valid_price(pair, trigger)
     limit = valid_price(pair, limit)
     stop_size = valid_size(pair, size)
@@ -1154,10 +1044,13 @@ def set_stop_M(pair, size, side, trigger, limit, live):
                                                  price=limit)
     else:
         stop_sell_order = {'orderId': 'not live'}
+    sd.stop()
     return stop_sell_order
 
 
 def clear_stop_M(pair, trade_record, live):
+    fc = Timer('clear_stop_M')
+    fc.start()
     '''finds the order id of the most recent stop-loss from the trade record
     and cancels that specific order. if no such id can be found, blindly cancels 
     the most recent stop-limit order relating to the pair'''
@@ -1188,7 +1081,7 @@ def clear_stop_M(pair, trade_record, live):
                 print('no stop to clear')
                 clear = {}
                 base_size = Decimal(0)
-    
+    fc.stop()
     return clear, base_size
 
 

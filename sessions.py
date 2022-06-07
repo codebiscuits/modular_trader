@@ -3,7 +3,10 @@ from pathlib import Path
 from datetime import datetime
 from pushbullet import Pushbullet
 from timers import Timer
+from binance.client import Client
+import keys
 
+client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 class MARGIN_SESSION:
@@ -13,13 +16,14 @@ class MARGIN_SESSION:
     max_spread = 0.5
     above_200_ema = set()
     below_200_ema = set()
+    prices = {}
     
     
     def __init__(self):
         t = Timer('session init')
         t.start()
         self.name = 'agent names here'
-        self.bal = funcs.account_bal_M()
+        self.bal = self.account_bal_M()
         self.live = self.set_live()
         self.market_data = self.mkt_data_path()
         self.ohlc_data = self.ohlc_path()
@@ -27,6 +31,16 @@ class MARGIN_SESSION:
         t.stop()
         
         
+    def account_bal_M(self):
+        jh = Timer('account_bal_M')
+        jh.start()
+        info = client.get_margin_account()
+        total_net = float(info.get('totalNetAssetOfBtc'))
+        btc_price = funcs.get_price('BTCUSDT')
+        usdt_total_net = total_net * btc_price
+        jh.stop()
+        return round(usdt_total_net, 2)
+    
     def set_live(self):
         y = Timer('set_live')
         y.start()

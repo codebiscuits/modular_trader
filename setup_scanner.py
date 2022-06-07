@@ -114,6 +114,7 @@ for agent in agents:
 
 for n, pair in enumerate(pairs):
     # print(pair, 'main loop')
+    session.prices[pair] = funcs.get_price(pair)
     asset = pair[:-1*len(session.quote_asset)]
     for agent in agents:
         agent.init_in_pos(pair)    
@@ -145,7 +146,7 @@ for n, pair in enumerate(pairs):
         risk = (price - stp) / price
         mir = uf.max_init_risk(agent.num_open_positions, agent.target_risk)
         size_l, usdt_size_l, size_s, usdt_size_s = funcs.get_size(agent, price, session.bal, risk)
-        usdt_depth_l, usdt_depth_s = funcs.get_depth(pair, session.max_spread)
+        usdt_depth_l, usdt_depth_s = funcs.get_depth(session, pair)
         
         df.drop(columns=['st_loose', 'st_loose_u', 'st_loose_d', 'st', 'st_u', 'st_d'], inplace=True)
         
@@ -322,8 +323,6 @@ for n, pair in enumerate(pairs):
 
 # calculate open risk and take profit if necessary ----------------------------
         agent.tp_signals(asset)
-        if agent.in_pos.get('real_tp_sig') or agent.in_pos.get('sim_tp_sig'):
-            pprint(agent.in_pos)
         if agent.in_pos['real'] == 'long' or agent.in_pos['sim'] == 'long':
             try:
                 omf.tp_long(session, agent, pair, stp, inval_dist)
@@ -378,7 +377,7 @@ for agent in agents:
     print('-:-' * 20)
 
 for k, v in Timer.timers.items():
-    if v > 1:
+    if v > 30:
         print(k, round(v))
 
 end = time.perf_counter()

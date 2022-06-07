@@ -14,9 +14,9 @@ client = Client(keys.bPkey, keys.bSkey)
 
 def open_long(session, agent, pair, size, stp, inval, sim_reason):
     asset = pair[:-4]
-    price = funcs.get_price(pair)
+    price = session.prices[pair]
     usdt_size = round(size*price, 2)
-    session.bal = funcs.account_bal_M()
+    # session.bal = funcs.account_bal_M()
     now = datetime.now().strftime('%d/%m/%y %H:%M')
         
     if agent.in_pos['real'] == None and not sim_reason: # if state = real
@@ -27,7 +27,7 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
         funcs.borrow_asset_M('USDT', usdt_size, session.live)
         
         # execute
-        api_order = funcs.buy_asset_M(pair, usdt_size, False, session.live)
+        api_order = funcs.buy_asset_M(pair, usdt_size, False, price, session.live)
         
         # create trade record
         long_order = funcs.create_trade_dict(api_order, price, session.live)
@@ -94,9 +94,9 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
 
 def tp_long(session, agent, pair, stp, inval):
     asset = pair[:-4]
-    price = funcs.get_price(pair)
+    price = session.prices[pair]
     now = datetime.now().strftime('%d/%m/%y %H:%M')
-    session.bal = funcs.account_bal_M()
+    # session.bal = funcs.account_bal_M()
     
     if agent.in_pos.get('real_tp_sig'):        
         trade_record = agent.open_trades.get(pair)
@@ -184,7 +184,7 @@ def tp_long(session, agent, pair, stp, inval):
                     agent.real_pos[asset].update(funcs.update_pos_M(session, asset, new_size, inval, agent.in_pos['real'], agent.in_pos['real_pfrd']))
                     agent.real_pos['USDT'] = funcs.update_usdt(session.bal)
                 else:
-                    uf.calc_sizing_non_live_tp(agent, asset, pct, 'real')
+                    uf.calc_sizing_non_live_tp(session, agent, asset, pct, 'real')
                 
                 agent.counts_dict['real_tp_long'] += 1
                 agent.realised_pnl(trade_record, 'long')
@@ -218,7 +218,7 @@ def tp_long(session, agent, pair, stp, inval):
         agent.record_trades(session, 'sim')
         
         # update sim_pos
-        uf.calc_sizing_non_live_tp(agent, asset, 50, 'sim')
+        uf.calc_sizing_non_live_tp(session, agent, asset, 50, 'sim')
     
         agent.counts_dict['sim_tp_long'] += 1
         agent.in_pos['sim_pfrd'] = agent.in_pos['sim_pfrd'] / 2
@@ -257,10 +257,10 @@ def tp_long(session, agent, pair, stp, inval):
 
 def close_long(session, agent, pair):
     # initialise stuff
-    price = funcs.get_price(pair)
+    price = session.prices[pair]
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     asset = pair[:-4]
-    session.bal = funcs.account_bal_M()
+    # session.bal = funcs.account_bal_M()
     
     if agent.in_pos['real'] == 'long':
         note = f"real close long {pair} @ {price}"
@@ -409,11 +409,11 @@ def close_long(session, agent, pair):
 
 def open_short(session, agent, pair, size, stp, inval, sim_reason):
     # initialise stuff
-    price = funcs.get_price(pair)
+    price = session.prices[pair]
     usdt_size = round(size*price, 2)
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     asset = pair[:-4]
-    session.bal = funcs.account_bal_M()
+    # session.bal = funcs.account_bal_M()
     
     if agent.in_pos['real'] == None and not sim_reason:
         note = f"real open short {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
@@ -489,9 +489,9 @@ def open_short(session, agent, pair, size, stp, inval, sim_reason):
 
 def tp_short(session, agent, pair, stp, inval):
     asset = pair[:-4]
-    price = funcs.get_price(pair)
+    price = session.prices[pair]
     now = datetime.now().strftime('%d/%m/%y %H:%M')
-    session.bal = funcs.account_bal_M()
+    # session.bal = funcs.account_bal_M()
     
     if agent.in_pos.get('real_tp_sig'):        
         trade_record = agent.open_trades.get(pair)
@@ -574,7 +574,7 @@ def tp_short(session, agent, pair, stp, inval):
                     agent.real_pos[asset].update(funcs.update_pos_M(session, asset, new_size, inval, agent.in_pos['real'], agent.in_pos['real_pfrd']))
                     agent.real_pos['USDT'] = funcs.update_usdt(session.bal)
                 else:
-                    uf.calc_sizing_non_live_tp(agent, asset, pct, 'real')
+                    uf.calc_sizing_non_live_tp(session, agent, asset, pct, 'real')
                 
                 agent.counts_dict['real_tp_short'] += 1
                 agent.realised_pnl(trade_record, 'short')
@@ -609,7 +609,7 @@ def tp_short(session, agent, pair, stp, inval):
         agent.record_trades(session, 'sim')
         
         # update sim_pos
-        uf.calc_sizing_non_live_tp(agent, asset, 50, 'sim')
+        uf.calc_sizing_non_live_tp(session, agent, asset, 50, 'sim')
     
         agent.counts_dict['sim_tp_short'] += 1
         agent.realised_pnl(trade_record, 'short')
@@ -647,10 +647,10 @@ def tp_short(session, agent, pair, stp, inval):
 
 def close_short(session, agent, pair):
     # initialise stuff
-    price = funcs.get_price(pair)
+    price = session.prices[pair]
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     asset = pair[:-4]
-    session.bal = funcs.account_bal_M()
+    # session.bal = funcs.account_bal_M()
     
     if agent.in_pos['real'] == 'short':
         note = f"real close short {pair} @ {price}"

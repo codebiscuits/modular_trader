@@ -11,6 +11,7 @@ from pushbullet import Pushbullet
 import time
 from pprint import pprint
 from decimal import Decimal
+from timers import Timer
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
@@ -18,6 +19,8 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 
 def open_trade_stats(now, total_bal, v):
+    we = Timer('open_trade_stats')
+    we.start()
     '''takes an entry from the open trades dictionary, 
     returns information about that position including 
     current profit, size and direction'''
@@ -67,14 +70,16 @@ def open_trade_stats(now, total_bal, v):
             elif i.get('type') in ['tp_short', 'close_short', 'tp_long', 'close_long']:
                 total_liability -= Decimal(i.get('liability'))
         
-        return {'qty': str(current_base_size), 'value': str(value), 'pf%': pf_pct, 
+        stats_dict = {'qty': str(current_base_size), 'value': str(value), 'pf%': pf_pct, 
                 'pnl_R': round(pnl / r, 5), 'pnl_%': round(pnl, 5), 'liability': total_liability, 
                 'entry_price': entry_price, 'duration (h)': duration, 'long': long}
     
     else:
-        return {'qty': str(current_base_size), 'value': str(value), 'pf%': pf_pct, 
+        stats_dict = {'qty': str(current_base_size), 'value': str(value), 'pf%': pf_pct, 
                 'pnl_R': round(pnl / r, 5), 'pnl_%': round(pnl, 5), 
                 'entry_price': entry_price, 'duration (h)': duration, 'long': long}
+    we.stop()
+    return stats_dict
 
 def adjust_max_positions(max_pos, sizing):
     '''the max_pos input tells the function what the strategy has as a default
@@ -333,6 +338,8 @@ def interpret_benchmark(session, agents):
             print(f'no benchmarking data available for {agent.name}')
 
 def count_trades(counts):
+    er = Timer('count_trades')
+    er.start()
     count_list = []
     if counts.get("stop_count"):
         count_list.append(f'stopped: {counts.get("stop_count")}') 
@@ -348,7 +355,7 @@ def count_trades(counts):
         counts_str = '\n' + ', '.join(count_list)
     else:
         counts_str = ''
-    
+    er.stop()
     return counts_str
 
 def find_bad_keys(c_data):
@@ -383,40 +390,9 @@ def find_bad_keys(c_data):
     
     return bad_keys
 
-def realised_pnl_old(agent, trade_record, side):
-    entry = float(trade_record[0].get('exe_price'))
-    init_stop = float(trade_record[0].get('hard_stop'))
-    init_size = float(trade_record[0].get('base_size'))
-    final_exit = float(trade_record[-1].get('exe_price'))
-    final_size = float(trade_record[-1].get('base_size'))
-    r_val = abs((entry - init_stop) / entry)
-    if side == 'long':
-        trade_pnl = (final_exit - entry) / entry
-    else:
-        trade_pnl = (entry - final_exit) / entry
-    trade_r = round(trade_pnl / r_val, 3)
-    scalar = final_size / init_size
-    realised_r = trade_r * scalar
-    # print(f'\nrealised pnl: {realised_r:.1f}R')
-    # print(f'{entry = }, {init_stop = }, {final_exit = }')
-    # print(f'{r_val = }, {trade_r = }, {scalar = }')
-    # print(f'{init_size = }, {final_size = }\n')
-    
-    if trade_record[-1].get('state') == 'real':
-        if side == 'long':
-            agent.realised_pnl_long += realised_r
-        else:
-            agent.realised_pnl_short += realised_r
-    elif trade_record[-1].get('state') == 'sim':
-        if side == 'long':
-            agent.sim_pnl_long += realised_r
-        else:
-            agent.sim_pnl_short += realised_r
-    else:
-        print(f'state in record: {trade_record[-1].get("state")}')
-        print(f'{trade_r = }')
-
 def latest_stop_id(trade_record):
+    rt = Timer('latest_stop_id')
+    rt.start()
     '''looks through trade_record for a stop id and retrieves the pair, id and 
     timestamp for when the stop was set. if nothing is found, just retreives the 
     pair and timestamp from the start of the trade_record'''
@@ -443,10 +419,12 @@ def latest_stop_id(trade_record):
         if stop_time == oldest:
             print('used default timestamp value in latest_stop_id')
             
-    
+    rt.stop()
     return pair, stop_id, stop_time
 
 def update_liability(trade_record, size, operation):
+    ty = Timer('update_liability')
+    ty.start()
     '''calculates new liability figure from the old figure and the current size being traded'''
     if trade_record:
         prev_liability = Decimal(trade_record[-1].get('liability'))
@@ -462,10 +440,12 @@ def update_liability(trade_record, size, operation):
     if new_liability < 0:
         pair = trade_record[0].get('pair')
         print(f"***** Warning - {pair} liability records don't add up *****")
-    
+    ty.stop()
     return str(new_liability)
 
 def create_stop_dict(order):
+    yu = Timer('create_stop-dict')
+    yu.start()
     '''collects and returns the details of filled stop-loss order in a dictionary'''
     
     pair = order.get('symbol')
@@ -488,184 +468,8 @@ def create_stop_dict(order):
     if order.get('status') != 'FILLED':
         print(f'{pair} order not filled')
         pb.push_note('Warning', f'{pair} stop-loss hit but not filled')
-    
+    yu.stop()
     return trade_dict
-
-def record_stopped_trades_old(session, agent):
-    # loop through agent.open_trades and call latest_stop_id(trade_record) to
-    # compile a list of order ids for each open trade's stop loss orders, then 
-    # check binance to find which don't have an active stop-loss
-    stop_ids = [latest_stop_id(v) for v in agent.open_trades.values()]
-    
-    open_orders = client.get_open_orders()
-    ids_remaining = [i.get('orderId') for i in open_orders]
-    symbols_remaining = [i.get('symbol') for i in open_orders]
-    
-    stopped = []
-    for pair, sid, time in stop_ids:
-        if sid:
-            if sid not in ids_remaining:
-                stopped.append((pair, sid, time))
-            else:
-                continue
-        elif pair not in symbols_remaining:
-            stopped.append((pair, sid, time))
-    
-    # print(f'number of stopped trades: {len(stopped)}')
-    
-    # for any that don't, assume that the stop was hit and check for exchange records
-    for pair, sid, time in stopped:
-        trade_record = agent.open_trades.get(pair)
-        # order_list = client.get_all_orders(symbol=pair, orderId=sid, startTime=time-10000)
-        if sid == 'not live':
-            continue
-        order_list = client.get_all_margin_orders(symbol=pair, orderId=sid, startTime=time-10000)
-        
-        order = None
-        if order_list and sid:
-            for o in order_list[::-1]:
-                if o.get('order_id') == sid and o.get('status') == 'FILLED':
-                    order = o
-                    break
-        elif order_list and not sid:
-            for o in order_list[::-1]:
-                if o.get('type') == 'STOP_LOSS_LIMIT' and o.get('status') == 'FILLED':
-                    order = o
-                    break
-        else:
-            print(f'No orders on binance for {pair}')
-            
-        if order:
-            if (order.get('side') == 'BUY'):
-                trade_type = 'stop_short'
-                asset = pair[:-4]
-                stop_size = Decimal(order.get('executedQty'))
-                funcs.repay_asset_M(asset, stop_size, session.live)
-            else:
-                trade_type = 'stop_long'
-                stop_size = Decimal(order.get('cummulativeQuoteQty'))
-                funcs.repay_asset_M('USDT', stop_size, session.live)
-            
-            
-            stop_dict = create_stop_dict(order)
-            stop_dict['type'] = trade_type                
-            stop_dict['state'] = 'real'
-            stop_dict['reason'] = 'hit hard stop'
-            stop_dict['liability'] = update_liability(trade_record, stop_size, 'reduce')
-            
-            trade_record.append(stop_dict)
-            
-            ts_id = trade_record[0].get('timestamp')
-            agent.closed_trades[ts_id] = trade_record
-            record_trades(session, agent, 'closed')
-            del agent.open_trades[pair]
-            record_trades(session, agent, 'open')
-            
-            if trade_type == 'stop_long':
-                realised_pnl(agent, trade_record, 'long')
-                agent.counts_dict['real_stop_long'] += 1
-            else:
-                realised_pnl(agent, trade_record, 'short')
-                agent.counts_dict['real_stop_short'] += 1
-            
-        else:
-            # check for a free balance matching the size. if there is, that means 
-            # the stop was never set in the first place and needs to be set
-            print(f'getting {pair[:-4]} free balance')
-            free_bal = float(client.get_asset_balance(pair[:-4]).get('free'))
-            print(f'getting {pair} price')
-            price = funcs.get_price(pair)
-            value = free_bal * price
-            if value > 10:
-                note = f'{pair} in position with no stop-loss'
-                pb.push_note(session.now_start, note)
-
-def record_stopped_sim_trades_old(session, agent):
-    '''goes through all trades in the sim_trades file and checks their recent 
-    price action against their most recent hard_stop to see if any of them would have 
-    got stopped out'''
-    
-    del_pairs = []
-    for pair, v in agent.sim_trades.items():
-        # first filter out all trades which started out real
-        if v[0].get('real'):
-            continue
-        
-        long_trade = True if 'long' in v[0].get('type') else False
-        
-        # calculate current base size
-        base_size = 0
-        for i in v:
-            if i.get('type') in ['open_long', 'open_short', 'add_long', 'add_short']:
-                base_size += float(i.get('base_size'))
-            else:
-                base_size -= float(i.get('base_size'))
-        
-        # find most recent hard stop
-        for i in v[-1::-1]:
-            if i.get('hard_stop'):
-                stop = float(i.get('hard_stop'))
-                stop_time = i.get('timestamp')
-                break
-            
-        # check lowest low since stop was set
-        klines = client.get_historical_klines(pair, Client.KLINE_INTERVAL_1HOUR, stop_time)
-        cols = ['timestamp', 'open', 'high', 'low', 'close', 'base vol', 'close time',
-                'volume', 'num trades', 'taker buy base vol', 'taker buy quote vol', 'ignore']
-        df = pd.DataFrame(klines, columns=cols)
-        df['timestamp'] = df['timestamp'] * 1000000
-        df = df.astype(float)
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
-        
-        if long_trade:
-            trade_type = 'stop_long'
-            ll = df.low.min()
-            # stop_time = find timestamp of that lowest low candle
-            stopped = ll < stop
-            overshoot_pct = round((100 * (stop - ll) / stop), 3) # % distance that price broke through the stop
-        else:
-            trade_type = 'stop_short'
-            hh = df.high.max()
-            # stop_time = find timestamp of that highest high candle
-            stopped = hh > stop
-            overshoot_pct = round((100 * (hh - stop) / stop), 3) # % distance that price broke through the stop
-        
-        if stopped:
-            # create trade dict
-            trade_dict = {'timestamp': stop_time, 
-                          'pair': pair, 
-                          'type': trade_type, 
-                          'exe_price': str(stop), 
-                          'base_size': str(base_size), 
-                          'quote_size': str(round(base_size * stop, 2)), 
-                          'fee': 0, 
-                          'fee_currency': 'BNB', 
-                          'reason': 'hit hard stop', 
-                          'state': 'sim', 
-                          'overshoot': overshoot_pct
-                          }
-            note = f"*sim* stopped out {pair} @ {stop}"
-            print(session.now_start, note)
-            
-            v.append(trade_dict)
-            
-            ts_id = v[0].get('timestamp')
-            agent.closed_sim_trades[ts_id] = v
-            record_trades(session, agent, 'closed_sim')
-            
-            if long_trade:
-                realised_pnl(agent, v, 'long')
-                agent.counts_dict['sim_stop_long'] += 1
-            else:
-                realised_pnl(agent, v, 'short')
-                agent.counts_dict['sim_stop_short'] += 1
-            del_pairs.append(pair)
-        
-    # print(f"number of stopped sim trades: {agent.counts_dict['sim_stop_long'] +  agent.counts_dict['sim_stop_short']}")        
-    
-    for p in del_pairs:
-        del agent.sim_trades[p]
-    record_trades(session, agent, 'sim')
 
 def recent_perf_str(session, agent):
     '''generates a string of + and - to represent recent strat performance'''    
@@ -765,7 +569,7 @@ def scanner_summary(session, agents):
     if session.live:
         pb.push_note(title, final_msg)
 
-def sync_test_records(session, agent):
+def sync_test_records_old(session, agent):
     with open(f"{session.market_data}/{agent.name}/bal_history.txt", "r") as file:
         bal_data = file.readlines()
     with open(f"/home/ross/Documents/backtester_2021/test_records/{agent.name}/bal_history.txt", "w") as file:
@@ -822,35 +626,9 @@ def sync_test_records(session, agent):
     with open('/home/ross/Documents/backtester_2021/test_records/binance_liquidity_history.txt', 'w') as file:
         file.writelines(book_data)
 
-def set_max_pos_old(agent):
-    if agent.real_pos:
-        open_pnls = [v.get('pnl') for v in agent.real_pos.values() if v.get('pnl')]
-        if open_pnls:
-            avg_open_pnl = stats.median(open_pnls)
-        else:
-            avg_open_pnl = 0
-        agent.max_pos = 20 if avg_open_pnl <= 0 else 50
-    else:
-        agent.max_pos = 20
-
-def calc_pos_fr_dol_old(trade_record, fixed_risk_dol, in_pos, switch):   
-    if in_pos[switch] and trade_record and trade_record[0].get('type')[0] == 'o':
-        qs = float(trade_record[0].get('quote_size'))
-        ep = float(trade_record[0].get('exe_price'))
-        hs = float(trade_record[0].get('hard_stop'))
-        pos_fr_dol = qs * ((ep - hs) / ep)
-    else:
-        ep = None # i refer to this later and need it to exist even if it has no value
-        hs = None
-        pos_fr_dol = fixed_risk_dol
-    
-    in_pos[f'{switch}_pfrd'] = pos_fr_dol
-    in_pos[f'{switch}_ep'] = ep
-    in_pos[f'{switch}_hs'] = hs
-
-    return in_pos
-
-def calc_sizing_non_live_tp(agent, asset, tp_pct, switch):
+def calc_sizing_non_live_tp(session, agent, asset, tp_pct, switch):
+    qw = Timer('calc_sizing_non_live_tp')
+    qw.start()
     '''updates sizing dictionaries (real/sim) with with new open trade stats when 
     state is sim or real but not live and a take-profit is triggered'''
     tp_scalar = 1 - (100 / tp_pct)
@@ -869,12 +647,14 @@ def calc_sizing_non_live_tp(agent, asset, tp_pct, switch):
     or_R = pos_dict.get(asset).get('or_R') * tp_scalar
     or_dol = pos_dict.get(asset).get('or_$') * tp_scalar
     
-    curr_price = funcs.get_price(asset+'USDT')
+    curr_price = session.prices[asset+'USDT']
     r = (entry - stop) / entry
     pnl = (curr_price - entry) / entry
     pnl_r = pnl / r
     
     pos_dict[asset].update({'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol, 'pnl_R': pnl_r})
+    
+    qw.stop
 
 
 

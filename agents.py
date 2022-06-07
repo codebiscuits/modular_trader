@@ -456,7 +456,6 @@ class DoubleST():
             del self.sim_trades[p]
         n.stop()
     
-    
     def realised_pnl(self, trade_record, side):
         i = Timer(f'realised_pnl {side}')
         i.start()
