@@ -21,12 +21,7 @@ class DoubleST():
     total_r_limit = 20
     target_risk = 0.1
     max_pos = 20
-    counts_dict = {'real_stop_long': 0, 'real_open_long': 0, 'real_add_long': 0, 'real_tp_long': 0, 'real_close_long': 0, 
-                   'sim_stop_long': 0, 'sim_open_long': 0, 'sim_add_long': 0, 'sim_tp_long': 0, 'sim_close_long': 0, 
-                   'real_stop_short': 0, 'real_open_short': 0, 'real_add_short': 0, 'real_tp_short': 0, 'real_close_short': 0, 
-                   'sim_stop_short': 0, 'sim_open_short': 0, 'sim_add_short': 0, 'sim_tp_short': 0, 'sim_close_short': 0, 
-                   'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 'too_much_or': 0, 
-                   'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0}
+    
     
     def __init__(self, session, timeframe, tf_offset, lookback, mult):
         self.live = session.live
@@ -49,18 +44,22 @@ class DoubleST():
         self.tracked = self.current_positions('tracked')
         self.fixed_risk_l = self.set_fixed_risk('long')
         self.fixed_risk_s = self.set_fixed_risk('short')
-        print(self.fixed_risk_s)
         self.max_positions = self.set_max_pos()
         self.max_init_r_l = self.fixed_risk_l * self.total_r_limit
         self.max_init_r_s = self.fixed_risk_s * self.total_r_limit
         self.fixed_risk_dol_l = self.fixed_risk_l * self.bal
         self.fixed_risk_dol_s = self.fixed_risk_s * self.bal
+        self.counts_dict = {'real_stop_long': 0, 'real_open_long': 0, 'real_add_long': 0, 'real_tp_long': 0, 'real_close_long': 0, 
+                           'sim_stop_long': 0, 'sim_open_long': 0, 'sim_add_long': 0, 'sim_tp_long': 0, 'sim_close_long': 0, 
+                           'real_stop_short': 0, 'real_open_short': 0, 'real_add_short': 0, 'real_tp_short': 0, 'real_close_short': 0, 
+                           'sim_stop_short': 0, 'sim_open_short': 0, 'sim_add_short': 0, 'sim_tp_short': 0, 'sim_close_short': 0, 
+                           'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 'too_much_or': 0, 
+                           'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0}
         
     def __str__(self):
         return self.name
     
     def sync_test_records(self):
-        print('running sync_test_records')
         folder = Path(f"{self.market_data}/{self.name}")
         test_folder = Path(f'/home/ross/Documents/backtester_2021/test_records/{self.name}')
         if not test_folder.exists():
@@ -192,37 +191,37 @@ class DoubleST():
         if self.open_trades:
             with open(f"{self.market_data}/{self.name}/ot_backup.json", "w") as ot_file:
                 json.dump(self.open_trades, ot_file)
-        else:
-            if self.live:
-                pb.push_note(now, 'open trades file empty')
+        # else:
+        #     if self.live:
+        #         pb.push_note(now, 'open trades file empty')
         
         if self.sim_trades:
             with open(f"{self.market_data}/{self.name}/st_backup.json", "w") as st_file:
                 json.dump(self.sim_trades, st_file)
-        else:
-            if self.live:
-                pb.push_note(now, 'sim trades file empty')
+        # else:
+        #     if self.live:
+        #         pb.push_note(now, 'sim trades file empty')
         
         if self.tracked_trades:
             with open(f"{self.market_data}/{self.name}/tr_backup.json", "w") as tr_file:
                 json.dump(self.tracked_trades, tr_file)
-        else:
-            if self.live:
-                pb.push_note(now, 'tracked trades file empty')
+        # else:
+        #     if self.live:
+        #         pb.push_note(now, 'tracked trades file empty')
         
         if self.closed_trades:
             with open(f"{self.market_data}/{self.name}/ct_backup.json", "w") as ct_file:
                 json.dump(self.closed_trades, ct_file)
-        else:
-            if self.live:
-                pb.push_note(now, 'closed trades file empty')
+        # else:
+        #     if self.live:
+        #         pb.push_note(now, 'closed trades file empty')
         
         if self.closed_sim_trades:
             with open(f"{self.market_data}/{self.name}/cs_backup.json", "w") as cs_file:
                 json.dump(self.closed_sim_trades, cs_file)
-        else:
-            if self.live:
-                pb.push_note(now, 'closed sim trades file empty')
+        # else:
+        #     if self.live:
+        #         pb.push_note(now, 'closed sim trades file empty')
     
     def calc_tor(self):
         self.or_list = [v.get('or_R') for v in self.real_pos.values() if v.get('or_R')]
@@ -316,8 +315,8 @@ class DoubleST():
         if bal_change_pct < -0.1:
             score -= 1
         
-        print('-')
-        print(f'{direction} - {real_score = }, {sim_score = }, {bal_change_pct = }, {score = }')
+        # print('-')
+        # print(f'{direction} - {real_score = }, {sim_score = }, {bal_change_pct = }, {score = }')
         
         if score == 15:
             fr = min(fr_prev + (2*fr_inc), self.fr_max)
@@ -336,7 +335,6 @@ class DoubleST():
             note = f'fixed risk adjusted from {round(fr_prev*10000, 1)}bps to {round(fr*10000, 1)}bps'
             pb.push_note(now, note)
         
-        print(f'fixed risk perf score: {score}')
         return round(fr, 5)
     
     def set_max_pos(self):
@@ -497,7 +495,8 @@ class DoubleST():
     
     def margin_signals(self, session, df, pair):
         
-        df['ema200'] = df.close.ewm(200).mean()
+        if 'ema200' not in df.columns:
+            df['ema200'] = df.close.ewm(200).mean()
         ind.supertrend_new(df, 10, 3)
         df.rename(columns={'st': 'st_loose', 'st_u': 'st_loose_u', 'st_d': 'st_loose_d'}, inplace=True)
         ind.supertrend_new(df, self.lb, self.mult)
@@ -534,7 +533,7 @@ class DoubleST():
             inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
         else:
             inval = 100000
-            
+        
         return {'signal': signal, 'inval': inval}
 
 

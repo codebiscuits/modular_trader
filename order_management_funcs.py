@@ -20,7 +20,7 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
         
     if agent.in_pos['real'] == None and not sim_reason: # if state = real
-        note = f"open real long {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
+        note = f"real open long {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
         print(now, note)
         
         # borrow usdt
@@ -65,7 +65,7 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
     if agent.in_pos['sim'] == None and sim_reason:
         usdt_size = 100.0
         size = round(usdt_size / price, 8)
-        note = f"open sim long {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
+        note = f"sim open long {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
         print(now, note)
         
         timestamp = round(datetime.utcnow().timestamp() * 1000)
@@ -106,85 +106,89 @@ def tp_long(session, agent, pair, stp, inval):
         
         # clear stop
         clear, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
-        if base_size and (real_bal != base_size): # check records match reality
-            print(f"{pair} records don't match real balance. {real_bal = }, {base_size = }")
-        if not base_size:
-            base_size = real_bal
-        
-        # execute trade
-        order_size = base_size * (pct/100)
-        api_order = funcs.sell_asset_M(pair, order_size, session.live)
-        sell_order = funcs.create_trade_dict(api_order, price, session.live)
-        usdt_size = api_order.get('cummulativeQuoteQty')
-        funcs.repay_asset_M('USDT', usdt_size, session.live)
-        
-        note = f"real take-profit {pair} long {pct}% @ {price}"
-        print(now, note)        
-        
-        if pct == 100:
-            # create trade dict
-            sell_order['type'] = 'close_long'
-            sell_order['state'] = 'real'
-            sell_order['reason'] = 'trade over-extended'
-            sell_order['liability'] = uf.update_liability(trade_record, usdt_size, 'reduce')
-            trade_record.append(sell_order)
+        if clear == 'error':
+            print(f"Can't be sure which {pair} stop to clear, tp_long aborted")
+            pb.push_note(pair, "Can't be sure which stop to clear, tp_long aborted")
+        else:
+            if base_size and (real_bal != base_size): # check records match reality
+                print(f"{pair} records don't match real balance. {real_bal = }, {base_size = }")
+            if not base_size:
+                base_size = real_bal
             
-            # update records            
-            agent.tracked_trades[pair] = trade_record
-            uf.record_trades(session, agent, 'tracked')
+            # execute trade
+            order_size = base_size * (pct/100)
+            api_order = funcs.sell_asset_M(pair, order_size, session.live)
+            sell_order = funcs.create_trade_dict(api_order, price, session.live)
+            usdt_size = api_order.get('cummulativeQuoteQty')
+            funcs.repay_asset_M('USDT', usdt_size, session.live)
             
-            if agent.open_trades[pair]:
-                del agent.open_trades[pair]
+            note = f"real take-profit {pair} long {pct}% @ {price}"
+            print(now, note)        
+            
+            if pct == 100:
+                # create trade dict
+                sell_order['type'] = 'close_long'
+                sell_order['state'] = 'real'
+                sell_order['reason'] = 'trade over-extended'
+                sell_order['liability'] = uf.update_liability(trade_record, usdt_size, 'reduce')
+                trade_record.append(sell_order)
+                
+                # update records            
+                agent.tracked_trades[pair] = trade_record
+                uf.record_trades(session, agent, 'tracked')
+                
+                if agent.open_trades[pair]:
+                    del agent.open_trades[pair]
+                    uf.record_trades(session, agent, 'open')
+                
+                agent.in_pos['real'] = None
+                agent.in_pos['tracked'] = 'long'
+                
+                agent.tracked[asset] = {'qty': 0, 'value': 0, 'pf%': 0, 'or_R': 0, 'or_$': 0}                
+                del agent.real_pos[asset]
+                if session.live:
+                    agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
+                else:
+                    qty = float(agent.real_pos['USDT']['qty'])
+                    agent.real_pos['USDT']['qty'] = qty + float(agent.real_pos[asset].get('value'))
+                    value = float(agent.real_pos['USDT']['value'])
+                    agent.real_pos['USDT']['value'] = value + float(agent.real_pos[asset].get('value'))
+                    pf_pct = float(agent.real_pos['USDT']['pf%'])
+                    agent.real_pos['USDT']['pf%'] = pf_pct + float(agent.real_pos[asset].get('pf%'))
+                
+                agent.counts_dict['real_close_long'] += 1
+                uf.realised_pnl(agent, trade_record, 'long')
+            
+            
+            else: # if pct < 100%
+                # create trade dict
+                sell_order['type'] = 'tp_long'
+                sell_order['state'] = 'real'
+                sell_order['hard_stop'] = str(stp)
+                sell_order['reason'] = 'trade over-extended'
+                sell_order['liability'] = uf.update_liability(trade_record, usdt_size, 'reduce')
+                
+                # set new stop
+                new_size = real_bal - float(sell_order['base_size'])
+                stop_order = funcs.set_stop_M(pair, new_size, be.SIDE_SELL, stp, stp*0.8)
+                sell_order['stop_id'] = stop_order.get('orderId')
+                
+                trade_record.append(sell_order)
+                
+                # update records
+                agent.open_trades['pair'] = trade_record
                 uf.record_trades(session, agent, 'open')
+               
+                agent.in_pos['real_pfrd'] = agent.in_pos['real_pfrd'] * (pct / 100)
+                if session.live:
+                    agent.real_pos[asset].update(funcs.update_pos_M(session, asset, new_size, inval, agent.in_pos['real'], agent.in_pos['real_pfrd']))
+                    agent.real_pos['USDT'] = funcs.update_usdt(session.bal)
+                else:
+                    uf.calc_sizing_non_live_tp(agent, asset, pct, 'real')
+                
+                agent.counts_dict['real_tp_long'] += 1
+                uf.realised_pnl(agent, trade_record, 'long')
             
-            agent.in_pos['real'] = None
-            agent.in_pos['tracked'] = 'long'
-            
-            agent.tracked[asset] = {'qty': 0, 'value': 0, 'pf%': 0, 'or_R': 0, 'or_$': 0}                
-            del agent.real_pos[asset]
-            if session.live:
-                agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
-            else:
-                qty = float(agent.real_pos['USDT']['qty'])
-                agent.real_pos['USDT']['qty'] = qty + float(agent.real_pos[asset].get('value'))
-                value = float(agent.real_pos['USDT']['value'])
-                agent.real_pos['USDT']['value'] = value + float(agent.real_pos[asset].get('value'))
-                pf_pct = float(agent.real_pos['USDT']['pf%'])
-                agent.real_pos['USDT']['pf%'] = pf_pct + float(agent.real_pos[asset].get('pf%'))
-            
-            agent.counts_dict['real_close_long'] += 1
-            uf.realised_pnl(agent, trade_record, 'long')
-        
-        
-        else: # if pct < 100%
-            # create trade dict
-            sell_order['type'] = 'tp_long'
-            sell_order['state'] = 'real'
-            sell_order['hard_stop'] = str(stp)
-            sell_order['reason'] = 'trade over-extended'
-            sell_order['liability'] = uf.update_liability(trade_record, usdt_size, 'reduce')
-            
-            # set new stop
-            new_size = real_bal - float(sell_order['base_size'])
-            stop_order = funcs.set_stop_M(pair, new_size, be.SIDE_SELL, stp, stp*0.8)
-            sell_order['stop_id'] = stop_order.get('orderId')
-            
-            trade_record.append(sell_order)
-            
-            # update records
-            agent.open_trades['pair'] = trade_record
-            uf.record_trades(session, agent, 'open')
-           
-            agent.in_pos['real_pfrd'] = agent.in_pos['real_pfrd'] * (pct / 100)
-            if session.live:
-                agent.real_pos[asset].update(funcs.update_pos_M(session, asset, new_size, inval, agent.in_pos['real'], agent.in_pos['real_pfrd']))
-                agent.real_pos['USDT'] = funcs.update_usdt(session.bal)
-            else:
-                uf.calc_sizing_non_live_tp(agent, asset, pct, 'real')
-            
-            agent.counts_dict['real_tp_long'] += 1
-            uf.realised_pnl(agent, trade_record, 'long')
-        
     if agent.in_pos.get('sim_tp_sig'):
         note = f"sim take-profit {pair} long 50% @ {price}"
         print(now, note)
@@ -267,49 +271,53 @@ def close_long(session, agent, pair):
         
         # cancel stop
         clear, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
-        if base_size and (real_bal != base_size): # check records match reality
-            print(f"{pair} records don't match real balance. {real_bal = }, {base_size = }")
-        if not base_size:
-            base_size = real_bal
-        
-        # execute trade
-        api_order = funcs.sell_asset_M(pair, base_size, session.live)
-        usdt_size = api_order.get('cummulativeQuoteQty')
-        funcs.repay_asset_M('USDT', usdt_size, session.live)
-        
-        sell_order = funcs.create_trade_dict(api_order, price, session.live)
-        sell_order['type'] = 'close_long'
-        sell_order['state'] = 'real'
-        sell_order['reason'] = 'strategy close long signal'
-        sell_order['liability'] = uf.update_liability(trade_record, usdt_size, 'reduce')
-        trade_record.append(sell_order)
-        
-        if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
-            trade_id = trade_record[0].get('timestamp')
-            agent.closed_trades[trade_id] = trade_record
+        if clear == 'error':
+            print(f"Can't be sure which {pair} stop to clear, close_long aborted")
+            pb.push_note(pair, "Can't be sure which stop to clear, close_long aborted")
         else:
-            agent.closed_trades[agent.next_id] = trade_record
-        uf.record_trades(session, agent, 'closed')
-        agent.next_id += 1
-        
-        if agent.open_trades[pair]:
-            del agent.open_trades[pair]
-            uf.record_trades(session, agent, 'open')
-        
-        agent.in_pos['real'] = None
-        agent.in_pos['real_pfrd'] = 0
-        del agent.real_pos[asset]
-        if session.live:
-            agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
-        else:
-            value = float(agent.real_pos['USDT']['value'])
-            agent.real_pos['USDT']['value'] = value + float(usdt_size)
-            owed = float(agent.real_pos['USDT']['owed'])
-            agent.real_pos['USDT']['owed'] = owed - float(usdt_size)
-        
-        # save records and update counts
-        agent.counts_dict['real_close_long'] +=1
-        uf.realised_pnl(agent, trade_record, 'long')
+            if base_size and (real_bal != base_size): # check records match reality
+                print(f"{pair} records don't match real balance. {real_bal = }, {base_size = }")
+            if not base_size:
+                base_size = real_bal
+            
+            # execute trade
+            api_order = funcs.sell_asset_M(pair, base_size, session.live)
+            usdt_size = api_order.get('cummulativeQuoteQty')
+            funcs.repay_asset_M('USDT', usdt_size, session.live)
+            
+            sell_order = funcs.create_trade_dict(api_order, price, session.live)
+            sell_order['type'] = 'close_long'
+            sell_order['state'] = 'real'
+            sell_order['reason'] = 'strategy close long signal'
+            sell_order['liability'] = uf.update_liability(trade_record, usdt_size, 'reduce')
+            trade_record.append(sell_order)
+            
+            if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
+                trade_id = trade_record[0].get('timestamp')
+                agent.closed_trades[trade_id] = trade_record
+            else:
+                agent.closed_trades[agent.next_id] = trade_record
+            uf.record_trades(session, agent, 'closed')
+            agent.next_id += 1
+            
+            if agent.open_trades[pair]:
+                del agent.open_trades[pair]
+                uf.record_trades(session, agent, 'open')
+            
+            agent.in_pos['real'] = None
+            agent.in_pos['real_pfrd'] = 0
+            del agent.real_pos[asset]
+            if session.live:
+                agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
+            else:
+                value = float(agent.real_pos['USDT']['value'])
+                agent.real_pos['USDT']['value'] = value + float(usdt_size)
+                owed = float(agent.real_pos['USDT']['owed'])
+                agent.real_pos['USDT']['owed'] = owed - float(usdt_size)
+            
+            # save records and update counts
+            agent.counts_dict['real_close_long'] +=1
+            uf.realised_pnl(agent, trade_record, 'long')
     
     if agent.in_pos['sim'] == 'long':
         note = f"sim close long {pair} @ {price}"
@@ -493,80 +501,84 @@ def tp_short(session, agent, pair, stp, inval):
         
         # clear stop
         clear, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
-        if base_size and (real_bal != base_size): # check records match reality
-            print(f"{pair} records don't match real balance. {real_bal = }, {base_size = }")
-        if not base_size:
-            base_size = real_bal
-        
-        # execute trade
-        order_size = base_size * (pct/100)
-        api_order = funcs.buy_asset_M(pair, order_size, True, session.live)
-        buy_order = funcs.create_trade_dict(api_order, price, session.live)
-        repay_size = buy_order.get('base_size')
-        funcs.repay_asset_M(asset, repay_size, session.live)
-        
-        note = f"real take-profit {pair} short {pct}% @ {price}"
-        print(now, note)        
-        
-        if pct == 100:
-            # create trade dict
-            buy_order['type'] = 'close_short'
-            buy_order['state'] = 'real'
-            buy_order['reason'] = 'trade over-extended'
-            buy_order['liability'] = uf.update_liability(trade_record, repay_size, 'reduce')
-            trade_record.append(buy_order)
+        if clear == 'error':
+            print(f"Can't be sure which {pair} stop to clear, tp_short aborted")
+            pb.push_note(pair, "Can't be sure which stop to clear, tp_short aborted")
+        else:
+            if base_size and (real_bal != base_size): # check records match reality
+                print(f"{pair} records don't match real balance. {real_bal = }, {base_size = }")
+            if not base_size:
+                base_size = real_bal
             
-            # update records            
-            agent.tracked_trades[pair] = trade_record
-            uf.record_trades(session, agent, 'tracked')
+            # execute trade
+            order_size = base_size * (pct/100)
+            api_order = funcs.buy_asset_M(pair, order_size, True, session.live)
+            buy_order = funcs.create_trade_dict(api_order, price, session.live)
+            repay_size = buy_order.get('base_size')
+            funcs.repay_asset_M(asset, repay_size, session.live)
             
-            if agent.open_trades[pair]:
-                del agent.open_trades[pair]
+            note = f"real take-profit {pair} short {pct}% @ {price}"
+            print(now, note)        
+            
+            if pct == 100:
+                # create trade dict
+                buy_order['type'] = 'close_short'
+                buy_order['state'] = 'real'
+                buy_order['reason'] = 'trade over-extended'
+                buy_order['liability'] = uf.update_liability(trade_record, repay_size, 'reduce')
+                trade_record.append(buy_order)
+                
+                # update records            
+                agent.tracked_trades[pair] = trade_record
+                uf.record_trades(session, agent, 'tracked')
+                
+                if agent.open_trades[pair]:
+                    del agent.open_trades[pair]
+                    uf.record_trades(session, agent, 'open')
+                
+                agent.in_pos['real'] = None
+                agent.in_pos['tracked'] = 'short'
+                del agent.real_pos[asset]
+                if session.live:
+                    agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
+                else:
+                    agent.real_pos['USDT']['qty'] -= agent.real_pos[asset].get('value')
+                    agent.real_pos['USDT']['value'] -= agent.real_pos[asset].get('value')
+                    agent.real_pos['USDT']['pf%'] -= agent.real_pos[asset].get('pf%')
+                agent.tracked[asset] = {'qty': 0, 'value': 0, 'pf%': 0, 'or_R': 0, 'or_$': 0}                
+                
+                agent.counts_dict['real_close_short'] += 1
+                uf.realised_pnl(agent, trade_record, 'short')
+            
+            else: # if pct < 100%
+                # create trade dict
+                buy_order['type'] = 'tp_short'
+                buy_order['state'] = 'real'
+                buy_order['hard_stop'] = str(stp)
+                buy_order['reason'] = 'trade over-extended'
+                buy_order['liability'] = uf.update_liability(trade_record, repay_size, 'reduce')
+                
+                # set new stop
+                new_size = real_bal - float(buy_order['base_size'])
+                stop_order = funcs.set_stop_M(pair, new_size, be.SIDE_SELL, stp, stp*1.2)
+                buy_order['stop_id'] = stop_order.get('orderId')
+                
+                trade_record.append(buy_order)
+                
+                # update records
+                agent.open_trades['pair'] = trade_record
                 uf.record_trades(session, agent, 'open')
+               
+                agent.in_pos['real_pfrd'] = agent.in_pos['real_pfrd'] * (pct / 100)
+                if session.live:
+                    agent.real_pos[asset].update(funcs.update_pos_M(session, asset, new_size, inval, agent.in_pos['real'], agent.in_pos['real_pfrd']))
+                    agent.real_pos['USDT'] = funcs.update_usdt(session.bal)
+                else:
+                    uf.calc_sizing_non_live_tp(agent, asset, pct, 'real')
+                
+                agent.counts_dict['real_tp_short'] += 1
+                uf.realised_pnl(agent, trade_record, 'short')
             
-            agent.in_pos['real'] = None
-            agent.in_pos['tracked'] = 'short'
-            del agent.real_pos[asset]
-            if session.live:
-                agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
-            else:
-                agent.real_pos['USDT']['qty'] -= agent.real_pos[asset].get('value')
-                agent.real_pos['USDT']['value'] -= agent.real_pos[asset].get('value')
-                agent.real_pos['USDT']['pf%'] -= agent.real_pos[asset].get('pf%')
-            agent.tracked[asset] = {'qty': 0, 'value': 0, 'pf%': 0, 'or_R': 0, 'or_$': 0}                
-            
-            agent.counts_dict['real_close_short'] += 1
-            uf.realised_pnl(agent, trade_record, 'short')
-        
-        else: # if pct < 100%
-            # create trade dict
-            buy_order['type'] = 'tp_short'
-            buy_order['state'] = 'real'
-            buy_order['hard_stop'] = str(stp)
-            buy_order['reason'] = 'trade over-extended'
-            buy_order['liability'] = uf.update_liability(trade_record, repay_size, 'reduce')
-            
-            # set new stop
-            new_size = real_bal - float(buy_order['base_size'])
-            stop_order = funcs.set_stop_M(pair, new_size, be.SIDE_SELL, stp, stp*1.2)
-            buy_order['stop_id'] = stop_order.get('orderId')
-            
-            trade_record.append(buy_order)
-            
-            # update records
-            agent.open_trades['pair'] = trade_record
-            uf.record_trades(session, agent, 'open')
-           
-            agent.in_pos['real_pfrd'] = agent.in_pos['real_pfrd'] * (pct / 100)
-            if session.live:
-                agent.real_pos[asset].update(funcs.update_pos_M(session, asset, new_size, inval, agent.in_pos['real'], agent.in_pos['real_pfrd']))
-                agent.real_pos['USDT'] = funcs.update_usdt(session.bal)
-            else:
-                uf.calc_sizing_non_live_tp(agent, asset, pct, 'real')
-            
-            agent.counts_dict['real_tp_short'] += 1
-            uf.realised_pnl(agent, trade_record, 'short')
-        
     if agent.in_pos.get('sim_tp_sig'):
         note = f"sim take-profit {pair} short 50% @ {price}"
         print(now, note) 
@@ -649,49 +661,53 @@ def close_short(session, agent, pair):
         
         # cancel stop
         clear, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
-        if base_size and (real_bal != base_size): # check records match reality
-            print(f"{pair} records don't match real balance. {real_bal = }, {base_size = }")
-        if not base_size:
-            base_size = real_bal
-        
-        # execute trade
-        api_order = funcs.buy_asset_M(pair, base_size, True, session.live)
-        funcs.repay_asset_M(asset, base_size, session.live)
-        
-        sell_order = funcs.create_trade_dict(api_order, price, session.live)
-        sell_order['type'] = 'close_short'
-        sell_order['state'] = 'real'
-        sell_order['reason'] = 'strategy close short signal'
-        sell_order['liability'] = uf.update_liability(trade_record, base_size, 'reduce')
-        trade_record.append(sell_order)
-        
-        if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
-            trade_id = trade_record[0].get('timestamp')
-            agent.closed_trades[trade_id] = trade_record
+        if clear == 'error':
+            print(f"Can't be sure which {pair} stop to clear, close_short aborted")
+            pb.push_note(pair, "Can't be sure which stop to clear, close_short aborted")
         else:
-            agent.closed_trades[agent.next_id] = trade_record
-        uf.record_trades(session, agent, 'closed')
-        agent.next_id += 1
-        
-        if agent.open_trades[pair]:
-            del agent.open_trades[pair]
-            uf.record_trades(session, agent, 'open')
-        
-        agent.in_pos['real'] = None
-        agent.in_pos['real_pfrd'] = 0
-        if session.live:
-            del agent.real_pos[asset]
-            agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
-        else:
-            del agent.real_pos[asset]
-            value = float(agent.real_pos['USDT']['value'])
-            agent.real_pos['USDT']['value'] = value + float(base_size * price)
-            owed = float(agent.real_pos['USDT']['owed'])
-            agent.real_pos['USDT']['owed'] = owed - float(base_size * price)
-        
-        # save records and update counts
-        agent.counts_dict['real_close_short'] +=1
-        uf.realised_pnl(agent, trade_record, 'short')
+            if base_size and (real_bal != base_size): # check records match reality
+                print(f"{pair} records don't match real balance. {real_bal = }, {base_size = }")
+            if not base_size:
+                base_size = real_bal
+            
+            # execute trade
+            api_order = funcs.buy_asset_M(pair, base_size, True, session.live)
+            funcs.repay_asset_M(asset, base_size, session.live)
+            
+            sell_order = funcs.create_trade_dict(api_order, price, session.live)
+            sell_order['type'] = 'close_short'
+            sell_order['state'] = 'real'
+            sell_order['reason'] = 'strategy close short signal'
+            sell_order['liability'] = uf.update_liability(trade_record, base_size, 'reduce')
+            trade_record.append(sell_order)
+            
+            if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
+                trade_id = trade_record[0].get('timestamp')
+                agent.closed_trades[trade_id] = trade_record
+            else:
+                agent.closed_trades[agent.next_id] = trade_record
+            uf.record_trades(session, agent, 'closed')
+            agent.next_id += 1
+            
+            if agent.open_trades[pair]:
+                del agent.open_trades[pair]
+                uf.record_trades(session, agent, 'open')
+            
+            agent.in_pos['real'] = None
+            agent.in_pos['real_pfrd'] = 0
+            if session.live:
+                del agent.real_pos[asset]
+                agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
+            else:
+                del agent.real_pos[asset]
+                value = float(agent.real_pos['USDT']['value'])
+                agent.real_pos['USDT']['value'] = value + float(base_size * price)
+                owed = float(agent.real_pos['USDT']['owed'])
+                agent.real_pos['USDT']['owed'] = owed - float(base_size * price)
+            
+            # save records and update counts
+            agent.counts_dict['real_close_short'] +=1
+            uf.realised_pnl(agent, trade_record, 'short')
     
     if agent.in_pos['sim'] == 'short':
         note = f"sim close short {pair} @ {price}"
@@ -817,54 +833,58 @@ def reduce_risk_M(session, agent):
                     
                     # clear stop
                     clear, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
-                    if base_size and (real_bal != base_size): # check records match reality
-                        print(f"{pair} records don't match real balance. {real_bal = }, {base_size = }")
-                    if not base_size:
-                        base_size = real_bal
-                    
-                    long = trade_record[0].get('type')[-4:] == 'long'
-                    if long:
-                        api_order = funcs.sell_asset_M(pair, base_size, session.live)
-                        usdt_size = api_order.get('cummulativeQuoteQty')
-                        repay_size = usdt_size
-                        funcs.repay_asset_M('USDT', repay_size, session.live)
+                    if clear == 'error':
+                        print(f"Can't be sure which {pair} stop to clear, close_short aborted")
+                        pb.push_note(pair, "Can't be sure which stop to clear, close_short aborted")
                     else:
-                        api_order = funcs.buy_asset_M(pair, base_size, True, session.live)
-                        repay_size = base_size
-                        funcs.repay_asset_M(asset, repay_size, session.live)
-                    
-                    reduce_order = funcs.create_trade_dict(api_order, price, session.live)
-                    reduce_order['type'] = 'close_long' if long else 'close_short'
-                    reduce_order['state'] = 'real'
-                    reduce_order['reason'] = 'portfolio risk limiting'
-                    reduce_order['liability'] = uf.update_liability(trade_record, repay_size, 'reduce')
-                    
-                    trade_record.append(reduce_order)
-                    
-                    agent.sim_trades[pair] = trade_record
-                    uf.record_trades(session, agent, 'sim')
-                    
-                    if agent.open_trades[pair]:
-                        del agent.open_trades[pair]
-                        uf.record_trades(session, agent, 'open')
-                    
-                    agent.counts_dict['reduce_risk'] += 1
-                    total_r -= or_R
-                    
-                    if session.live:
+                        if base_size and (real_bal != base_size): # check records match reality
+                            print(f"{pair} records don't match real balance. {real_bal = }, {base_size = }")
+                        if not base_size:
+                            base_size = real_bal
+                        
+                        long = trade_record[0].get('type')[-4:] == 'long'
+                        if long:
+                            api_order = funcs.sell_asset_M(pair, base_size, session.live)
+                            usdt_size = api_order.get('cummulativeQuoteQty')
+                            repay_size = usdt_size
+                            funcs.repay_asset_M('USDT', repay_size, session.live)
+                        else:
+                            api_order = funcs.buy_asset_M(pair, base_size, True, session.live)
+                            repay_size = base_size
+                            funcs.repay_asset_M(asset, repay_size, session.live)
+                        
+                        reduce_order = funcs.create_trade_dict(api_order, price, session.live)
+                        reduce_order['type'] = 'close_long' if long else 'close_short'
+                        reduce_order['state'] = 'real'
+                        reduce_order['reason'] = 'portfolio risk limiting'
+                        reduce_order['liability'] = uf.update_liability(trade_record, repay_size, 'reduce')
+                        
+                        trade_record.append(reduce_order)
+                        
+                        agent.sim_trades[pair] = trade_record
+                        uf.record_trades(session, agent, 'sim')
+                        
+                        if agent.open_trades[pair]:
+                            del agent.open_trades[pair]
+                            uf.record_trades(session, agent, 'open')
+                        
+                        agent.counts_dict['reduce_risk'] += 1
+                        total_r -= or_R
+                        
+                        if session.live:
+                            del agent.real_pos[asset]
+                            agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
+                        elif long and not session.live:
+                            del agent.real_pos[asset]
+                            agent.real_pos['USDT']['value'] += float(usdt_size)
+                            agent.real_pos['USDT']['owed'] -= float(usdt_size)
+                        else:
+                            del agent.real_pos[asset]
+                            agent.real_pos['USDT']['value'] += float(base_size * price)
+                            agent.real_pos['USDT']['owed'] -= float(base_size * price)
+                        
                         del agent.real_pos[asset]
-                        agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
-                    elif long and not session.live:
-                        del agent.real_pos[asset]
-                        agent.real_pos['USDT']['value'] += float(usdt_size)
-                        agent.real_pos['USDT']['owed'] -= float(usdt_size)
-                    else:
-                        del agent.real_pos[asset]
-                        agent.real_pos['USDT']['value'] += float(base_size * price)
-                        agent.real_pos['USDT']['owed'] -= float(base_size * price)
-                    
-                    del agent.real_pos[asset]
-                    uf.realised_pnl(agent, trade_record, 'long')
+                        uf.realised_pnl(agent, trade_record, 'long')
                 except BinanceAPIException as e:
                     print(f'problem with sell order for {pair}')
                     print(e)

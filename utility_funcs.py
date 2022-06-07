@@ -397,10 +397,10 @@ def realised_pnl(agent, trade_record, side):
     trade_r = round(trade_pnl / r_val, 3)
     scalar = final_size / init_size
     realised_r = trade_r * scalar
-    print(f'\nrealised pnl: {realised_r:.1f}R')
-    print(f'{entry = }, {init_stop = }, {final_exit = }')
-    print(f'{r_val = }, {trade_r = }, {scalar = }')
-    print(f'{init_size = }, {final_size = }\n')
+    # print(f'\nrealised pnl: {realised_r:.1f}R')
+    # print(f'{entry = }, {init_stop = }, {final_exit = }')
+    # print(f'{r_val = }, {trade_r = }, {scalar = }')
+    # print(f'{init_size = }, {final_size = }\n')
     
     if trade_record[-1].get('state') == 'real':
         if side == 'long':
@@ -511,7 +511,8 @@ def record_stopped_trades(session, agent):
         elif pair not in symbols_remaining:
             stopped.append((pair, sid, time))
     
-    print(f'number of stopped trades: {len(stopped)}')
+    # print(f'number of stopped trades: {len(stopped)}')
+    
     # for any that don't, assume that the stop was hit and check for exchange records
     for pair, sid, time in stopped:
         trade_record = agent.open_trades.get(pair)
@@ -720,7 +721,6 @@ def record_stopped_sim_trades(session, agent):
             overshoot_pct = round((100 * (hh - stop) / stop), 3) # % distance that price broke through the stop
         
         if stopped:
-            print('stopped')
             # create trade dict
             trade_dict = {'timestamp': stop_time, 
                           'pair': pair, 
@@ -751,7 +751,7 @@ def record_stopped_sim_trades(session, agent):
                 agent.counts_dict['sim_stop_short'] += 1
             del_pairs.append(pair)
         
-    print(f"number of stopped sim trades: {agent.counts_dict['sim_stop_long'] +  agent.counts_dict['sim_stop_short']}")        
+    # print(f"number of stopped sim trades: {agent.counts_dict['sim_stop_long'] +  agent.counts_dict['sim_stop_short']}")        
     
     for p in del_pairs:
         del agent.sim_trades[p]
@@ -821,8 +821,8 @@ def recent_perf_str(session, agent):
     sim_score_l, sim_perf_str_l = score_accum('sim', 'l')
     sim_score_s, sim_perf_str_s = score_accum('sim', 's')
     
-    perf_str_l = real_perf_str_l if real_score_l else sim_perf_str_l
-    perf_str_s = real_perf_str_s if real_score_s else sim_perf_str_s
+    perf_str_l = real_perf_str_l if agent.fixed_risk_l else sim_perf_str_l
+    perf_str_s = real_perf_str_s if agent.fixed_risk_s else sim_perf_str_s
     
     full_perf_str = f'long: {perf_str_l}\nreal: score {real_score_l} rpnl {agent.realised_pnl_long:.1f},\nsim: score {sim_score_l} rpnl {agent.sim_pnl_long:.1f}\nshort: {perf_str_s}\nreal: score {real_score_s} rpnl {agent.realised_pnl_short:.1f},\nsim: score {sim_score_s} rpnl {agent.sim_pnl_short:.1f}'
     

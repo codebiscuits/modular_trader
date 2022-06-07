@@ -982,14 +982,7 @@ def update_pos_M(session, asset, new_bal, inval, direction, pfrd):
     price = get_price(pair)
     value = price * new_bal
     pct = round(100 * value / session.bal, 5)
-    
     open_risk = value - (value / inval)
-    # if direction == 'long':
-    #     open_risk = value - (value / inval)
-    # elif direction == 'short':
-    #     open_risk = (value / inval) - value
-    # else:
-    #     open_risk = 0
     
     if pfrd:
         open_risk_r = open_risk / pfrd
@@ -1028,7 +1021,7 @@ def top_up_bnb_M(usdt_size):
         if a.get('asset') == 'BNB':
             free_bnb = float(a.get('free'))
             interest = float(a.get('interest'))
-            print(interest)
+            print(f'BNB interest: {interest}')
         if a.get('asset') == 'USDT':
             free_usdt = float(a.get('free'))
     net_bnb = free_bnb - interest
@@ -1185,10 +1178,12 @@ def clear_stop_M(pair, trade_record, live):
         else:
             print(f'no recorded stop id for {pair}')
             orders = client.get_all_margin_orders(symbol=pair)
-            if orders[-1].get('type') == 'STOP_LOSS_LIMIT':
+            if (len(orders) == 1) and (orders[-1].get('type') == 'STOP_LOSS_LIMIT'):
                 stop_id = orders[-1].get('orderId')
                 clear = client.cancel_margin_order(symbol=pair, orderId=stop_id)
                 base_size = Decimal(clear.get('origQty'))
+            elif len(orders) > 1:
+                clear = 'error'
             else:
                 print('no stop to clear')
                 clear = {}
