@@ -406,8 +406,6 @@ class DoubleST():
                 df['timestamp'] = pd.to_datetime(df['timestamp'])
                 z.stop()
             
-            print(df.head(3))
-            
             if long_trade:
                 trade_type = 'stop_long'
                 ll = df.low.min()
