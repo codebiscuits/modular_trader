@@ -1,3 +1,5 @@
+'''code taken from https://realpython.com/python-timer/'''
+
 import time
 
 class TimerError(Exception):
@@ -29,8 +31,8 @@ class Timer:
         elapsed_time = time.perf_counter() - self._start_time
         self._start_time = None
 
-        if elapsed_time > 5:
-            print(f'{round(elapsed_time)} for {self.name}')
+        # if elapsed_time > 120:
+        #     print(f'{round(elapsed_time)} for {self.name}')
         if self.name:
             self.timers[self.name] += elapsed_time
 

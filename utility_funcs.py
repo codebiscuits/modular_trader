@@ -18,7 +18,7 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 # now = datetime.now().strftime('%d/%m/%y %H:%M')
 
 
-def open_trade_stats(now, total_bal, v):
+def open_trade_stats(now, total_bal, v, curr_price):
     we = Timer('open_trade_stats')
     we.start()
     '''takes an entry from the open trades dictionary, 
@@ -42,7 +42,6 @@ def open_trade_stats(now, total_bal, v):
             current_base_size -= Decimal(i.get('base_size'))
     
     entry_price = float(v[0].get('exe_price'))
-    curr_price = funcs.get_price(pair)
     
     open_time = v[0].get('timestamp') / 1000
     if open_time == 1000000:
@@ -304,16 +303,16 @@ def interpret_benchmark(session, agents):
     for agent in agents:
         agent_bench = agent.benchmark
         if mkt_bench['valid']:
-            d_ranking = [
-                ('btc', round(mkt_bench['btc_1d']*100, 3)), 
-                ('eth', round(mkt_bench['eth_1d']*100, 3)), 
-                ('mkt', round(mkt_bench['market_1d']*100, 3)), 
-                ('strat', round(agent_bench['strat_1d']*100, 3))
-                ]
-            d_ranking = sorted(d_ranking, key=lambda x: x[1], reverse=True)
-            print('1 day stats')
-            for e, r in enumerate(d_ranking):
-                print(f'rank {e+1}: {r[0]} {r[1]}%')
+            # d_ranking = [
+            #     ('btc', round(mkt_bench['btc_1d']*100, 3)), 
+            #     ('eth', round(mkt_bench['eth_1d']*100, 3)), 
+            #     ('mkt', round(mkt_bench['market_1d']*100, 3)), 
+            #     ('strat', round(agent_bench['strat_1d']*100, 3))
+            #     ]
+            # d_ranking = sorted(d_ranking, key=lambda x: x[1], reverse=True)
+            # print('1 day stats')
+            # for e, r in enumerate(d_ranking):
+            #     print(f'rank {e+1}: {r[0]} {r[1]}%')
             w_ranking = [
                 ('btc', round(mkt_bench['btc_1w']*100, 2)), 
                 ('eth', round(mkt_bench['eth_1w']*100, 2)), 
@@ -324,16 +323,16 @@ def interpret_benchmark(session, agents):
             print('1 week stats')
             for e, r in enumerate(w_ranking):
                 print(f'rank {e+1}: {r[0]} {r[1]}%')
-            m_ranking = [
-                ('btc', round(mkt_bench['btc_1m']*100, 1)), 
-                ('eth', round(mkt_bench['eth_1m']*100, 1)), 
-                ('mkt', round(mkt_bench['market_1m']*100, 1)), 
-                ('strat', round(agent_bench['strat_1m']*100, 1))
-                ]
-            m_ranking = sorted(m_ranking, key=lambda x: x[1], reverse=True)
-            print('1 month stats')
-            for e, r in enumerate(m_ranking):
-                print(f'rank {e+1}: {r[0]} {r[1]}%')
+            # m_ranking = [
+            #     ('btc', round(mkt_bench['btc_1m']*100, 1)), 
+            #     ('eth', round(mkt_bench['eth_1m']*100, 1)), 
+            #     ('mkt', round(mkt_bench['market_1m']*100, 1)), 
+            #     ('strat', round(agent_bench['strat_1m']*100, 1))
+            #     ]
+            # m_ranking = sorted(m_ranking, key=lambda x: x[1], reverse=True)
+            # print('1 month stats')
+            # for e, r in enumerate(m_ranking):
+            #     print(f'rank {e+1}: {r[0]} {r[1]}%')
         else:
             print(f'no benchmarking data available for {agent.name}')
 

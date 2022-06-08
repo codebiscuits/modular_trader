@@ -36,7 +36,9 @@ class DoubleST():
         self.live = session.live
         self.bal = session.bal
         self.fr_max = session.fr_max
+        self.prices = session.prices
         self.name = f'double_st_{timeframe}_{tf_offset}_{lookback}_{mult}'
+        print(f'initialising {self.name}')
         self.lb = lookback
         self.mult = mult
         self.market_data = self.mkt_data_path()
@@ -347,7 +349,7 @@ class DoubleST():
                 print(f'getting {pair[:-4]} free balance')
                 free_bal = float(client.get_asset_balance(pair[:-4]).get('free'))
                 print(f'getting {pair} price')
-                price = funcs.get_price(pair)
+                price = session.prices[pair]
                 value = free_bal * price
                 if value > 10:
                     note = f'{pair} in position with no stop-loss'
@@ -387,12 +389,17 @@ class DoubleST():
                     break
             x.stop()    
             # check lowest low since stop was set
-            z = Timer('get_historical_klines')
+            z = Timer('read ohlc pickles')
             z.start()
             df = pd.read_pickle(f'{session.ohlc_data}/{pair}.pkl')
             z.stop()
-            stop_dt = datetime.fromtimestamp(stop_time/1000)
-            df = df.loc[df.timestamp > stop_dt]
+            
+            # trim df down to just the rows since the last stop was set
+            if (datetime.now().timestamp() - stop_time/1000) < 13000:
+                df = df.tail(2)
+            else:
+                stop_dt = datetime.fromtimestamp(stop_time/1000)
+                df = df.loc[df.timestamp > stop_dt]
             
             if df.empty:
                 z = Timer('get_historical_klines')
@@ -667,7 +674,8 @@ class DoubleST():
                 size_dict[asset] = {}
             else:
                 asset = k[:-4]
-                size_dict[asset] = uf.open_trade_stats(now, total_bal, v)
+                price = self.prices[k]
+                size_dict[asset] = uf.open_trade_stats(now, total_bal, v, price)
         a.stop()
         return size_dict# -*- coding: utf-8 -*-
 

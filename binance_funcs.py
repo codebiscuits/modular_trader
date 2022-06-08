@@ -153,34 +153,6 @@ def account_bal_old():
     return total
 
 
-def current_positions_old(session, agent, switch:str):
-    '''creates a dictionary of open positions by checking either 
-    open_trades.json, sim_trades.json or tracked_trades.json'''
-        
-    filepath = Path(f'{session.market_data}/{agent.name}/{switch}_trades.json')
-    with open(filepath, 'r') as file:
-        try:
-            data = json.load(file)
-        except:
-            data = {}
-    
-    size_dict = {}
-    now = datetime.now()
-    
-    for k, v in data.items():
-        if switch == 'open':
-            asset = k[:-4]
-            size_dict[asset] = uf.open_trade_stats(now, session.bal, v)
-        elif switch == 'sim':
-            asset = v[0].get('pair')[:-4]
-            size_dict[asset] = uf.open_trade_stats(now, session.bal, v)
-        elif switch == 'tracked':
-            asset = v[0].get('pair')[:-4]
-            size_dict[asset] = {}
-    
-    return size_dict
-        
-
 def free_usdt():
     usdt_bals = client.get_asset_balance(asset='USDT')
     return float(usdt_bals.get('free'))
@@ -218,11 +190,27 @@ def update_usdt(total_bal):
 
 
 def get_price(pair):
+    '''fetches a single pairs price from binance. slow so only use when necessary'''
+    print('running get_price')
     hn = Timer('get_price')
     hn.start()
     price = float(client.get_ticker(symbol=pair).get('lastPrice'))
     hn.stop()    
     return price
+
+
+def update_prices(session):
+    '''fetches current prices for all pairs on binance. much faster than get_price'''
+    up = Timer('update_prices')
+    up.start()
+    now = time.perf_counter()
+    last = session.last_price_update
+    if now - last > 60:
+        prices = client.get_all_tickers()
+        session.prices = {x.get('symbol', None): float(x.get('price', None)) for x in prices}
+        session.last_price_update = time.perf_counter()
+    up.stop()
+    
 
 
 def get_mid_price(pair):
@@ -691,7 +679,7 @@ def buy_asset(pair, usdt_size, live):
     timestamp = round(datetime.utcnow().timestamp() * 1000)
     
     # calculate the exact size of the order
-    usdt_price = get_price(pair)
+    # usdt_price = get_price(pair)
     order_size = valid_size(pair, usdt_size/usdt_price)
     if not order_size:
         order_size = 0
@@ -715,7 +703,7 @@ def sell_asset(pair, asset_bal, live, pct=100):
     # print(f'selling {pair}')
     timestamp = round(datetime.utcnow().timestamp() * 1000)
     asset = pair[:-4]
-    usdt_price = get_price(pair)
+    # usdt_price = get_price(pair)
 
     # make sure order size has the right number of decimal places
     trade_size = Decimal(asset_bal) * Decimal(pct / 100)
@@ -960,6 +948,7 @@ def buy_asset_M(pair, size, is_base, price, live):
         else:
             base_size = valid_size(pair, size / price)
             if not base_size: # if size == 0, valid_size will output None
+                print(f'*problem* non-live buy {pair}: {usdt_size = }, {base_size = }')
                 base_size = 0
             usdt_size = size
         buy_order = {'clientOrderId': '111111',

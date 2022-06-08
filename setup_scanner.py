@@ -65,10 +65,14 @@ dst_presets = {1: ('4h', 0, 1, 1.0),
 
 # session = strats.RSI_ST_EMA(4, 45, 96)
 session = sessions.MARGIN_SESSION()
-agent_1 = DoubleST(session, *dst_presets[3])
-agent_2 = DoubleST(session, *dst_presets[7])
-agent_3 = DoubleST(session, *dst_presets[11])
-agents = [agent_1, agent_2, agent_3]
+funcs.update_prices(session)
+agent_1 = DoubleST(session, *dst_presets[1])
+agent_2 = DoubleST(session, *dst_presets[3])
+agent_3 = DoubleST(session, *dst_presets[5])
+agent_4 = DoubleST(session, *dst_presets[7])
+agent_5 = DoubleST(session, *dst_presets[9])
+agent_6 = DoubleST(session, *dst_presets[11])
+agents = [agent_1, agent_2, agent_3, agent_4, agent_5, agent_6]
 session.name = '-'.join([n.name for n in agents])
 
 # now that trade records have been loaded, path can be changed
@@ -113,8 +117,8 @@ for agent in agents:
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 
 for n, pair in enumerate(pairs):
+    funcs.update_prices(session)
     # print(pair, 'main loop')
-    session.prices[pair] = funcs.get_price(pair)
     asset = pair[:-1*len(session.quote_asset)]
     for agent in agents:
         agent.init_in_pos(pair)    
@@ -135,6 +139,8 @@ for n, pair in enumerate(pairs):
     
 # generate signals ------------------------------------------------------------
     signals = {}
+    mir = uf.max_init_risk(agent.num_open_positions, agent.target_risk)
+    usdt_depth_l, usdt_depth_s = funcs.get_depth(session, pair)
     for agent in agents:
         # print('*****', agent.name)
         signals = agent.margin_signals(session, df, pair)
@@ -144,9 +150,7 @@ for n, pair in enumerate(pairs):
         inval_dist = signals.get('inval')
         stp = funcs.calc_stop(st, session.spreads.get(pair), price)
         risk = (price - stp) / price
-        mir = uf.max_init_risk(agent.num_open_positions, agent.target_risk)
         size_l, usdt_size_l, size_s, usdt_size_s = funcs.get_size(agent, price, session.bal, risk)
-        usdt_depth_l, usdt_depth_s = funcs.get_depth(session, pair)
         
         df.drop(columns=['st_loose', 'st_loose_u', 'st_loose_d', 'st', 'st_u', 'st_d'], inplace=True)
         
@@ -361,9 +365,8 @@ for agent in agents:
     if not session.live:
         print('\n*** real_pos ***')
         pprint(agent.real_pos)
-        print('\n*** sim_pos ***')
-        pprint(agent.sim_pos.keys())
-        uf.interpret_benchmark(session, [agent])
+        # print('\n*** sim_pos ***')
+        # pprint(agent.sim_pos.keys())
         print('warning: logging directed to test_records')
     
     uf.scanner_summary(session, [agent])
@@ -376,11 +379,13 @@ for agent in agents:
         print('-')
     print('-:-' * 20)
 
+uf.interpret_benchmark(session, agents)
+
 for k, v in Timer.timers.items():
-    if v > 30:
+    if v > 3:
         print(k, round(v))
 
 end = time.perf_counter()
 elapsed = round(end - all_start)
 print(f'Total time taken: {elapsed//60}m, {elapsed%60}s')
-
+print('\n-------------------------------------------------------------------------------\n')

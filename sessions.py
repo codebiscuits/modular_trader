@@ -5,6 +5,7 @@ from pushbullet import Pushbullet
 from timers import Timer
 from binance.client import Client
 import keys
+import time
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
@@ -28,6 +29,7 @@ class MARGIN_SESSION:
         self.market_data = self.mkt_data_path()
         self.ohlc_data = self.ohlc_path()
         self.now_start = datetime.now().strftime('%d/%m/%y %H:%M')
+        self.last_price_update = 0
         t.stop()
         
         
