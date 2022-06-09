@@ -310,7 +310,7 @@ def interpret_benchmark(session, agents):
             #     ('strat', round(agent_bench['strat_1d']*100, 3))
             #     ]
             # d_ranking = sorted(d_ranking, key=lambda x: x[1], reverse=True)
-            # print('1 day stats')
+            # print(f'{agent} 1 day stats')
             # for e, r in enumerate(d_ranking):
             #     print(f'rank {e+1}: {r[0]} {r[1]}%')
             w_ranking = [
@@ -320,7 +320,7 @@ def interpret_benchmark(session, agents):
                 ('strat', round(agent_bench['strat_1w']*100, 2))
                 ]
             w_ranking = sorted(w_ranking, key=lambda x: x[1], reverse=True)
-            print('1 week stats')
+            print(f'{agent} 1 week stats')
             for e, r in enumerate(w_ranking):
                 print(f'rank {e+1}: {r[0]} {r[1]}%')
             # m_ranking = [
@@ -330,7 +330,7 @@ def interpret_benchmark(session, agents):
             #     ('strat', round(agent_bench['strat_1m']*100, 1))
             #     ]
             # m_ranking = sorted(m_ranking, key=lambda x: x[1], reverse=True)
-            # print('1 month stats')
+            # print(f'{agent} 1 month stats')
             # for e, r in enumerate(m_ranking):
             #     print(f'rank {e+1}: {r[0]} {r[1]}%')
         else:

@@ -38,7 +38,7 @@ class DoubleST():
         self.fr_max = session.fr_max
         self.prices = session.prices
         self.name = f'double_st_{timeframe}_{tf_offset}_{lookback}_{mult}'
-        print(f'initialising {self.name}')
+        print(f'\nInitialising {self.name}')
         self.lb = lookback
         self.mult = mult
         self.market_data = self.mkt_data_path()

@@ -673,130 +673,7 @@ def valid_price(pair, price):
     return str(step_round(price, step_size))
 
 
-def buy_asset(pair, usdt_size, live):
-    '''takes the pair and the dollar value of the desired position, and 
-    calculates the exact amount to order. then executes a market buy.'''
-    timestamp = round(datetime.utcnow().timestamp() * 1000)
-    
-    # calculate the exact size of the order
-    # usdt_price = get_price(pair)
-    order_size = valid_size(pair, usdt_size/usdt_price)
-    if not order_size:
-        order_size = 0
-    print(f'order size: {order_size}')
-    
-    # send the order
-    if live:
-        order = client.create_order(symbol=pair,
-                                    side=be.SIDE_BUY,
-                                    type=be.ORDER_TYPE_MARKET,
-                                    quantity=order_size)
-        
-    else:
-        order = {'symbol': pair, 'timestamp': timestamp, 'price': usdt_price, 
-                 'base_size': order_size, 'quote_size': usdt_size}
-    
-    return order
-
-
-def sell_asset(pair, asset_bal, live, pct=100):
-    # print(f'selling {pair}')
-    timestamp = round(datetime.utcnow().timestamp() * 1000)
-    asset = pair[:-4]
-    # usdt_price = get_price(pair)
-
-    # make sure order size has the right number of decimal places
-    trade_size = Decimal(asset_bal) * Decimal(pct / 100)
-    order_size = valid_size(pair, trade_size)
-    if not order_size:
-        order_size = 0
-    # print(f'{pair} Sell Order - raw size: {asset_bal:.5}, step size: {step_size:.2}, final size: {order_size:.5}')
-
-    if live:
-        order = client.create_order(symbol=pair,
-                                    side=be.SIDE_SELL,
-                                    type=be.ORDER_TYPE_MARKET,
-                                    quantity=order_size)
-        
-    else:
-        order = {'symbol': pair, 'timestamp': timestamp, 'price': usdt_price, 
-                 'base_size': order_size, 'quote_size': (order_size*Decimal(usdt_price))}
-        
-    return order
-
-
-def set_stop(pair, base_size, price, live):
-    # print(f'setting {pair} stop @ {price}')
-    asset = pair[:-4]
-
-    info = client.get_symbol_info(pair)
-    tick_size = info.get('filters')[0].get('tickSize')
-    step_size = Decimal(info.get('filters')[2].get('stepSize'))
-
-    reserve = 10 / price  # amount of BNB that would be worth $10 at stop price
-
-    order_size = step_round(base_size, step_size)  # - step_size
-    spread = get_spread(pair)
-    lower_price = price * (1 - (spread * 30))
-    trigger_price = step_round(price, tick_size)
-    limit_price = step_round(lower_price, tick_size)
-    # print(f'{pair} Stop Order - trigger: {trigger_price:.5}, limit: {limit_price:.5}, size: {order_size:.5}')
-
-    if live:
-        order = client.create_order(symbol=pair,
-                                    side=be.SIDE_SELL,
-                                    type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
-                                    timeInForce=be.TIME_IN_FORCE_GTC,
-                                    stopPrice=trigger_price,
-                                    quantity=order_size,
-                                    price=limit_price)
-    else:
-        order = {"pair": pair, 
-                "trig_price": Decimal(trigger_price),
-                "base_size": Decimal(order_size),
-                "quote_size": Decimal(order_size) * Decimal(trigger_price),
-                "fee": 0,
-                "fee_currency": "BNB"
-                }
-
-    # print('-')
-    return order
-
-
-def clear_stop(pair, trade_record, live):
-    '''finds the order id of the most recent stop-loss from the trade record
-    and cancels that specific order. if no such id can be found, blindly cancels 
-    the most recent stop-limit order relating to the pair'''
-
-    # sanity check
-    bal = client.get_asset_balance(asset=pair[:-4])
-    if Decimal(bal.get('locked')) == 0:
-        print('no stop to cancel')
-    else:
-        print(f'{pair} locked balance = {bal.get("locked")}')
-        _, stop_id, _ = uf.latest_stop_id(trade_record)
-        
-        if not stop_id: # if the function above didn't find anything
-            orders = client.get_open_orders(symbol=pair)
-            if orders and orders[-1].get('type') == 'STOP_LOSS_LIMIT':
-                stop_id = orders[-1].get('orderId')
-        
-        if live and stop_id:
-            result = client.cancel_order(symbol=pair, orderId=stop_id)
-
-
 #-#-#- Margin Account Functions
-
-
-def account_bal_M_old():
-    jh = Timer('account_bal_M')
-    jh.start()
-    info = client.get_margin_account()
-    total_net = float(info.get('totalNetAssetOfBtc'))
-    btc_price = get_price('BTCUSDT')
-    usdt_total_net = total_net * btc_price
-    jh.stop()
-    return round(usdt_total_net, 2)
 
 
 def free_usdt_M():
@@ -862,7 +739,7 @@ def update_pos_M(session, asset, new_bal, inval, direction, pfrd):
     return {'qty': new_bal, 'value': value, 'pf%': pct, 'or_R': open_risk_r, 'or_$': open_risk}
 
 
-def update_usdt_M(total_bal):
+def update_usdt_M_old(total_bal):
     hj = Timer('update_usdt_M')
     hj.start()
     '''checks current usdt balance and returns a dictionary for updating the sizing dict'''

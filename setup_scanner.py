@@ -66,6 +66,7 @@ dst_presets = {1: ('4h', 0, 1, 1.0),
 # session = strats.RSI_ST_EMA(4, 45, 96)
 session = sessions.MARGIN_SESSION()
 funcs.update_prices(session)
+pprint(session.usdt_bal)
 agent_1 = DoubleST(session, *dst_presets[1])
 agent_2 = DoubleST(session, *dst_presets[3])
 agent_3 = DoubleST(session, *dst_presets[5])
@@ -100,15 +101,13 @@ pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked
 
 # pairs = pairs[:10] ############# delete when testing is finished #############
 
-print(f"Current time: {session.now_start}, {session.name}")
-for agent in agents:
-    print(f"{agent.name} fr long: {agent.fixed_risk_l}, fr short: {agent.fixed_risk_s}")
-
+print(f"\nCurrent time: {session.now_start}, {session.name}\n")
 funcs.top_up_bnb_M(15)
 session.spreads = funcs.binance_spreads('USDT') # dict
 
 for agent in agents:
-    agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
+    print(f"{agent.name} fr long: {agent.fixed_risk_l}, fr short: {agent.fixed_risk_s}")
+    agent.real_pos['USDT'] = session.usdt_bal
     if agent.max_positions > 20:
         print(f'max positions: {agent.max_positions}')
     agent.calc_tor()
@@ -206,7 +205,7 @@ for n, pair in enumerate(pairs):
             
     # check total open risk and close profitable positions if necessary -----------
             omf.reduce_risk_M(session, agent)
-            agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
+            agent.real_pos['USDT'] = session.usdt_bal
                 
     # make sure there aren't too many open positions now --------------------------
             agent.calc_tor()
@@ -280,7 +279,7 @@ for n, pair in enumerate(pairs):
             
     # check total open risk and close profitable positions if necessary -----------
             omf.reduce_risk_M(session, agent)
-            agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
+            agent.real_pos['USDT'] = session.usdt_bal
                 
     # make sure there aren't too many open positions now --------------------------
             agent.calc_tor()
@@ -351,6 +350,7 @@ for n, pair in enumerate(pairs):
         
 # log all data from the session and print/push summary-------------------------
 print('-:-' * 20)
+session.get_usdt_M()
 for agent in agents:
     print(agent.name, 'summary')
     print(f'realised real long pnl: {agent.realised_pnl_long:.1f}R, realised sim long pnl: {agent.sim_pnl_long:.1f}R')
@@ -359,7 +359,7 @@ for agent in agents:
     print(f'or list: {[round(x, 2) for x in sorted(agent.or_list, reverse=True)]}')
     print(f"real open pnl: {agent.open_pnl('real'):.1f}R")
     print(f"sim open pnl: {agent.open_pnl('sim'):.1f}R")
-    agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
+    agent.real_pos['USDT'] = session.usdt_bal
     
     benchmark = uf.log(session, [agent])
     if not session.live:
@@ -381,6 +381,7 @@ for agent in agents:
 
 uf.interpret_benchmark(session, agents)
 
+print('-')
 for k, v in Timer.timers.items():
     if v > 3:
         print(k, round(v))

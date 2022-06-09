@@ -53,7 +53,7 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
         if session.live:
             agent.real_pos[asset] = funcs.update_pos_M(session, asset, size, inval, agent.in_pos['real'], agent.in_pos['real_pfrd'])
             agent.real_pos[asset]['pnl_R'] = 0
-            agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
+            session.update_usdt_M('borrow', usdt_size)
         else:
             pf = usdt_size / session.bal
             or_dol = session.bal * agent.fixed_risk_l
@@ -99,6 +99,7 @@ def tp_long(session, agent, pair, stp, inval):
     # session.bal = funcs.account_bal_M()
     
     if agent.in_pos.get('real_tp_sig'):        
+        agent.update_usdt(session)
         trade_record = agent.open_trades.get(pair)
         real_bal = abs(float(agent.real_pos[asset]['qty']))
         real_val = abs(float(agent.real_pos[asset]['value']))
@@ -147,7 +148,7 @@ def tp_long(session, agent, pair, stp, inval):
                 agent.tracked[asset] = {'qty': 0, 'value': 0, 'pf%': 0, 'or_R': 0, 'or_$': 0}                
                 del agent.real_pos[asset]
                 if session.live:
-                    agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
+                    session.update_usdt_M('repay', usdt_size)
                 else:
                     qty = float(agent.real_pos['USDT']['qty'])
                     agent.real_pos['USDT']['qty'] = qty + float(agent.real_pos[asset].get('value'))
@@ -182,7 +183,7 @@ def tp_long(session, agent, pair, stp, inval):
                 agent.in_pos['real_pfrd'] = agent.in_pos['real_pfrd'] * (pct / 100)
                 if session.live:
                     agent.real_pos[asset].update(funcs.update_pos_M(session, asset, new_size, inval, agent.in_pos['real'], agent.in_pos['real_pfrd']))
-                    agent.real_pos['USDT'] = funcs.update_usdt(session.bal)
+                    session.update_usdt_M('repay', usdt_size)
                 else:
                     uf.calc_sizing_non_live_tp(session, agent, asset, pct, 'real')
                 
@@ -308,7 +309,7 @@ def close_long(session, agent, pair):
             agent.in_pos['real_pfrd'] = 0
             del agent.real_pos[asset]
             if session.live:
-                agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
+                session.update_usdt_M('repay', usdt_size)
             else:
                 value = float(agent.real_pos['USDT']['value'])
                 agent.real_pos['USDT']['value'] = value + float(usdt_size)
@@ -448,7 +449,7 @@ def open_short(session, agent, pair, size, stp, inval, sim_reason):
         if session.live:
             agent.real_pos[asset] = funcs.update_pos_M(session, asset, size, inval, agent.in_pos['real'], agent.in_pos['real_pfrd'])
             agent.real_pos[asset]['pnl_R'] = 0
-            agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
+            session.update_usdt_M('up', usdt_size)
         else:
             pf = usdt_size / session.bal
             or_dol = session.bal * agent.fixed_risk_s
@@ -540,7 +541,8 @@ def tp_short(session, agent, pair, stp, inval):
                 agent.in_pos['tracked'] = 'short'
                 del agent.real_pos[asset]
                 if session.live:
-                    agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
+                    usdt_size = round(order_size * price, 2)
+                    session.update_usdt_M('down', usdt_size)
                 else:
                     agent.real_pos['USDT']['qty'] -= agent.real_pos[asset].get('value')
                     agent.real_pos['USDT']['value'] -= agent.real_pos[asset].get('value')
@@ -572,7 +574,8 @@ def tp_short(session, agent, pair, stp, inval):
                 agent.in_pos['real_pfrd'] = agent.in_pos['real_pfrd'] * (pct / 100)
                 if session.live:
                     agent.real_pos[asset].update(funcs.update_pos_M(session, asset, new_size, inval, agent.in_pos['real'], agent.in_pos['real_pfrd']))
-                    agent.real_pos['USDT'] = funcs.update_usdt(session.bal)
+                    usdt_size = round(order_size * price, 2)
+                    session.update_usdt_M('down', usdt_size)
                 else:
                     uf.calc_sizing_non_live_tp(session, agent, asset, pct, 'real')
                 
@@ -697,7 +700,8 @@ def close_short(session, agent, pair):
             agent.in_pos['real_pfrd'] = 0
             if session.live:
                 del agent.real_pos[asset]
-                agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
+                usdt_size = base_size * price
+                session.update_usdt_M('down', usdt_size)
             else:
                 del agent.real_pos[asset]
                 value = float(agent.real_pos['USDT']['value'])
@@ -851,6 +855,7 @@ def reduce_risk_M(session, agent):
                         else:
                             api_order = funcs.buy_asset_M(pair, base_size, True, price, session.live)
                             repay_size = base_size
+                            usdt_size = repay_size * price
                             funcs.repay_asset_M(asset, repay_size, session.live)
                         
                         reduce_order = funcs.create_trade_dict(api_order, price, session.live)
@@ -873,7 +878,10 @@ def reduce_risk_M(session, agent):
                         
                         if session.live:
                             del agent.real_pos[asset]
-                            agent.real_pos['USDT'] = funcs.update_usdt_M(session.bal)
+                            if long:
+                                session.update_usdt_M('repay', usdt_size)
+                            else:
+                                session.update_usdt_M('down', usdt_size)
                         elif long and not session.live:
                             del agent.real_pos[asset]
                             agent.real_pos['USDT']['value'] += float(usdt_size)

@@ -25,6 +25,7 @@ class MARGIN_SESSION:
         t.start()
         self.name = 'agent names here'
         self.bal = self.account_bal_M()
+        self.usdt_bal = self.get_usdt_M()
         self.live = self.set_live()
         self.market_data = self.mkt_data_path()
         self.ohlc_data = self.ohlc_path()
@@ -88,5 +89,42 @@ class MARGIN_SESSION:
             print(note)
         v.stop()
         return ohlc_data
+    
+    def get_usdt_M(self):
+        print('running get_usdt_M')
+        '''checks current usdt balance and returns a dictionary for updating the sizing dict'''
+        um = Timer('update_usdt_M')
+        um.start()
+        
+        bal = funcs.asset_bal_M('USDT')
+        net = float(bal.get('net'))
+        value = round(net, 2)
+        pct = round(100 * value / self.bal, 5)
+        print(f'usdt stats: qty = {bal.get("free")}, owed = {bal.get("borrowed")}, {value = }, {pct = }, {self.bal = }')
+        um.stop()
+        return {'qty': bal.get('free'), 'owed': bal.get('borrowed'), 'value': value, 'pf%': pct}
+        
+    def update_usdt_M(self, up:float=0, down:float=0, borrow:float=0, repay:float=0):
+        '''checks current usdt balance and returns a dictionary for updating the sizing dict'''
+        hj = Timer('update_usdt_M')
+        hj.start()
+        
+        qty = self.usdt_bal.get('qty') + up
+        value = self.usdt_bal.get('value') + up
+        qty = self.usdt_bal.get('qty') - down
+        value = self.usdt_bal.get('value') - down
+        
+        owed = self.usdt_bal.get('owed') + borrow
+        value = self.usdt_bal.get('value') - borrow
+        owed = self.usdt_bal.get('owed') - repay
+        value = self.usdt_bal.get('value') + repay
+        
+        pct = round(100 * value / self.bal, 5)
+        
+        print(f'usdt stats: {qty = }, {owed = }, {value = }, {pct = }, {self.bal = }')
+        self.usdt_bal = {'qty': qty, 'owed': owed, 'value': value, 'pf%': pct}
+        hj.stop()
+        
+
     
     
