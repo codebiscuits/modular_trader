@@ -185,7 +185,7 @@ def market_benchmark(session):
     print(f'1m median based on {len(all_1m)} data points')
     
     all_pairs = len(list(data))
-    valid_pairs = len(all_1d)
+    valid_pairs = len(all_1d) > 3
     if valid_pairs:
         valid = True
         if all_pairs / valid_pairs > 1.5:

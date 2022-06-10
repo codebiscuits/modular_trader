@@ -75,7 +75,7 @@ class DoubleST():
         self.tracked = self.current_positions('tracked')
         self.fixed_risk_l = self.set_fixed_risk('long')
         self.fixed_risk_s = self.set_fixed_risk('short')
-        self.test_fixed_risk(0.0001, 0.0001)
+        # self.test_fixed_risk(0.0001, 0.0001)
         self.max_positions = self.set_max_pos()
         self.max_init_r_l = self.fixed_risk_l * self.total_r_limit
         self.max_init_r_s = self.fixed_risk_s * self.total_r_limit

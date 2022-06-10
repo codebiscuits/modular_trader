@@ -930,6 +930,7 @@ def clear_stop_M(pair, trade_record, live):
     # sanity check
     bal = client.get_asset_balance(asset=pair[:-4])
     if Decimal(bal.get('locked')) == 0:
+        stop_id = None
         print('no stop to cancel')
     else:
         print(f'{pair} locked balance = {bal.get("locked")}')
