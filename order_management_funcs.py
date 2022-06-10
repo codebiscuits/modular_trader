@@ -27,7 +27,7 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
         funcs.borrow_asset_M('USDT', usdt_size, session.live)
         
         # execute
-        api_order = funcs.buy_asset_M(pair, usdt_size, False, price, session.live)
+        api_order = funcs.buy_asset_M(session, pair, usdt_size, False, price, session.live)
         
         # create trade record
         long_order = funcs.create_trade_dict(api_order, price, session.live)
@@ -39,7 +39,7 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
         
         # set stop and add to trade record
         stop_size = float(api_order.get('executedQty'))
-        stop_order = funcs.set_stop_M(pair, stop_size, be.SIDE_SELL, stp, stp*0.8, session.live)
+        stop_order = funcs.set_stop_M(session, pair, stop_size, be.SIDE_SELL, stp, stp*0.8, session.live)
         long_order['stop_id'] = stop_order.get('orderId')
         
         agent.open_trades[pair] = [long_order]
@@ -98,8 +98,7 @@ def tp_long(session, agent, pair, stp, inval):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     # session.bal = funcs.account_bal_M()
     
-    if agent.in_pos.get('real_tp_sig'):        
-        agent.update_usdt(session)
+    if agent.in_pos.get('real_tp_sig'):
         trade_record = agent.open_trades.get(pair)
         real_bal = abs(float(agent.real_pos[asset]['qty']))
         real_val = abs(float(agent.real_pos[asset]['value']))
@@ -118,7 +117,7 @@ def tp_long(session, agent, pair, stp, inval):
             
             # execute trade
             order_size = base_size * (pct/100)
-            api_order = funcs.sell_asset_M(pair, order_size, price, session.live)
+            api_order = funcs.sell_asset_M(session, pair, order_size, price, session.live)
             sell_order = funcs.create_trade_dict(api_order, price, session.live)
             usdt_size = api_order.get('cummulativeQuoteQty')
             funcs.repay_asset_M('USDT', usdt_size, session.live)
@@ -171,13 +170,13 @@ def tp_long(session, agent, pair, stp, inval):
                 
                 # set new stop
                 new_size = real_bal - float(sell_order['base_size'])
-                stop_order = funcs.set_stop_M(pair, new_size, be.SIDE_SELL, stp, stp*0.8, session.live)
+                stop_order = funcs.set_stop_M(session, pair, new_size, be.SIDE_SELL, stp, stp*0.8, session.live)
                 sell_order['stop_id'] = stop_order.get('orderId')
                 
                 trade_record.append(sell_order)
                 
                 # update records
-                agent.open_trades['pair'] = trade_record
+                agent.open_trades[pair] = trade_record
                 agent.record_trades(session, 'open')
                
                 agent.in_pos['real_pfrd'] = agent.in_pos['real_pfrd'] * (pct / 100)
@@ -282,7 +281,7 @@ def close_long(session, agent, pair):
                 base_size = real_bal
             
             # execute trade
-            api_order = funcs.sell_asset_M(pair, base_size, price, session.live)
+            api_order = funcs.sell_asset_M(session, pair, base_size, price, session.live)
             usdt_size = api_order.get('cummulativeQuoteQty')
             funcs.repay_asset_M('USDT', usdt_size, session.live)
             
@@ -424,7 +423,7 @@ def open_short(session, agent, pair, size, stp, inval, sim_reason):
         funcs.borrow_asset_M(asset, size, session.live)
         
         # execute
-        api_order = funcs.sell_asset_M(pair, size, price, session.live)
+        api_order = funcs.sell_asset_M(session, pair, size, price, session.live)
         
         # create trade record
         short_order = funcs.create_trade_dict(api_order, price, session.live)
@@ -436,7 +435,7 @@ def open_short(session, agent, pair, size, stp, inval, sim_reason):
         
         # set stop and add to trade record
         stop_size = float(api_order.get('executedQty'))
-        stop_order = funcs.set_stop_M(pair, stop_size, be.SIDE_BUY, stp, stp*1.2, session.live)
+        stop_order = funcs.set_stop_M(session, pair, stop_size, be.SIDE_BUY, stp, stp*1.2, session.live)
         short_order['stop_id'] = stop_order.get('orderId')
         agent.open_trades[pair] = [short_order]
         agent.record_trades(session, 'open')
@@ -494,7 +493,7 @@ def tp_short(session, agent, pair, stp, inval):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     # session.bal = funcs.account_bal_M()
     
-    if agent.in_pos.get('real_tp_sig'):        
+    if agent.in_pos.get('real_tp_sig'):
         trade_record = agent.open_trades.get(pair)
         real_bal = abs(float(agent.real_pos[asset]['qty']))
         real_val = abs(float(agent.real_pos[asset]['value']))
@@ -513,7 +512,7 @@ def tp_short(session, agent, pair, stp, inval):
             
             # execute trade
             order_size = base_size * (pct/100)
-            api_order = funcs.buy_asset_M(pair, order_size, True, price, session.live)
+            api_order = funcs.buy_asset_M(session, pair, order_size, True, price, session.live)
             buy_order = funcs.create_trade_dict(api_order, price, session.live)
             repay_size = buy_order.get('base_size')
             funcs.repay_asset_M(asset, repay_size, session.live)
@@ -562,13 +561,13 @@ def tp_short(session, agent, pair, stp, inval):
                 
                 # set new stop
                 new_size = real_bal - float(buy_order['base_size'])
-                stop_order = funcs.set_stop_M(pair, new_size, be.SIDE_SELL, stp, stp*1.2, session.live)
+                stop_order = funcs.set_stop_M(session, pair, new_size, be.SIDE_SELL, stp, stp*1.2, session.live)
                 buy_order['stop_id'] = stop_order.get('orderId')
                 
                 trade_record.append(buy_order)
                 
                 # update records
-                agent.open_trades['pair'] = trade_record
+                agent.open_trades[pair] = trade_record
                 agent.record_trades(session, 'open')
                
                 agent.in_pos['real_pfrd'] = agent.in_pos['real_pfrd'] * (pct / 100)
@@ -674,7 +673,7 @@ def close_short(session, agent, pair):
                 base_size = real_bal
             
             # execute trade
-            api_order = funcs.buy_asset_M(pair, base_size, True, price, session.live)
+            api_order = funcs.buy_asset_M(session, pair, base_size, True, price, session.live)
             funcs.repay_asset_M(asset, base_size, session.live)
             
             sell_order = funcs.create_trade_dict(api_order, price, session.live)
@@ -848,12 +847,12 @@ def reduce_risk_M(session, agent):
                         
                         long = trade_record[0].get('type')[-4:] == 'long'
                         if long:
-                            api_order = funcs.sell_asset_M(pair, base_size, price, session.live)
+                            api_order = funcs.sell_asset_M(session, pair, base_size, price, session.live)
                             usdt_size = api_order.get('cummulativeQuoteQty')
                             repay_size = usdt_size
                             funcs.repay_asset_M('USDT', repay_size, session.live)
                         else:
-                            api_order = funcs.buy_asset_M(pair, base_size, True, price, session.live)
+                            api_order = funcs.buy_asset_M(session, pair, base_size, True, price, session.live)
                             repay_size = base_size
                             usdt_size = repay_size * price
                             funcs.repay_asset_M(asset, repay_size, session.live)

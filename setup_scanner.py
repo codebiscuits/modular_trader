@@ -49,44 +49,18 @@ all_start = time.perf_counter()
 # args = parser.parse_args()
 
 
-dst_presets = {1: ('4h', 0, 1, 1.0), 
-           2: ('4h', 0, 2, 1.1), 
-           3: ('4h', 0, 3, 1.2), 
-           4: ('4h', 0, 3, 1.3), 
-           5: ('4h', 0, 4, 1.4), 
-           6: ('4h', 0, 4, 1.5), 
-           7: ('4h', 0, 5, 1.6), 
-           8: ('4h', 0, 5, 1.7), 
-           9: ('4h', 0, 5, 1.8), 
-           10: ('4h', 0, 6, 1.9), 
-           11: ('4h', 0, 6, 2.0), 
-           }
-
-
 # session = strats.RSI_ST_EMA(4, 45, 96)
 session = sessions.MARGIN_SESSION()
 funcs.update_prices(session)
 pprint(session.usdt_bal)
-agent_1 = DoubleST(session, *dst_presets[1])
-agent_2 = DoubleST(session, *dst_presets[3])
-agent_3 = DoubleST(session, *dst_presets[5])
-agent_4 = DoubleST(session, *dst_presets[7])
-agent_5 = DoubleST(session, *dst_presets[9])
-agent_6 = DoubleST(session, *dst_presets[11])
+agent_1 = DoubleST(session, 1)
+agent_2 = DoubleST(session, 2)
+agent_3 = DoubleST(session, 3)
+agent_4 = DoubleST(session, 4)
+agent_5 = DoubleST(session, 5)
+agent_6 = DoubleST(session, 6)
 agents = [agent_1, agent_2, agent_3, agent_4, agent_5, agent_6]
 session.name = '-'.join([n.name for n in agents])
-
-# now that trade records have been loaded, path can be changed
-# if not session.live:
-#     session.market_data = Path('/home/ross/Documents/backtester_2021/test_records')
-
-# update trade records --------------------------------------------------------
-# for agent in agents:
-#     uf.record_stopped_trades(session, agent)
-#     uf.record_stopped_sim_trades(session, agent)
-#     agent.real_pos = agent.current_positions('open')
-#     agent.sim_pos = agent.current_positions('sim')
-#     agent.tracked = agent.current_positions('tracked')
 
 # compile and sort list of pairs to loop through ------------------------------
 all_pairs = funcs.get_pairs(market='CROSS')
@@ -350,7 +324,15 @@ for n, pair in enumerate(pairs):
         
 # log all data from the session and print/push summary-------------------------
 print('-:-' * 20)
+
+before = session.usdt_bal
 session.get_usdt_M()
+after = session.usdt_bal
+if before != after:
+    print('USDT balance wrong')
+    print('before:', before)
+    print('after:', after)
+
 for agent in agents:
     print(agent.name, 'summary')
     print(f'realised real long pnl: {agent.realised_pnl_long:.1f}R, realised sim long pnl: {agent.sim_pnl_long:.1f}R')

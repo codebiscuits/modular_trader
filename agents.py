@@ -29,18 +29,28 @@ class DoubleST():
     target_risk = 0.1
     max_pos = 20
     
+    presets = {1: {'timeframe': '4h', 'tf_offset': 0, 'lookback': 1, 'mult': 1.0}, 
+               2: {'timeframe': '4h', 'tf_offset': 0, 'lookback': 3, 'mult': 1.2}, 
+               3: {'timeframe': '4h', 'tf_offset': 0, 'lookback': 4, 'mult': 1.4}, 
+               4: {'timeframe': '4h', 'tf_offset': 0, 'lookback': 5, 'mult': 1.6}, 
+               5: {'timeframe': '4h', 'tf_offset': 0, 'lookback': 5, 'mult': 1.8}, 
+               6: {'timeframe': '4h', 'tf_offset': 0, 'lookback': 6, 'mult': 2.0}, 
+               }
     
-    def __init__(self, session, timeframe, tf_offset, lookback, mult):
+    def __init__(self, session, preset):
         t = Timer('agent init')
         t.start()
         self.live = session.live
         self.bal = session.bal
         self.fr_max = session.fr_max
         self.prices = session.prices
-        self.name = f'double_st_{timeframe}_{tf_offset}_{lookback}_{mult}'
+        self.lb = self.presets[preset]['lookback']
+        self.mult = self.presets[preset]['mult']
+        self.tf = self.presets[preset]['timeframe']
+        self.offset = self.presets[preset]['tf_offset']
+        self.name = f'{self.tf} dst {self.lb}-{self.mult}'
+        self.id = f'double_st_{self.tf}_{self.offset}_{self.lb}_{self.mult}'
         print(f'\nInitialising {self.name}')
-        self.lb = lookback
-        self.mult = mult
         self.market_data = self.mkt_data_path()
         self.counts_dict = {'real_stop_long': 0, 'real_open_long': 0, 'real_add_long': 0, 'real_tp_long': 0, 'real_close_long': 0, 
                            'sim_stop_long': 0, 'sim_open_long': 0, 'sim_add_long': 0, 'sim_tp_long': 0, 'sim_close_long': 0, 
@@ -65,6 +75,7 @@ class DoubleST():
         self.tracked = self.current_positions('tracked')
         self.fixed_risk_l = self.set_fixed_risk('long')
         self.fixed_risk_s = self.set_fixed_risk('short')
+        self.test_fixed_risk(0.0001, 0.0001)
         self.max_positions = self.set_max_pos()
         self.max_init_r_l = self.fixed_risk_l * self.total_r_limit
         self.max_init_r_s = self.fixed_risk_s * self.total_r_limit
@@ -73,13 +84,13 @@ class DoubleST():
         t.stop()
         
     def __str__(self):
-        return self.name
+        return self.id
     
     def sync_test_records(self):
         q = Timer('sync_test_records')
         q.start()
-        folder = Path(f"{self.market_data}/{self.name}")
-        test_folder = Path(f'/home/ross/Documents/backtester_2021/test_records/{self.name}')
+        folder = Path(f"{self.market_data}/{self.id}")
+        test_folder = Path(f'/home/ross/Documents/backtester_2021/test_records/{self.id}')
         if not test_folder.exists():
             test_folder.mkdir(parents=True)
         bal_path = Path(folder / 'bal_history.txt')
@@ -105,8 +116,8 @@ class DoubleST():
         def sync_trades_records(switch):
             w = Timer(f'sync_trades_records-{switch}')
             w.start()
-            trades_path = Path(f'{self.market_data}/{self.name}/{switch}_trades.json')
-            test_trades = Path(f'/home/ross/Documents/backtester_2021/test_records/{self.name}/{switch}_trades.json')
+            trades_path = Path(f'{self.market_data}/{self.id}/{switch}_trades.json')
+            test_trades = Path(f'/home/ross/Documents/backtester_2021/test_records/{self.id}/{switch}_trades.json')
             if not test_trades.exists():
                 print(f'creating {test_trades}')
                 test_trades.touch()
@@ -156,7 +167,7 @@ class DoubleST():
     def read_open_trade_records(self, switch):
         w = Timer(f'read_open_trade_records-{switch}')
         w.start()
-        ot_path = Path(f"{self.market_data}/{self.name}")
+        ot_path = Path(f"{self.market_data}/{self.id}")
         if not ot_path.exists():
             ot_path.mkdir(parents=True)
         ot_path = ot_path / f'{switch}_trades.json'
@@ -180,7 +191,7 @@ class DoubleST():
     def read_closed_trade_records(self):
         e = Timer('read_closed_trade_records')
         e.start()
-        ct_path = Path(f"{self.market_data}/{self.name}/closed_trades.json")
+        ct_path = Path(f"{self.market_data}/{self.id}/closed_trades.json")
         if Path(ct_path).exists():
             with open(ct_path, "r") as ct_file:
                 try:
@@ -202,7 +213,7 @@ class DoubleST():
     def read_closed_sim_trade_records(self):
         r = Timer('read_closed_sim_trade_records')
         r.start()
-        cs_path = Path(f"{self.market_data}/{self.name}/closed_sim_trades.json")
+        cs_path = Path(f"{self.market_data}/{self.id}/closed_sim_trades.json")
         if Path(cs_path).exists():
             with open(cs_path, "r") as cs_file:
                 try:
@@ -221,35 +232,35 @@ class DoubleST():
         y.start()
         now = datetime.now().strftime('%d/%m/%y %H:%M')
         if self.open_trades:
-            with open(f"{self.market_data}/{self.name}/ot_backup.json", "w") as ot_file:
+            with open(f"{self.market_data}/{self.id}/ot_backup.json", "w") as ot_file:
                 json.dump(self.open_trades, ot_file)
         # else:
         #     if self.live:
         #         pb.push_note(now, 'open trades file empty')
         
         if self.sim_trades:
-            with open(f"{self.market_data}/{self.name}/st_backup.json", "w") as st_file:
+            with open(f"{self.market_data}/{self.id}/st_backup.json", "w") as st_file:
                 json.dump(self.sim_trades, st_file)
         # else:
         #     if self.live:
         #         pb.push_note(now, 'sim trades file empty')
         
         if self.tracked_trades:
-            with open(f"{self.market_data}/{self.name}/tr_backup.json", "w") as tr_file:
+            with open(f"{self.market_data}/{self.id}/tr_backup.json", "w") as tr_file:
                 json.dump(self.tracked_trades, tr_file)
         # else:
         #     if self.live:
         #         pb.push_note(now, 'tracked trades file empty')
         
         if self.closed_trades:
-            with open(f"{self.market_data}/{self.name}/ct_backup.json", "w") as ct_file:
+            with open(f"{self.market_data}/{self.id}/ct_backup.json", "w") as ct_file:
                 json.dump(self.closed_trades, ct_file)
         # else:
         #     if self.live:
         #         pb.push_note(now, 'closed trades file empty')
         
         if self.closed_sim_trades:
-            with open(f"{self.market_data}/{self.name}/cs_backup.json", "w") as cs_file:
+            with open(f"{self.market_data}/{self.id}/cs_backup.json", "w") as cs_file:
                 json.dump(self.closed_sim_trades, cs_file)
         # else:
         #     if self.live:
@@ -502,7 +513,7 @@ class DoubleST():
     def record_trades(self, session, switch):
         b = Timer(f'record_trades {switch}')
         b.start()
-        filepath = Path(f"{session.market_data}/{self.name}/{switch}_trades.json")
+        filepath = Path(f"{session.market_data}/{self.id}/{switch}_trades.json")
         if not filepath.exists():
             print('filepath doesnt exist')
             filepath.touch()
@@ -534,7 +545,7 @@ class DoubleST():
         
         now = datetime.now().strftime('%d/%m/%y %H:%M')
         
-        filepath = Path(f"{self.market_data}/{self.name}/bal_history.txt")
+        filepath = Path(f"{self.market_data}/{self.id}/bal_history.txt")
         if self.live:
             filepath.touch(exist_ok=True)
         with open(filepath, "r") as file:
@@ -547,7 +558,7 @@ class DoubleST():
         fr_inc = self.fr_max / 10 # increment fr in 10% steps of the range
         
         def score_accum(direction:str, switch:str):
-            with open(f"{self.market_data}/{self.name}/bal_history.txt", "r") as file:
+            with open(f"{self.market_data}/{self.id}/bal_history.txt", "r") as file:
                 bal_data = file.readlines()
             
             if bal_data:
@@ -630,6 +641,11 @@ class DoubleST():
         o.stop()
         return round(fr, 5)
     
+    def test_fixed_risk(self, fr_l, fr_s):
+        print(f'*** WARNING: FIXED RISK MANUALLY SET to {fr_l} / {fr_s} ***')
+        self.fixed_risk_l = fr_l
+        self.fixed_risk_s = fr_s
+    
     def set_max_pos(self):
         p = Timer('set_max_pos')
         p.start()
@@ -650,7 +666,7 @@ class DoubleST():
         '''creates a dictionary of open positions by checking either 
         open_trades.json, sim_trades.json or tracked_trades.json'''
             
-        # filepath = Path(f'{self.market_data}/{self.name}/{switch}_trades.json')
+        # filepath = Path(f'{self.market_data}/{self.id}/{switch}_trades.json')
         # with open(filepath, 'r') as file:
         #     try:
         #         data = json.load(file)

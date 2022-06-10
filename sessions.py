@@ -18,6 +18,7 @@ class MARGIN_SESSION:
     above_200_ema = set()
     below_200_ema = set()
     prices = {}
+    symbol_info = {}
     
     
     def __init__(self):
@@ -100,7 +101,7 @@ class MARGIN_SESSION:
         net = float(bal.get('net'))
         value = round(net, 2)
         pct = round(100 * value / self.bal, 5)
-        print(f'usdt stats: qty = {bal.get("free")}, owed = {bal.get("borrowed")}, {value = }, {pct = }, {self.bal = }')
+        # print(f'usdt stats: qty = {bal.get("free")}, owed = {bal.get("borrowed")}, {value = }, {pct = }, {self.bal = }')
         um.stop()
         return {'qty': bal.get('free'), 'owed': bal.get('borrowed'), 'value': value, 'pf%': pct}
         

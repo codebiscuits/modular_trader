@@ -191,7 +191,6 @@ def update_usdt(total_bal):
 
 def get_price(pair):
     '''fetches a single pairs price from binance. slow so only use when necessary'''
-    print('running get_price')
     hn = Timer('get_price')
     hn.start()
     price = float(client.get_ticker(symbol=pair).get('lastPrice'))
@@ -630,7 +629,7 @@ def create_trade_dict(order, price, live):
                       'pair': pair,
                       'trig_price': str(price),
                       'exe_price': str(avg_price),
-                      'base_size': order.get('executedQty'),
+                      'base_size': str(order.get('executedQty')),
                       'quote_size': quote_qty,
                       'fee': str(fee),
                       'fee_currency': fills[0].get('commissionAsset')
@@ -644,7 +643,7 @@ def create_trade_dict(order, price, live):
                       "pair": pair, 
                       "trig_price": str(price),
                       "exe_price": str(price),
-                      "base_size": str(order.get('base_size')),
+                      "base_size": str(order.get('executedQty')),
                       "quote_size": str(order.get('cummulativeQuoteQty')),
                       "fee": '0',
                       "fee_currency": "BNB"
@@ -653,21 +652,27 @@ def create_trade_dict(order, price, live):
     return trade_dict
 
 
-def valid_size(pair, size):
-    gf = Timer('valid_size')
+def valid_size(session, pair, size):
+    gf = Timer('get_symbol_info valid')
     gf.start()
     '''rounds the desired order size to the correct step size for binance'''
-    info = client.get_symbol_info(pair)
+    info = session.symbol_info.get(pair)
+    if not info:
+        info = client.get_symbol_info(pair)
+        session.symbol_info[pair] = info
     step_size = Decimal(info.get('filters')[2].get('stepSize'))
     gf.stop()
     return step_round(size, step_size)
 
 
-def valid_price(pair, price):
-    hg = Timer('valid_price')
+def valid_price(session, pair, price):
+    hg = Timer('get_symbol_info valid')
     hg.start()
     '''rounds the desired order price to the correct step size for binance'''
-    info = client.get_symbol_info(pair)
+    info = session.symbol_info.get(pair)
+    if not info:
+        info = client.get_symbol_info(pair)
+        session.symbol_info[pair] = info
     step_size = Decimal(info.get('filters')[0].get('tickSize'))
     hg.stop()
     return str(step_round(price, step_size))
@@ -809,11 +814,11 @@ def top_up_bnb_M(usdt_size):
     return order, repay
 
 
-def buy_asset_M(pair, size, is_base, price, live):
+def buy_asset_M(session, pair, size, is_base, price, live):
     fg = Timer('buy_asset_M')
     fg.start()
     if live and is_base:
-        base_size = valid_size(pair, size)
+        base_size = valid_size(session, pair, size)
         buy_order = client.create_margin_order(symbol=pair,side=be.SIDE_BUY,type=be.ORDER_TYPE_MARKET,quantity=base_size)
     elif live and not is_base:
         buy_order = client.create_margin_order(symbol=pair,side=be.SIDE_BUY,type=be.ORDER_TYPE_MARKET,quoteOrderQty=size)
@@ -823,7 +828,8 @@ def buy_asset_M(pair, size, is_base, price, live):
             base_size = size
             usdt_size = round(size * price, 2)
         else:
-            base_size = valid_size(pair, size / price)
+            base_size = valid_size(session, pair, size / price)
+            print(f'buy_asset_M {size = }, {base_size = }')
             if not base_size: # if size == 0, valid_size will output None
                 print(f'*problem* non-live buy {pair}: {usdt_size = }, {base_size = }')
                 base_size = 0
@@ -833,7 +839,7 @@ def buy_asset_M(pair, size, is_base, price, live):
          'executedQty': str(base_size),
          'fills': [{'commission': '0',
                     'commissionAsset': 'BNB',
-                    'price': str(valid_price(pair, price)),
+                    'price': str(valid_price(session, pair, price)),
                     'qty': str(base_size)}],
          'isIsolated': False,
          'orderId': 123456,
@@ -849,17 +855,17 @@ def buy_asset_M(pair, size, is_base, price, live):
     return buy_order
 
 
-def sell_asset_M(pair, base_size, price, live):
+def sell_asset_M(session, pair, base_size, price, live):
     df = Timer('sell_asset_M')
     df.start()
-    base_size = valid_size(pair, base_size)
+    base_size = valid_size(session, pair, base_size)
     if not base_size: # if size == 0, valid_size will output None
         base_size = 0
     if live:
         sell_order = client.create_margin_order(symbol=pair, side=be.SIDE_SELL, type=be.ORDER_TYPE_MARKET, quantity=base_size)
     else:
         now = int(datetime.now().timestamp() * 1000)
-        usdt_size = valid_size(pair, float(base_size) * price)
+        usdt_size = valid_size(session, pair, float(base_size) * price)
         if not usdt_size:
             usdt_size = 0
         sell_order = {
@@ -868,7 +874,7 @@ def sell_asset_M(pair, base_size, price, live):
                     'executedQty': str(base_size),
                     'fills': [{'commission': '0',
                                'commissionAsset': 'BNB',
-                               'price': str(valid_price(pair, price)),
+                               'price': str(valid_price(session, pair, price)),
                                'qty': str(base_size)}],
                     'isIsolated': False,
                     'orderId': 123456,
@@ -894,12 +900,12 @@ def repay_asset_M(asset, qty, live):
         client.repay_margin_loan(asset=asset, amount=round(float(qty), 8))
 
 
-def set_stop_M(pair, size, side, trigger, limit, live):
+def set_stop_M(session, pair, size, side, trigger, limit, live):
     sd = Timer('set_stop_M')
     sd.start()
-    trigger = valid_price(pair, trigger)
-    limit = valid_price(pair, limit)
-    stop_size = valid_size(pair, size)
+    trigger = valid_price(session, pair, trigger)
+    limit = valid_price(session, pair, limit)
+    stop_size = valid_size(session, pair, size)
     if live:
         stop_sell_order = client.create_margin_order(symbol=pair,
                                                  side=side,

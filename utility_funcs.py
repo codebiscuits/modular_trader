@@ -68,6 +68,7 @@ def open_trade_stats(now, total_bal, v, curr_price):
                 total_liability += Decimal(i.get('liability'))
             elif i.get('type') in ['tp_short', 'close_short', 'tp_long', 'close_long']:
                 total_liability -= Decimal(i.get('liability'))
+        total_liability = str(round(total_liability, 8))
         
         stats_dict = {'qty': str(current_base_size), 'value': str(value), 'pf%': pf_pct, 
                 'pnl_R': round(pnl / r, 5), 'pnl_%': round(pnl, 5), 'liability': total_liability, 
@@ -120,7 +121,7 @@ def max_init_risk(n, target_risk):
     return round(output, 2)
 
 def record_trades_old(session, agent, switch):
-    filepath = Path(f"{session.market_data}/{agent.name}/{switch}_trades.json")
+    filepath = Path(f"{session.market_data}/{agent.id}/{switch}_trades.json")
     if not filepath.exists():
         print('filepath doesnt exist')
         filepath.touch()
@@ -146,8 +147,10 @@ def market_benchmark(session):
     eth_1d = None
     eth_1w = None
     eth_1m = None
+    
+    data = session.ohlc_data.glob('*.*')
         
-    for x in ohlc_data.glob('*.*'):
+    for x in data:
         df = pd.read_pickle(x)
         if len(df) > 721:
             df = df.tail(721)
@@ -181,7 +184,7 @@ def market_benchmark(session):
     print(f'1w median based on {len(all_1w)} data points')
     print(f'1m median based on {len(all_1m)} data points')
     
-    all_pairs = len(list(ohlc_data.glob('*.*')))
+    all_pairs = len(list(data))
     valid_pairs = len(all_1d)
     if valid_pairs:
         valid = True
@@ -191,7 +194,7 @@ def market_benchmark(session):
         valid = False
     
     if session.live:
-        print(f'pairs with recent data: {len(all_1d)} / {len(list(ohlc_data.glob("*.*")))}')
+        print(f'pairs with recent data: {len(all_1d)} / {len(list(data))}')
     
     session.benchmark = {'btc_1d': btc_1d, 'btc_1w': btc_1w, 'btc_1m': btc_1m, 
             'eth_1d': eth_1d, 'eth_1w': eth_1w, 'eth_1m': eth_1m, 
@@ -206,7 +209,7 @@ def strat_benchmark(session, agent):
     
     bal_now, bal_1d, bal_1w, bal_1m = session.bal, None, None, None
     
-    with open(f"{session.market_data}/{agent.name}/bal_history.txt", "r") as file:
+    with open(f"{session.market_data}/{agent.id}/bal_history.txt", "r") as file:
         bal_data = file.readlines()
     
     if bal_data:
@@ -256,6 +259,7 @@ def strat_benchmark(session, agent):
 
 def log(session, agents):    
     
+    market_benchmark(session)
     for agent in agents:
         params = {'quote_asset': 'USDT', 
                   'fr_max': session.fr_max,
@@ -273,68 +277,76 @@ def log(session, agents):
                       'median_spread': stats.median(session.spreads.values())}
         new_line = json.dumps(bal_record)
         if session.live:
-            filepath = Path(f"{session.market_data}/{agent.name}/bal_history.txt")
+            filepath = Path(f"{session.market_data}/{agent.id}/bal_history.txt")
             filepath.touch(exist_ok=True)
             with open(filepath, "a") as file:
                 file.write(new_line)
                 file.write('\n')
         else:
-            filepath = Path(f"/home/ross/Documents/backtester_2021/test_records/{agent.name}/bal_history.txt")
+            filepath = Path(f"/home/ross/Documents/backtester_2021/test_records/{agent.id}/bal_history.txt")
             filepath.touch(exist_ok=True)
             with open(filepath, "a") as file:
                 file.write(new_line)
                 file.write('\n')
         
         # if live:
-        market_benchmark(session)
         strat_benchmark(session, agent)
     
         # save a json of any trades that have happened with relevant data
         if session.live:
             # should be able to remove these two function calls
-            with open(f"{session.market_data}/{agent.name}/open_trades.json", "w") as ot_file:
+            with open(f"{session.market_data}/{agent.id}/open_trades.json", "w") as ot_file:
                 json.dump(agent.open_trades, ot_file)            
-            with open(f"{session.market_data}/{agent.name}/closed_trades.json", "w") as ct_file:
+            with open(f"{session.market_data}/{agent.id}/closed_trades.json", "w") as ct_file:
                 json.dump(agent.closed_trades, ct_file)
 
 def interpret_benchmark(session, agents):
     mkt_bench = session.benchmark
-    
+    d_ranking = []
+    w_ranking = []
+    m_ranking = []
+    if mkt_bench['valid']:
+        d_ranking = [
+            ('btc', round(mkt_bench['btc_1d']*100, 3)), 
+            ('eth', round(mkt_bench['eth_1d']*100, 3)), 
+            ('mkt', round(mkt_bench['market_1d']*100, 3))
+            ]
+        w_ranking = [
+            ('btc', round(mkt_bench['btc_1w']*100, 2)), 
+            ('eth', round(mkt_bench['eth_1w']*100, 2)), 
+            ('mkt', round(mkt_bench['market_1w']*100, 2))
+            ]
+        m_ranking = [
+            ('btc', round(mkt_bench['btc_1m']*100, 1)), 
+            ('eth', round(mkt_bench['eth_1m']*100, 1)), 
+            ('mkt', round(mkt_bench['market_1m']*100, 1))
+            ]
+        
     for agent in agents:
         agent_bench = agent.benchmark
         if mkt_bench['valid']:
-            # d_ranking = [
-            #     ('btc', round(mkt_bench['btc_1d']*100, 3)), 
-            #     ('eth', round(mkt_bench['eth_1d']*100, 3)), 
-            #     ('mkt', round(mkt_bench['market_1d']*100, 3)), 
-            #     ('strat', round(agent_bench['strat_1d']*100, 3))
-            #     ]
-            # d_ranking = sorted(d_ranking, key=lambda x: x[1], reverse=True)
-            # print(f'{agent} 1 day stats')
-            # for e, r in enumerate(d_ranking):
-            #     print(f'rank {e+1}: {r[0]} {r[1]}%')
-            w_ranking = [
-                ('btc', round(mkt_bench['btc_1w']*100, 2)), 
-                ('eth', round(mkt_bench['eth_1w']*100, 2)), 
-                ('mkt', round(mkt_bench['market_1w']*100, 2)), 
-                ('strat', round(agent_bench['strat_1w']*100, 2))
-                ]
-            w_ranking = sorted(w_ranking, key=lambda x: x[1], reverse=True)
-            print(f'{agent} 1 week stats')
-            for e, r in enumerate(w_ranking):
-                print(f'rank {e+1}: {r[0]} {r[1]}%')
-            # m_ranking = [
-            #     ('btc', round(mkt_bench['btc_1m']*100, 1)), 
-            #     ('eth', round(mkt_bench['eth_1m']*100, 1)), 
-            #     ('mkt', round(mkt_bench['market_1m']*100, 1)), 
-            #     ('strat', round(agent_bench['strat_1m']*100, 1))
-            #     ]
-            # m_ranking = sorted(m_ranking, key=lambda x: x[1], reverse=True)
-            # print(f'{agent} 1 month stats')
-            # for e, r in enumerate(m_ranking):
-            #     print(f'rank {e+1}: {r[0]} {r[1]}%')
+            d_ranking.append((agent.name, round(agent_bench['strat_1d']*100, 3)))
+            w_ranking.append((agent.name, round(agent_bench['strat_1w']*100, 2)))
+            m_ranking.append((agent.name, round(agent_bench['strat_1m']*100, 1)))
+            
         else:
             print(f'no benchmarking data available for {agent.name}')
+    
+    if d_ranking:
+        d_ranking = sorted(d_ranking, key=lambda x: x[1], reverse=True)
+        print('1 day stats')
+        for e, r in enumerate(d_ranking):
+            print(f'rank {e+1}: {r[1]}% {r[0]}')
+    if w_ranking:
+        w_ranking = sorted(w_ranking, key=lambda x: x[1], reverse=True)
+        print('1 week stats')
+        for e, r in enumerate(w_ranking):
+            print(f'rank {e+1}: {r[1]}% {r[0]}')
+    if m_ranking:
+        m_ranking = sorted(m_ranking, key=lambda x: x[1], reverse=True)
+        print('1 month stats')
+        for e, r in enumerate(m_ranking):
+            print(f'rank {e+1}: {r[1]}% {r[0]}')
 
 def count_trades(counts):
     er = Timer('count_trades')
@@ -474,7 +486,7 @@ def recent_perf_str(session, agent):
     '''generates a string of + and - to represent recent strat performance'''    
     
     def score_accum(state, direction):
-        with open(f"{session.market_data}/{agent.name}/bal_history.txt", "r") as file:
+        with open(f"{session.market_data}/{agent.id}/bal_history.txt", "r") as file:
             bal_data = file.readlines()
         
         if bal_data:
@@ -569,52 +581,52 @@ def scanner_summary(session, agents):
         pb.push_note(title, final_msg)
 
 def sync_test_records_old(session, agent):
-    with open(f"{session.market_data}/{agent.name}/bal_history.txt", "r") as file:
+    with open(f"{session.market_data}/{agent.id}/bal_history.txt", "r") as file:
         bal_data = file.readlines()
-    with open(f"/home/ross/Documents/backtester_2021/test_records/{agent.name}/bal_history.txt", "w") as file:
+    with open(f"/home/ross/Documents/backtester_2021/test_records/{agent.id}/bal_history.txt", "w") as file:
         file.writelines(bal_data)
     
     
     try:
-        with open(f'{session.market_data}/{agent.name}/open_trades.json', 'r') as file:
+        with open(f'{session.market_data}/{agent.id}/open_trades.json', 'r') as file:
             o_data = json.load(file)
-        with open(f'/home/ross/Documents/backtester_2021/test_records/{agent.name}/open_trades.json', 'w') as file:
+        with open(f'/home/ross/Documents/backtester_2021/test_records/{agent.id}/open_trades.json', 'w') as file:
             json.dump(o_data, file)
     except JSONDecodeError:
         print('open_trades file empty')
     
     
     try:
-        with open(f'{session.market_data}/{agent.name}/sim_trades.json', 'r') as file:
+        with open(f'{session.market_data}/{agent.id}/sim_trades.json', 'r') as file:
             s_data = json.load(file)
-        with open(f'/home/ross/Documents/backtester_2021/test_records/{agent.name}/sim_trades.json', 'w') as file:
+        with open(f'/home/ross/Documents/backtester_2021/test_records/{agent.id}/sim_trades.json', 'w') as file:
             json.dump(s_data, file)
     except JSONDecodeError:
         print('sim_trades file empty')
     
     
     try:
-        with open(f'{session.market_data}/{agent.name}/tracked_trades.json', 'r') as file:
+        with open(f'{session.market_data}/{agent.id}/tracked_trades.json', 'r') as file:
             tr_data = json.load(file)
-        with open(f'/home/ross/Documents/backtester_2021/test_records/{agent.name}/tracked_trades.json', 'w') as file:
+        with open(f'/home/ross/Documents/backtester_2021/test_records/{agent.id}/tracked_trades.json', 'w') as file:
             json.dump(tr_data, file)
     except JSONDecodeError:
         print('tracked_trades file empty')
     
     
     try:
-        with open(f'{session.market_data}/{agent.name}/closed_trades.json', 'r') as file:
+        with open(f'{session.market_data}/{agent.id}/closed_trades.json', 'r') as file:
             c_data = json.load(file)
-        with open(f'/home/ross/Documents/backtester_2021/test_records/{agent.name}/closed_trades.json', 'w') as file:
+        with open(f'/home/ross/Documents/backtester_2021/test_records/{agent.id}/closed_trades.json', 'w') as file:
             json.dump(c_data, file)
     except JSONDecodeError:
         print('closed_trades file empty')
 
 
     try:
-        with open(f'{session.market_data}/{agent.name}/closed_sim_trades.json', 'r') as file:
+        with open(f'{session.market_data}/{agent.id}/closed_sim_trades.json', 'r') as file:
             cs_data = json.load(file)
-        with open(f'/home/ross/Documents/backtester_2021/test_records/{agent.name}/closed_sim_trades.json', 'w') as file:
+        with open(f'/home/ross/Documents/backtester_2021/test_records/{agent.id}/closed_sim_trades.json', 'w') as file:
             json.dump(cs_data, file)
     except JSONDecodeError:
         print('closed_sim_trades file empty')
