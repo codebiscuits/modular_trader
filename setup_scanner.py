@@ -345,8 +345,8 @@ for agent in agents:
     
     benchmark = uf.log(session, [agent])
     if not session.live:
-        print('\n*** real_pos ***')
-        pprint(agent.real_pos)
+        # print('\n*** real_pos ***')
+        # pprint(agent.real_pos)
         # print('\n*** sim_pos ***')
         # pprint(agent.sim_pos.keys())
         print('warning: logging directed to test_records')
@@ -365,7 +365,7 @@ uf.interpret_benchmark(session, agents)
 
 print('-')
 for k, v in Timer.timers.items():
-    if v > 3:
+    if v > 30:
         print(k, round(v))
 
 end = time.perf_counter()

@@ -63,7 +63,7 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
         agent.counts_dict['real_open_long'] +=1
         
     if agent.in_pos['sim'] == None and sim_reason:
-        usdt_size = 100.0
+        usdt_size = 128.0
         size = round(usdt_size / price, 8)
         note = f"{agent.name} sim open long {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
         print(now, note)
@@ -458,7 +458,7 @@ def open_short(session, agent, pair, size, stp, inval, sim_reason):
         agent.counts_dict['real_open_short'] +=1
         
     if agent.in_pos['sim'] == None and sim_reason:
-        usdt_size = 100.0
+        usdt_size = 128.0
         size = round(usdt_size / price, 8)
         note = f"{agent.name} sim open short {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
         print(now, note)

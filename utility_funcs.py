@@ -498,11 +498,11 @@ def recent_perf_str(session, agent):
         d = -1 # default value
         pnls = {1:d, 2:d, 3:d, 4:d, 5:d}
         if bal_data and (len(bal_data) >= 5):
-            lookup = f'realised_pnl_{direction}' if state == 'real' else 'sim_r_pnl_{direction}'
+            lookup = f'realised_pnl_{direction}' if state == 'real' else f'sim_r_pnl_{direction}'
             for i in range(1, 6):
-                pnls[i] = json.loads(bal_data[-1*i]).get(lookup, d)
+                pnls[i] = json.loads(bal_data[-1*i]).get(lookup, 7)
         
-        score = 15
+        score = 0
         if pnls.get(1) > 0:
             score += 5
         elif pnls.get(1) < 0:
@@ -541,15 +541,21 @@ def recent_perf_str(session, agent):
         
         return score, perf_str
     
-    real_score_l, real_perf_str_l = score_accum('real', 'l')
-    real_score_s, real_perf_str_s = score_accum('real', 's')
-    sim_score_l, sim_perf_str_l = score_accum('sim', 'l')
-    sim_score_s, sim_perf_str_s = score_accum('sim', 's')
+    real_score_l, real_perf_str_l = score_accum('real', 'long')
+    real_score_s, real_perf_str_s = score_accum('real', 'short')
+    sim_score_l, sim_perf_str_l = score_accum('sim', 'long')
+    sim_score_s, sim_perf_str_s = score_accum('sim', 'short')
     
-    perf_str_l = real_perf_str_l if agent.fixed_risk_l else sim_perf_str_l
-    perf_str_s = real_perf_str_s if agent.fixed_risk_s else sim_perf_str_s
+    perf_str_l = real_perf_str_l if (agent.open_trades and real_score_l) else sim_perf_str_l
+    perf_str_s = real_perf_str_s if (agent.open_trades and real_score_s) else sim_perf_str_s
     
-    full_perf_str = f'long: {perf_str_l}\nreal: score {real_score_l} rpnl {agent.realised_pnl_long:.1f},\nsim: score {sim_score_l} rpnl {agent.sim_pnl_long:.1f}\nshort: {perf_str_s}\nreal: score {real_score_s} rpnl {agent.realised_pnl_short:.1f},\nsim: score {sim_score_s} rpnl {agent.sim_pnl_short:.1f}'
+    full_perf_str = f'\
+long: {perf_str_l}\n\
+real: score {real_score_l} rpnl {agent.realised_pnl_long:.1f},\n\
+sim: score {sim_score_l} rpnl {agent.sim_pnl_long:.1f}\n\
+short: {perf_str_s}\n\
+real: score {real_score_s} rpnl {agent.realised_pnl_short:.1f},\n\
+sim: score {sim_score_s} rpnl {agent.sim_pnl_short:.1f}'
     
     return full_perf_str
 

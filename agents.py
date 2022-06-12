@@ -24,7 +24,7 @@ class DoubleST():
     realised_pnl_short = 0
     sim_pnl_long = 0
     sim_pnl_short = 0
-    indiv_r_limit = 1.4
+    indiv_r_limit = 1.2
     total_r_limit = 20
     target_risk = 0.1
     max_pos = 20
@@ -552,7 +552,7 @@ class DoubleST():
             bal_data = file.readlines()
         
         if bal_data:
-            fr_prev = json.loads(bal_data[-1]).get(f'fr_{direction}', 0) # default to 0 if no history
+            fr_prev = json.loads(bal_data[-1]).get(f'fr_{direction}', 0)
         else:
             fr_prev = 0
         fr_inc = self.fr_max / 10 # increment fr in 10% steps of the range
@@ -567,11 +567,7 @@ class DoubleST():
                 prev_bal = self.bal
             bal_change_pct = 100 * (self.bal - prev_bal) / prev_bal
             
-            lookup = 'realised_pnl' if switch == 'real' else 'sim_r_pnl'
-            if direction == 'long':
-                lookup += '_long'
-            else:
-                lookup += '_short'
+            lookup = f'realised_pnl_{direction}' if switch == 'real' else f'sim_r_pnl_{direction}'
             pnls = {}
             for i in range(1, 6):
                 if bal_data and len(bal_data) > 5:
@@ -606,7 +602,7 @@ class DoubleST():
         real_score = score_accum(direction, 'real')
         sim_score = score_accum(direction, 'sim')
         
-        if real_score > 0:
+        if self.open_trades and real_score:
             score = real_score
         else:
             score = sim_score
