@@ -632,8 +632,9 @@ class DoubleST():
             fr = 0
             
         if fr != fr_prev:
+            title = f'{now} {self.name}'
             note = f'fixed risk adjusted from {round(fr_prev*10000, 1)}bps to {round(fr*10000, 1)}bps'
-            pb.push_note(now, note)
+            pb.push_note(title, note)
         o.stop()
         return round(fr, 5)
     
