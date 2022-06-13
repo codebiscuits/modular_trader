@@ -323,21 +323,23 @@ for n, pair in enumerate(pairs):
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#   
         
 # log all data from the session and print/push summary-------------------------
-print('-:-' * 20)
-
+print('\n*-*-*-*-*-*-*-*-*-*-*-*-*-*-*')
 before = session.usdt_bal
 session.get_usdt_M()
 after = session.usdt_bal
 if before != after:
     print('USDT balance wrong')
-    print('before:', before)
-    print('after:', after)
+print('before:', before)
+print('after:', after)
+print('*-*-*-*-*-*-*-*-*-*-*-*-*-*-*\n')
+
+print('-:-' * 20)
 
 for agent in agents:
     print(agent.name, 'summary')
     print(f'realised real long pnl: {agent.realised_pnl_long:.1f}R, realised sim long pnl: {agent.sim_pnl_long:.1f}R')
     print(f'realised real short pnl: {agent.realised_pnl_short:.1f}R, realised sim short pnl: {agent.sim_pnl_short:.1f}R')
-    print(f'tor: {agent.total_open_risk}')
+    print(f'tor: {agent.total_open_risk:.1f}')
     print(f'or list: {[round(x, 2) for x in sorted(agent.or_list, reverse=True)]}')
     print(f"real open pnl: {agent.open_pnl('real'):.1f}R")
     print(f"sim open pnl: {agent.open_pnl('sim'):.1f}R")

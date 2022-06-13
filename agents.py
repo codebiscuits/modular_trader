@@ -561,40 +561,48 @@ class DoubleST():
             with open(f"{self.market_data}/{self.id}/bal_history.txt", "r") as file:
                 bal_data = file.readlines()
             
-            if bal_data:
-                prev_bal = json.loads(bal_data[-1]).get('balance')
+            last = json.loads(bal_data[-1])
+            if bal_data and last.get(f'{switch}_open_pnl'):
+                prev_open_pnl = last.get(f'{switch}_open_pnl')
+                curr_open_pnl = self.open_pnl(switch)
+                bal_change_pct = 100 * (curr_open_pnl - prev_open_pnl) / prev_open_pnl
+                print(f"{switch} open pnl change: {bal_change_pct:.2f}")
+            elif bal_data:
+                prev_bal = last.get('balance')
+                bal_change_pct = 100 * (self.bal - prev_bal) / prev_bal
+                print(f"bal change: {bal_change_pct:.2f}")
             else:
-                prev_bal = self.bal
-            bal_change_pct = 100 * (self.bal - prev_bal) / prev_bal
+                bal_change_pct = 0
+                print(f"real open pnl change: {bal_change_pct}")
             
             lookup = f'realised_pnl_{direction}' if switch == 'real' else f'sim_r_pnl_{direction}'
             pnls = {}
-            for i in range(1, 6):
+            for i in range(1, 5):
                 if bal_data and len(bal_data) > 5:
                     pnls[i] = json.loads(bal_data[-1*i]).get(lookup, -1)
                 else:
                     pnls[i] = -1 # if there's no data yet, return -1 instead
             
             score = 0
-            if pnls.get(1) > 0:
+            if bal_change_pct > 0:
                 score += 5
-            elif pnls.get(1) < 0:
+            elif bal_change_pct < 0:
                 score -= 5
-            if pnls.get(2) > 0:
+            if pnls.get(1) > 0:
                 score += 4
-            elif pnls.get(2) < 0:
+            elif pnls.get(1) < 0:
                 score -= 4
-            if pnls.get(3) > 0:
+            if pnls.get(2) > 0:
                 score += 3
-            elif pnls.get(3) < 0:
+            elif pnls.get(2) < 0:
                 score -= 3
-            if pnls.get(4) > 0:
+            if pnls.get(3) > 0:
                 score += 2
-            elif pnls.get(4) < 0:
+            elif pnls.get(3) < 0:
                 score -= 2
-            if pnls.get(5) > 0:
+            if pnls.get(4) > 0:
                 score += 1
-            elif pnls.get(5) < 0:
+            elif pnls.get(4) < 0:
                 score -= 1
             
             return score
@@ -607,13 +615,13 @@ class DoubleST():
         else:
             score = sim_score
         
-        if bal_data:
-            prev_bal = json.loads(bal_data[-1]).get('balance')
-        else:
-            prev_bal = self.bal
-        bal_change_pct = round(100 * (self.bal - prev_bal) / prev_bal, 3)
-        if bal_change_pct < -0.1:
-            score -= 1
+        # if bal_data:
+        #     prev_bal = json.loads(bal_data[-1]).get('balance')
+        # else:
+        #     prev_bal = self.bal
+        # bal_change_pct = round(100 * (self.bal - prev_bal) / prev_bal, 3)
+        # if bal_change_pct < -0.1:
+        #     score -= 1
         
         # print('-')
         # print(f'{direction} - {real_score = }, {sim_score = }, {bal_change_pct = }, {score = }')
@@ -663,13 +671,6 @@ class DoubleST():
         '''creates a dictionary of open positions by checking either 
         open_trades.json, sim_trades.json or tracked_trades.json'''
             
-        # filepath = Path(f'{self.market_data}/{self.id}/{switch}_trades.json')
-        # with open(filepath, 'r') as file:
-        #     try:
-        #         data = json.load(file)
-        #     except:
-        #         data = {}
-        
         if switch == 'open':
             data = self.open_trades
         elif switch == 'sim':

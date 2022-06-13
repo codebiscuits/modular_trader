@@ -274,31 +274,20 @@ def log(session, agents):
                       'positions': agent.real_pos, 'params': params, 'trade_counts': agent.counts_dict, 
                       'realised_pnl_long': agent.realised_pnl_long, 'sim_r_pnl_long': agent.sim_pnl_long, 
                       'realised_pnl_short': agent.realised_pnl_short, 'sim_r_pnl_short': agent.sim_pnl_short, 
-                      'median_spread': stats.median(session.spreads.values())}
+                      'median_spread': stats.median(session.spreads.values()),
+                      'real_open_pnl': agent.open_pnl('real'),
+                      'sim_open_pnl': agent.open_pnl('sim')}
         new_line = json.dumps(bal_record)
         if session.live:
             filepath = Path(f"{session.market_data}/{agent.id}/bal_history.txt")
-            filepath.touch(exist_ok=True)
-            with open(filepath, "a") as file:
-                file.write(new_line)
-                file.write('\n')
         else:
             filepath = Path(f"/home/ross/Documents/backtester_2021/test_records/{agent.id}/bal_history.txt")
-            filepath.touch(exist_ok=True)
-            with open(filepath, "a") as file:
-                file.write(new_line)
-                file.write('\n')
+        filepath.touch(exist_ok=True)
+        with open(filepath, "a") as file:
+            file.write(new_line)
+            file.write('\n')
         
-        # if live:
         strat_benchmark(session, agent)
-    
-        # save a json of any trades that have happened with relevant data
-        if session.live:
-            # should be able to remove these two function calls
-            with open(f"{session.market_data}/{agent.id}/open_trades.json", "w") as ot_file:
-                json.dump(agent.open_trades, ot_file)            
-            with open(f"{session.market_data}/{agent.id}/closed_trades.json", "w") as ct_file:
-                json.dump(agent.closed_trades, ct_file)
 
 def interpret_benchmark(session, agents):
     mkt_bench = session.benchmark
@@ -489,39 +478,53 @@ def recent_perf_str(session, agent):
         with open(f"{session.market_data}/{agent.id}/bal_history.txt", "r") as file:
             bal_data = file.readlines()
         
-        if bal_data:
-            prev_bal = json.loads(bal_data[-1]).get('balance')
+        # if bal_data:
+        #     prev_bal = json.loads(bal_data[-1]).get('balance')
+        # else:
+        #     prev_bal = session.bal
+        # bal_change_pct = 100 * (session.bal - prev_bal) / prev_bal
+        
+        last = json.loads(bal_data[-1])
+        if bal_data and last.get(f'{state}_open_pnl'):
+            prev_open_pnl = last.get(f'{state}_open_pnl')
+            curr_open_pnl = agent.open_pnl(state)
+            bal_change_pct = 100 * (curr_open_pnl - prev_open_pnl) / prev_open_pnl
+            print(f"{state} open pnl change: {bal_change_pct:.2f}")
+        elif bal_data:
+            prev_bal = last.get('balance')
+            bal_change_pct = 100 * (agent.bal - prev_bal) / prev_bal
+            print(f"bal change: {bal_change_pct:.2f}")
         else:
-            prev_bal = session.bal
-        bal_change_pct = 100 * (session.bal - prev_bal) / prev_bal
+            bal_change_pct = 0
+            print(f"real open pnl change: {bal_change_pct}")
         
         d = -1 # default value
         pnls = {1:d, 2:d, 3:d, 4:d, 5:d}
         if bal_data and (len(bal_data) >= 5):
             lookup = f'realised_pnl_{direction}' if state == 'real' else f'sim_r_pnl_{direction}'
-            for i in range(1, 6):
+            for i in range(1, 5):
                 pnls[i] = json.loads(bal_data[-1*i]).get(lookup, 7)
         
         score = 0
-        if pnls.get(1) > 0:
+        if bal_change_pct > 0:
             score += 5
-        elif pnls.get(1) < 0:
+        elif bal_change_pct < 0:
             score -= 5
-        if pnls.get(2) > 0:
+        if pnls.get(1) > 0:
             score += 4
-        elif pnls.get(2) < 0:
+        elif pnls.get(1) < 0:
             score -= 4
-        if pnls.get(3) > 0:
+        if pnls.get(2) > 0:
             score += 3
-        elif pnls.get(3) < 0:
+        elif pnls.get(2) < 0:
             score -= 3
-        if pnls.get(4) > 0:
+        if pnls.get(3) > 0:
             score += 2
-        elif pnls.get(4) < 0:
+        elif pnls.get(3) < 0:
             score -= 2
-        if pnls.get(5) > 0:
+        if pnls.get(4) > 0:
             score += 1
-        elif pnls.get(5) < 0:
+        elif pnls.get(4) < 0:
             score -= 1
         
         if bal_change_pct > 0.1:
