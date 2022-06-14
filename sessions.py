@@ -103,14 +103,14 @@ class MARGIN_SESSION:
         pct = round(100 * value / self.bal, 5)
         # print(f'usdt stats: qty = {bal.get("free")}, owed = {bal.get("borrowed")}, {value = }, {pct = }, {self.bal = }')
         um.stop()
-        return {'qty': bal.get('free'), 'owed': bal.get('borrowed'), 'value': value, 'pf%': pct}
+        return {'qty': float(bal.get('free')), 'owed': float(bal.get('borrowed')), 'value': value, 'pf%': pct}
         
     def update_usdt_M(self, up=0.0, down=0.0, borrow=0.0, repay=0.0):
         '''checks current usdt balance and returns a dictionary for updating the sizing dict'''
         hj = Timer('update_usdt_M')
         hj.start()
         
-        qty = self.usdt_bal.get('qty') + up
+        qty = (self.usdt_bal.get('qty')) + up
         value = self.usdt_bal.get('value') + up
         qty = self.usdt_bal.get('qty') - down
         value = self.usdt_bal.get('value') - down
