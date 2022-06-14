@@ -734,7 +734,10 @@ def update_pos_M(session, asset, new_bal, inval, direction, pfrd):
     price = session.prices[pair]
     value = price * new_bal
     pct = round(100 * value / session.bal, 5)
-    open_risk = value - (value / inval)
+    if direction == 'long':
+        open_risk = value - (value / inval)
+    else:
+        open_risk = (value / inval) - value
     
     if pfrd:
         open_risk_r = open_risk / pfrd

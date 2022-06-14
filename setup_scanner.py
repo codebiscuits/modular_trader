@@ -53,13 +53,15 @@ all_start = time.perf_counter()
 session = sessions.MARGIN_SESSION()
 funcs.update_prices(session)
 pprint(session.usdt_bal)
-agent_1 = DoubleST(session, 1)
-agent_2 = DoubleST(session, 2)
-agent_3 = DoubleST(session, 3)
-agent_4 = DoubleST(session, 4)
-agent_5 = DoubleST(session, 5)
+# agent_1 = DoubleST(session, 1)
+# agent_2 = DoubleST(session, 2)
+# agent_3 = DoubleST(session, 3)
+# agent_4 = DoubleST(session, 4)
+# agent_5 = DoubleST(session, 5)
 agent_6 = DoubleST(session, 6)
-agents = [agent_1, agent_2, agent_3, agent_4, agent_5, agent_6]
+agents = [
+    # agent_1, agent_2, agent_3, agent_4, agent_5, 
+    agent_6]
 session.name = ' | '.join([n.name for n in agents])
 
 # compile and sort list of pairs to loop through ------------------------------
@@ -125,7 +127,7 @@ for n, pair in enumerate(pairs):
         st = df.at[len(df)-1, 'st']
         inval_dist = signals.get('inval')
         stp = funcs.calc_stop(st, session.spreads.get(pair), price)
-        risk = (price - stp) / price
+        risk = abs((price - stp) / price)
         size_l, usdt_size_l, size_s, usdt_size_s = funcs.get_size(agent, price, session.bal, risk)
         
         df.drop(columns=['st_loose', 'st_loose_u', 'st_loose_d', 'st', 'st_u', 'st_d'], inplace=True)
@@ -142,12 +144,20 @@ for n, pair in enumerate(pairs):
             agent.real_pos[asset].update(funcs.update_pos_M(session, asset, real_qty, inval_dist, agent.in_pos['real'], agent.in_pos['real_pfrd']))
             if agent.in_pos['real_ep']:
                 agent.in_pos['real_price_delta'] = (price - agent.in_pos['real_ep']) / agent.in_pos['real_ep'] # how much has price moved since entry
+            if agent.real_pos[asset]['or_R'] < 0:
+                dir = agent.in_pos['real']
+                print('dir', dir)
+                signals['signal'] = f"close_{dir}"
                 
         if agent.in_pos['sim']:
             sim_qty = float(agent.sim_pos[asset]['qty'])
             agent.sim_pos[asset].update(funcs.update_pos_M(session, asset, sim_qty, inval_dist, agent.in_pos['sim'], agent.in_pos['sim_pfrd']))
             if agent.in_pos['sim_ep']:
                 agent.in_pos['sim_price_delta'] = (price - agent.in_pos['sim_ep']) / agent.in_pos['sim_ep']
+            if agent.sim_pos[asset]['or_R'] < 0:
+                dir = agent.in_pos['sim']
+                print('dir', dir)
+                signals['signal'] = f"close_{dir}"
         
             
 # margin order execution ------------------------------------------------------
@@ -350,8 +360,8 @@ for agent in agents:
     
     benchmark = uf.log(session, [agent])
     if not session.live:
-        # print('\n*** real_pos ***')
-        # pprint(agent.real_pos)
+        print('\n*** real_pos ***')
+        pprint(agent.real_pos)
         # print('\n*** sim_pos ***')
         # pprint(agent.sim_pos.keys())
         print('warning: logging directed to test_records')
