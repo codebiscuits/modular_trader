@@ -484,16 +484,10 @@ def recent_perf_str(session, agent):
         #     prev_bal = session.bal
         # bal_change_pct = 100 * (session.bal - prev_bal) / prev_bal
         
-        last = json.loads(bal_data[-1])
-        other_last = json.loads(bal_data[-2])
-        if bal_data and last.get(f'{state}_open_pnl'):
-            prev_open_pnl = other_last.get(f'{state}_open_pnl')
-            if state == 'real':
-                curr_open_pnl = agent.starting_ropnl
-            else:
-                curr_open_pnl = agent.starting_sopnl
-            print(f'perf_str: {curr_open_pnl = }, {prev_open_pnl = }')
-            bal_change_pct = 100 * (curr_open_pnl - prev_open_pnl) / prev_open_pnl
+        last = json.loads(bal_data[-2])
+        # other_last = json.loads(bal_data[-2])
+        if agent.open_pnl_changes.get(state):
+            bal_change_pct = agent.open_pnl_changes.get(state)
             print(f"{state} open pnl change: {bal_change_pct:.2f}")
         elif bal_data:
             prev_bal = last.get('balance')
@@ -510,27 +504,28 @@ def recent_perf_str(session, agent):
             for i in range(1, 5):
                 pnls[i] = json.loads(bal_data[-1*i]).get(lookup, 7)
         
-        score = 0
-        if bal_change_pct > 0:
-            score += 5
-        elif bal_change_pct < 0:
-            score -= 5
+        score_1 = 0
+        score_2 = 0
+        if bal_change_pct > 0.1:
+            score_1 += 5
+        elif bal_change_pct < 0.1:
+            score_1 -= 5
         if pnls.get(1) > 0:
-            score += 4
+            score_2 += 4
         elif pnls.get(1) < 0:
-            score -= 4
+            score_2 -= 4
         if pnls.get(2) > 0:
-            score += 3
+            score_2 += 3
         elif pnls.get(2) < 0:
-            score -= 3
+            score_2 -= 3
         if pnls.get(3) > 0:
-            score += 2
+            score_2 += 2
         elif pnls.get(3) < 0:
-            score -= 2
+            score_2 -= 2
         if pnls.get(4) > 0:
-            score += 1
+            score_2 += 1
         elif pnls.get(4) < 0:
-            score -= 1
+            score_2 -= 1
         
         if bal_change_pct > 0.1:
             perf_str = '+ | '
@@ -547,15 +542,20 @@ def recent_perf_str(session, agent):
             else:
                 perf_str += ' 0'
         
-        return score, perf_str
+        return score_1, score_2, perf_str
     
-    real_score_l, real_perf_str_l = score_accum('real', 'long')
-    real_score_s, real_perf_str_s = score_accum('real', 'short')
-    sim_score_l, sim_perf_str_l = score_accum('sim', 'long')
-    sim_score_s, sim_perf_str_s = score_accum('sim', 'short')
+    real_score_l1, real_score_l2, real_perf_str_l = score_accum('real', 'long')
+    real_score_s1, real_score_s2, real_perf_str_s = score_accum('real', 'short')
+    sim_score_l1, sim_score_l2, sim_perf_str_l = score_accum('sim', 'long')
+    sim_score_s1, sim_score_s2, sim_perf_str_s = score_accum('sim', 'short')
     
-    perf_str_l = real_perf_str_l if (agent.open_trades and real_score_l) else sim_perf_str_l
-    perf_str_s = real_perf_str_s if (agent.open_trades and real_score_s) else sim_perf_str_s
+    perf_str_l = real_perf_str_l if (agent.open_trades and real_score_l2) else sim_perf_str_l
+    perf_str_s = real_perf_str_s if (agent.open_trades and real_score_s2) else sim_perf_str_s
+    
+    real_score_l = real_score_l1 + real_score_l2
+    real_score_s = real_score_s1 + real_score_s2
+    sim_score_l = sim_score_l1 + sim_score_l2
+    sim_score_s = sim_score_s1 + sim_score_s2
     
     full_perf_str = f'\
 long: {perf_str_l}\n\

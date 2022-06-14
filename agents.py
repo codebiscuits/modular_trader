@@ -73,6 +73,7 @@ class DoubleST():
         self.real_pos = self.current_positions('open')
         self.sim_pos = self.current_positions('sim')
         self.tracked = self.current_positions('tracked')
+        self.open_pnl_changes = {}
         self.fixed_risk_l = self.set_fixed_risk('long')
         self.fixed_risk_s = self.set_fixed_risk('short')
         # self.test_fixed_risk(0.0001, 0.0001)
@@ -558,6 +559,9 @@ class DoubleST():
         fr_inc = self.fr_max / 10 # increment fr in 10% steps of the range
         
         def score_accum(direction:str, switch:str):
+            '''calculates perf score from recent performance. also saves the
+            instance property open_pnl_changes dictionary'''
+            
             with open(f"{self.market_data}/{self.id}/bal_history.txt", "r") as file:
                 bal_data = file.readlines()
             
@@ -566,6 +570,7 @@ class DoubleST():
                 prev_open_pnl = last.get(f'{switch}_open_pnl')
                 curr_open_pnl = self.open_pnl(switch)
                 bal_change_pct = 100 * (curr_open_pnl - prev_open_pnl) / prev_open_pnl
+                self.open_pnl_changes[switch] = bal_change_pct
                 print(f"{switch} open pnl change: {bal_change_pct:.2f}%")
             elif bal_data:
                 prev_bal = last.get('balance')
@@ -585,9 +590,9 @@ class DoubleST():
             
             score_1 = 0
             score_2 = 0
-            if bal_change_pct > 0:
+            if bal_change_pct > 0.1:
                 score_1 += 5
-            elif bal_change_pct < 0:
+            elif bal_change_pct < 0.1:
                 score_1 -= 5
             if pnls.get(1) > 0:
                 score_2 += 4
@@ -613,8 +618,10 @@ class DoubleST():
         print(f"set_fixed_risk: real_score {real_score_1 + real_score_2}, sim_score {sim_score_1 + sim_score_2}")
         if self.open_trades and real_score_2:
             score = real_score_1 + real_score_2
+            print('real score chosen')
         else:
             score = sim_score_1 + sim_score_2
+            print('sim score chosen')
         
         # if bal_data:
         #     prev_bal = json.loads(bal_data[-1]).get('balance')

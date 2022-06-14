@@ -84,6 +84,7 @@ for agent in agents:
     agent.real_pos['USDT'] = session.usdt_bal
     agent.starting_ropnl = agent.open_pnl('real')
     agent.starting_sopnl = agent.open_pnl('sim')
+    
     if agent.max_positions > 20:
         print(f'max positions: {agent.max_positions}')
     agent.calc_tor()
