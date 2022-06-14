@@ -566,11 +566,11 @@ class DoubleST():
                 prev_open_pnl = last.get(f'{switch}_open_pnl')
                 curr_open_pnl = self.open_pnl(switch)
                 bal_change_pct = 100 * (curr_open_pnl - prev_open_pnl) / prev_open_pnl
-                print(f"{switch} open pnl change: {bal_change_pct:.2f}")
+                print(f"{switch} open pnl change: {bal_change_pct:.2f}%")
             elif bal_data:
                 prev_bal = last.get('balance')
                 bal_change_pct = 100 * (self.bal - prev_bal) / prev_bal
-                print(f"bal change: {bal_change_pct:.2f}")
+                print(f"bal change: {bal_change_pct:.2f}%")
             else:
                 bal_change_pct = 0
                 print(f"real open pnl change: {bal_change_pct}")
@@ -583,37 +583,38 @@ class DoubleST():
                 else:
                     pnls[i] = -1 # if there's no data yet, return -1 instead
             
-            score = 0
+            score_1 = 0
+            score_2 = 0
             if bal_change_pct > 0:
-                score += 5
+                score_1 += 5
             elif bal_change_pct < 0:
-                score -= 5
+                score_1 -= 5
             if pnls.get(1) > 0:
-                score += 4
+                score_2 += 4
             elif pnls.get(1) < 0:
-                score -= 4
+                score_2 -= 4
             if pnls.get(2) > 0:
-                score += 3
+                score_2 += 3
             elif pnls.get(2) < 0:
-                score -= 3
+                score_2 -= 3
             if pnls.get(3) > 0:
-                score += 2
+                score_2 += 2
             elif pnls.get(3) < 0:
-                score -= 2
+                score_2 -= 2
             if pnls.get(4) > 0:
-                score += 1
+                score_2 += 1
             elif pnls.get(4) < 0:
-                score -= 1
+                score_2 -= 1
             
-            return score
+            return score_1, score_2
         
-        real_score = score_accum(direction, 'real')
-        sim_score = score_accum(direction, 'sim')
-        
-        if self.open_trades and real_score:
-            score = real_score
+        real_score_1, real_score_2 = score_accum(direction, 'real')
+        sim_score_1, sim_score_2 = score_accum(direction, 'sim')
+        print(f"set_fixed_risk: real_score {real_score_1 + real_score_2}, sim_score {sim_score_1 + sim_score_2}")
+        if self.open_trades and real_score_2:
+            score = real_score_1 + real_score_2
         else:
-            score = sim_score
+            score = sim_score_1 + sim_score_2
         
         # if bal_data:
         #     prev_bal = json.loads(bal_data[-1]).get('balance')

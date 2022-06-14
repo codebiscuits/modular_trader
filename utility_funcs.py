@@ -485,9 +485,14 @@ def recent_perf_str(session, agent):
         # bal_change_pct = 100 * (session.bal - prev_bal) / prev_bal
         
         last = json.loads(bal_data[-1])
+        other_last = json.loads(bal_data[-2])
         if bal_data and last.get(f'{state}_open_pnl'):
-            prev_open_pnl = last.get(f'{state}_open_pnl')
-            curr_open_pnl = agent.open_pnl(state)
+            prev_open_pnl = other_last.get(f'{state}_open_pnl')
+            if state == 'real':
+                curr_open_pnl = agent.starting_ropnl
+            else:
+                curr_open_pnl = agent.starting_sopnl
+            print(f'perf_str: {curr_open_pnl = }, {prev_open_pnl = }')
             bal_change_pct = 100 * (curr_open_pnl - prev_open_pnl) / prev_open_pnl
             print(f"{state} open pnl change: {bal_change_pct:.2f}")
         elif bal_data:
@@ -534,7 +539,7 @@ def recent_perf_str(session, agent):
         else:
             perf_str = '0 |'
         
-        for j in range(1, 6):
+        for j in range(1, 5):
             if pnls.get(j, -1) > 0:
                 perf_str += ' +'
             elif pnls.get(j, -1) < 0:

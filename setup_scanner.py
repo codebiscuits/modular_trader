@@ -60,7 +60,7 @@ agent_4 = DoubleST(session, 4)
 agent_5 = DoubleST(session, 5)
 agent_6 = DoubleST(session, 6)
 agents = [agent_1, agent_2, agent_3, agent_4, agent_5, agent_6]
-session.name = '-'.join([n.name for n in agents])
+session.name = ' | '.join([n.name for n in agents])
 
 # compile and sort list of pairs to loop through ------------------------------
 all_pairs = funcs.get_pairs(market='CROSS')
@@ -82,6 +82,8 @@ session.spreads = funcs.binance_spreads('USDT') # dict
 for agent in agents:
     print(f"{agent.name} fr long: {agent.fixed_risk_l}, fr short: {agent.fixed_risk_s}")
     agent.real_pos['USDT'] = session.usdt_bal
+    agent.starting_ropnl = agent.open_pnl('real')
+    agent.starting_sopnl = agent.open_pnl('sim')
     if agent.max_positions > 20:
         print(f'max positions: {agent.max_positions}')
     agent.calc_tor()
