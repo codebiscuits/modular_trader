@@ -53,15 +53,13 @@ all_start = time.perf_counter()
 session = sessions.MARGIN_SESSION()
 funcs.update_prices(session)
 pprint(session.usdt_bal)
-# agent_1 = DoubleST(session, 1)
-# agent_2 = DoubleST(session, 2)
-# agent_3 = DoubleST(session, 3)
-# agent_4 = DoubleST(session, 4)
-# agent_5 = DoubleST(session, 5)
+agent_1 = DoubleST(session, 1)
+agent_2 = DoubleST(session, 2)
+agent_3 = DoubleST(session, 3)
+agent_4 = DoubleST(session, 4)
+agent_5 = DoubleST(session, 5)
 agent_6 = DoubleST(session, 6)
-agents = [
-    # agent_1, agent_2, agent_3, agent_4, agent_5, 
-    agent_6]
+agents = [agent_1, agent_2, agent_3, agent_4, agent_5, agent_6]
 session.name = ' | '.join([n.name for n in agents])
 
 # compile and sort list of pairs to loop through ------------------------------
