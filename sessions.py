@@ -13,7 +13,7 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 class MARGIN_SESSION:
     max_length = 201
     quote_asset = 'USDT'
-    fr_max = 0.0005 # at 0.0025, one agent makes good use of total balance
+    fr_max = 0.005 # at 0.0025, one agent makes good use of total balance
     max_spread = 0.5
     above_200_ema = set()
     below_200_ema = set()
