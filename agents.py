@@ -284,7 +284,7 @@ class DoubleST():
         # check binance to find which don't have an active stop-loss
         stop_ids = [uf.latest_stop_id(v) for v in self.open_trades.values()]
         
-        open_orders = client.get_open_orders()
+        open_orders = client.get_open_margin_orders()
         ids_remaining = [i.get('orderId') for i in open_orders]
         symbols_remaining = [i.get('symbol') for i in open_orders]
         
@@ -303,7 +303,6 @@ class DoubleST():
         # for any that don't, assume that the stop was hit and check for exchange records
         for pair, sid, time in stopped:
             trade_record = self.open_trades.get(pair)
-            # order_list = client.get_all_orders(symbol=pair, orderId=sid, startTime=time-10000)
             if sid == 'not live':
                 continue
             order_list = client.get_all_margin_orders(symbol=pair, orderId=sid, startTime=time-10000)
@@ -311,7 +310,7 @@ class DoubleST():
             order = None
             if order_list and sid:
                 for o in order_list[::-1]:
-                    if o.get('order_id') == sid and o.get('status') == 'FILLED':
+                    if o.get('orderId') == sid and o.get('status') == 'FILLED':
                         order = o
                         break
             elif order_list and not sid:
@@ -568,7 +567,8 @@ class DoubleST():
             last = json.loads(bal_data[-1])
             if bal_data and last.get(f'{switch}_open_pnl'):
                 prev_open_pnl = last.get(f'{switch}_open_pnl')
-                curr_open_pnl = self.open_pnl(switch)
+                curr_open_pnl = self.open_pnl(direction, switch)
+                print(f"{direction}, {switch}, {curr_open_pnl}")
                 bal_change_pct = 100 * (curr_open_pnl - prev_open_pnl) / prev_open_pnl
                 self.open_pnl_changes[switch] = bal_change_pct
                 print(f"{switch} open pnl change: {bal_change_pct:.2f}%")
@@ -613,6 +613,7 @@ class DoubleST():
             
             return score_1, score_2
         
+        print('\n- score accum -')
         real_score_1, real_score_2 = score_accum(direction, 'real')
         sim_score_1, sim_score_2 = score_accum(direction, 'sim')
         print(f"set_fixed_risk: real_score {real_score_1 + real_score_2}, sim_score {sim_score_1 + sim_score_2}")
@@ -769,7 +770,7 @@ class DoubleST():
         
         return len(df) <= 200 and no_pos
 
-    def open_pnl(self, switch):
+    def open_pnl(self, direction, switch):
         h = Timer(f'open_pnl {switch}')
         h.start()
         total = 0
@@ -777,11 +778,16 @@ class DoubleST():
             pos_dict = self.real_pos.values()
         elif switch == 'sim':
             pos_dict = self.sim_pos.values()
-            for pos in pos_dict:
-                if pos.get('pnl_R'):
-                    total += pos['pnl_R']
         else:
             print('open_pnl requires argument real or sim')
+        
+        for pos in pos_dict:
+            if pos.get('pnl_R'):
+                if (direction == 'long') and pos['long']:
+                    total += pos['pnl_R']
+                elif (direction == 'short') and not pos['long']:
+                    total += pos['pnl_R']
+                        
         h.stop()
         return total
     

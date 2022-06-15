@@ -65,8 +65,9 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
     if agent.in_pos['sim'] == None and sim_reason:
         usdt_size = 128.0
         size = round(usdt_size / price, 8)
-        note = f"{agent.name} sim open long {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
-        print(now, note)
+        if not session.live:
+            note = f"{agent.name} sim open long {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
+            print(now, note)
         
         timestamp = round(datetime.utcnow().timestamp() * 1000)
         long_order = {'pair': pair, 
@@ -190,8 +191,9 @@ def tp_long(session, agent, pair, stp, inval):
                 agent.realised_pnl(trade_record, 'long')
             
     if agent.in_pos.get('sim_tp_sig'):
-        note = f"{agent.name} sim take-profit {pair} long 50% @ {price}"
-        print(now, note)
+        if not session.live:
+            note = f"{agent.name} sim take-profit {pair} long 50% @ {price}"
+            print(now, note)
         
         trade_record = agent.sim_trades.get(pair)
         sim_bal = abs(float(agent.sim_pos[asset]['qty']))
@@ -281,7 +283,7 @@ def close_long(session, agent, pair):
                 base_size = real_bal
             
             # execute trade
-            api_order = funcs.sell_asset_M(session, pair, base_size, price, session.live)
+            api_order = funcs.sell_asset_M(session, pair, real_bal, price, session.live)
             usdt_size = api_order.get('cummulativeQuoteQty')
             funcs.repay_asset_M('USDT', usdt_size, session.live)
             
@@ -320,8 +322,9 @@ def close_long(session, agent, pair):
             agent.realised_pnl(trade_record, 'long')
     
     if agent.in_pos['sim'] == 'long':
-        note = f"{agent.name} sim close long {pair} @ {price}"
-        print(now, note)
+        if not session.live:
+            note = f"{agent.name} sim close long {pair} @ {price}"
+            print(now, note)
         
         # initialise stuff
         trade_record = agent.sim_trades[pair]
@@ -460,8 +463,9 @@ def open_short(session, agent, pair, size, stp, inval, sim_reason):
     if agent.in_pos['sim'] == None and sim_reason:
         usdt_size = 128.0
         size = round(usdt_size / price, 8)
-        note = f"{agent.name} sim open short {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
-        print(now, note)
+        if not session.live:
+            note = f"{agent.name} sim open short {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
+            print(now, note)
         
         timestamp = round(datetime.utcnow().timestamp() * 1000)
         short_order = {'pair': pair, 
@@ -582,8 +586,9 @@ def tp_short(session, agent, pair, stp, inval):
                 agent.realised_pnl(trade_record, 'short')
             
     if agent.in_pos.get('sim_tp_sig'):
-        note = f"{agent.name} sim take-profit {pair} short 50% @ {price}"
-        print(now, note) 
+        if not session.live:
+            note = f"{agent.name} sim take-profit {pair} short 50% @ {price}"
+            print(now, note) 
         
         trade_record = agent.sim_trades.get(pair)
         sim_bal = abs(float(agent.sim_pos[asset]['qty']))
@@ -713,8 +718,9 @@ def close_short(session, agent, pair):
             agent.realised_pnl(trade_record, 'short')
     
     if agent.in_pos['sim'] == 'short':
-        note = f"{agent.name} sim close short {pair} @ {price}"
-        print(now, note)
+        if not session.live:
+            note = f"{agent.name} sim close short {pair} @ {price}"
+            print(now, note)
         
         # initialise stuff
         trade_record = agent.sim_trades[pair]

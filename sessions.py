@@ -32,6 +32,7 @@ class MARGIN_SESSION:
         self.ohlc_data = self.ohlc_path()
         self.now_start = datetime.now().strftime('%d/%m/%y %H:%M')
         self.last_price_update = 0
+        self.check_margin_lvl()
         t.stop()
         
         
@@ -125,6 +126,16 @@ class MARGIN_SESSION:
         print(f'usdt stats: {qty = }, {owed = }, {value = }, {pct = }, {self.bal = }')
         self.usdt_bal = {'qty': qty, 'owed': owed, 'value': value, 'pf%': pct}
         hj.stop()
+    
+    def check_margin_lvl(self):
+        info = client.get_margin_account()
+        margin_lvl = float(info.get('marginLevel'))
+        print(f"Margin level: {margin_lvl:.2f}")
+        
+        if margin_lvl <= 2:
+            pb.push_note('*** Warning ***', 'Margin level <= 2, reduce risk')
+        elif margin_lvl <= 3:
+            pb.push_note('Warning', 'Margin level <= 3, keep an eye on it')
         
 
     

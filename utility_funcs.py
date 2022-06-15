@@ -574,22 +574,25 @@ def scanner_summary(session, agents):
     above_ema = len(session.above_200_ema)
     below_ema = len(session.below_200_ema)
     ema_str = f'above ema: {above_ema}/{above_ema + below_ema}'
-    final_msg = f'{live_str} {ema_str}'
+    final_msg = f'{live_str} {ema_str}\n-'
     
     for agent in agents:
         or_list = [v.get('or_$') for v in agent.real_pos.values() if v.get('or_$')]
         num_open_positions = len(or_list)
-        vol_exp = round(100 - agent.real_pos.get('USDT').get('pf%'))
+        vol_exp = 0
+        for k, v in agent.real_pos.items():
+            if k != 'USDT':
+                vol_exp += v.get('pf%')
         
         count_str = count_trades(agent.counts_dict)
         perf_str = recent_perf_str(session, agent)
         agent_bench = agent.benchmark
         mkt_bench = session.benchmark
-        bench_str = f"1m perf: strat {round(agent_bench.get('strat_1m')*100, 2)}%, mkt {round(mkt_bench.get('market_1m')*100, 2)}%"
-        agent_msg = f'\n{agent.name}\n{perf_str}\npositions {num_open_positions}, exposure {vol_exp}% {count_str}\n{bench_str}'
+        bench_str = f"1w perf: strat {round(agent_bench.get('strat_1w')*100, 2)}%, mkt {round(mkt_bench.get('market_1m')*100, 2)}%"
+        agent_msg = f'\n{agent.name}\n{perf_str}\npositions {num_open_positions}, exposure {vol_exp:.2f}% {count_str}\n{bench_str}\n-'
         final_msg += agent_msg
     
-    print(f'-\n{title}\n{final_msg}\n-')
+    print(f'-\n{title}\n{final_msg}')
     
     if session.live:
         pb.push_note(title, final_msg)
