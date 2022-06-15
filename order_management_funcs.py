@@ -818,7 +818,7 @@ def reduce_risk_M(session, agent):
             asset = pos[0]
             or_R = pos[1]
             pnl_pct = pos[2]
-            if total_r > agent.total_r_limit and or_R > 1.1 and pnl_pct > 0.3:
+            if total_r > agent.total_r_limit and or_R > agent.indiv_r_limit and pnl_pct > 0.3:
                 print(f'*** tor: {total_r:.1f}, reducing risk ***')
                 pair = asset + 'USDT'
                 now = datetime.now().strftime('%d/%m/%y %H:%M')
@@ -837,11 +837,14 @@ def reduce_risk_M(session, agent):
                     # clear stop
                     clear, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
                     if clear == 'error':
-                        print(f"Can't be sure which {pair} stop to clear, close_short aborted")
-                        pb.push_note(pair, "Can't be sure which stop to clear, close_short aborted")
+                        note = f"{agent.name} Can't be sure which {pair} stop to clear, close_short aborted"
+                        print(note)
+                        pb.push_note(pair, note)
                     else:
                         if base_size and (real_bal != base_size): # check records match reality
                             print(f"{pair} records don't match real balance. {real_bal = }, {base_size = }")
+                            mismatch = 100 * abs(base_size - real_bal) / base_size
+                            print(f"{mismatch = }%")
                         if not base_size:
                             base_size = real_bal
                         
@@ -891,7 +894,10 @@ def reduce_risk_M(session, agent):
                             agent.real_pos['USDT']['owed'] -= float(base_size * price)
                         
                         del agent.real_pos[asset]
-                        agent.realised_pnl(trade_record, 'long')
+                        if long:
+                            agent.realised_pnl(trade_record, 'long')
+                        else:
+                            agent.realised_pnl(trade_record, 'short')
                 except BinanceAPIException as e:
                     print(f'problem with sell order for {pair}')
                     print(e)

@@ -949,7 +949,7 @@ def clear_stop_M(pair, trade_record, live):
             orders = client.get_all_margin_orders(symbol=pair)
             if (len(orders) == 1) and (orders[-1].get('type') == 'STOP_LOSS_LIMIT'):
                 stop_id = orders[-1].get('orderId')
-                clear = client.cancel_margin_order(symbol=pair, orderId=stop_id)
+                clear = client.cancel_margin_order(symbol=pair, orderId=str(stop_id))
                 base_size = Decimal(clear.get('origQty'))
             elif len(orders) > 1:
                 clear = 'error'
