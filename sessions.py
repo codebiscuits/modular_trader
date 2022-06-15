@@ -123,7 +123,7 @@ class MARGIN_SESSION:
         
         pct = round(100 * value / self.bal, 5)
         
-        print(f'usdt stats: {qty = }, {owed = }, {value = }, {pct = }, {self.bal = }')
+        # print(f'usdt stats: {qty = }, {owed = }, {value = }, {pct = }, {self.bal = }')
         self.usdt_bal = {'qty': qty, 'owed': owed, 'value': value, 'pf%': pct}
         hj.stop()
     

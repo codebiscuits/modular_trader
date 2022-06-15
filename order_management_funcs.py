@@ -108,11 +108,11 @@ def tp_long(session, agent, pair, stp, inval):
         # clear stop
         clear, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
         if clear == 'error':
-            print(f"Can't be sure which {pair} stop to clear, tp_long aborted")
+            print(f"{agent.name} Can't be sure which {pair} stop to clear, tp_long aborted")
             pb.push_note(pair, "Can't be sure which stop to clear, tp_long aborted")
         else:
             if base_size and (real_bal != base_size): # check records match reality
-                print(f"{pair} records don't match real balance. {real_bal = }, {base_size = }")
+                print(f"{agent.name} {pair} records don't match real balance. {real_bal = }, {base_size = }")
             if not base_size:
                 base_size = real_bal
             
@@ -274,11 +274,11 @@ def close_long(session, agent, pair):
         # cancel stop
         clear, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
         if clear == 'error':
-            print(f"Can't be sure which {pair} stop to clear, close_long aborted")
+            print(f"{agent.name} Can't be sure which {pair} stop to clear, close_long aborted")
             pb.push_note(pair, "Can't be sure which stop to clear, close_long aborted")
         else:
             if base_size and (real_bal != base_size): # check records match reality
-                print(f"{pair} records don't match real balance. {real_bal = }, {base_size = }")
+                print(f"{agent.name} {pair} records don't match real balance. {real_bal = }, {base_size = }")
             if not base_size:
                 base_size = real_bal
             
@@ -506,11 +506,11 @@ def tp_short(session, agent, pair, stp, inval):
         # clear stop
         clear, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
         if clear == 'error':
-            print(f"Can't be sure which {pair} stop to clear, tp_short aborted")
+            print(f"{agent.name} Can't be sure which {pair} stop to clear, tp_short aborted")
             pb.push_note(pair, "Can't be sure which stop to clear, tp_short aborted")
         else:
             if base_size and (real_bal != base_size): # check records match reality
-                print(f"{pair} records don't match real balance. {real_bal = }, {base_size = }")
+                print(f"{agent.name} {pair} records don't match real balance. {real_bal = }, {base_size = }")
             if not base_size:
                 base_size = real_bal
             
@@ -669,11 +669,11 @@ def close_short(session, agent, pair):
         # cancel stop
         clear, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
         if clear == 'error':
-            print(f"Can't be sure which {pair} stop to clear, close_short aborted")
+            print(f"{agent.name} Can't be sure which {pair} stop to clear, close_short aborted")
             pb.push_note(pair, "Can't be sure which stop to clear, close_short aborted")
         else:
             if base_size and (real_bal != base_size): # check records match reality
-                print(f"{pair} records don't match real balance. {real_bal = }, {base_size = }")
+                print(f"{agent.name} {pair} records don't match real balance. {real_bal = }, {base_size = }")
             if not base_size:
                 base_size = real_bal
             
@@ -848,7 +848,7 @@ def reduce_risk_M(session, agent):
                         pb.push_note(pair, note)
                     else:
                         if base_size and (real_bal != base_size): # check records match reality
-                            print(f"{pair} records don't match real balance. {real_bal = }, {base_size = }")
+                            print(f"{agent.name} {pair} records don't match real balance. {real_bal = }, {base_size = }")
                             mismatch = 100 * abs(base_size - real_bal) / base_size
                             print(f"{mismatch = }%")
                         if not base_size:
