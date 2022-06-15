@@ -942,7 +942,7 @@ def clear_stop_M(pair, trade_record, live):
     clear, base_size = None, None
     if live:
         if stop_id:
-            clear = client.cancel_margin_order(symbol=pair, orderId=stop_id)
+            clear = client.cancel_margin_order(symbol=pair, orderId=str(stop_id))
             base_size = Decimal(clear.get('origQty'))
         else:
             print(f'no recorded stop id for {pair}')
