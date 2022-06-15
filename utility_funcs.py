@@ -275,8 +275,10 @@ def log(session, agents):
                       'realised_pnl_long': agent.realised_pnl_long, 'sim_r_pnl_long': agent.sim_pnl_long, 
                       'realised_pnl_short': agent.realised_pnl_short, 'sim_r_pnl_short': agent.sim_pnl_short, 
                       'median_spread': stats.median(session.spreads.values()),
-                      'real_open_pnl': agent.open_pnl('real'),
-                      'sim_open_pnl': agent.open_pnl('sim')}
+                      'real_open_pnl_l': agent.open_pnl('long', 'real'),
+                      'real_open_pnl_s': agent.open_pnl('short', 'real'),
+                      'sim_open_pnl_l': agent.open_pnl('long', 'sim'), 
+                      'sim_open_pnl_s': agent.open_pnl('short', 'sim')}
         new_line = json.dumps(bal_record)
         if session.live:
             filepath = Path(f"{session.market_data}/{agent.id}/bal_history.txt")

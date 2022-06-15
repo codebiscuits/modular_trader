@@ -82,8 +82,10 @@ session.spreads = funcs.binance_spreads('USDT') # dict
 for agent in agents:
     print(f"{agent.name} fr long: {agent.fixed_risk_l}, fr short: {agent.fixed_risk_s}")
     agent.real_pos['USDT'] = session.usdt_bal
-    agent.starting_ropnl = agent.open_pnl('real')
-    agent.starting_sopnl = agent.open_pnl('sim')
+    agent.starting_ropnl_l = agent.open_pnl('long', 'real')
+    agent.starting_sopnl_l = agent.open_pnl('long', 'sim')
+    agent.starting_ropnl_s = agent.open_pnl('short', 'real')
+    agent.starting_sopnl_s = agent.open_pnl('short', 'sim')
     
     if agent.max_positions > 20:
         print(f'max positions: {agent.max_positions}')
@@ -144,7 +146,6 @@ for n, pair in enumerate(pairs):
                 agent.in_pos['real_price_delta'] = (price - agent.in_pos['real_ep']) / agent.in_pos['real_ep'] # how much has price moved since entry
             if agent.real_pos[asset]['or_R'] < 0:
                 dir = agent.in_pos['real']
-                print('dir', dir)
                 signals['signal'] = f"close_{dir}"
                 
         if agent.in_pos['sim']:
@@ -154,7 +155,6 @@ for n, pair in enumerate(pairs):
                 agent.in_pos['sim_price_delta'] = (price - agent.in_pos['sim_ep']) / agent.in_pos['sim_ep']
             if agent.sim_pos[asset]['or_R'] < 0:
                 dir = agent.in_pos['sim']
-                print('dir', dir)
                 signals['signal'] = f"close_{dir}"
         
             
@@ -352,8 +352,10 @@ for agent in agents:
     print(f'realised real short pnl: {agent.realised_pnl_short:.1f}R, realised sim short pnl: {agent.sim_pnl_short:.1f}R')
     print(f'tor: {agent.total_open_risk:.1f}')
     print(f'or list: {[round(x, 2) for x in sorted(agent.or_list, reverse=True)]}')
-    print(f"real open pnl: {agent.open_pnl('real'):.1f}R")
-    print(f"sim open pnl: {agent.open_pnl('sim'):.1f}R")
+    print(f"real open pnl long: {agent.open_pnl('long', 'real'):.1f}R")
+    print(f"real open pnl short: {agent.open_pnl('short', 'real'):.1f}R")
+    print(f"sim open pnl long: {agent.open_pnl('long', 'sim'):.1f}R")
+    print(f"sim open pnl short: {agent.open_pnl('short', 'sim'):.1f}R")
     agent.real_pos['USDT'] = session.usdt_bal
     
     benchmark = uf.log(session, [agent])
@@ -364,15 +366,13 @@ for agent in agents:
         # pprint(agent.sim_pos.keys())
         print('warning: logging directed to test_records')
     
-    uf.scanner_summary(session, [agent])
-    
     print('Counts:')
-    for agent in [agent]:
-        for k, v in agent.counts_dict.items():
-            if v:
-                print(k, v)
-        print('-')
+    for k, v in agent.counts_dict.items():
+        if v:
+            print(k, v)
     print('-:-' * 20)
+
+uf.scanner_summary(session, agents)
 
 uf.interpret_benchmark(session, agents)
 

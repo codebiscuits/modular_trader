@@ -451,8 +451,9 @@ class DoubleST():
                               'state': 'sim', 
                               'overshoot': overshoot_pct
                               }
-                note = f"*sim* stopped out {pair} @ {stop}"
-                print(session.now_start, note)
+                if not session.live:
+                    note = f"*sim* stopped out {pair} @ {stop}"
+                    print(session.now_start, note)
                 
                 v.append(trade_dict)
                 
@@ -568,10 +569,10 @@ class DoubleST():
             if bal_data and last.get(f'{switch}_open_pnl'):
                 prev_open_pnl = last.get(f'{switch}_open_pnl')
                 curr_open_pnl = self.open_pnl(direction, switch)
-                print(f"{direction}, {switch}, {curr_open_pnl}")
+                print(f"{switch} open pnl: {curr_open_pnl:.1f}")
                 bal_change_pct = 100 * (curr_open_pnl - prev_open_pnl) / prev_open_pnl
                 self.open_pnl_changes[switch] = bal_change_pct
-                print(f"{switch} open pnl change: {bal_change_pct:.2f}%")
+                print(f"{switch} {direction} open pnl change: {bal_change_pct:.2f}%")
             elif bal_data:
                 prev_bal = last.get('balance')
                 bal_change_pct = 100 * (self.bal - prev_bal) / prev_bal
@@ -613,7 +614,7 @@ class DoubleST():
             
             return score_1, score_2
         
-        print('\n- score accum -')
+        print(f'\n- score accum {direction} -')
         real_score_1, real_score_2 = score_accum(direction, 'real')
         sim_score_1, sim_score_2 = score_accum(direction, 'sim')
         print(f"set_fixed_risk: real_score {real_score_1 + real_score_2}, sim_score {sim_score_1 + sim_score_2}")
