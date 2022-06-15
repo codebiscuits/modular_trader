@@ -931,10 +931,10 @@ def clear_stop_M(pair, trade_record, live):
     the most recent stop-limit order relating to the pair'''
     
     # sanity check
-    bal = client.get_asset_balance(asset=pair[:-4])
-    if Decimal(bal.get('locked')) == 0:
+    bal = asset_bal_M(pair[:-4])
+    if float(bal.get('locked')) == 0:
         stop_id = None
-        print('no stop to cancel')
+        print('no locked balance')
     else:
         print(f'{pair} locked balance = {bal.get("locked")}')
         _, stop_id, _ = uf.latest_stop_id(trade_record)

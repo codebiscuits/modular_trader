@@ -451,9 +451,9 @@ class DoubleST():
                               'state': 'sim', 
                               'overshoot': overshoot_pct
                               }
-                if not session.live:
-                    note = f"*sim* stopped out {pair} @ {stop}"
-                    print(session.now_start, note)
+                # if not session.live:
+                #     note = f"*sim* stopped out {pair} @ {stop}"
+                #     print(session.now_start, note)
                 
                 v.append(trade_dict)
                 

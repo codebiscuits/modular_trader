@@ -13,7 +13,7 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 class MARGIN_SESSION:
     max_length = 201
     quote_asset = 'USDT'
-    fr_max = 0.0003 # at 0.0025, one agent makes good use of total balance
+    fr_max = 0.0002 # at 0.0025, one agent makes good use of total balance
     max_spread = 0.5
     above_200_ema = set()
     below_200_ema = set()
@@ -32,6 +32,8 @@ class MARGIN_SESSION:
         self.ohlc_data = self.ohlc_path()
         self.now_start = datetime.now().strftime('%d/%m/%y %H:%M')
         self.last_price_update = 0
+        self.margin_account_info()
+        self.get_asset_bals
         self.check_margin_lvl()
         t.stop()
         
@@ -127,16 +129,37 @@ class MARGIN_SESSION:
         self.usdt_bal = {'qty': qty, 'owed': owed, 'value': value, 'pf%': pct}
         hj.stop()
     
+    def margin_account_info(self):
+        self.account_info = client.get_margin_account()
+    
     def check_margin_lvl(self):
-        info = client.get_margin_account()
-        margin_lvl = float(info.get('marginLevel'))
+        margin_lvl = float(self.account_info.get('marginLevel'))
         print(f"Margin level: {margin_lvl:.2f}")
         
         if margin_lvl <= 2:
             pb.push_note('*** Warning ***', 'Margin level <= 2, reduce risk')
         elif margin_lvl <= 3:
             pb.push_note('Warning', 'Margin level <= 3, keep an eye on it')
+            
+    def get_asset_bals(self):
+        bals = self.account_info.get('userAssets')
         
+        bals_dict = {}
+        
+        for bal in bals:
+            asset = bal.get('asset')
+            borrowed = float(bal.get('borrowed'))
+            free = float(bal.get('free'))
+            interest = float(bal.get('interest'))
+            locked = float(bal.get('locked'))
+            net_asset = float(bal.get('netAsset'))
+            bals_dict[asset] = {'borrowed': borrowed, 
+                                'free': free, 
+                                'interest': interest, 
+                                'locked': locked, 
+                                'net_asset': net_asset}
+    
+    
 
     
     

@@ -54,12 +54,14 @@ session = sessions.MARGIN_SESSION()
 funcs.update_prices(session)
 pprint(session.usdt_bal)
 agent_1 = DoubleST(session, 1)
-agent_2 = DoubleST(session, 2)
-agent_3 = DoubleST(session, 3)
-agent_4 = DoubleST(session, 4)
-agent_5 = DoubleST(session, 5)
-agent_6 = DoubleST(session, 6)
-agents = [agent_1, agent_2, agent_3, agent_4, agent_5, agent_6]
+# agent_2 = DoubleST(session, 2)
+# agent_3 = DoubleST(session, 3)
+# agent_4 = DoubleST(session, 4)
+# agent_5 = DoubleST(session, 5)
+# agent_6 = DoubleST(session, 6)
+agents = [agent_1
+          # , agent_2, agent_3, agent_4, agent_5, agent_6
+          ]
 session.name = ' | '.join([n.name for n in agents])
 
 # compile and sort list of pairs to loop through ------------------------------
@@ -69,7 +71,8 @@ positions = []
 for agent in agents:
     posis = list(agent.real_pos.keys())
     positions.extend(posis)
-pairs_in_pos = [p + 'USDT' for p in positions if p != 'USDT']
+pairs_in_pos = [p + 'USDT' for p in set(positions) if p != 'USDT']
+print(f"{pairs_in_pos = }")
 other_pairs = [p for p in all_pairs if (not p in pairs_in_pos) and (not p in not_pairs)]
 pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked first
 
