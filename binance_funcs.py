@@ -100,11 +100,14 @@ def calc_stop(st, spread,  price, min_risk=0.01):
     I would like to make min_risk part of the adaptive settings, so if too 
     many positions are getting stopped out too early, the system can increase 
     it automatically'''
-    buffer = max(spread * 2, min_risk) 
+    buffer = max(spread * 2, min_risk)
+    
     if price > st:
-        return float(st) * (1 - buffer)
+        stop_price = float(st) * (1 - buffer)
     else:
-        return float(st) * (1 + buffer)
+        stop_price = float(st) * (1 + buffer)
+    
+    return stop_price
 
 
 def calc_fee_bnb(usdt_size, fee_rate=0.00075):
@@ -909,6 +912,7 @@ def set_stop_M(session, pair, size, side, trigger, limit, live):
     trigger = valid_price(session, pair, trigger)
     limit = valid_price(session, pair, limit)
     stop_size = valid_size(session, pair, size)
+    print(f"setting {pair} stop: {stop_size = } {side = } {trigger = } {limit = }")
     if live:
         stop_sell_order = client.create_margin_order(symbol=pair,
                                                  side=side,

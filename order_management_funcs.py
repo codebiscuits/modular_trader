@@ -520,13 +520,9 @@ def tp_short(session, agent, pair, stp, inval):
             # execute trade
             order_size = float(base_size) * (pct/100)
             
-            print('buying asset')
-            
             api_order = funcs.buy_asset_M(session, pair, order_size, True, price, session.live)
             buy_order = funcs.create_trade_dict(api_order, price, session.live)
             repay_size = buy_order.get('base_size')
-            
-            print('repaying asset')
             
             funcs.repay_asset_M(asset, repay_size, session.live)
             
@@ -574,8 +570,6 @@ def tp_short(session, agent, pair, stp, inval):
                 
                 # set new stop
                 new_size = real_bal - float(buy_order['base_size'])
-                
-                print('setting stop')
                 
                 stop_order = funcs.set_stop_M(session, pair, new_size, be.SIDE_SELL, stp, stp*1.2, session.live)
                 buy_order['stop_id'] = stop_order.get('orderId')
