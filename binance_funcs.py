@@ -744,7 +744,6 @@ def update_pos_M(session, asset, new_bal, inval, direction, pfrd):
     else:
         open_risk_r = 0
         jk.stop()
-    print(f"{pair} {price = } {value = } {pfrd = } {open_risk_r = }")
     return {'qty': new_bal, 'value': value, 'pf%': pct, 'or_R': open_risk_r, 'or_$': open_risk}
 
 

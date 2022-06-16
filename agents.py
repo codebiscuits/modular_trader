@@ -165,13 +165,13 @@ class DoubleST():
         u.stop()
         return market_data
     
-    def read_open_trade_records(self, switch):
-        w = Timer(f'read_open_trade_records-{switch}')
+    def read_open_trade_records(self, state: str):
+        w = Timer(f'read_open_trade_records-{state}')
         w.start()
         ot_path = Path(f"{self.market_data}/{self.id}")
         if not ot_path.exists():
             ot_path.mkdir(parents=True)
-        ot_path = ot_path / f'{switch}_trades.json'
+        ot_path = ot_path / f'{state}_trades.json'
         
         if ot_path.exists():
             with open(ot_path, "r") as ot_file:
@@ -306,6 +306,9 @@ class DoubleST():
             if sid == 'not live':
                 continue
             order_list = client.get_all_margin_orders(symbol=pair, orderId=sid, startTime=time-10000)
+            
+            print(sid)
+            pprint(order_list)
             
             order = None
             if order_list and sid:
@@ -475,7 +478,7 @@ class DoubleST():
             del self.sim_trades[p]
         n.stop()
     
-    def realised_pnl(self, trade_record, side):
+    def realised_pnl(self, trade_record: dict, side: str):
         i = Timer(f'realised_pnl {side}')
         i.start()
         entry = float(trade_record[0].get('exe_price'))
@@ -511,23 +514,23 @@ class DoubleST():
             print(f'{trade_r = }')
         i.stop()
     
-    def record_trades(self, session, switch):
-        b = Timer(f'record_trades {switch}')
+    def record_trades(self, session, state: str):
+        b = Timer(f'record_trades {state}')
         b.start()
-        filepath = Path(f"{session.market_data}/{self.id}/{switch}_trades.json")
+        filepath = Path(f"{session.market_data}/{self.id}/{state}_trades.json")
         if not filepath.exists():
             print('filepath doesnt exist')
             filepath.touch()
         with open(filepath, "w") as file:
-            if switch == 'open':
+            if state == 'open':
                 json.dump(self.open_trades, file)
-            if switch == 'sim':
+            if state == 'sim':
                 json.dump(self.sim_trades, file)
-            if switch == 'tracked':
+            if state == 'tracked':
                 json.dump(self.tracked_trades, file)
-            if switch == 'closed':
+            if state == 'closed':
                 json.dump(self.closed_trades, file)
-            if switch == 'closed_sim':
+            if state == 'closed_sim':
                 json.dump(self.closed_sim_trades, file)
         b.stop()
     
@@ -538,7 +541,7 @@ class DoubleST():
         and previous setting. if recent performance is very good, fr is increased slightly.
         if not, fr is decreased by thirds'''
         
-        def reduce_fr(factor, fr_prev, fr_inc):
+        def reduce_fr(factor: float, fr_prev: float, fr_inc: float):
             '''reduces fixed_risk by factor (with the floor value being 0)'''
             ideal = fr_prev * factor
             reduce = max(ideal, fr_inc)
@@ -656,7 +659,7 @@ class DoubleST():
         o.stop()
         return round(fr, 5)
     
-    def test_fixed_risk(self, fr_l, fr_s):
+    def test_fixed_risk(self, fr_l: float, fr_s: float):
         print(f'*** WARNING: FIXED RISK MANUALLY SET to {fr_l} / {fr_s} ***')
         self.fixed_risk_l = fr_l
         self.fixed_risk_s = fr_s
@@ -675,17 +678,17 @@ class DoubleST():
         p.stop()
         return max_pos
     
-    def current_positions(self, switch:str):
-        a = Timer(f'current_positions-{switch}')
+    def current_positions(self, state: str):
+        a = Timer(f'current_positions-{state}')
         a.start()
         '''creates a dictionary of open positions by checking either 
         open_trades.json, sim_trades.json or tracked_trades.json'''
             
-        if switch == 'open':
+        if state == 'open':
             data = self.open_trades
-        elif switch == 'sim':
+        elif state == 'sim':
             data = self.sim_trades
-        elif switch == 'tracked':
+        elif state == 'tracked':
             data = self.tracked_trades
         
         size_dict = {}
@@ -693,7 +696,7 @@ class DoubleST():
         total_bal = self.bal
         
         for k, v in data.items():
-            if switch == 'tracked':
+            if state == 'tracked':
                 asset = k[:-4]
                 size_dict[asset] = {}
             else:
@@ -701,12 +704,12 @@ class DoubleST():
                 price = self.prices[k]
                 size_dict[asset] = uf.open_trade_stats(now, total_bal, v, price)
         a.stop()
-        return size_dict# -*- coding: utf-8 -*-
+        return size_dict
 
-    def calc_pos_fr_dol(self, trade_record, direction, switch):   
-        s = Timer(f'calc_pos_fr_dol {direction} {switch}')
+    def calc_pos_fr_dol(self, trade_record: list, direction: str, state: str):   
+        s = Timer(f'calc_pos_fr_dol {direction} {state}')
         s.start()
-        if self.in_pos[switch] and trade_record and trade_record[0].get('type')[0] == 'o':
+        if self.in_pos[state] and trade_record and trade_record[0].get('type')[0] == 'o':
             qs = float(trade_record[0].get('quote_size'))
             ep = float(trade_record[0].get('exe_price'))
             hs = float(trade_record[0].get('hard_stop'))
@@ -716,37 +719,37 @@ class DoubleST():
             hs = None
             pos_fr_dol = self.fixed_risk_dol_l if direction == 'long' else self.fixed_risk_dol_s
         
-        self.in_pos[f'{switch}_pfrd'] = pos_fr_dol
-        self.in_pos[f'{switch}_ep'] = ep
-        self.in_pos[f'{switch}_hs'] = hs
+        self.in_pos[f'{state}_pfrd'] = pos_fr_dol
+        self.in_pos[f'{state}_ep'] = ep
+        self.in_pos[f'{state}_hs'] = hs
         s.stop()
 
-    def set_in_pos(self, pair, switch):
-        d = Timer(f'set_in_pos {switch}')
+    def set_in_pos(self, pair: str, state: str):
+        d = Timer(f'set_in_pos {state}')
         d.start()
         asset = pair[:-4]
-        if switch == 'real':
+        if state == 'real':
             pos_dict = self.real_pos.keys()
             trade_record = self.open_trades.get(pair)
-        elif switch == 'sim':
+        elif state == 'sim':
             pos_dict = self.sim_pos.keys()
             trade_record = self.sim_trades.get(pair)
-        elif switch == 'tracked':
+        elif state == 'tracked':
             pos_dict = self.tracked.keys()
             trade_record = self.tracked_trades.get(pair)
         
         if asset in pos_dict:
             if trade_record[0].get('type')[-4:] == 'long':
-                self.in_pos[switch] = 'long'
+                self.in_pos[state] = 'long'
                 # calculate dollar denominated fixed-risk per position
-                self.calc_pos_fr_dol(trade_record, 'long', switch)
+                self.calc_pos_fr_dol(trade_record, 'long', state)
             else:
-                self.in_pos[switch] = 'short'
+                self.in_pos[state] = 'short'
                 # calculate dollar denominated fixed-risk per position
-                self.calc_pos_fr_dol(trade_record, 'short', switch)
+                self.calc_pos_fr_dol(trade_record, 'short', state)
         d.stop()
 
-    def init_in_pos(self, pair):
+    def init_in_pos(self, pair: str):
         f = Timer(f'init_in_pos')
         f.start()
         self.in_pos = {'real':None, 'sim':None, 'tracked':None, 
@@ -759,7 +762,7 @@ class DoubleST():
         self.set_in_pos(pair, 'tracked')
         f.stop()
     
-    def too_new(self, df):
+    def too_new(self, df: pd.DataFrame):
         g = Timer('too_new')
         g.start()
         '''returns True if there is less than 200 hours of history AND if
@@ -771,13 +774,13 @@ class DoubleST():
         
         return len(df) <= 200 and no_pos
 
-    def open_pnl(self, direction, switch):
-        h = Timer(f'open_pnl {switch}')
+    def open_pnl(self, direction: str, state: str):
+        h = Timer(f'open_pnl {state}')
         h.start()
         total = 0
-        if switch == 'real':
+        if state == 'real':
             pos_dict = self.real_pos.values()
-        elif switch == 'sim':
+        elif state == 'sim':
             pos_dict = self.sim_pos.values()
         else:
             print('open_pnl requires argument real or sim')
@@ -792,7 +795,7 @@ class DoubleST():
         h.stop()
         return total
     
-    def tp_signals(self, asset):
+    def tp_signals(self, asset: str):
         j = Timer('tp_signals')
         j.start()
         if self.real_pos.get(asset):
@@ -805,7 +808,7 @@ class DoubleST():
                                          (abs(self.in_pos.get('sim_price_delta', 0)) > 0.001))
         j.stop()
     
-    def spot_signals(self, session, df):
+    def spot_signals(self, session, df: pd.DataFrame):
         
         df['ema200'] = df.close.ewm(200).mean()
         ind.supertrend_new(df, 10, 3)
@@ -837,7 +840,7 @@ class DoubleST():
             
         return {'signal': signal, 'inval': inval}
     
-    def margin_signals(self, session, df, pair):
+    def margin_signals(self, session, df: pd.DataFrame, pair: str):
         k = Timer(f'margin_signals')
         k.start()
         

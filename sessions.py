@@ -108,8 +108,9 @@ class MARGIN_SESSION:
         um.stop()
         return {'qty': float(bal.get('free')), 'owed': float(bal.get('borrowed')), 'value': value, 'pf%': pct}
         
-    def update_usdt_M(self, up=0.0, down=0.0, borrow=0.0, repay=0.0):
-        '''checks current usdt balance and returns a dictionary for updating the sizing dict'''
+    def update_usdt_M(self, up: float=0.0, down: float=0.0, 
+                      borrow: float=0.0, repay: float=0.0):
+        '''updates current usdt balance, called whenever usdt balance is changed'''
         hj = Timer('update_usdt_M')
         hj.start()
         

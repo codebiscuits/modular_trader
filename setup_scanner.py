@@ -54,13 +54,10 @@ session = sessions.MARGIN_SESSION()
 funcs.update_prices(session)
 pprint(session.usdt_bal)
 agent_1 = DoubleST(session, 1)
-# agent_2 = DoubleST(session, 2)
-# agent_3 = DoubleST(session, 3)
-# agent_4 = DoubleST(session, 4)
-# agent_5 = DoubleST(session, 5)
-# agent_6 = DoubleST(session, 6)
+# agent_2 = DoubleST(session, 3)
+# agent_3 = DoubleST(session, 5)
 agents = [agent_1
-          # , agent_2, agent_3, agent_4, agent_5, agent_6
+          # , agent_2, agent_3
           ]
 session.name = ' | '.join([n.name for n in agents])
 
@@ -83,7 +80,8 @@ funcs.top_up_bnb_M(15)
 session.spreads = funcs.binance_spreads('USDT') # dict
 
 for agent in agents:
-    print(f"{agent.name} fr long: {agent.fixed_risk_l}, fr short: {agent.fixed_risk_s}")
+    print(f"{agent.name} fr long: {(agent.fixed_risk_l*10000):.2f}bps, \
+fr short: {(agent.fixed_risk_s*10000):.2f}bps")
     agent.real_pos['USDT'] = session.usdt_bal
     agent.starting_ropnl_l = agent.open_pnl('long', 'real')
     agent.starting_sopnl_l = agent.open_pnl('long', 'sim')
@@ -147,6 +145,8 @@ for n, pair in enumerate(pairs):
             agent.real_pos[asset].update(funcs.update_pos_M(session, asset, real_qty, inval_dist, agent.in_pos['real'], agent.in_pos['real_pfrd']))
             if agent.in_pos['real_ep']:
                 agent.in_pos['real_price_delta'] = (price - agent.in_pos['real_ep']) / agent.in_pos['real_ep'] # how much has price moved since entry
+            
+            # check if price has moved beyond reach of normal close signal
             if agent.real_pos[asset]['or_R'] < 0:
                 dir = agent.in_pos['real']
                 signals['signal'] = f"close_{dir}"
@@ -156,6 +156,8 @@ for n, pair in enumerate(pairs):
             agent.sim_pos[asset].update(funcs.update_pos_M(session, asset, sim_qty, inval_dist, agent.in_pos['sim'], agent.in_pos['sim_pfrd']))
             if agent.in_pos['sim_ep']:
                 agent.in_pos['sim_price_delta'] = (price - agent.in_pos['sim_ep']) / agent.in_pos['sim_ep']
+            
+            # check if price has moved beyond reach of normal close signal
             if agent.sim_pos[asset]['or_R'] < 0:
                 dir = agent.in_pos['sim']
                 signals['signal'] = f"close_{dir}"
@@ -365,8 +367,8 @@ for agent in agents:
     if not session.live:
         print('\n*** real_pos ***')
         pprint(agent.real_pos)
-        # print('\n*** sim_pos ***')
-        # pprint(agent.sim_pos.keys())
+        print('\n*** sim_pos ***')
+        pprint(agent.sim_pos.keys())
         print('warning: logging directed to test_records')
     
     print('Counts:')

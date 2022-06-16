@@ -661,7 +661,7 @@ def calc_sizing_non_live_tp(session, agent, asset, tp_pct, switch):
     qw.start()
     '''updates sizing dictionaries (real/sim) with with new open trade stats when 
     state is sim or real but not live and a take-profit is triggered'''
-    tp_scalar = 1 - (100 / tp_pct)
+    tp_scalar = 1 - (tp_pct / 100)
     if switch == 'real':
         pos_dict = agent.real_pos
         entry = agent.in_pos['real_ep']
