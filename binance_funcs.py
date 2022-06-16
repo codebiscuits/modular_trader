@@ -744,6 +744,7 @@ def update_pos_M(session, asset, new_bal, inval, direction, pfrd):
     else:
         open_risk_r = 0
         jk.stop()
+    print(f"{pair} {price = } {value = } {pfrd = } {open_risk_r = }")
     return {'qty': new_bal, 'value': value, 'pf%': pct, 'or_R': open_risk_r, 'or_$': open_risk}
 
 
@@ -930,14 +931,7 @@ def clear_stop_M(pair, trade_record, live):
     and cancels that specific order. if no such id can be found, blindly cancels 
     the most recent stop-limit order relating to the pair'''
     
-    # sanity check
-    bal = asset_bal_M(pair[:-4])
-    if float(bal.get('locked')) == 0:
-        stop_id = None
-        print('no locked balance')
-    else:
-        print(f'{pair} locked balance = {bal.get("locked")}')
-        _, stop_id, _ = uf.latest_stop_id(trade_record)
+    _, stop_id, _ = uf.latest_stop_id(trade_record)
     
     clear, base_size = None, None
     if live:
