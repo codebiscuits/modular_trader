@@ -119,7 +119,7 @@ if stopped_trades:
             push = pb.push_note(now, note)
         trade_record.append(trade_dict)
         if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
-            trade_id = trade_record[0].get('timestamp')
+            trade_id = int(trade_record[0].get('timestamp'))
             c_data[trade_id] = trade_record
         else:
             c_data[next_id] = trade_record
@@ -246,10 +246,10 @@ if c_data:
         
         all_r.append(final_r)
         
-        trade_start = entry.get('timestamp') / 1000
+        trade_start = int(entry.get('timestamp')) / 1000
         
-        if close.get('timestamp'):
-            trade_end = close.get('timestamp') / 1000
+        if int(close.get('timestamp')):
+            trade_end = int(close.get('timestamp')) / 1000
         else:
             trade_end = trade_start + 3600
         

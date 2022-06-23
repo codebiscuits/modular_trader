@@ -15,7 +15,7 @@ client = Client(keys.bPkey, keys.bSkey)
 def open_long(session, agent, pair, size, stp, inval, sim_reason):
     asset = pair[:-4]
     price = session.prices[pair]
-    usdt_size = round(size*price, 2)
+    usdt_size: str = f"{size*price:.2f}"
     # session.bal = funcs.account_bal_M()
     now = datetime.now().strftime('%d/%m/%y %H:%M')
         
@@ -27,7 +27,7 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
         funcs.borrow_asset_M('USDT', usdt_size, session.live)
         
         # execute
-        api_order = funcs.buy_asset_M(session, pair, usdt_size, False, price, session.live)
+        api_order = funcs.buy_asset_M(session, pair, float(usdt_size), False, price, session.live)
         
         # create trade record
         long_order = funcs.create_trade_dict(api_order, price, session.live)
@@ -51,20 +51,20 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
         agent.in_pos['real_ep'] = price
         agent.in_pos['real_hs'] = stp
         if session.live:
-            agent.real_pos[asset] = funcs.update_pos_M(session, asset, size, inval, agent.in_pos['real'], agent.in_pos['real_pfrd'])
+            agent.real_pos[asset] = funcs.update_pos_M(session, asset, float(size), inval, agent.in_pos['real'], agent.in_pos['real_pfrd'])
             agent.real_pos[asset]['pnl_R'] = 0
-            session.update_usdt_M(borrow=usdt_size)
+            session.update_usdt_M(borrow=float(usdt_size))
         else:
-            pf = usdt_size / session.bal
-            or_dol = session.bal * agent.fixed_risk_l
-            agent.real_pos[asset] = {'qty': size, 'value': usdt_size, 'pf%': pf, 'or_R': 1, 'or_$': or_dol}
+            pf = f"{float(usdt_size)/session.bal:.2f}"
+            or_dol = f"{session.bal*agent.fixed_risk_l:.2f}"
+            agent.real_pos[asset] = {'qty': str(size), 'value': usdt_size, 'pf%': pf, 'or_R': '1', 'or_$': str(or_dol)}
         
         # save records and update counts
         agent.counts_dict['real_open_long'] +=1
         
     if agent.in_pos['sim'] == None and sim_reason:
         usdt_size = 128.0
-        size = round(usdt_size / price, 8)
+        size = f"{usdt_size/price:.8f}"
         # if not session.live:
         #     note = f"{agent.name} sim open long {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
         #     print(now, note)
@@ -74,7 +74,7 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
                      'exe_price': str(price), 
                      'trig_price': str(price), 
                      'base_size': str(size), 
-                     'quote_size': str(round(usdt_size, 2)), 
+                     'quote_size': f"{usdt_size:.2f}", 
                      'hard_stop': str(stp), 
                      'reason': sim_reason, 
                      'timestamp': timestamp, 
@@ -88,7 +88,7 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
         
         agent.in_pos['sim'] = 'long'
         agent.in_pos['sim_pfrd'] = agent.fixed_risk_dol_l
-        agent.sim_pos[asset] = funcs.update_pos_M(session, asset, size, inval, agent.in_pos['sim'], agent.in_pos['sim_pfrd'])
+        agent.sim_pos[asset] = funcs.update_pos_M(session, asset, float(size), inval, agent.in_pos['sim'], agent.in_pos['sim_pfrd'])
         agent.sim_pos[asset]['pnl_R'] = 0
         
         agent.counts_dict['sim_open_long'] += 1
@@ -145,17 +145,17 @@ def tp_long(session, agent, pair, stp, inval):
                 agent.in_pos['real'] = None
                 agent.in_pos['tracked'] = 'long'
                 
-                agent.tracked[asset] = {'qty': 0, 'value': 0, 'pf%': 0, 'or_R': 0, 'or_$': 0}                
+                agent.tracked[asset] = {'qty': '0', 'value': '0', 'pf%': '0', 'or_R': '0', 'or_$': '0'}                
                 del agent.real_pos[asset]
                 if session.live:
                     session.update_usdt_M(repay=usdt_size)
                 else:
-                    qty = float(agent.real_pos['USDT']['qty'])
-                    agent.real_pos['USDT']['qty'] = qty + float(agent.real_pos[asset].get('value'))
-                    value = float(agent.real_pos['USDT']['value'])
-                    agent.real_pos['USDT']['value'] = value + float(agent.real_pos[asset].get('value'))
-                    pf_pct = float(agent.real_pos['USDT']['pf%'])
-                    agent.real_pos['USDT']['pf%'] = pf_pct + float(agent.real_pos[asset].get('pf%'))
+                    qty = float(agent.real_pos['USDT']['qty']) + float(agent.real_pos[asset].get('value'))
+                    agent.real_pos['USDT']['qty'] = f"{qty:.2f}"
+                    value = float(agent.real_pos['USDT']['value']) + float(agent.real_pos[asset].get('value'))
+                    agent.real_pos['USDT']['value'] = f"{value:.2f}"
+                    pf_pct = float(agent.real_pos['USDT']['pf%']) + float(agent.real_pos[asset].get('pf%'))
+                    agent.real_pos['USDT']['pf%'] = f"{pf_pct:.2f}"
                 
                 agent.counts_dict['real_close_long'] += 1
                 agent.realised_pnl(trade_record, 'long')
@@ -199,14 +199,14 @@ def tp_long(session, agent, pair, stp, inval):
         sim_bal = abs(float(agent.sim_pos[asset]['qty']))
         timestamp = round(datetime.utcnow().timestamp() * 1000)
         order_size = sim_bal / 2
-        quote_order_size = round(order_size * price, 2)
+        usdt_size = f"{order_size * price:.2f}"
         
         # execute order
         tp_order = {'pair': pair, 
                      'exe_price': str(price), 
                      'trig_price': str(price), 
                      'base_size': str(order_size), 
-                     'quote_size': str(quote_order_size), 
+                     'quote_size': usdt_size, 
                      'reason': 'trade over-extended', 
                      'timestamp': timestamp, 
                      'type': 'tp_long', 
@@ -234,14 +234,14 @@ def tp_long(session, agent, pair, stp, inval):
         tracked_bal = abs(float(agent.tracked[asset]['qty']))
         timestamp = round(datetime.utcnow().timestamp() * 1000)
         order_size = tracked_bal / 2
-        quote_order_size = round(order_size * price, 2)
+        usdt_size = f"{order_size * price:.2f}"
         
         # execute order
         tp_order = {'pair': pair, 
                      'exe_price': str(price), 
                      'trig_price': str(price), 
                      'base_size': str(order_size), 
-                     'quote_size': str(quote_order_size), 
+                     'quote_size': usdt_size, 
                      'reason': 'trade over-extended', 
                      'timestamp': timestamp, 
                      'type': 'tp_long', 
@@ -285,17 +285,17 @@ def close_long(session, agent, pair):
             # execute trade
             api_order = funcs.sell_asset_M(session, pair, real_bal, price, session.live)
             usdt_size = api_order.get('cummulativeQuoteQty')
-            funcs.repay_asset_M('USDT', usdt_size, session.live)
+            funcs.repay_asset_M('USDT', trade_record[-1].get('liability'), session.live)
             
             sell_order = funcs.create_trade_dict(api_order, price, session.live)
             sell_order['type'] = 'close_long'
             sell_order['state'] = 'real'
             sell_order['reason'] = 'strategy close long signal'
-            sell_order['liability'] = uf.update_liability(trade_record, usdt_size, 'reduce')
+            sell_order['liability'] = '0'
             trade_record.append(sell_order)
             
             if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
-                trade_id = trade_record[0].get('timestamp')
+                trade_id = int(trade_record[0].get('timestamp'))
                 agent.closed_trades[trade_id] = trade_record
             else:
                 agent.closed_trades[agent.next_id] = trade_record
@@ -313,9 +313,9 @@ def close_long(session, agent, pair):
                 session.update_usdt_M(repay=usdt_size)
             else:
                 value = float(agent.real_pos['USDT']['value'])
-                agent.real_pos['USDT']['value'] = value + float(usdt_size)
+                agent.real_pos['USDT']['value'] = f"{value + float(usdt_size):.2f}"
                 owed = float(agent.real_pos['USDT']['owed'])
-                agent.real_pos['USDT']['owed'] = owed - float(usdt_size)
+                agent.real_pos['USDT']['owed'] = f"{owed - float(usdt_size):.2f}"
             
             # save records and update counts
             agent.counts_dict['real_close_long'] +=1
@@ -347,7 +347,7 @@ def close_long(session, agent, pair):
         
         # update records
         if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
-            trade_id = trade_record[0].get('timestamp')
+            trade_id = int(trade_record[0].get('timestamp'))
             agent.closed_sim_trades[trade_id] = trade_record
         else:
             agent.closed_sim_trades[agent.next_id] = trade_record
@@ -391,7 +391,7 @@ def close_long(session, agent, pair):
         
         # update records
         if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
-            trade_id = trade_record[0].get('timestamp')
+            trade_id = int(trade_record[0].get('timestamp'))
             agent.closed_trades[trade_id] = trade_record
         else:
             agent.closed_trades[agent.next_id] = trade_record
@@ -423,6 +423,7 @@ def open_short(session, agent, pair, size, stp, inval, sim_reason):
         print(now, note)
         
         # borrow
+        size = funcs.valid_size(session, pair, size)
         funcs.borrow_asset_M(asset, size, session.live)
         
         # execute
@@ -434,7 +435,7 @@ def open_short(session, agent, pair, size, stp, inval, sim_reason):
         short_order['state'] = 'real'
         short_order['score'] = 'signal score'
         short_order['hard_stop'] = str(stp)
-        short_order['liability'] = uf.update_liability(None, size, 'increase')
+        short_order['liability'] = uf.update_liability(None, str(size), 'increase')
         
         # set stop and add to trade record
         stop_size = float(api_order.get('executedQty'))
@@ -449,13 +450,13 @@ def open_short(session, agent, pair, size, stp, inval, sim_reason):
         agent.in_pos['real_ep'] = price
         agent.in_pos['real_hs'] = stp
         if session.live:
-            agent.real_pos[asset] = funcs.update_pos_M(session, asset, size, inval, agent.in_pos['real'], agent.in_pos['real_pfrd'])
+            agent.real_pos[asset] = funcs.update_pos_M(session, asset, float(size), inval, agent.in_pos['real'], agent.in_pos['real_pfrd'])
             agent.real_pos[asset]['pnl_R'] = 0
             session.update_usdt_M(up=usdt_size)
         else:
             pf = usdt_size / session.bal
             or_dol = session.bal * agent.fixed_risk_s
-            agent.real_pos[asset] = {'qty': size, 'value': usdt_size, 'pf%': pf, 'or_R': 1, 'or_$': or_dol}
+            agent.real_pos[asset] = {'qty': str(size), 'value': str(usdt_size), 'pf%': str(pf), 'or_R': '1', 'or_$': str(or_dol)}
         
         # save records and update counts
         agent.counts_dict['real_open_short'] +=1
@@ -486,7 +487,7 @@ def open_short(session, agent, pair, size, stp, inval, sim_reason):
         
         agent.in_pos['sim'] = 'short'
         agent.in_pos['sim_pfrd'] = agent.fixed_risk_dol_s
-        agent.sim_pos[asset] = funcs.update_pos_M(session, asset, size, inval, agent.in_pos['sim'], agent.in_pos['sim_pfrd'])
+        agent.sim_pos[asset] = funcs.update_pos_M(session, asset, float(size), inval, agent.in_pos['sim'], agent.in_pos['sim_pfrd'])
         agent.sim_pos[asset]['pnl_R'] = 0
         
         agent.counts_dict['sim_open_short'] += 1
@@ -522,14 +523,16 @@ def tp_short(session, agent, pair, stp, inval):
             
             api_order = funcs.buy_asset_M(session, pair, order_size, True, price, session.live)
             buy_order = funcs.create_trade_dict(api_order, price, session.live)
-            repay_size = buy_order.get('base_size')
-            
-            funcs.repay_asset_M(asset, repay_size, session.live)
             
             note = f"{agent.name} real take-profit {pair} short {pct}% @ {price}"
             print(now, note)        
             
             if pct == 100:
+                liability = trade_record[-1].get('liability')
+                if not liability:
+                    repay_size = buy_order.get('base_size') # backup value in case theres something wrong with liability
+                funcs.repay_asset_M(asset, repay_size, session.live)
+                
                 # create trade dict
                 buy_order['type'] = 'close_short'
                 buy_order['state'] = 'real'
@@ -561,6 +564,9 @@ def tp_short(session, agent, pair, stp, inval):
                 agent.realised_pnl(trade_record, 'short')
             
             else: # if pct < 100%
+                repay_size = buy_order.get('base_size')
+                funcs.repay_asset_M(asset, repay_size, session.live)
+                
                 # create trade dict
                 buy_order['type'] = 'tp_short'
                 buy_order['state'] = 'real'
@@ -685,17 +691,18 @@ def close_short(session, agent, pair):
             
             # execute trade
             api_order = funcs.buy_asset_M(session, pair, base_size, True, price, session.live)
-            funcs.repay_asset_M(asset, base_size, session.live)
+            liability = trade_record[-1]['liability']
+            funcs.repay_asset_M(asset, liability, session.live)
             
             sell_order = funcs.create_trade_dict(api_order, price, session.live)
             sell_order['type'] = 'close_short'
             sell_order['state'] = 'real'
             sell_order['reason'] = 'strategy close short signal'
-            sell_order['liability'] = uf.update_liability(trade_record, base_size, 'reduce')
+            sell_order['liability'] = '0'
             trade_record.append(sell_order)
             
             if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
-                trade_id = trade_record[0].get('timestamp')
+                trade_id = int(trade_record[0].get('timestamp'))
                 agent.closed_trades[trade_id] = trade_record
             else:
                 agent.closed_trades[agent.next_id] = trade_record
@@ -749,7 +756,7 @@ def close_short(session, agent, pair):
         
         # update records
         if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
-            trade_id = trade_record[0].get('timestamp')
+            trade_id = int(trade_record[0].get('timestamp'))
             agent.closed_sim_trades[trade_id] = trade_record
         else:
             agent.closed_sim_trades[agent.next_id] = trade_record
@@ -793,7 +800,7 @@ def close_short(session, agent, pair):
         
         # update records
         if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
-            trade_id = trade_record[0].get('timestamp')
+            trade_id = int(trade_record[0].get('timestamp'))
             agent.closed_trades[trade_id] = trade_record
         else:
             agent.closed_trades[agent.next_id] = trade_record
@@ -813,9 +820,10 @@ def close_short(session, agent, pair):
 
 def reduce_risk_M(session, agent):
     # create a list of open positions in profit and their open risk value
-    positions = [(p, r.get('or_R'), r.get('pnl_%')) 
+    positions = [(p, float(r.get('or_R')), float(r.get('pnl_%'))) 
                  for p, r in agent.real_pos.items() 
-                 if r.get('or_R') and (r.get('or_R') > 0)]
+                 if r.get('or_R') and (float(r.get('or_R')) > 0) 
+                 and r.get('pnl_%')]
     
     if positions:
         # sort the list so biggest open risk is first
@@ -823,7 +831,7 @@ def reduce_risk_M(session, agent):
         # pprint(sorted_pos)
 
         # # create a new list with just the R values
-        r_list = [x.get('or_R') for x in agent.real_pos.values() if x.get('or_R')]
+        r_list = [float(x.get('or_R')) for x in agent.real_pos.values() if x.get('or_R')]
         total_r = sum(r_list)       
         
         for pos in sorted_pos:

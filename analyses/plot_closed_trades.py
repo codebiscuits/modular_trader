@@ -106,22 +106,22 @@ if trades:
     
         pair = trade_entry.get('pair')
         
-        start = dt.fromtimestamp(trade_entry.get('timestamp') / 1000)
-        start_stamp = trade_entry.get('timestamp') / 1000
+        start = dt.fromtimestamp(int(trade_entry.get('timestamp')) / 1000)
+        start_stamp = int(trade_entry.get('timestamp')) / 1000
         entry_price = float(trade_entry.get('exe_price'))
         init_stop = trade_entry.get('hard_stop')
         r = 100 * (entry_price-init_stop) / init_stop
         
         if trade_add:
-            add_time = dt.fromtimestamp(trade_add.get('timestamp') / 1000)
+            add_time = dt.fromtimestamp(int(trade_add.get('timestamp')) / 1000)
             add_price = float(trade_add.get('exe_price'))
         
         if trade_tp:
-            tp_time = dt.fromtimestamp(trade_tp.get('timestamp') / 1000)
+            tp_time = dt.fromtimestamp(int(trade_tp.get('timestamp')) / 1000)
             tp_price = float(trade_tp.get('exe_price'))
         
-        end = dt.fromtimestamp(trade_exit.get('timestamp') / 1000)
-        end_stamp = trade_exit.get('timestamp') / 1000
+        end = dt.fromtimestamp(int(trade_exit.get('timestamp')) / 1000)
+        end_stamp = int(trade_exit.get('timestamp')) / 1000
         exit_price = float(trade_exit.get('exe_price'))
         exit_type = i.get('type')
         

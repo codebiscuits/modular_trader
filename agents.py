@@ -13,6 +13,7 @@ from pprint import pprint
 from timers import Timer
 from decimal import Decimal
 import binance_funcs as funcs
+from typing import Union, List, Tuple, Dict, Set, Optional, Any
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
@@ -29,12 +30,12 @@ class DoubleST():
     target_risk = 0.1
     max_pos = 20
     
-    presets = {1: {'timeframe': '4h', 'tf_offset': 0, 'lookback': 1, 'mult': 1.0}, 
-               2: {'timeframe': '4h', 'tf_offset': 0, 'lookback': 3, 'mult': 1.2}, 
-               3: {'timeframe': '4h', 'tf_offset': 0, 'lookback': 4, 'mult': 1.4}, 
-               4: {'timeframe': '4h', 'tf_offset': 0, 'lookback': 5, 'mult': 1.6}, 
-               5: {'timeframe': '4h', 'tf_offset': 0, 'lookback': 5, 'mult': 1.8}, 
-               6: {'timeframe': '4h', 'tf_offset': 0, 'lookback': 6, 'mult': 2.0}, 
+    presets = {1: {'timeframe': '4h', 'tf_offset': None, 'mult1': 3, 'mult2': 1.0}, 
+               2: {'timeframe': '4h', 'tf_offset': None, 'mult1': 3, 'mult2': 1.2}, 
+               3: {'timeframe': '4h', 'tf_offset': None, 'mult1': 3, 'mult2': 1.4}, 
+               4: {'timeframe': '4h', 'tf_offset': None, 'mult1': 3, 'mult2': 1.6}, 
+               5: {'timeframe': '4h', 'tf_offset': None, 'mult1': 3, 'mult2': 1.8}, 
+               6: {'timeframe': '4h', 'tf_offset': None, 'mult1': 3, 'mult2': 2.0}, 
                }
     
     def __init__(self, session, preset):
@@ -44,12 +45,13 @@ class DoubleST():
         self.bal = session.bal
         self.fr_max = session.fr_max
         self.prices = session.prices
-        self.lb = self.presets[preset]['lookback']
-        self.mult = self.presets[preset]['mult']
+        # self.lb = self.presets[preset]['lookback']
+        self.mult1 = self.presets[preset]['mult1']
+        self.mult2 = self.presets[preset]['mult2']
         self.tf = self.presets[preset]['timeframe']
         self.offset = self.presets[preset]['tf_offset']
-        self.name = f'{self.tf} dst {self.lb}-{self.mult}'
-        self.id = f'double_st_{self.tf}_{self.offset}_{self.lb}_{self.mult}'
+        self.name = f'{self.tf} dst {self.mult1}-{self.mult2}'
+        self.id = f'double_st_{self.tf}_{self.offset}_{self.mult1}_{self.mult2}'
         print(f'\nInitialising {self.name}')
         self.market_data = self.mkt_data_path()
         self.counts_dict = {'real_stop_long': 0, 'real_open_long': 0, 'real_add_long': 0, 'real_tp_long': 0, 'real_close_long': 0, 
@@ -87,7 +89,10 @@ class DoubleST():
     def __str__(self):
         return self.id
     
-    def sync_test_records(self):
+    def sync_test_records(self) -> None:
+        '''takes the trade records from the raspberry pi and saves them over 
+        the local trade records. only runs when not live'''
+        
         q = Timer('sync_test_records')
         q.start()
         folder = Path(f"{self.market_data}/{self.id}")
@@ -147,7 +152,10 @@ class DoubleST():
         self.market_data = Path('/home/ross/Documents/backtester_2021/test_records')
         q.stop()
 
-    def mkt_data_path(self):
+    def mkt_data_path(self) -> Path:
+        '''works out what the absolute path should be to access the local market 
+        data folder'''
+        
         u = Timer('mkt_data_path in agent')
         u.start()
         now = datetime.now().strftime('%d/%m/%y %H:%M')
@@ -165,7 +173,10 @@ class DoubleST():
         u.stop()
         return market_data
     
-    def read_open_trade_records(self, state: str):
+    def read_open_trade_records(self, state: str) -> dict:
+        '''loads records from open_trades/sim_trades/tracked_trades and returns
+        them in a dictionary'''
+        
         w = Timer(f'read_open_trade_records-{state}')
         w.start()
         ot_path = Path(f"{self.market_data}/{self.id}")
@@ -189,7 +200,9 @@ class DoubleST():
         w.stop()
         return open_trades
 
-    def read_closed_trade_records(self):
+    def read_closed_trade_records(self) -> dict:
+        '''loads trade records from closed_trades and returns them as a dictionary'''
+        
         e = Timer('read_closed_trade_records')
         e.start()
         ct_path = Path(f"{self.market_data}/{self.id}/closed_trades.json")
@@ -211,7 +224,9 @@ class DoubleST():
         e.stop()
         return closed_trades
 
-    def read_closed_sim_trade_records(self):
+    def read_closed_sim_trade_records(self) -> dict:
+        '''loads closed_sim_trades and returns them as a dictionary'''
+        
         r = Timer('read_closed_sim_trade_records')
         r.start()
         cs_path = Path(f"{self.market_data}/{self.id}/closed_sim_trades.json")
@@ -228,7 +243,10 @@ class DoubleST():
         r.stop()
         return closed_sim_trades
 
-    def backup_trade_records(self):
+    def backup_trade_records(self) -> None:
+        '''updates the backup file for each trades dictionary, on the condition 
+        that they are not empty'''
+        
         y = Timer('backup_trade_records')
         y.start()
         now = datetime.now().strftime('%d/%m/%y %H:%M')
@@ -268,15 +286,23 @@ class DoubleST():
         #         pb.push_note(now, 'closed sim trades file empty')
         y.stop()
     
-    def calc_tor(self):
+    def calc_tor(self) -> None:
+        '''collects all the open risk values from real_pos into a list and 
+        calculates the sum total of all the open risk for the agent in question'''
+        
         u = Timer('calc_tor')
         u.start()
-        self.or_list = [v.get('or_R') for v in self.real_pos.values() if v.get('or_R')]
+        self.or_list = [float(v.get('or_R')) for v in self.real_pos.values() if v.get('or_R')]
         self.total_open_risk = sum(self.or_list)
         self.num_open_positions = len(self.or_list)
         u.stop()
     
-    def record_stopped_trades(self, session):
+    def record_stopped_trades(self, session) -> None:
+        '''compiles a list of stop-loss order ids from the open_trades dict, 
+        checks that list against open stop-loss orders on binance, and works 
+        out which stops have been hit since the last session, then updates all
+        relevant trade records and performance metrics'''
+        
         m = Timer('record_stopped_trades')
         m.start()
         # loop through agent.open_trades and call latest_stop_id(trade_record) to
@@ -344,7 +370,7 @@ class DoubleST():
                 
                 trade_record.append(stop_dict)
                 
-                ts_id = trade_record[0].get('timestamp')
+                ts_id = int(trade_record[0].get('timestamp'))
                 self.closed_trades[ts_id] = trade_record
                 self.record_trades(session, 'closed')
                 del self.open_trades[pair]
@@ -361,7 +387,7 @@ class DoubleST():
                 # check for a free balance matching the size. if there is, that means 
                 # the stop was never set in the first place and needs to be set
                 print(f'getting {pair[:-4]} free balance')
-                free_bal = float(client.get_asset_balance(pair[:-4]).get('free'))
+                free_bal = session.asset_bals[pair[:-4]].get('free')
                 print(f'getting {pair} price')
                 price = session.prices[pair]
                 value = free_bal * price
@@ -370,12 +396,13 @@ class DoubleST():
                     pb.push_note(session.now_start, note)   
         m.stop()
     
-    def record_stopped_sim_trades(self, session):
-        n = Timer('record_stopped_sim_trades')
-        n.start()
+    def record_stopped_sim_trades(self, session) -> None:
         '''goes through all trades in the sim_trades file and checks their recent 
         price action against their most recent hard_stop to see if any of them would have 
         got stopped out'''
+        
+        n = Timer('record_stopped_sim_trades')
+        n.start()
         
         del_pairs = []
         for pair, v in self.sim_trades.items():
@@ -399,7 +426,7 @@ class DoubleST():
             for i in v[-1::-1]:
                 if i.get('hard_stop'):
                     stop = float(i.get('hard_stop'))
-                    stop_time = i.get('timestamp')
+                    stop_time = int(i.get('timestamp'))
                     break
             x.stop()    
             # check lowest low since stop was set
@@ -460,7 +487,7 @@ class DoubleST():
                 
                 v.append(trade_dict)
                 
-                ts_id = v[0].get('timestamp')
+                ts_id = int(v[0].get('timestamp'))
                 self.closed_sim_trades[ts_id] = v
                 self.record_trades(session, 'closed_sim')
                 
@@ -478,7 +505,10 @@ class DoubleST():
             del self.sim_trades[p]
         n.stop()
     
-    def realised_pnl(self, trade_record: dict, side: str):
+    def realised_pnl(self, trade_record: dict, side: str) -> None:
+        '''calculates realised pnl of a tp or close denominated in the trades 
+        own R value'''
+        
         i = Timer(f'realised_pnl {side}')
         i.start()
         entry = float(trade_record[0].get('exe_price'))
@@ -514,7 +544,9 @@ class DoubleST():
             print(f'{trade_r = }')
         i.stop()
     
-    def record_trades(self, session, state: str):
+    def record_trades(self, session, state: str) -> None:
+        '''saves any trades dictionary to its respective json file'''
+        
         b = Timer(f'record_trades {state}')
         b.start()
         filepath = Path(f"{session.market_data}/{self.id}/{state}_trades.json")
@@ -534,12 +566,13 @@ class DoubleST():
                 json.dump(self.closed_sim_trades, file)
         b.stop()
     
-    def set_fixed_risk(self, direction:str):
-        o = Timer(f'set_fixed_risk-{direction}')
-        o.start()
+    def set_fixed_risk(self, direction:str) -> None:
         '''calculates fixed risk setting for new trades based on recent performance 
         and previous setting. if recent performance is very good, fr is increased slightly.
         if not, fr is decreased by thirds'''
+        
+        o = Timer(f'set_fixed_risk-{direction}')
+        o.start()
         
         def reduce_fr(factor: float, fr_prev: float, fr_inc: float):
             '''reduces fixed_risk by factor (with the floor value being 0)'''
@@ -568,7 +601,8 @@ class DoubleST():
             with open(f"{self.market_data}/{self.id}/bal_history.txt", "r") as file:
                 bal_data = file.readlines()
             
-            last = json.loads(bal_data[-1])
+            if bal_data:
+                last = json.loads(bal_data[-1])
             if bal_data and last.get(f'{switch}_open_pnl'):
                 prev_open_pnl = last.get(f'{switch}_open_pnl')
                 curr_open_pnl = self.open_pnl(direction, switch)
@@ -596,7 +630,7 @@ class DoubleST():
             score_2 = 0
             if bal_change_pct > 0.1:
                 score_1 += 5
-            elif bal_change_pct < 0.1:
+            elif bal_change_pct < -0.1:
                 score_1 -= 5
             if pnls.get(1) > 0:
                 score_2 += 4
@@ -628,17 +662,6 @@ class DoubleST():
             score = sim_score_1 + sim_score_2
             print('sim score chosen')
         
-        # if bal_data:
-        #     prev_bal = json.loads(bal_data[-1]).get('balance')
-        # else:
-        #     prev_bal = self.bal
-        # bal_change_pct = round(100 * (self.bal - prev_bal) / prev_bal, 3)
-        # if bal_change_pct < -0.1:
-        #     score -= 1
-        
-        # print('-')
-        # print(f'{direction} - {real_score = }, {sim_score = }, {bal_change_pct = }, {score = }')
-        
         if score == 15:
             fr = min(fr_prev + (2*fr_inc), self.fr_max)
         elif score >= 11:
@@ -659,12 +682,18 @@ class DoubleST():
         o.stop()
         return round(fr, 5)
     
-    def test_fixed_risk(self, fr_l: float, fr_s: float):
-        print(f'*** WARNING: FIXED RISK MANUALLY SET to {fr_l} / {fr_s} ***')
-        self.fixed_risk_l = fr_l
-        self.fixed_risk_s = fr_s
+    def test_fixed_risk(self, fr_l: float, fr_s: float) -> None:
+        '''manually overrides fixed risk settings for testing purposes'''
+        if not self.live:
+            print(f'*** WARNING: FIXED RISK MANUALLY SET to {fr_l} / {fr_s} ***')
+            self.fixed_risk_l = fr_l
+            self.fixed_risk_s = fr_s
     
-    def set_max_pos(self):
+    def set_max_pos(self) -> int:
+        '''sets the maximum number of open positions for the agent. if the median 
+        pnl of current open positions is greater than 0, max pos will be set to 50, 
+        otherwise max_pos will be set to 20'''
+        
         p = Timer('set_max_pos')
         p.start()
         max_pos = 20
@@ -678,12 +707,13 @@ class DoubleST():
         p.stop()
         return max_pos
     
-    def current_positions(self, state: str):
-        a = Timer(f'current_positions-{state}')
-        a.start()
+    def current_positions(self, state: str) -> dict:
         '''creates a dictionary of open positions by checking either 
         open_trades.json, sim_trades.json or tracked_trades.json'''
             
+        a = Timer(f'current_positions-{state}')
+        a.start()
+        
         if state == 'open':
             data = self.open_trades
         elif state == 'sim':
@@ -706,7 +736,11 @@ class DoubleST():
         a.stop()
         return size_dict
 
-    def calc_pos_fr_dol(self, trade_record: list, direction: str, state: str):   
+    def calc_pos_fr_dol(self, trade_record: list, direction: str, state: str) -> None:
+        '''populates in_pos dictionary for the current position with pfrd, ep and hs
+        values. pfrd is the amount in usdt that 1R represents for this position.
+        ep and hs are the original entry price and the current hard stop'''
+        
         s = Timer(f'calc_pos_fr_dol {direction} {state}')
         s.start()
         if self.in_pos[state] and trade_record and trade_record[0].get('type')[0] == 'o':
@@ -724,7 +758,9 @@ class DoubleST():
         self.in_pos[f'{state}_hs'] = hs
         s.stop()
 
-    def set_in_pos(self, pair: str, state: str):
+    def set_in_pos(self, pair: str, state: str) -> None:
+        '''fills in in_pos with a trade direction if applicable'''
+        
         d = Timer(f'set_in_pos {state}')
         d.start()
         asset = pair[:-4]
@@ -749,7 +785,9 @@ class DoubleST():
                 self.calc_pos_fr_dol(trade_record, 'short', state)
         d.stop()
 
-    def init_in_pos(self, pair: str):
+    def init_in_pos(self, pair: str) -> None:
+        '''initialises the in_pos dictionary and fills it with None values'''
+        
         f = Timer(f'init_in_pos')
         f.start()
         self.in_pos = {'real':None, 'sim':None, 'tracked':None, 
@@ -762,11 +800,13 @@ class DoubleST():
         self.set_in_pos(pair, 'tracked')
         f.stop()
     
-    def too_new(self, df: pd.DataFrame):
-        g = Timer('too_new')
-        g.start()
+    def too_new(self, df: pd.DataFrame) -> bool:
         '''returns True if there is less than 200 hours of history AND if
         there are no current positions in the asset'''
+        
+        g = Timer('too_new')
+        g.start()
+        
         if self.in_pos['real'] or self.in_pos['sim'] or self.in_pos['tracked']:
             no_pos = False
         else:
@@ -774,7 +814,9 @@ class DoubleST():
         
         return len(df) <= 200 and no_pos
 
-    def open_pnl(self, direction: str, state: str):
+    def open_pnl(self, direction: str, state: str) -> Union[int, float]:
+        '''adds up the pnls of all open positions for a given state'''
+        
         h = Timer(f'open_pnl {state}')
         h.start()
         total = 0
@@ -795,20 +837,30 @@ class DoubleST():
         h.stop()
         return total
     
-    def tp_signals(self, asset: str):
+    def tp_signals(self, asset: str) -> None:
+        '''calculates whether the current position needs to take profit and stores 
+        the result in the in_pos dictionary. this cant be done in the main signals
+        function because those signals are based solely on the indicators and are 
+        therefore state-agnostic. these take-profit signals are based on the indicators 
+        and the risk management parameters and so produce unique signals for each 
+        position, therefore they cannot be sent to the omfs to be blindly split 
+        into state signals in the same way as open and close signals can'''
+        
         j = Timer('tp_signals')
         j.start()
         if self.real_pos.get(asset):
-            real_or = self.real_pos.get(asset).get('or_R')
-            self.in_pos['real_tp_sig'] = ((real_or > self.indiv_r_limit) and 
+            real_or = self.real_pos.get(asset).get('or_R', 0)
+            self.in_pos['real_tp_sig'] = ((float(real_or) > self.indiv_r_limit) and 
                                           (abs(self.in_pos.get('real_price_delta', 0)) > 0.001))
         if self.sim_pos.get(asset):
-            sim_or = self.sim_pos.get(asset).get('or_R')
-            self.in_pos['sim_tp_sig'] = ((sim_or > self.indiv_r_limit) and 
+            sim_or = self.sim_pos.get(asset).get('or_R', 0)
+            self.in_pos['sim_tp_sig'] = ((float(sim_or) > self.indiv_r_limit) and 
                                          (abs(self.in_pos.get('sim_price_delta', 0)) > 0.001))
         j.stop()
     
-    def spot_signals(self, session, df: pd.DataFrame):
+    def spot_signals(self, session, df: pd.DataFrame, pair: str) -> dict:
+        '''generates spot buy and sell signals based on 2 supertrend indicators
+        and a 200 period EMA'''
         
         df['ema200'] = df.close.ewm(200).mean()
         ind.supertrend_new(df, 10, 3)
@@ -821,10 +873,9 @@ class DoubleST():
         bearish_tight = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st']
         
         if bullish_ema:
-            session.above_200_ema[0] += 1
-            session.above_200_ema[1] += 1
+            session.above_200_ema.add(pair)
         else:
-            session.above_200_ema[1] += 1
+            session.below_200_ema.add(pair)
         
         if bullish_ema and bullish_loose and bullish_tight:
             signal = 'spot_open'
@@ -840,15 +891,18 @@ class DoubleST():
             
         return {'signal': signal, 'inval': inval}
     
-    def margin_signals(self, session, df: pd.DataFrame, pair: str):
+    def margin_signals(self, session, df: pd.DataFrame, pair: str) -> dict:
+        '''generates open and close signals for long and short trades based on
+        two supertrend indicators and a 200 period EMA'''
+        
         k = Timer(f'margin_signals')
         k.start()
         
         if 'ema200' not in df.columns:
             df['ema200'] = df.close.ewm(200).mean()
-        ind.supertrend_new(df, 10, 3)
+        ind.supertrend_new(df, 10, self.mult1)
         df.rename(columns={'st': 'st_loose', 'st_u': 'st_loose_u', 'st_d': 'st_loose_d'}, inplace=True)
-        ind.supertrend_new(df, self.lb, self.mult)
+        ind.supertrend_new(df, 10, self.mult2)
     
         bullish_ema = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'ema200']
         bearish_ema = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'ema200']

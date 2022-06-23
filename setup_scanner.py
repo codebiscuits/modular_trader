@@ -54,11 +54,9 @@ session = sessions.MARGIN_SESSION()
 funcs.update_prices(session)
 pprint(session.usdt_bal)
 agent_1 = DoubleST(session, 1)
-# agent_2 = DoubleST(session, 3)
-# agent_3 = DoubleST(session, 5)
-agents = [agent_1
-          # , agent_2, agent_3
-          ]
+agent_2 = DoubleST(session, 3)
+agent_3 = DoubleST(session, 5)
+agents = [agent_1, agent_2, agent_3]
 session.name = ' | '.join([n.name for n in agents])
 
 # compile and sort list of pairs to loop through ------------------------------
@@ -140,7 +138,6 @@ for n, pair in enumerate(pairs):
             continue
     
 # update positions dictionary with current pair's open_risk values ------------
-        if agent.in_pos['real']:
             real_qty = float(agent.real_pos[asset]['qty'])
             agent.real_pos[asset].update(funcs.update_pos_M(session, asset, real_qty, inval_dist, agent.in_pos['real'], agent.in_pos['real_pfrd']))
             if agent.in_pos['real_ep']:
@@ -313,7 +310,6 @@ for n, pair in enumerate(pairs):
                 continue
         
     
-
 # calculate open risk and take profit if necessary ----------------------------
         agent.tp_signals(asset)
         if agent.in_pos['real'] == 'long' or agent.in_pos['sim'] == 'long':
@@ -363,13 +359,14 @@ for agent in agents:
     print(f"sim open pnl short: {agent.open_pnl('short', 'sim'):.1f}R")
     agent.real_pos['USDT'] = session.usdt_bal
     
-    benchmark = uf.log(session, [agent])
     if not session.live:
         print('\n*** real_pos ***')
         pprint(agent.real_pos)
         print('\n*** sim_pos ***')
         pprint(agent.sim_pos.keys())
         print('warning: logging directed to test_records')
+    
+    benchmark = uf.log(session, [agent])
     
     print('Counts:')
     for k, v in agent.counts_dict.items():

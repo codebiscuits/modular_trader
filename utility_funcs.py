@@ -12,18 +12,19 @@ import time
 from pprint import pprint
 from decimal import Decimal
 from timers import Timer
+from typing import Union, List, Tuple, Dict, Set, Optional, Any
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 # now = datetime.now().strftime('%d/%m/%y %H:%M')
 
 
-def open_trade_stats(now, total_bal, v, curr_price):
+def open_trade_stats(now: datetime, total_bal: float, v: dict, curr_price: float) -> dict:
+    '''takes an entry from the open trades dictionary, returns information about 
+    that position including current profit, size and direction'''
+    
     we = Timer('open_trade_stats')
     we.start()
-    '''takes an entry from the open trades dictionary, 
-    returns information about that position including 
-    current profit, size and direction'''
     
     pair = v[0].get('pair')
     
@@ -43,7 +44,7 @@ def open_trade_stats(now, total_bal, v, curr_price):
     
     entry_price = float(v[0].get('exe_price'))
     
-    open_time = v[0].get('timestamp') / 1000
+    open_time = int(v[0].get('timestamp')) / 1000
     if open_time == 1000000:
         print('used default timestamp value in open_trade_stats')
     duration = round((now.timestamp() - open_time) / 3600, 1)
@@ -81,7 +82,7 @@ def open_trade_stats(now, total_bal, v, curr_price):
     we.stop()
     return stats_dict
 
-def adjust_max_positions(max_pos, sizing):
+def adjust_max_positions(max_pos: int, sizing: dict) -> int:
     '''the max_pos input tells the function what the strategy has as a default
     the sizing input is the dictionary of currently open positions with their 
     associated open risk
@@ -89,7 +90,9 @@ def adjust_max_positions(max_pos, sizing):
     this function decides if there should currently be a limit on how many positions
     can be open at once, based on current performance of currently open positions'''
     
-def max_init_risk(n, target_risk):
+    pass
+    
+def max_init_risk(n: int, target_risk: float) -> float:
     '''n = number of open positions, target_risk is the percentage distance 
     from invalidation this function should converge on, max_pos is the maximum
     number of open positions as set in the main script
@@ -120,24 +123,10 @@ def max_init_risk(n, target_risk):
         
     return round(output, 2)
 
-def record_trades_old(session, agent, switch):
-    filepath = Path(f"{session.market_data}/{agent.id}/{switch}_trades.json")
-    if not filepath.exists():
-        print('filepath doesnt exist')
-        filepath.touch()
-    with open(filepath, "w") as file:
-        if switch == 'open':
-            json.dump(agent.open_trades, file)
-        if switch == 'sim':
-            json.dump(agent.sim_trades, file)
-        if switch == 'tracked':
-            json.dump(agent.tracked_trades, file)
-        if switch == 'closed':
-            json.dump(agent.closed_trades, file)
-        if switch == 'closed_sim':
-            json.dump(agent.closed_sim_trades, file)
-        
-def market_benchmark(session):
+def market_benchmark(session) -> None:
+    '''calculates daily, weekly and monthly returns for btc, eth and the median 
+    altcoin on binance'''
+    
     all_1d = []
     all_1w = []
     all_1m = []
@@ -201,7 +190,9 @@ def market_benchmark(session):
             'market_1d': market_1d, 'market_1w': market_1w, 'market_1m': market_1m, 
             'valid': valid}
 
-def strat_benchmark(session, agent):
+def strat_benchmark(session, agent) -> None:
+    '''calculates daily, weekly and monthly returns for the agent in question'''
+    
     now = datetime.now()
     day_ago = now - timedelta(days=1)
     week_ago = now - timedelta(days=7)
@@ -257,7 +248,8 @@ def strat_benchmark(session, agent):
     
     agent.benchmark = benchmark 
 
-def log(session, agents):    
+def log(session, agents: list) -> None:    
+    '''records all data from the session as a line in the bal_history.txt file'''
     
     market_benchmark(session)
     for agent in agents:
@@ -291,7 +283,10 @@ def log(session, agents):
         
         strat_benchmark(session, agent)
 
-def interpret_benchmark(session, agents):
+def interpret_benchmark(session, agents: list) -> None:
+    '''takes the benchmark results, ranks them by performance, and prints them 
+    in a table'''
+    
     mkt_bench = session.benchmark
     d_ranking = []
     w_ranking = []
@@ -339,9 +334,13 @@ def interpret_benchmark(session, agents):
         for e, r in enumerate(m_ranking):
             print(f'rank {e+1}: {r[1]}% {r[0]}')
 
-def count_trades(counts):
+def count_trades(counts: dict) -> str:
+    '''returns a summary of the counts dict as a human-readable string for use
+    in the scanner_summary function'''
+    
     er = Timer('count_trades')
     er.start()
+    
     count_list = []
     if counts.get("stop_count"):
         count_list.append(f'stopped: {counts.get("stop_count")}') 
@@ -360,7 +359,9 @@ def count_trades(counts):
     er.stop()
     return counts_str
 
-def find_bad_keys(c_data):
+def find_bad_keys(c_data: dict) -> list:
+    '''returns the ids of any trade records whos trade sizes don't add up'''
+    
     bad_keys = []
     for k, v in c_data.items():
         try:
@@ -392,12 +393,13 @@ def find_bad_keys(c_data):
     
     return bad_keys
 
-def latest_stop_id(trade_record):
-    rt = Timer('latest_stop_id')
-    rt.start()
+def latest_stop_id(trade_record: list) -> Tuple[str, int, int]:
     '''looks through trade_record for a stop id and retrieves the pair, id and 
     timestamp for when the stop was set. if nothing is found, just retreives the 
     pair and timestamp from the start of the trade_record'''
+    
+    rt = Timer('latest_stop_id')
+    rt.start()
     
     # define the oldest timestamp i want to search back to, to find the id
     now = datetime.now()
@@ -413,18 +415,21 @@ def latest_stop_id(trade_record):
         if i.get('stop_id'):
             pair = i.get('pair')
             stop_id = i.get('stop_id')
-            stop_time = i.get('timestamp')
+            stop_time = int(i.get('timestamp'))
             break
     if not pair:
         pair = trade_record[0].get('pair')
-        stop_time = trade_record[0].get('timestamp', oldest)
+        stop_time = int(trade_record[0].get('timestamp', oldest))
         if stop_time == oldest:
             print('used default timestamp value in latest_stop_id')
             
     rt.stop()
     return pair, stop_id, stop_time
 
-def update_liability(trade_record, size, operation):
+def update_liability(trade_record: Dict[str, str], size: str, operation: str) -> str:
+    '''when a new entry is added to a trade record, this function finds the previous
+    value for liability, adjusts it, and returns the new value as a string'''
+    
     ty = Timer('update_liability')
     ty.start()
     '''calculates new liability figure from the old figure and the current size being traded'''
@@ -432,6 +437,7 @@ def update_liability(trade_record, size, operation):
         prev_liability = Decimal(trade_record[-1].get('liability'))
     else:
         prev_liability = Decimal(0)
+    
     adjustment = Decimal(size)
     
     if operation == 'increase':
@@ -439,16 +445,21 @@ def update_liability(trade_record, size, operation):
     else:
         new_liability = prev_liability - adjustment
     
-    if new_liability < 0:
-        pair = trade_record[0].get('pair')
-        print(f"***** Warning - {pair} liability records don't add up *****")
+    if trade_record:
+        ratio = new_liability / prev_liability
+        if ratio > 0.0001:
+            pair = trade_record[0].get('pair')
+            print(f"***** Warning - {pair} liability records don't add up *****")
+            print(f"{prev_liability = } {new_liability = }")
+            print(f"new liability is {100*ratio:.3f}% of prev")
     ty.stop()
     return str(new_liability)
 
-def create_stop_dict(order):
+def create_stop_dict(order: dict) -> dict:
+    '''collects and returns the details of filled stop-loss order in a dictionary'''
+    
     yu = Timer('create_stop-dict')
     yu.start()
-    '''collects and returns the details of filled stop-loss order in a dictionary'''
     
     pair = order.get('symbol')
     quote_qty = order.get('cummulativeQuoteQty')
@@ -473,10 +484,10 @@ def create_stop_dict(order):
     yu.stop()
     return trade_dict
 
-def recent_perf_str(session, agent):
+def recent_perf_str(session, agent) -> str:
     '''generates a string of + and - to represent recent strat performance'''    
     
-    def score_accum(state, direction):
+    def score_accum(state: str, direction: str) -> Tuple[int, int, str]:
         with open(f"{session.market_data}/{agent.id}/bal_history.txt", "r") as file:
             bal_data = file.readlines()
         
@@ -486,12 +497,12 @@ def recent_perf_str(session, agent):
         #     prev_bal = session.bal
         # bal_change_pct = 100 * (session.bal - prev_bal) / prev_bal
         
-        last = json.loads(bal_data[-2])
         # other_last = json.loads(bal_data[-2])
         if agent.open_pnl_changes.get(state):
             bal_change_pct = agent.open_pnl_changes.get(state)
             print(f"{state} open pnl change: {bal_change_pct:.2f}")
-        elif bal_data:
+        elif bal_data and len(bal_data) > 1:
+            last = json.loads(bal_data[-2])
             prev_bal = last.get('balance')
             bal_change_pct = 100 * (agent.bal - prev_bal) / prev_bal
             print(f"bal change: {bal_change_pct:.2f}")
@@ -510,7 +521,7 @@ def recent_perf_str(session, agent):
         score_2 = 0
         if bal_change_pct > 0.1:
             score_1 += 5
-        elif bal_change_pct < 0.1:
+        elif bal_change_pct < -0.1:
             score_1 -= 5
         if pnls.get(1) > 0:
             score_2 += 4
@@ -551,25 +562,33 @@ def recent_perf_str(session, agent):
     sim_score_l1, sim_score_l2, sim_perf_str_l = score_accum('sim', 'long')
     sim_score_s1, sim_score_s2, sim_perf_str_s = score_accum('sim', 'short')
     
-    perf_str_l = real_perf_str_l if (agent.open_trades and real_score_l2) else sim_perf_str_l
-    perf_str_s = real_perf_str_s if (agent.open_trades and real_score_s2) else sim_perf_str_s
-    
     real_score_l = real_score_l1 + real_score_l2
     real_score_s = real_score_s1 + real_score_s2
     sim_score_l = sim_score_l1 + sim_score_l2
     sim_score_s = sim_score_s1 + sim_score_s2
     
-    full_perf_str = f'\
-long: {perf_str_l}\n\
-real: score {real_score_l} rpnl {agent.realised_pnl_long:.1f},\n\
-sim: score {sim_score_l} rpnl {agent.sim_pnl_long:.1f}\n\
-short: {perf_str_s}\n\
-real: score {real_score_s} rpnl {agent.realised_pnl_short:.1f},\n\
-sim: score {sim_score_s} rpnl {agent.sim_pnl_short:.1f}'
+    if (agent.open_trades and real_score_l2):
+        perf_str_l = real_perf_str_l
+        perf_summ_l = f"real: score {real_score_l} rpnl {agent.realised_pnl_long:.1f}"
+    else:
+        perf_str_l = sim_perf_str_l
+        perf_summ_l = f"sim: score {sim_score_l} rpnl {agent.sim_pnl_long:.1f}"
+    
+    if (agent.open_trades and real_score_s2):
+        perf_str_s = real_perf_str_s
+        perf_summ_s = f"real: score {real_score_s} rpnl {agent.realised_pnl_short:.1f}"
+    else:
+        perf_str_s = sim_perf_str_s
+        perf_summ_s = f"sim: score {sim_score_s} rpnl {agent.sim_pnl_short:.1f}"
+    
+    full_perf_str = f'long: {perf_str_l}\n{perf_summ_l}\nshort: {perf_str_s}\n{perf_summ_s}'
     
     return full_perf_str
 
-def scanner_summary(session, agents):
+def scanner_summary(session, agents: list) -> None:
+    '''prints a summary of the agents recent performance, current exposure, 
+    benchmarks, trade counts etc'''
+    
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     title = f'{now} ${session.bal:.2f}'
     live_str = '' if session.live else '*not live* '
@@ -584,7 +603,7 @@ def scanner_summary(session, agents):
         vol_exp = 0
         for k, v in agent.real_pos.items():
             if k != 'USDT':
-                vol_exp += v.get('pf%')
+                vol_exp += float(v.get('pf%'))
         
         count_str = count_trades(agent.counts_dict)
         perf_str = recent_perf_str(session, agent)
@@ -599,68 +618,11 @@ def scanner_summary(session, agents):
     if session.live:
         pb.push_note(title, final_msg)
 
-def sync_test_records_old(session, agent):
-    with open(f"{session.market_data}/{agent.id}/bal_history.txt", "r") as file:
-        bal_data = file.readlines()
-    with open(f"/home/ross/Documents/backtester_2021/test_records/{agent.id}/bal_history.txt", "w") as file:
-        file.writelines(bal_data)
-    
-    
-    try:
-        with open(f'{session.market_data}/{agent.id}/open_trades.json', 'r') as file:
-            o_data = json.load(file)
-        with open(f'/home/ross/Documents/backtester_2021/test_records/{agent.id}/open_trades.json', 'w') as file:
-            json.dump(o_data, file)
-    except JSONDecodeError:
-        print('open_trades file empty')
-    
-    
-    try:
-        with open(f'{session.market_data}/{agent.id}/sim_trades.json', 'r') as file:
-            s_data = json.load(file)
-        with open(f'/home/ross/Documents/backtester_2021/test_records/{agent.id}/sim_trades.json', 'w') as file:
-            json.dump(s_data, file)
-    except JSONDecodeError:
-        print('sim_trades file empty')
-    
-    
-    try:
-        with open(f'{session.market_data}/{agent.id}/tracked_trades.json', 'r') as file:
-            tr_data = json.load(file)
-        with open(f'/home/ross/Documents/backtester_2021/test_records/{agent.id}/tracked_trades.json', 'w') as file:
-            json.dump(tr_data, file)
-    except JSONDecodeError:
-        print('tracked_trades file empty')
-    
-    
-    try:
-        with open(f'{session.market_data}/{agent.id}/closed_trades.json', 'r') as file:
-            c_data = json.load(file)
-        with open(f'/home/ross/Documents/backtester_2021/test_records/{agent.id}/closed_trades.json', 'w') as file:
-            json.dump(c_data, file)
-    except JSONDecodeError:
-        print('closed_trades file empty')
-
-
-    try:
-        with open(f'{session.market_data}/{agent.id}/closed_sim_trades.json', 'r') as file:
-            cs_data = json.load(file)
-        with open(f'/home/ross/Documents/backtester_2021/test_records/{agent.id}/closed_sim_trades.json', 'w') as file:
-            json.dump(cs_data, file)
-    except JSONDecodeError:
-        print('closed_sim_trades file empty')
-
-
-    with open(f'{session.market_data}/binance_liquidity_history.txt', 'r') as file:
-        book_data = file.readlines()
-    with open('/home/ross/Documents/backtester_2021/test_records/binance_liquidity_history.txt', 'w') as file:
-        file.writelines(book_data)
-
-def calc_sizing_non_live_tp(session, agent, asset, tp_pct, switch):
-    qw = Timer('calc_sizing_non_live_tp')
-    qw.start()
+def calc_sizing_non_live_tp(session, agent, asset: str, tp_pct: int, switch: str) -> None:
     '''updates sizing dictionaries (real/sim) with with new open trade stats when 
     state is sim or real but not live and a take-profit is triggered'''
+    qw = Timer('calc_sizing_non_live_tp')
+    qw.start()
     tp_scalar = 1 - (tp_pct / 100)
     if switch == 'real':
         pos_dict = agent.real_pos
