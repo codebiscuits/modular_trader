@@ -118,6 +118,8 @@ def calc_stop(st: float, spread: float,  price: float, min_risk: float=0.01) -> 
 
 
 def calc_fee_bnb(usdt_size: str, fee_rate: float=0.00075) -> float:
+    '''calculates the trade fee denominated in BNB'''
+    
     jm = Timer('calc_fee_bnb')
     jm.start()
     bnb_price = get_price('BNBUSDT')
@@ -131,6 +133,7 @@ def calc_fee_bnb(usdt_size: str, fee_rate: float=0.00075) -> float:
 
 def get_price(pair: str) -> float:
     '''fetches a single pairs price from binance. slow so only use when necessary'''
+    
     hn = Timer('get_price')
     hn.start()
     price = float(client.get_ticker(symbol=pair).get('lastPrice'))
@@ -151,12 +154,13 @@ def update_prices(session) -> None:
     up.stop()
     
 
-
 def get_mid_price(pair: str) -> float:
-    gb = Timer('get_mid_price')
-    gb.start()
     '''returns the midpoint between first bid and ask price on the orderbook 
     for the pair in question'''
+    
+    gb = Timer('get_mid_price')
+    gb.start()
+    
     t = client.get_orderbook_ticker(symbol=pair)
     bid = float(t.get('bidPrice'))
     ask = float(t.get('askPrice'))
@@ -165,12 +169,13 @@ def get_mid_price(pair: str) -> float:
 
 
 def get_depth(session, pair: str) -> Tuple[float]:
-    max_slip = session.max_spread
-    fv = Timer('get_depth')
-    fv.start()
     '''returns the quantity (in the quote currency) that could be bought/sold 
     within the % range of price set by the max_slip param'''
 
+    max_slip = session.max_spread
+    fv = Timer('get_depth')
+    fv.start()
+    
     price = session.prices[pair]
     book = client.get_order_book(symbol=pair)
 
@@ -201,12 +206,13 @@ def get_depth(session, pair: str) -> Tuple[float]:
 
 
 def get_book_stats(pair: str, quote: str, width: Union[int, float]=2) -> dict:
-    dc = Timer('get_book_stats')
-    dc.start()
     '''returns a dictionary containing the base asset, the quote asset, 
     the spread, and the bid and ask depth within the % range of price set 
     by the width param in base and quote denominations'''
 
+    dc = Timer('get_book_stats')
+    dc.start()
+    
     q_len = len(quote) * -1
     base = pair[:q_len]
 
@@ -243,10 +249,11 @@ def get_book_stats(pair: str, quote: str, width: Union[int, float]=2) -> dict:
 
 
 def binance_spreads(quote: str='USDT') -> dict:
+    '''returns a dictionary with pairs as keys and current average spread as values'''
+    
     sx = Timer('binance_spreads')
     sx.start()
-    '''returns a dictionary with pairs as keys and current average spread as values'''
-
+    
     length = len(quote)
     avg_spreads = {}
 
@@ -297,6 +304,11 @@ def binance_spreads(quote: str='USDT') -> dict:
 
 
 def binance_depths(quotes: List[str]=['USDT', 'BTC']) -> dict:
+    '''calls get_orderbook_tickers 3 times, and loops through each pair averaging 
+    the quantities of the first bid and the first ask across those three. returns
+    a dictionary with all pairs as keys, and a dictionary containing median bid 
+    depth and median ask depth as values'''
+    
     az = Timer('binance_depths')
     az.start()
     avg_depths = {}
@@ -348,10 +360,12 @@ def binance_depths(quotes: List[str]=['USDT', 'BTC']) -> dict:
 
 
 def get_pairs(quote: str='USDT', market: str='SPOT') -> List[str]:
+    '''returns all active pairs for a given quote currency. possible values for 
+    quote are USDT, BTC, BNB etc. possible values for market are SPOT or CROSS'''
+    
     sa = Timer('get_pairs')
     sa.start()
-    '''possible values for quote are USDT, BTC, BNB etc. possible values for 
-    market are SPOT or CROSS'''
+    
     if market == 'SPOT':
         info = client.get_exchange_info()
         symbols = info.get('symbols')
@@ -374,6 +388,9 @@ def get_pairs(quote: str='USDT', market: str='SPOT') -> List[str]:
 
 
 def get_ohlc(pair:str, timeframe: str, span: str="1 year ago UTC") -> pd.DataFrame:
+    '''fetches kline data from binance for the stated pair and timeframe. 
+    span tells the function how far back to start the data, in plain english'''
+    
     client = Client(keys.bPkey, keys.bSkey)
     tf = {'1m': Client.KLINE_INTERVAL_1MINUTE,
           '5m': Client.KLINE_INTERVAL_5MINUTE,
@@ -402,6 +419,10 @@ def get_ohlc(pair:str, timeframe: str, span: str="1 year ago UTC") -> pd.DataFra
 
 
 def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame) -> pd.DataFrame:
+    '''takes an ohlc dataframe, works out when the data ends, then requests from 
+    binance all data from the end to the current moment. It then joins the new
+    data onto the old data and returns the updated dataframe'''
+    
     client = Client(keys.bPkey, keys.bSkey)
     tf = {'1m': Client.KLINE_INTERVAL_1MINUTE,
           '5m': Client.KLINE_INTERVAL_5MINUTE,
@@ -433,31 +454,23 @@ def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame) -> pd.DataFrame
 
 
 def prepare_ohlc(pair: str, is_live: bool, timeframe: str='4H', offset: Optional[str]=None, bars: int=2190) -> pd.DataFrame:
-    ds = Timer('prepare_ohlc')
-    ds.start()
     '''checks if there is old data already, if so it loads the old data and 
     downloads an update, if not it downloads all data from scratch, then 
     resamples all data to desired timeframe'''
     
-    ####### if there is an exception with this code ##########
-    # put the name of the exception in the try / except blocks so they
-    # work properly
+    ds = Timer('prepare_ohlc')
+    ds.start()
 
     if is_live:
         filepath = Path(f'{ohlc_data}/{pair}.pkl')
     else:
         filepath = Path(f'/home/ross/Documents/backtester_2021/bin_ohlc/{pair}.pkl')
     if filepath.exists():
-        # try:
         df = pd.read_pickle(filepath)
         if len(df) > 2:
             df = df.iloc[:-1, ]
             df = update_ohlc(pair, '1h', df)
-        # except:
-        #     print('-')
-        #     print(f'read_pickle went wrong with {pair}, downloading old data')
-        #     df = get_ohlc(pair, '1h', '1 year ago UTC')
-
+        
     else:
         df = get_ohlc(pair, '1h', '1 year ago UTC')
         print(f'downloaded {pair} from scratch')
@@ -465,13 +478,8 @@ def prepare_ohlc(pair: str, is_live: bool, timeframe: str='4H', offset: Optional
     if len(df) > 17520:  # 17520 is 2 year's worth of 1h periods
         df = df.tail(17520)
         df.reset_index(drop=True, inplace=True)
-    # try:
     df.to_pickle(filepath)
-    # except:
-    #     print('-')
-    #     print(f'to_pickle went wrong with {pair}')
-    #     print('-')
-
+    
     df = df.resample(timeframe, on='timestamp', offset=offset).agg({'open': 'first',
                                                      'high': 'max',
                                                      'low': 'min',
@@ -488,9 +496,11 @@ def prepare_ohlc(pair: str, is_live: bool, timeframe: str='4H', offset: Optional
 #-#-#- Trading Functions
 
 def create_trade_dict(order: dict, price: float, live: bool) -> Dict[str, str]:
+    '''collects and returns the details of the order in a dictionary'''
+    
     fd = Timer('create_trade_dict')
     fd.start()
-    '''collects and returns the details of the order in a dictionary'''
+    
     pair = order.get('symbol')
     if live:
         fills = order.get('fills')
@@ -532,9 +542,11 @@ def create_trade_dict(order: dict, price: float, live: bool) -> Dict[str, str]:
 
 
 def valid_size(session, pair: str, size: float) -> str:
+    '''rounds the desired order size to the correct step size for binance'''
+    
     gf = Timer('get_symbol_info valid')
     gf.start()
-    '''rounds the desired order size to the correct step size for binance'''
+    
     info = session.symbol_info.get(pair)
     if not info:
         info = client.get_symbol_info(pair)
@@ -545,9 +557,11 @@ def valid_size(session, pair: str, size: float) -> str:
 
 
 def valid_price(session, pair: str, price: float) -> str:
+    '''rounds the desired order price to the correct step size for binance'''
+    
     hg = Timer('get_symbol_info valid')
     hg.start()
-    '''rounds the desired order price to the correct step size for binance'''
+    
     info = session.symbol_info.get(pair)
     if not info:
         info = client.get_symbol_info(pair)
@@ -561,8 +575,11 @@ def valid_price(session, pair: str, price: float) -> str:
 
 
 def free_usdt_M() -> float:
+    '''fetches the free balance of USDT in the margin account'''
+    
     kj = Timer('free_usdt_M')
     kj.start()
+    
     info = client.get_margin_account()
     assets = info.get('userAssets')
     bal = 0
@@ -603,12 +620,13 @@ def free_usdt_M() -> float:
 
 
 def update_pos_M(session, asset: str, new_bal: str, inval: float, direction: str, pfrd: float) -> Dict[str, float]:
-    jk = Timer('update_pos_M')
-    jk.start()
     '''checks for the current balance of a particular asset and returns it in 
     the correct format for the sizing dict. also calculates the open risk for 
     a given asset and returns it in R and $ denominations'''
 
+    jk = Timer('update_pos_M')
+    jk.start()
+    
     pair = asset + 'USDT'
     price = session.prices[pair]
     value = price * new_bal
@@ -630,10 +648,12 @@ def update_pos_M(session, asset: str, new_bal: str, inval: float, direction: str
 
 
 def top_up_bnb_M(usdt_size: int) -> dict:
-    gh = Timer('top_up_bnb_M')
-    gh.start()
     '''checks net BNB balance and interest owed, if net is below the threshold,
     buys BNB then repays any interest'''
+    
+    gh = Timer('top_up_bnb_M')
+    gh.start()
+    
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     
     # check balances
@@ -680,8 +700,12 @@ def top_up_bnb_M(usdt_size: int) -> dict:
 
 
 def buy_asset_M(session, pair: str, size: float, is_base: bool, price: float, live: bool) -> dict:
+    '''sends a market buy order to binance in the margin account and returns the
+    order data'''
+    
     fg = Timer('buy_asset_M')
     fg.start()
+    
     if live and is_base:
         base_size = valid_size(session, pair, size)
         buy_order = client.create_margin_order(symbol=pair,
@@ -727,8 +751,12 @@ def buy_asset_M(session, pair: str, size: float, is_base: bool, price: float, li
 
 
 def sell_asset_M(session, pair: str, base_size: float, price: float, live: bool) -> dict:
+    '''sends a market sell order to binance in the margin account and returns the
+    order data'''
+    
     df = Timer('sell_asset_M')
     df.start()
+    
     # base_size = valid_size(session, pair, base_size)
     if not base_size: # if size == 0, valid_size will output None
         base_size = 0
@@ -761,21 +789,27 @@ def sell_asset_M(session, pair: str, base_size: float, price: float, live: bool)
     return sell_order
 
 
+
 def borrow_asset_M(asset: str, qty: str, live: bool) -> None:
     '''calls the binance api function to take out a margin loan'''
+    
     if live:
         client.create_margin_loan(asset=asset, amount=qty)
 
 
 def repay_asset_M(asset:str, qty: str, live: bool) -> None:
     '''calls the binance api function to repay a margin loan'''
+    
     if live:
         client.repay_margin_loan(asset=asset, amount=round(float(qty), 8))
 
 
 def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit: float, live: bool) -> dict:
+    '''sends a margin stop-loss limit order to binance and returns the order data'''
+    
     sd = Timer('set_stop_M')
     sd.start()
+    
     trigger = valid_price(session, pair, trigger)
     limit = valid_price(session, pair, limit)
     stop_size = valid_size(session, pair, size)
@@ -795,11 +829,12 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit
 
 
 def clear_stop_M(pair: str, trade_record: dict, live: bool) -> Tuple[Any, Decimal]:
-    fc = Timer('clear_stop_M')
-    fc.start()
     '''finds the order id of the most recent stop-loss from the trade record
     and cancels that specific order. if no such id can be found, blindly cancels 
     the most recent stop-limit order relating to the pair'''
+    
+    fc = Timer('clear_stop_M')
+    fc.start()
     
     _, stop_id, _ = uf.latest_stop_id(trade_record)
     
