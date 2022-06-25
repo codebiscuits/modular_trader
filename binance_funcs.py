@@ -590,35 +590,6 @@ def free_usdt_M() -> float:
     return bal
 
 
-# def asset_bal_M(asset: str) -> Dict[str, str]:
-#     lk = Timer('asset_bal_M')
-#     lk.start()
-#     info = client.get_margin_account()
-#     bals = info.get('userAssets')
-    
-#     balance = {}
-#     for bal in bals:
-#         if bal.get('asset') == asset:
-#             balance['net'] = bal.get('netAsset')
-#             balance['locked'] = bal.get('locked')
-#             balance['borrowed'] = bal.get('borrowed')
-#             balance['free'] = bal.get('free')
-#     lk.stop()
-#     return balance
-
-
-# def free_bal_M(asset: str) -> float:
-#     kl = Timer('free_bal_M')
-#     kl.start()
-#     info = client.get_margin_account()
-#     bal = 0
-#     for i in info.get('userAssets'):
-#         if i.get('asset') == asset:
-#             bal = float(i.get('free'))
-#     kl.stop()        
-#     return bal
-
-
 def update_pos_M(session, asset: str, new_bal: str, inval: float, direction: str, pfrd: float) -> Dict[str, float]:
     '''checks for the current balance of a particular asset and returns it in 
     the correct format for the sizing dict. also calculates the open risk for 

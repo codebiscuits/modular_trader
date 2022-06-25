@@ -598,13 +598,16 @@ class DoubleST():
             '''calculates perf score from recent performance. also saves the
             instance property open_pnl_changes dictionary'''
             
+            print(f"\n\nrunning {direction} {switch} agent score accumulator\n")
+            
             with open(f"{self.market_data}/{self.id}/bal_history.txt", "r") as file:
                 bal_data = file.readlines()
             
             if bal_data:
                 last = json.loads(bal_data[-1])
-            if bal_data and last.get(f'{switch}_open_pnl'):
-                prev_open_pnl = last.get(f'{switch}_open_pnl')
+                pprint(last)
+            if bal_data and last.get(f'{switch}_open_pnl_{direction[0]}'):
+                prev_open_pnl = last.get(f'{switch}_open_pnl_{direction[0]}')
                 curr_open_pnl = self.open_pnl(direction, switch)
                 print(f"{switch} open pnl: {curr_open_pnl:.1f}")
                 bal_change_pct = 100 * (curr_open_pnl - prev_open_pnl) / prev_open_pnl
@@ -648,6 +651,8 @@ class DoubleST():
                 score_2 += 1
             elif pnls.get(4) < 0:
                 score_2 -= 1
+            
+            print('\n')
             
             return score_1, score_2
         
