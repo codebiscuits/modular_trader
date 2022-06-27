@@ -202,4 +202,13 @@ def signal_noise_ratio(df, periods):
 
 def stochastic(data, lookback):
     pass
-    
+
+def wma(s: pd.Series, lb: int) -> pd.Series:
+    '''calculates the weighted moving average on an input series'''
+    return s.rolling(lb).apply(lambda x: ((np.arange(lb)+1)*x).sum()/(np.arange(lb)+1).sum(), raw=True)
+
+def hma(s: pd.Series, lb: int) -> pd.Series:
+    '''calculates the Hull moving average on an input series. typically applied to closing prices'''
+    return wma(wma(s, lb//2).multiply(2).sub(wma(s, lb)), int(np.sqrt(lb)))
+
+

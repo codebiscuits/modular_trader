@@ -36,6 +36,12 @@ class DoubleST():
                4: {'timeframe': '4h', 'tf_offset': None, 'mult1': 3, 'mult2': 1.6}, 
                5: {'timeframe': '4h', 'tf_offset': None, 'mult1': 3, 'mult2': 1.8}, 
                6: {'timeframe': '4h', 'tf_offset': None, 'mult1': 3, 'mult2': 2.0}, 
+               7: {'timeframe': '4h', 'tf_offset': None, 'mult1': 5, 'mult2': 1.0}, 
+               8: {'timeframe': '4h', 'tf_offset': None, 'mult1': 5, 'mult2': 1.6}, 
+               9: {'timeframe': '4h', 'tf_offset': None, 'mult1': 5, 'mult2': 2.2}, 
+               10: {'timeframe': '4h', 'tf_offset': None, 'mult1': 5, 'mult2': 2.8}, 
+               11: {'timeframe': '4h', 'tf_offset': None, 'mult1': 5, 'mult2': 3.4}, 
+               12: {'timeframe': '4h', 'tf_offset': None, 'mult1': 5, 'mult2': 4.0}, 
                }
     
     def __init__(self, session, preset):
@@ -45,7 +51,6 @@ class DoubleST():
         self.bal = session.bal
         self.fr_max = session.fr_max
         self.prices = session.prices
-        # self.lb = self.presets[preset]['lookback']
         self.mult1 = self.presets[preset]['mult1']
         self.mult2 = self.presets[preset]['mult2']
         self.tf = self.presets[preset]['timeframe']
