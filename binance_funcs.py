@@ -637,7 +637,8 @@ def top_up_bnb_M(usdt_size: int) -> dict:
         if a.get('asset') == 'BNB':
             free_bnb = float(a.get('free'))
             interest = a.get('interest')
-            print(f'BNB interest: {interest}')
+            if float(interest):
+                print(f'BNB interest: {interest}')
         if a.get('asset') == 'USDT':
             free_usdt = float(a.get('free'))
     net_bnb = free_bnb - float(interest)
@@ -775,7 +776,7 @@ def repay_asset_M(asset:str, qty: str, live: bool) -> None:
         client.repay_margin_loan(asset=asset, amount=round(float(qty), 8))
 
 
-def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit: float, live: bool) -> dict:
+def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit: float) -> dict:
     '''sends a margin stop-loss limit order to binance and returns the order data'''
     
     sd = Timer('set_stop_M')
@@ -785,7 +786,7 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit
     limit = valid_price(session, pair, limit)
     stop_size = valid_size(session, pair, size)
     print(f"setting {pair} stop: {stop_size = } {side = } {trigger = } {limit = }")
-    if live:
+    if session.live:
         stop_sell_order = client.create_margin_order(symbol=pair,
                                                  side=side,
                                                  type=be.ORDER_TYPE_STOP_LOSS_LIMIT,

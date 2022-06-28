@@ -18,8 +18,8 @@ from typing import Union, List, Tuple, Dict, Set, Optional, Any
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
-class DoubleST():
-    '''regular supertrend for bias with tight supertrend for entries/exits'''
+class Agent():
+    '''generic agent class for each strategy to inherit from'''
     
     realised_pnl_long = 0
     realised_pnl_short = 0
@@ -30,19 +30,7 @@ class DoubleST():
     target_risk = 0.1
     max_pos = 20
     
-    presets = {1: {'timeframe': '4h', 'tf_offset': None, 'mult1': 3, 'mult2': 1.0}, 
-               2: {'timeframe': '4h', 'tf_offset': None, 'mult1': 3, 'mult2': 1.2}, 
-               3: {'timeframe': '4h', 'tf_offset': None, 'mult1': 3, 'mult2': 1.4}, 
-               4: {'timeframe': '4h', 'tf_offset': None, 'mult1': 3, 'mult2': 1.6}, 
-               5: {'timeframe': '4h', 'tf_offset': None, 'mult1': 3, 'mult2': 1.8}, 
-               6: {'timeframe': '4h', 'tf_offset': None, 'mult1': 3, 'mult2': 2.0}, 
-               7: {'timeframe': '4h', 'tf_offset': None, 'mult1': 5, 'mult2': 1.0}, 
-               8: {'timeframe': '4h', 'tf_offset': None, 'mult1': 5, 'mult2': 1.6}, 
-               9: {'timeframe': '4h', 'tf_offset': None, 'mult1': 5, 'mult2': 2.2}, 
-               10: {'timeframe': '4h', 'tf_offset': None, 'mult1': 5, 'mult2': 2.8}, 
-               11: {'timeframe': '4h', 'tf_offset': None, 'mult1': 5, 'mult2': 3.4}, 
-               12: {'timeframe': '4h', 'tf_offset': None, 'mult1': 5, 'mult2': 4.0}, 
-               }
+    # presets = {1: {'timeframe': '4h', 'tf_offset': None}}
     
     def __init__(self, session, preset):
         t = Timer('agent init')
@@ -51,13 +39,7 @@ class DoubleST():
         self.bal = session.bal
         self.fr_max = session.fr_max
         self.prices = session.prices
-        self.mult1 = self.presets[preset]['mult1']
-        self.mult2 = self.presets[preset]['mult2']
-        self.tf = self.presets[preset]['timeframe']
-        self.offset = self.presets[preset]['tf_offset']
-        self.name = f'{self.tf} dst {self.mult1}-{self.mult2}'
-        self.id = f'double_st_{self.tf}_{self.offset}_{self.mult1}_{self.mult2}'
-        print(f'\nInitialising {self.name}')
+        self.lookback_limit = 200
         self.market_data = self.mkt_data_path()
         self.counts_dict = {'real_stop_long': 0, 'real_open_long': 0, 'real_add_long': 0, 'real_tp_long': 0, 'real_close_long': 0, 
                            'sim_stop_long': 0, 'sim_open_long': 0, 'sim_add_long': 0, 'sim_tp_long': 0, 'sim_close_long': 0, 
@@ -603,14 +585,14 @@ class DoubleST():
             '''calculates perf score from recent performance. also saves the
             instance property open_pnl_changes dictionary'''
             
-            print(f"\n\nrunning {direction} {switch} agent score accumulator\n")
+            # print(f"\n\nrunning {direction} {switch} agent score accumulator\n")
             
             with open(f"{self.market_data}/{self.id}/bal_history.txt", "r") as file:
                 bal_data = file.readlines()
             
             if bal_data:
                 last = json.loads(bal_data[-1])
-                pprint(last)
+                # pprint(last)
             if bal_data and last.get(f'{switch}_open_pnl_{direction[0]}'):
                 prev_open_pnl = last.get(f'{switch}_open_pnl_{direction[0]}')
                 curr_open_pnl = self.open_pnl(direction, switch)
@@ -811,7 +793,7 @@ class DoubleST():
         f.stop()
     
     def too_new(self, df: pd.DataFrame) -> bool:
-        '''returns True if there is less than 200 hours of history AND if
+        '''returns True if there is less than 200 periods of history AND if
         there are no current positions in the asset'''
         
         g = Timer('too_new')
@@ -822,7 +804,7 @@ class DoubleST():
         else:
             no_pos = True    
         
-        return len(df) <= 200 and no_pos
+        return len(df) <= self.lookback_limit and no_pos
 
     def open_pnl(self, direction: str, state: str) -> Union[int, float]:
         '''adds up the pnls of all open positions for a given state'''
@@ -847,6 +829,49 @@ class DoubleST():
         h.stop()
         return total
     
+    def move_stop(self, session, pair, df, state, direction):
+        if state == 'real':
+            trade_record = self.open_trades[pair]
+        elif state == 'sim':
+            trade_record = self.sim_trades[pair]
+        elif state == 'tracked':
+            trade_record = self.tracked_trades[pair]
+        
+        current_stop = None
+        for record in trade_record[::-1]:
+           if record.get('hard_stop'):
+               current_stop = float(record.get('hard_stop'))
+               break
+        
+        low_atr = df.at[len(df)-1, 'atr_lower']
+        high_atr = df.at[len(df)-1, 'atr_upper']
+        
+        if state == 'real' and direction == 'long' and low_atr > current_stop:
+            print(f"*** {pair} {state} {direction} move stop from {current_stop} to {low_atr}")
+            _, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
+            stop_order = funcs.set_stop_M(session, pair, base_size, direction, low_atr, low_atr*0.8)
+            self.open_trades[pair][-1]['stop_id'] = stop_order.get('orderId')
+            self.open_trades[pair][-1]['hard_stop'] = low_atr
+            self.record_trades(session, 'open')
+        
+        elif state == 'sim' and direction == 'long' and low_atr > current_stop:
+            print(f"*** {pair} {state} {direction} move stop from {current_stop} to {low_atr}")
+            self.sim_trades[pair][-1]['hard_stop'] = low_atr
+            self.record_trades(session, 'sim')
+            
+        elif state == 'real' and direction == 'short' and high_atr < current_stop:
+            print(f"*** {pair} {state} {direction} move stop from {current_stop} to {high_atr}")
+            _, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
+            stop_order = funcs.set_stop_M(session, pair, base_size, direction, high_atr, high_atr*1.2)
+            self.open_trades[pair][-1]['stop_id'] = stop_order.get('orderId')
+            self.open_trades[pair][-1]['hard_stop'] = high_atr
+            self.record_trades(session, 'open')
+            
+        elif state == 'sim' and direction == 'short' and high_atr < current_stop:
+            print(f"*** {pair} {state} {direction} move stop from {current_stop} to {high_atr}")
+            self.sim_trades[pair][-1]['hard_stop'] = high_atr
+            self.record_trades(session, 'sim')
+    
     def tp_signals(self, asset: str) -> None:
         '''calculates whether the current position needs to take profit and stores 
         the result in the in_pos dictionary. this cant be done in the main signals
@@ -867,6 +892,35 @@ class DoubleST():
             self.in_pos['sim_tp_sig'] = ((float(sim_or) > self.indiv_r_limit) and 
                                          (abs(self.in_pos.get('sim_price_delta', 0)) > 0.001))
         j.stop()
+    
+    
+
+class DoubleST(Agent):
+    '''200EMA and regular supertrend for bias with tight supertrend for entries/exits'''
+    
+    presets = {1: {'timeframe': '4h', 'tf_offset': None, 'var1': 3, 'var2': 1.0}, 
+               2: {'timeframe': '4h', 'tf_offset': None, 'var1': 3, 'var2': 1.2}, 
+               3: {'timeframe': '4h', 'tf_offset': None, 'var1': 3, 'var2': 1.4}, 
+               4: {'timeframe': '4h', 'tf_offset': None, 'var1': 3, 'var2': 1.6}, 
+               5: {'timeframe': '4h', 'tf_offset': None, 'var1': 3, 'var2': 1.8}, 
+               6: {'timeframe': '4h', 'tf_offset': None, 'var1': 3, 'var2': 2.0}, 
+               7: {'timeframe': '4h', 'tf_offset': None, 'var1': 5, 'var2': 1.0}, 
+               8: {'timeframe': '4h', 'tf_offset': None, 'var1': 5, 'var2': 1.6}, 
+               9: {'timeframe': '4h', 'tf_offset': None, 'var1': 5, 'var2': 2.2}, 
+               10: {'timeframe': '4h', 'tf_offset': None, 'var1': 5, 'var2': 2.8}, 
+               11: {'timeframe': '4h', 'tf_offset': None, 'var1': 5, 'var2': 3.4}, 
+               12: {'timeframe': '4h', 'tf_offset': None, 'var1': 5, 'var2': 4.0}, 
+               }
+    
+    def __init__(self, session, preset):
+        self.tf = self.presets[preset]['timeframe']
+        self.offset = self.presets[preset]['tf_offset']
+        self.mult1 = self.presets[preset]['var1']
+        self.mult2 = self.presets[preset]['var2']
+        self.name = f'{self.tf} dst {self.mult1}-{self.mult2}'
+        self.id = f"double_st_{'_'.join([str(arg) for arg in self.presets[preset].values()])}"
+        print(f'\nInitialising {self.name}')
+        Agent.__init__(self, session, preset)
     
     def spot_signals(self, session, df: pd.DataFrame, pair: str) -> dict:
         '''generates spot buy and sell signals based on 2 supertrend indicators
@@ -909,11 +963,12 @@ class DoubleST():
         k.start()
         
         if 'ema200' not in df.columns:
-            df['ema200'] = df.close.ewm(200).mean()
+            df['ema200'] = df.close.ewm(self.lookback_limit).mean()
         ind.supertrend_new(df, 10, self.mult1)
         df.rename(columns={'st': 'st_loose', 'st_u': 'st_loose_u', 'st_d': 'st_loose_d'}, inplace=True)
         ind.supertrend_new(df, 10, self.mult2)
     
+        
         bullish_ema = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'ema200']
         bearish_ema = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'ema200']
         bullish_loose = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st_loose']
@@ -943,11 +998,195 @@ class DoubleST():
             signal = None
         
         if df.at[len(df)-1, 'st']:
-            inval = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
+            inval = df.at[len(df)-1, 'st']
+            inval_ratio = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
         else:
-            inval = 100000
+            inval = None
+            inval_ratio = 100000
         k.stop()
-        return {'signal': signal, 'inval': inval}
+        return {'signal': signal, 'inval': inval, 'inval_ratio': inval_ratio}
+    
+class EMACross(Agent):
+    '''Simple EMA cross strategy with a longer-term EMA to set bias and a 
+    trailing stop based on ATR bands'''
+    
+    presets = {1: {'timeframe': '4h', 'tf_offset': None, 'var1': 12, 'var2': 21}, 
+               2: {'timeframe': '4h', 'tf_offset': None, 'var1': 50, 'var2': 100}, 
+               3: {'timeframe': '4h', 'tf_offset': None, 'var1': 50, 'var2': 200}, 
+               4: {'timeframe': '4h', 'tf_offset': None, 'var1': 100, 'var2': 200},
+               }
+    
+    def __init__(self, session, preset):
+        self.tf = self.presets[preset]['timeframe']
+        self.offset = self.presets[preset]['tf_offset']
+        self.lb1 = self.presets[preset]['var1']
+        self.lb2 = self.presets[preset]['var2']
+        self.name = f'{self.tf} emacross {self.lb1}-{self.lb2}'
+        self.id = f"ema_cross_{'_'.join([str(arg) for arg in self.presets[preset].values()])}"
+        print(f'\nInitialising {self.name}')
+        Agent.__init__(self, session, preset)
+        
+    
+    def margin_signals(self, session, df: pd.DataFrame, pair: str) -> dict:
+        '''generates open and close signals for long and short trades based on
+        two supertrend indicators and a 200 period EMA'''
+        
+        k = Timer(f'margin_signals')
+        k.start()
+        
+        fast_ema_str = f"ema{self.lb1}"
+        slow_ema_str = f"ema{self.lb2}"
+        bias_ema_str = f"{self.tf}ema{self.lookback_limit}"
+        
+        if bias_ema_str not in df.columns:
+            df[bias_ema_str] = df.close.ewm(self.lookback_limit).mean()
+        df[fast_ema_str] = df.close.ewm(self.lb1).mean()
+        df[slow_ema_str] = df.close.ewm(self.lb2).mean()
+        ind.atr_bands(df, 10, 1.2)
 
+        bullish_bias = df.at[len(df)-1, 'close'] > df.at[len(df)-1, bias_ema_str]
+        bearish_bias = df.at[len(df)-1, 'close'] < df.at[len(df)-1, bias_ema_str]
+        bullish_emas = (df.at[len(df)-1, fast_ema_str] > df.at[len(df)-1, slow_ema_str]
+                         and
+                         df.at[len(df)-2, fast_ema_str] < df.at[len(df)-2, slow_ema_str])
+        bearish_emas = (df.at[len(df)-1, fast_ema_str] < df.at[len(df)-1, slow_ema_str]
+                         and
+                         df.at[len(df)-2, fast_ema_str] > df.at[len(df)-2, slow_ema_str])
+        
+        in_long = (self.in_pos['real'] == 'long' 
+                   or self.in_pos['sim'] == 'long'
+                   or self.in_pos['tracked'] == 'long')
+        in_short = (self.in_pos['real'] == 'short' 
+                   or self.in_pos['sim'] == 'short'
+                   or self.in_pos['tracked'] == 'short')
+        flat = not in_long and not in_short
+        
+        if bullish_bias and bullish_emas and flat:
+            signal = 'open_long'
+        elif bearish_bias and bearish_emas and flat:
+            signal = 'open_short'
+        elif bearish_emas and in_long:
+            signal = 'close_long'
+        elif bullish_emas and in_short:
+            signal = 'close_short'
+        else:
+            signal = None
+        
+        if in_long and in_short:
+            print(f"WARNING: problem with EMACross signals")
+            print(f"signal generated: {signal}")
+            pprint(self.in_pos)
+        
+        if bullish_bias:
+            session.above_200_ema.add(pair)
+        else:
+            session.below_200_ema.add(pair)
+        
+        for state in ['real', 'sim', 'tracked']:
+            if self.in_pos[state]:
+                self.move_stop(session, pair, df, state, self.in_pos[state])
+        
+        if signal == 'open_long' and df.at[len(df)-1, 'atr_lower']:
+            inval = df.at[len(df)-1, 'atr_lower']
+            inval_ratio = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'atr_lower']) # current price proportional to invalidation price
+        elif signal == 'open_short' and df.at[len(df)-1, 'atr_upper']:
+            inval = df.at[len(df)-1, 'atr_upper']
+            inval_ratio = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'atr_upper']) # current price proportional to invalidation price
+        else:
+            inval = None
+            inval_ratio = None
+        k.stop()
+        return {'signal': signal, 'inval': inval, 'inval_ratio': inval_ratio}
 
+class EMACrossHMA(Agent):
+    '''Simple EMA cross strategy with a longer-term HMA to set bias more 
+    responsively and a trailing stop based on ATR bands'''
+    
+    presets = {1: {'timeframe': '4h', 'tf_offset': None, 'var1': 12, 'var2': 21}, 
+               2: {'timeframe': '4h', 'tf_offset': None, 'var1': 50, 'var2': 100}, 
+               3: {'timeframe': '4h', 'tf_offset': None, 'var1': 50, 'var2': 200}, 
+               4: {'timeframe': '4h', 'tf_offset': None, 'var1': 100, 'var2': 200},
+               }
+    
+    def __init__(self, session, preset):
+        self.tf = self.presets[preset]['timeframe']
+        self.offset = self.presets[preset]['tf_offset']
+        self.lb1 = self.presets[preset]['var1']
+        self.lb2 = self.presets[preset]['var2']
+        self.name = f'{self.tf} emaxhma {self.lb1}-{self.lb2}'
+        self.id = f"ema_cross_hma_{'_'.join([str(arg) for arg in self.presets[preset].values()])}"
+        print(f'\nInitialising {self.name}')
+        Agent.__init__(self, session, preset)
+        
+    
+    def margin_signals(self, session, df: pd.DataFrame, pair: str) -> dict:
+        '''generates open and close signals for long and short trades based on
+        two supertrend indicators and a 200 period EMA'''
+        
+        k = Timer(f'margin_signals')
+        k.start()
+        
+        fast_ema_str = f"ema{self.lb1}"
+        slow_ema_str = f"ema{self.lb2}"
+        bias_hma_str = f"{self.tf}hma{self.lookback_limit}"
+        
+        if bias_hma_str not in df.columns:
+            df[bias_hma_str] = ind.hma(df.close, self.lookback_limit)
+        df[fast_ema_str] = df.close.ewm(self.lb1).mean()
+        df[slow_ema_str] = df.close.ewm(self.lb2).mean()
+        ind.atr_bands(df, 10, 1.2)
+
+        bullish_bias = df.at[len(df)-1, 'close'] > df.at[len(df)-1, bias_hma_str]
+        bearish_bias = df.at[len(df)-1, 'close'] < df.at[len(df)-1, bias_hma_str]
+        bullish_emas = (df.at[len(df)-1, fast_ema_str] > df.at[len(df)-1, slow_ema_str]
+                         and
+                         df.at[len(df)-2, fast_ema_str] < df.at[len(df)-2, slow_ema_str])
+        bearish_emas = (df.at[len(df)-1, fast_ema_str] < df.at[len(df)-1, slow_ema_str]
+                         and
+                         df.at[len(df)-2, fast_ema_str] > df.at[len(df)-2, slow_ema_str])
+        
+        in_long = (self.in_pos['real'] == 'long' 
+                   or self.in_pos['sim'] == 'long'
+                   or self.in_pos['tracked'] == 'long')
+        in_short = (self.in_pos['real'] == 'short' 
+                   or self.in_pos['sim'] == 'short'
+                   or self.in_pos['tracked'] == 'short')
+        flat = not in_long and not in_short
+        
+        if bullish_bias and bullish_emas and flat:
+            signal = 'open_long'
+        elif bearish_bias and bearish_emas and flat:
+            signal = 'open_short'
+        elif bearish_emas and in_long:
+            signal = 'close_long'
+        elif bullish_emas and in_short:
+            signal = 'close_short'
+        else:
+            signal = None
+        
+        if in_long and in_short:
+            print(f"WARNING: problem with EMACross signals")
+            print(f"signal generated: {signal}")
+            pprint(self.in_pos)
+        
+        if bullish_bias:
+            session.above_200_ema.add(pair)
+        else:
+            session.below_200_ema.add(pair)
+        
+        for state in ['real', 'sim', 'tracked']:
+            if self.in_pos[state]:
+                self.move_stop(session, pair, df, state, self.in_pos[state])
+        
+        if signal == 'open_long' and df.at[len(df)-1, 'atr_lower']:
+            inval = df.at[len(df)-1, 'atr_lower']
+            inval_ratio = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'atr_lower']) # current price proportional to invalidation price
+        elif signal == 'open_short' and df.at[len(df)-1, 'atr_upper']:
+            inval = df.at[len(df)-1, 'atr_upper']
+            inval_ratio = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'atr_upper']) # current price proportional to invalidation price
+        else:
+            inval = None
+            inval_ratio = None
+        k.stop()
+        return {'signal': signal, 'inval': inval, 'inval_ratio': inval_ratio}
 

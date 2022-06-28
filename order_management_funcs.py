@@ -39,7 +39,7 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
         
         # set stop and add to trade record
         stop_size = float(api_order.get('executedQty'))
-        stop_order = funcs.set_stop_M(session, pair, stop_size, be.SIDE_SELL, stp, stp*0.8, session.live)
+        stop_order = funcs.set_stop_M(session, pair, stop_size, be.SIDE_SELL, stp, stp*0.8)
         long_order['stop_id'] = stop_order.get('orderId')
         
         agent.open_trades[pair] = [long_order]
@@ -171,7 +171,7 @@ def tp_long(session, agent, pair, stp, inval):
                 
                 # set new stop
                 new_size = real_bal - float(sell_order['base_size'])
-                stop_order = funcs.set_stop_M(session, pair, new_size, be.SIDE_SELL, stp, stp*0.8, session.live)
+                stop_order = funcs.set_stop_M(session, pair, new_size, be.SIDE_SELL, stp, stp*0.8)
                 sell_order['stop_id'] = stop_order.get('orderId')
                 
                 trade_record.append(sell_order)
@@ -439,7 +439,7 @@ def open_short(session, agent, pair, size, stp, inval, sim_reason):
         
         # set stop and add to trade record
         stop_size = float(api_order.get('executedQty'))
-        stop_order = funcs.set_stop_M(session, pair, stop_size, be.SIDE_BUY, stp, stp*1.2, session.live)
+        stop_order = funcs.set_stop_M(session, pair, stop_size, be.SIDE_BUY, stp, stp*1.2)
         short_order['stop_id'] = stop_order.get('orderId')
         agent.open_trades[pair] = [short_order]
         agent.record_trades(session, 'open')
@@ -577,7 +577,7 @@ def tp_short(session, agent, pair, stp, inval):
                 # set new stop
                 new_size = real_bal - float(buy_order['base_size'])
                 
-                stop_order = funcs.set_stop_M(session, pair, new_size, be.SIDE_SELL, stp, stp*1.2, session.live)
+                stop_order = funcs.set_stop_M(session, pair, new_size, be.SIDE_SELL, stp, stp*1.2)
                 buy_order['stop_id'] = stop_order.get('orderId')
                 
                 trade_record.append(buy_order)

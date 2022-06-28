@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import keys, time
 from datetime import datetime
 import binance_funcs as funcs
-from agents import DoubleST
+from agents import DoubleST, EMACross, EMACrossHMA
 import order_management_funcs as omf
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
@@ -59,7 +59,10 @@ agent_3 = DoubleST(session, 5) # '4h', None, 3, 1.8
 agent_4 = DoubleST(session, 9) # '4h', None, 5, 2.2
 agent_5 = DoubleST(session, 10) # '4h', None, 5, 2.8
 agent_6 = DoubleST(session, 11) # '4h', None, 5, 3.4
-agents = [agent_1, agent_2, agent_3, agent_4, agent_5, agent_6]
+agent_7 = EMACross(session, 1) # '4h', None, 12, 21
+agent_8 = EMACrossHMA(session, 1) # '4h', None, 12, 21
+agents = [agent_1, agent_2, agent_3, agent_4, agent_5, agent_6, agent_7, agent_8]
+
 session.name = ' | '.join([n.name for n in agents])
 
 # compile and sort list of pairs to loop through ------------------------------
@@ -104,6 +107,7 @@ for n, pair in enumerate(pairs):
         agent.init_in_pos(pair)    
     df = funcs.prepare_ohlc(pair, session.live)
     
+    # if pair is too new for all agents, skip it
     too_new = 0
     for agent in agents:
         if agent.too_new(df):
@@ -123,18 +127,21 @@ for n, pair in enumerate(pairs):
     usdt_depth_l, usdt_depth_s = funcs.get_depth(session, pair)
     for agent in agents:
         # print('*****', agent.name)
+        
         signals = agent.margin_signals(session, df, pair)
     
         price = df.at[len(df)-1, 'close']
-        st = df.at[len(df)-1, 'st']
-        inval_dist = signals.get('inval')
-        stp = funcs.calc_stop(st, session.spreads.get(pair), price)
-        risk = abs((price - stp) / price)
-        size_l, usdt_size_l, size_s, usdt_size_s = funcs.get_size(agent, price, session.bal, risk)
+        if signals.get('signal'):
+            inval = signals.get('inval')
+            inval_ratio = signals.get('inval_ratio')
+            stp = funcs.calc_stop(inval, session.spreads.get(pair), price)
+            risk = abs((price - stp) / price)
+            size_l, usdt_size_l, size_s, usdt_size_s = funcs.get_size(agent, price, session.bal, risk)
         
-        df.drop(columns=['st_loose', 'st_loose_u', 'st_loose_d', 'st', 'st_u', 'st_d'], inplace=True)
+        # reset the dataframe to avoid errors
+        df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
         
-        if st == 0:
+        if inval == 0:
             note = f'{pair} supertrend 0 error, skipping pair'
             print(note)
             push = pb.push_note(now, note)
@@ -142,7 +149,7 @@ for n, pair in enumerate(pairs):
     
 # update positions dictionary with current pair's open_risk values ------------
             real_qty = float(agent.real_pos[asset]['qty'])
-            agent.real_pos[asset].update(funcs.update_pos_M(session, asset, real_qty, inval_dist, agent.in_pos['real'], agent.in_pos['real_pfrd']))
+            agent.real_pos[asset].update(funcs.update_pos_M(session, asset, real_qty, inval_ratio, agent.in_pos['real'], agent.in_pos['real_pfrd']))
             if agent.in_pos['real_ep']:
                 agent.in_pos['real_price_delta'] = (price - agent.in_pos['real_ep']) / agent.in_pos['real_ep'] # how much has price moved since entry
             
@@ -153,7 +160,7 @@ for n, pair in enumerate(pairs):
                 
         if agent.in_pos['sim']:
             sim_qty = float(agent.sim_pos[asset]['qty'])
-            agent.sim_pos[asset].update(funcs.update_pos_M(session, asset, sim_qty, inval_dist, agent.in_pos['sim'], agent.in_pos['sim_pfrd']))
+            agent.sim_pos[asset].update(funcs.update_pos_M(session, asset, sim_qty, inval_ratio, agent.in_pos['sim'], agent.in_pos['sim_pfrd']))
             if agent.in_pos['sim_ep']:
                 agent.in_pos['sim_price_delta'] = (price - agent.in_pos['sim_ep']) / agent.in_pos['sim_ep']
             
@@ -213,7 +220,7 @@ for n, pair in enumerate(pairs):
                 sim_reason = 'not_enough_usdt'
             
             try:
-                omf.open_long(session, agent, pair, size_l, stp, inval_dist, sim_reason)
+                omf.open_long(session, agent, pair, size_l, stp, inval_ratio, sim_reason)
             except BinanceAPIException as e:
                 print(f'problem with open_long order for {pair}')
                 print(e)
@@ -222,7 +229,7 @@ for n, pair in enumerate(pairs):
         
         elif signals.get('signal') == 'tp_long':
             try:
-                omf.tp_long(session, agent, pair, stp, inval_dist)
+                omf.tp_long(session, agent, pair, stp, inval_ratio)
             except BinanceAPIException as e:
                 print(f'problem with tp_long order for {pair}')
                 print(e)
@@ -287,7 +294,7 @@ for n, pair in enumerate(pairs):
                 sim_reason = 'not_enough_usdt'
             
             try:
-                omf.open_short(session, agent, pair, size_s, stp, inval_dist, sim_reason)
+                omf.open_short(session, agent, pair, size_s, stp, inval_ratio, sim_reason)
             except BinanceAPIException as e:
                 print(f'problem with open_short order for {pair}')
                 print(e)
@@ -296,7 +303,7 @@ for n, pair in enumerate(pairs):
         
         elif signals.get('signal') == 'tp_short':
             try:
-                omf.tp_short(session, agent, pair, stp, inval_dist)
+                omf.tp_short(session, agent, pair, stp, inval_ratio)
             except BinanceAPIException as e:
                 print(f'problem with tp_short order for {pair}')
                 print(e)
@@ -317,7 +324,7 @@ for n, pair in enumerate(pairs):
         agent.tp_signals(asset)
         if agent.in_pos['real'] == 'long' or agent.in_pos['sim'] == 'long':
             try:
-                omf.tp_long(session, agent, pair, stp, inval_dist)
+                omf.tp_long(session, agent, pair, stp, inval_ratio)
             except BinanceAPIException as e:
                 print(f'problem with tp_long order for {pair}')
                 print(e)
@@ -325,7 +332,7 @@ for n, pair in enumerate(pairs):
                 continue
         elif agent.in_pos['real'] == 'short' or agent.in_pos['sim'] == 'short':
             try:
-                omf.tp_short(session, agent, pair, stp, inval_dist)
+                omf.tp_short(session, agent, pair, stp, inval_ratio)
             except BinanceAPIException as e:
                 print(f'problem with tp_short order for {pair}')
                 print(e)

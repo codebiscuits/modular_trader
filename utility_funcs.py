@@ -342,16 +342,21 @@ def count_trades(counts: dict) -> str:
     er.start()
     
     count_list = []
-    if counts.get("stop_count"):
-        count_list.append(f'stopped: {counts.get("stop_count")}') 
-    if counts.get("open_count"):
-        count_list.append(f'opened: {counts.get("open_count")}') 
-    if counts.get("add_count"):
-        count_list.append(f'added: {counts.get("add_count")}') 
-    if counts.get("tp_count"):
-        count_list.append(f'tped: {counts.get("tp_count")}') 
-    if counts.get("close_count"):
-        count_list.append(f'closed: {counts.get("close_count")}') 
+    stops = counts["real_stop_long"] + counts["real_stop_short"]
+    if stops:
+        count_list.append(f'stopped: {stops}') 
+    opens = counts["real_open_long"] + counts["real_open_short"]
+    if opens:
+        count_list.append(f'opened: {opens}') 
+    adds = counts["real_add_long"] + counts["real_add_short"]
+    if adds:
+        count_list.append(f'added: {adds}') 
+    tps = counts["real_tp_long"] + counts["real_tp_short"]
+    if tps:
+        count_list.append(f'tped: {tps}') 
+    closes = counts["real_close_long"] + counts["real_close_short"]
+    if closes:
+        count_list.append(f'closed: {closes}') 
     if count_list:
         counts_str = '\n' + ', '.join(count_list)
     else:
@@ -513,10 +518,11 @@ def recent_perf_str(session, agent) -> str:
         
         d = -1 # default value
         pnls = {1:d, 2:d, 3:d, 4:d, 5:d}
-        if bal_data and (len(bal_data) >= 5):
+        if bal_data:
             lookup = f'realised_pnl_{direction}' if state == 'real' else f'sim_r_pnl_{direction}'
-            for i in range(1, 6):
-                pnls[i] = json.loads(bal_data[-1*i]).get(lookup, 7)
+            max_i = min(6, len(bal_data))
+            for i in range(1, max_i):
+                pnls[i] = json.loads(bal_data[-1*i]).get(lookup)
         
         score = 0
         if pnls.get(1) > 0:
@@ -590,7 +596,8 @@ def scanner_summary(session, agents: list) -> None:
     above_ema = len(session.above_200_ema)
     below_ema = len(session.below_200_ema)
     ema_str = f'above ema: {above_ema}/{above_ema + below_ema}'
-    final_msg = f'{live_str} {ema_str}\n-'
+    mkt_bench = session.benchmark
+    final_msg = f"{live_str} {ema_str}\nmkt perf 1w {round(mkt_bench.get('market_1w')*100, 2)}%\n-"
     
     for agent in agents:
         or_list = [v.get('or_$') for v in agent.real_pos.values() if v.get('or_$')]
@@ -603,9 +610,14 @@ def scanner_summary(session, agents: list) -> None:
         count_str = count_trades(agent.counts_dict)
         perf_str = recent_perf_str(session, agent)
         agent_bench = agent.benchmark
-        mkt_bench = session.benchmark
-        bench_str = f"1w perf: strat {round(agent_bench.get('strat_1w')*100, 2)}%, mkt {round(mkt_bench.get('market_1m')*100, 2)}%"
-        agent_msg = f'\n{agent.name}\n{perf_str}\npositions {num_open_positions}, exposure {vol_exp:.2f}% {count_str}\n{bench_str}\n-'
+        bench_str = f"1w strat perf: {round(agent_bench.get('strat_1w')*100, 2)}%"
+        agent_msg = f'\n{agent.name}\n{perf_str}\n{bench_str}\n-'
+        exp_str = f"\npositions {num_open_positions}, exposure {vol_exp:.2f}%"
+        if num_open_positions or (vol_exp > 1):
+            agent_msg += exp_str
+        agent_msg += f"\n{count_str}"
+        if abs(agent_bench.get('strat_1w')*100) > 1:
+            agent_msg += bench_str
         final_msg += agent_msg
     
     print(f'-\n{title}\n{final_msg}')
