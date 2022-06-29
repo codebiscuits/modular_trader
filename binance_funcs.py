@@ -479,10 +479,13 @@ def prepare_ohlc(session, pair: str) -> pd.DataFrame:
     len_mult = {'1h': 1, '2h': 2, '4h': 4, '6h': 6, '8h': 8, '12h': 12, '1d': 24, '3d': 72, '1w': 168}
     max_len = (session.max_length + 1) * len_mult[session.tf]
     
+    if len(df) > 17520:  # 17520 is 2 year's worth of 1h periods
+        df = df.tail(17520)
+        df.reset_index(drop=True, inplace=True)
+    df.to_pickle(filepath)
     if len(df) > max_len:  # 17520 is 2 year's worth of 1h periods
         df = df.tail(max_len)
         df.reset_index(drop=True, inplace=True)
-    df.to_pickle(filepath)
     
     df = df.resample(session.tf.upper(), on='timestamp', 
                      offset=session.offset).agg({'open': 'first',
@@ -491,7 +494,7 @@ def prepare_ohlc(session, pair: str) -> pd.DataFrame:
                                                  'close': 'last',
                                                  'volume': 'sum'})
     if len(df) > session.max_length:
-        # print(f"{pair} dataframe has {len(df)} bars, trimming to {session.max_length}")
+        # print(f"{pair} dataframe has {len(df)} bars, trimming to {ohlc_len}")
         df = df.tail(session.max_length)
     # drop=False because we want to keep the timestamp column
     df.reset_index(inplace=True)
