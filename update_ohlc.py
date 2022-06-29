@@ -19,8 +19,10 @@ live = pi2path.exists()
 
 if live:
     print('-:-' * 10, ' running update_ohlc ', '-:-' * 10)
+    ohlc_data = Path('/media/coding/ohlc_binance_1h')
 else:
     print('*** Warning: Not Live ***')
+    ohlc_data = Path('/home/ross/Documents/backtester_2021/bin_ohlc')
 
 start = time.perf_counter()
 
@@ -28,7 +30,22 @@ pairs = funcs.get_pairs()
 
 for pair in pairs:
     if not pair in not_pairs:
-        df = funcs.prepare_ohlc(pair, live)
+        filepath = Path(f'{ohlc_data}/{pair}.pkl')
+        if filepath.exists():
+            df = pd.read_pickle(filepath)
+            if len(df) > 2:
+                df = df.iloc[:-1, :]
+                df = funcs.update_ohlc(pair, '1h', df)
+            
+        else:
+            df = funcs.get_ohlc(pair, '1h', '1 year ago UTC')
+            print(f'downloaded {pair} from scratch')
+        
+        max_len = 17520
+        if len(df) > max_len:  # 17520 is 2 year's worth of 1h periods
+            df = df.tail(max_len)
+            df.reset_index(drop=True, inplace=True)
+        df.to_pickle(filepath)
 
 end = time.perf_counter()
 all_time = end - start
