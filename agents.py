@@ -32,7 +32,7 @@ class Agent():
     
     # presets = {1: {'timeframe': '4h', 'tf_offset': None}}
     
-    def __init__(self, session, preset):
+    def __init__(self, session):
         t = Timer('agent init')
         t.start()
         self.live = session.live
@@ -596,17 +596,17 @@ class Agent():
             if bal_data and last.get(f'{switch}_open_pnl_{direction[0]}'):
                 prev_open_pnl = last.get(f'{switch}_open_pnl_{direction[0]}')
                 curr_open_pnl = self.open_pnl(direction, switch)
-                print(f"{switch} open pnl: {curr_open_pnl:.1f}")
-                bal_change_pct = 100 * (curr_open_pnl - prev_open_pnl) / prev_open_pnl
-                self.open_pnl_changes[switch] = bal_change_pct
-                print(f"{switch} {direction} open pnl change: {bal_change_pct:.2f}%")
+                # print(f"{switch} open pnl: {curr_open_pnl:.1f}")
+                pnl_change_pct = 100 * (curr_open_pnl - prev_open_pnl) / prev_open_pnl
+                self.open_pnl_changes[switch] = pnl_change_pct
+                # print(f"{switch} {direction} open pnl change: {pnl_change_pct:.2f}%")
             elif bal_data:
                 prev_bal = last.get('balance')
-                bal_change_pct = 100 * (self.bal - prev_bal) / prev_bal
-                print(f"bal change: {bal_change_pct:.2f}%")
+                pnl_change_pct = 100 * (self.bal - prev_bal) / prev_bal
+                # print(f"bal change: {pnl_change_pct:.2f}%")
             else:
-                bal_change_pct = 0
-                print(f"real open pnl change: {bal_change_pct}")
+                pnl_change_pct = 0
+                # print(f"real open pnl change: {pnl_change_pct}")
             
             lookup = f'realised_pnl_{direction}' if switch == 'real' else f'sim_r_pnl_{direction}'
             pnls = {}
@@ -618,9 +618,9 @@ class Agent():
             
             score_1 = 0
             score_2 = 0
-            if bal_change_pct > 0.1:
+            if pnl_change_pct > 0.1:
                 score_1 += 5
-            elif bal_change_pct < -0.1:
+            elif pnl_change_pct < -0.1:
                 score_1 -= 5
             if pnls.get(1) > 0:
                 score_2 += 4
@@ -639,19 +639,20 @@ class Agent():
             elif pnls.get(4) < 0:
                 score_2 -= 1
             
-            print('\n')
+            # print('\n')
             
-            return score_1, score_2
+            return score_1, score_2, pnls
         
-        print(f'\n- score accum {direction} -')
-        real_score_1, real_score_2 = score_accum(direction, 'real')
-        sim_score_1, sim_score_2 = score_accum(direction, 'sim')
-        print(f"set_fixed_risk: real_score {real_score_1 + real_score_2}, sim_score {sim_score_1 + sim_score_2}")
+        real_score_1, real_score_2, real_pnls = score_accum(direction, 'real')
+        sim_score_1, sim_score_2, sim_pnls = score_accum(direction, 'sim')
+        print(f"set_fixed_risk {direction}: real_score {real_score_1 + real_score_2}, sim_score {sim_score_1 + sim_score_2}")
         if self.open_trades and real_score_2:
             score = real_score_1 + real_score_2
+            pnls = real_pnls
             print('real score chosen')
         else:
             score = sim_score_1 + sim_score_2
+            pnls = sim_pnls
             print('sim score chosen')
         
         if score == 15:
@@ -671,6 +672,8 @@ class Agent():
             title = f'{now} {self.name}'
             note = f'fixed risk adjusted from {round(fr_prev*10000, 1)}bps to {round(fr*10000, 1)}bps'
             pb.push_note(title, note)
+            print(note)
+            print(f"calculated score: {score}, pnls: {pnls}")
         o.stop()
         return round(fr, 5)
     
@@ -898,29 +901,15 @@ class Agent():
 class DoubleST(Agent):
     '''200EMA and regular supertrend for bias with tight supertrend for entries/exits'''
     
-    presets = {1: {'timeframe': '4h', 'tf_offset': None, 'var1': 3, 'var2': 1.0}, 
-               2: {'timeframe': '4h', 'tf_offset': None, 'var1': 3, 'var2': 1.2}, 
-               3: {'timeframe': '4h', 'tf_offset': None, 'var1': 3, 'var2': 1.4}, 
-               4: {'timeframe': '4h', 'tf_offset': None, 'var1': 3, 'var2': 1.6}, 
-               5: {'timeframe': '4h', 'tf_offset': None, 'var1': 3, 'var2': 1.8}, 
-               6: {'timeframe': '4h', 'tf_offset': None, 'var1': 3, 'var2': 2.0}, 
-               7: {'timeframe': '4h', 'tf_offset': None, 'var1': 5, 'var2': 1.0}, 
-               8: {'timeframe': '4h', 'tf_offset': None, 'var1': 5, 'var2': 1.6}, 
-               9: {'timeframe': '4h', 'tf_offset': None, 'var1': 5, 'var2': 2.2}, 
-               10: {'timeframe': '4h', 'tf_offset': None, 'var1': 5, 'var2': 2.8}, 
-               11: {'timeframe': '4h', 'tf_offset': None, 'var1': 5, 'var2': 3.4}, 
-               12: {'timeframe': '4h', 'tf_offset': None, 'var1': 5, 'var2': 4.0}, 
-               }
-    
-    def __init__(self, session, preset):
-        self.tf = self.presets[preset]['timeframe']
-        self.offset = self.presets[preset]['tf_offset']
-        self.mult1 = self.presets[preset]['var1']
-        self.mult2 = self.presets[preset]['var2']
-        self.name = f'{self.tf} dst {self.mult1}-{self.mult2}'
-        self.id = f"double_st_{'_'.join([str(arg) for arg in self.presets[preset].values()])}"
+    def __init__(self, session, mult1: float, mult2: float):
+        # self.tf = session.tf
+        # self.offset = session.offset
+        self.mult1 = mult1
+        self.mult2 = mult2
+        self.name = f'{session.tf} dst {self.mult1}-{self.mult2}'
+        self.id = f"double_st_{session.tf}_{session.offset}_{self.mult1}_{self.mult2}"
         print(f'\nInitialising {self.name}')
-        Agent.__init__(self, session, preset)
+        Agent.__init__(self, session)
     
     def spot_signals(self, session, df: pd.DataFrame, pair: str) -> dict:
         '''generates spot buy and sell signals based on 2 supertrend indicators
@@ -969,6 +958,7 @@ class DoubleST(Agent):
         ind.supertrend_new(df, 10, self.mult2)
     
         
+        
         bullish_ema = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'ema200']
         bearish_ema = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'ema200']
         bullish_loose = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st_loose']
@@ -1001,7 +991,7 @@ class DoubleST(Agent):
             inval = df.at[len(df)-1, 'st']
             inval_ratio = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'st']) # current price proportional to invalidation price
         else:
-            inval = None
+            inval = 0
             inval_ratio = 100000
         k.stop()
         return {'signal': signal, 'inval': inval, 'inval_ratio': inval_ratio}
@@ -1010,21 +1000,15 @@ class EMACross(Agent):
     '''Simple EMA cross strategy with a longer-term EMA to set bias and a 
     trailing stop based on ATR bands'''
     
-    presets = {1: {'timeframe': '4h', 'tf_offset': None, 'var1': 12, 'var2': 21}, 
-               2: {'timeframe': '4h', 'tf_offset': None, 'var1': 50, 'var2': 100}, 
-               3: {'timeframe': '4h', 'tf_offset': None, 'var1': 50, 'var2': 200}, 
-               4: {'timeframe': '4h', 'tf_offset': None, 'var1': 100, 'var2': 200},
-               }
-    
-    def __init__(self, session, preset):
-        self.tf = self.presets[preset]['timeframe']
-        self.offset = self.presets[preset]['tf_offset']
-        self.lb1 = self.presets[preset]['var1']
-        self.lb2 = self.presets[preset]['var2']
-        self.name = f'{self.tf} emacross {self.lb1}-{self.lb2}'
-        self.id = f"ema_cross_{'_'.join([str(arg) for arg in self.presets[preset].values()])}"
+    def __init__(self, session, lookback_1, lookback_2):
+        # self.tf = session.tf
+        # self.offset = session.offset
+        self.lb1 = lookback_1
+        self.lb2 = lookback_2
+        self.name = f'{session.tf} emacross {self.lb1}-{self.lb2}'
+        self.id = f"ema_cross_{session.tf}_{session.offset}_{self.lb1}_{self.lb2}"
         print(f'\nInitialising {self.name}')
-        Agent.__init__(self, session, preset)
+        Agent.__init__(self, session)
         
     
     def margin_signals(self, session, df: pd.DataFrame, pair: str) -> dict:
@@ -1036,7 +1020,7 @@ class EMACross(Agent):
         
         fast_ema_str = f"ema{self.lb1}"
         slow_ema_str = f"ema{self.lb2}"
-        bias_ema_str = f"{self.tf}ema{self.lookback_limit}"
+        bias_ema_str = f"{session.tf}ema{self.lookback_limit}"
         
         if bias_ema_str not in df.columns:
             df[bias_ema_str] = df.close.ewm(self.lookback_limit).mean()
@@ -1102,21 +1086,15 @@ class EMACrossHMA(Agent):
     '''Simple EMA cross strategy with a longer-term HMA to set bias more 
     responsively and a trailing stop based on ATR bands'''
     
-    presets = {1: {'timeframe': '4h', 'tf_offset': None, 'var1': 12, 'var2': 21}, 
-               2: {'timeframe': '4h', 'tf_offset': None, 'var1': 50, 'var2': 100}, 
-               3: {'timeframe': '4h', 'tf_offset': None, 'var1': 50, 'var2': 200}, 
-               4: {'timeframe': '4h', 'tf_offset': None, 'var1': 100, 'var2': 200},
-               }
-    
-    def __init__(self, session, preset):
-        self.tf = self.presets[preset]['timeframe']
-        self.offset = self.presets[preset]['tf_offset']
-        self.lb1 = self.presets[preset]['var1']
-        self.lb2 = self.presets[preset]['var2']
-        self.name = f'{self.tf} emaxhma {self.lb1}-{self.lb2}'
-        self.id = f"ema_cross_hma_{'_'.join([str(arg) for arg in self.presets[preset].values()])}"
+    def __init__(self, session, lookback_1, lookback_2):
+        # self.tf = session.tf
+        # self.offset = session.offset
+        self.lb1 = lookback_1
+        self.lb2 = lookback_2
+        self.name = f'{session.tf} emaxhma {self.lb1}-{self.lb2}'
+        self.id = f"ema_cross_hma_{session.tf}_{session.offset}_{self.lb1}_{self.lb2}"
         print(f'\nInitialising {self.name}')
-        Agent.__init__(self, session, preset)
+        Agent.__init__(self, session)
         
     
     def margin_signals(self, session, df: pd.DataFrame, pair: str) -> dict:
@@ -1128,7 +1106,7 @@ class EMACrossHMA(Agent):
         
         fast_ema_str = f"ema{self.lb1}"
         slow_ema_str = f"ema{self.lb2}"
-        bias_hma_str = f"{self.tf}hma{self.lookback_limit}"
+        bias_hma_str = f"{session.tf}hma{self.lookback_limit}"
         
         if bias_hma_str not in df.columns:
             df[bias_hma_str] = ind.hma(df.close, self.lookback_limit)

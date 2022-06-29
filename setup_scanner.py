@@ -27,373 +27,374 @@ pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
-all_start = time.perf_counter()
 
 
-# parser = argparse.ArgumentParser()
-# parser.add_argument('strat', metavar='strategy', type=str, 
-#                     help='choose the strategy to run', 
-#                     required = True)
-# parser.add_argument('tf', metavar='timeframe', type=str, 
-#                     help='choose from 1h, 4h, 6h, 12h, 1d', 
-#                     required = True)
-# parser.add_argument('param_1', metavar='parameter 1', type=int, 
-#                     help='input the value for the first parameter', 
-#                     required = True)
-# parser.add_argument('param_2', metavar='parameter 2', type=float, 
-#                     help='input the value for the second parameter', 
-#                     required = False)
-# parser.add_argument('param_3', metavar='parameter 3', type=float, 
-#                     help='input the value for the third parameter', 
-                    # required = False)
-# args = parser.parse_args()
+def setup_scan(timeframe, offset):
 
-
-# session = strats.RSI_ST_EMA(4, 45, 96)
-session = sessions.MARGIN_SESSION()
-funcs.update_prices(session)
-pprint(session.usdt_bal)
-agent_1 = DoubleST(session, 1) # '4h', None, 3, 1.0
-agent_2 = DoubleST(session, 3) # '4h', None, 3, 1.4
-agent_3 = DoubleST(session, 5) # '4h', None, 3, 1.8
-agent_4 = DoubleST(session, 9) # '4h', None, 5, 2.2
-agent_5 = DoubleST(session, 10) # '4h', None, 5, 2.8
-agent_6 = DoubleST(session, 11) # '4h', None, 5, 3.4
-agent_7 = EMACross(session, 1) # '4h', None, 12, 21
-agent_8 = EMACrossHMA(session, 1) # '4h', None, 12, 21
-agents = [agent_1, agent_2, agent_3, agent_4, agent_5, agent_6, agent_7, agent_8]
-
-session.name = ' | '.join([n.name for n in agents])
-
-# compile and sort list of pairs to loop through ------------------------------
-all_pairs = funcs.get_pairs(market='CROSS')
-shuffle(all_pairs)
-positions = []
-for agent in agents:
-    posis = list(agent.real_pos.keys())
-    positions.extend(posis)
-pairs_in_pos = [p + 'USDT' for p in set(positions) if p != 'USDT']
-print(f"{pairs_in_pos = }")
-other_pairs = [p for p in all_pairs if (not p in pairs_in_pos) and (not p in not_pairs)]
-pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked first
-
-# pairs = pairs[:10] ############# delete when testing is finished #############
-
-print(f"\nCurrent time: {session.now_start}, {session.name}\n")
-funcs.top_up_bnb_M(15)
-session.spreads = funcs.binance_spreads('USDT') # dict
-
-for agent in agents:
-    print(f"{agent.name} fr long: {(agent.fixed_risk_l*10000):.2f}bps, \
-fr short: {(agent.fixed_risk_s*10000):.2f}bps")
-    agent.real_pos['USDT'] = session.usdt_bal
-    agent.starting_ropnl_l = agent.open_pnl('long', 'real')
-    agent.starting_sopnl_l = agent.open_pnl('long', 'sim')
-    agent.starting_ropnl_s = agent.open_pnl('short', 'real')
-    agent.starting_sopnl_s = agent.open_pnl('short', 'sim')
-    
-    if agent.max_positions > 20:
-        print(f'max positions: {agent.max_positions}')
-    agent.calc_tor()
-
-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
-
-for n, pair in enumerate(pairs):
+    all_start = time.perf_counter()
+    session = sessions.MARGIN_SESSION(timeframe, offset, 0.0001)
     funcs.update_prices(session)
-    # print(pair, 'main loop')
-    asset = pair[:-1*len(session.quote_asset)]
+    pprint(session.usdt_bal)
+    
+    agents = [
+        DoubleST(session, 3, 1.0), 
+        DoubleST(session, 3, 1.4), 
+        DoubleST(session, 3, 1.8), 
+        DoubleST(session, 5, 2.2), 
+        DoubleST(session, 5, 2.8), 
+        DoubleST(session, 5, 3.4), 
+        EMACross(session, 12, 21), 
+        EMACrossHMA(session, 12, 21)
+        ] 
+    # agents = [agent_1, agent_2, agent_3, agent_4, agent_5, agent_6, agent_7, agent_8]
+    
+    session.name = ' | '.join([n.name for n in agents])
+    
+    # compile and sort list of pairs to loop through ------------------------------
+    all_pairs = funcs.get_pairs(market='CROSS')
+    shuffle(all_pairs)
+    positions = []
     for agent in agents:
-        agent.init_in_pos(pair)    
-    df = funcs.prepare_ohlc(pair, session.live)
+        posis = list(agent.real_pos.keys())
+        positions.extend(posis)
+    pairs_in_pos = [p + 'USDT' for p in set(positions) if p != 'USDT']
+    print(f"{pairs_in_pos = }")
+    other_pairs = [p for p in all_pairs if (not p in pairs_in_pos) and (not p in not_pairs)]
+    pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked first
     
-    # if pair is too new for all agents, skip it
-    too_new = 0
+    # pairs = pairs[:10] ############# delete when testing is finished #############
+    
+    print(f"\nCurrent time: {session.now_start}, {session.name}\n")
+    funcs.top_up_bnb_M(15)
+    session.spreads = funcs.binance_spreads('USDT') # dict
+    
     for agent in agents:
-        if agent.too_new(df):
-            too_new += 1
-    if too_new == len(agents):
-        continue
-    
-    if len(df) > session.max_length:
-        df = df.tail(session.max_length)
-        df.reset_index(drop=True, inplace=True)
-    
-    now = datetime.now().strftime('%d/%m/%y %H:%M')
-    
-# generate signals ------------------------------------------------------------
-    signals = {}
-    mir = uf.max_init_risk(agent.num_open_positions, agent.target_risk)
-    usdt_depth_l, usdt_depth_s = funcs.get_depth(session, pair)
-    for agent in agents:
-        # print('*****', agent.name)
+        print(f"{agent.name} fr long: {(agent.fixed_risk_l*10000):.2f}bps, \
+    fr short: {(agent.fixed_risk_s*10000):.2f}bps")
+        agent.real_pos['USDT'] = session.usdt_bal
+        agent.starting_ropnl_l = agent.open_pnl('long', 'real')
+        agent.starting_sopnl_l = agent.open_pnl('long', 'sim')
+        agent.starting_ropnl_s = agent.open_pnl('short', 'real')
+        agent.starting_sopnl_s = agent.open_pnl('short', 'sim')
         
-        signals = agent.margin_signals(session, df, pair)
-    
-        price = df.at[len(df)-1, 'close']
-        if signals.get('signal'):
-            inval = signals.get('inval')
-            inval_ratio = signals.get('inval_ratio')
-            stp = funcs.calc_stop(inval, session.spreads.get(pair), price)
-            risk = abs((price - stp) / price)
-            size_l, usdt_size_l, size_s, usdt_size_s = funcs.get_size(agent, price, session.bal, risk)
-        
-        # reset the dataframe to avoid errors
-        df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
-        
-        if inval == 0:
-            note = f'{pair} supertrend 0 error, skipping pair'
-            print(note)
-            push = pb.push_note(now, note)
-            continue
-    
-# update positions dictionary with current pair's open_risk values ------------
-            real_qty = float(agent.real_pos[asset]['qty'])
-            agent.real_pos[asset].update(funcs.update_pos_M(session, asset, real_qty, inval_ratio, agent.in_pos['real'], agent.in_pos['real_pfrd']))
-            if agent.in_pos['real_ep']:
-                agent.in_pos['real_price_delta'] = (price - agent.in_pos['real_ep']) / agent.in_pos['real_ep'] # how much has price moved since entry
-            
-            # check if price has moved beyond reach of normal close signal
-            if agent.real_pos[asset]['or_R'] < 0:
-                dir = agent.in_pos['real']
-                signals['signal'] = f"close_{dir}"
-                
-        if agent.in_pos['sim']:
-            sim_qty = float(agent.sim_pos[asset]['qty'])
-            agent.sim_pos[asset].update(funcs.update_pos_M(session, asset, sim_qty, inval_ratio, agent.in_pos['sim'], agent.in_pos['sim_pfrd']))
-            if agent.in_pos['sim_ep']:
-                agent.in_pos['sim_price_delta'] = (price - agent.in_pos['sim_ep']) / agent.in_pos['sim_ep']
-            
-            # check if price has moved beyond reach of normal close signal
-            if agent.sim_pos[asset]['or_R'] < 0:
-                dir = agent.in_pos['sim']
-                signals['signal'] = f"close_{dir}"
-        
-            
-# margin order execution ------------------------------------------------------
-        if signals.get('signal') == 'open_long':
-            # risk = (price - stp) / price
-            # mir = uf.max_init_risk(agent.num_open_positions, agent.target_risk)
-            # size, usdt_size = funcs.get_size(price, agent.fixed_risk_l, session.bal, risk)
-            # usdt_depth = funcs.get_depth(pair, 'buy', session.max_spread)
-            
-            if usdt_size_l > usdt_depth_l > (usdt_size_l / 2): # only trim size if books are a bit too thin
-                agent.counts_dict['books_too_thin'] += 1
-                trim_size = f'{now} {pair} books too thin, reducing size from {usdt_size_l:.3} to {usdt_depth_l:.3}'
-                print(trim_size)
-                usdt_size_l = usdt_depth_l
-            sim_reason = None
-            if usdt_size_l < 30:
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['too_small'] += 1
-                sim_reason = 'too_small'
-            elif risk > mir:
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['too_risky'] += 1
-                sim_reason = 'too_risky'
-            elif usdt_depth_l == 0:
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['too_much_spread'] += 1
-                sim_reason = 'too_much_spread'
-            elif usdt_depth_l < usdt_size_l:
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['books_too_thin'] += 1
-                sim_reason = 'books_too_thin'
-            
-    # check total open risk and close profitable positions if necessary -----------
-            omf.reduce_risk_M(session, agent)
-            agent.real_pos['USDT'] = session.usdt_bal
-                
-    # make sure there aren't too many open positions now --------------------------
-            agent.calc_tor()
-            if agent.num_open_positions >= agent.max_positions:
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['too_many_pos'] += 1
-                sim_reason = 'too_many_pos'
-            elif agent.total_open_risk > agent.total_r_limit:
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['too_much_or'] += 1
-                sim_reason = 'too_much_or'
-            elif float(agent.real_pos['USDT']['qty']) < usdt_size_l:
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['not_enough_usdt'] += 1
-                sim_reason = 'not_enough_usdt'
-            
-            try:
-                omf.open_long(session, agent, pair, size_l, stp, inval_ratio, sim_reason)
-            except BinanceAPIException as e:
-                print(f'problem with open_long order for {pair}')
-                print(e)
-                pb.push_note(now, f'exeption during {pair} open_long order')
-                continue
-        
-        elif signals.get('signal') == 'tp_long':
-            try:
-                omf.tp_long(session, agent, pair, stp, inval_ratio)
-            except BinanceAPIException as e:
-                print(f'problem with tp_long order for {pair}')
-                print(e)
-                pb.push_note(now, f'exeption during {pair} tp_long order')
-                continue
-        
-        elif signals.get('signal') == 'close_long':
-            try:
-                omf.close_long(session, agent, pair)
-            except BinanceAPIException as e:
-                print(f'problem with close_long order for {pair}')
-                print(e)
-                pb.push_note(now, f'exeption during {pair} close_long order')
-                continue
-        
-        elif signals.get('signal') == 'open_short':
-            # risk = (stp - price) / price
-            # mir = uf.max_init_risk(agent.num_open_positions, agent.target_risk)
-            # size, usdt_size = funcs.get_size(price, agent.fixed_risk_s, session.bal, risk)
-            # usdt_depth = funcs.get_depth(pair, 'sell', session.max_spread)
-            
-            if usdt_size_s > usdt_depth_s > (usdt_size_s / 2): # only trim size if books are a bit too thin
-                agent.counts_dict['books_too_thin'] += 1
-                trim_size = f'{now} {pair} books too thin, reducing size from {usdt_size_s:.3} to {usdt_depth_s:.3}'
-                print(trim_size)
-                usdt_size_s = usdt_depth_s
-            sim_reason = None
-            if usdt_size_s < 30:
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['too_small'] += 1
-                sim_reason = 'too_small'
-            elif risk > mir:
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['too_risky'] += 1
-                sim_reason = 'too_risky'
-            elif usdt_depth_s == 0:
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['too_much_spread'] += 1
-                sim_reason = 'too_much_spread'
-            elif usdt_depth_s < usdt_size_s:
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['books_too_thin'] += 1
-                sim_reason = 'books_too_thin'
-            
-    # check total open risk and close profitable positions if necessary -----------
-            omf.reduce_risk_M(session, agent)
-            agent.real_pos['USDT'] = session.usdt_bal
-                
-    # make sure there aren't too many open positions now --------------------------
-            agent.calc_tor()
-            if agent.num_open_positions >= agent.max_positions:
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['too_many_pos'] += 1
-                sim_reason = 'too_many_pos'
-            elif agent.total_open_risk > agent.total_r_limit:
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['too_much_or'] += 1
-                sim_reason = 'too_much_or'
-            elif float(agent.real_pos['USDT']['qty']) < usdt_size_s:
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['not_enough_usdt'] += 1
-                sim_reason = 'not_enough_usdt'
-            
-            try:
-                omf.open_short(session, agent, pair, size_s, stp, inval_ratio, sim_reason)
-            except BinanceAPIException as e:
-                print(f'problem with open_short order for {pair}')
-                print(e)
-                pb.push_note(now, f'exeption during {pair} open_short order')
-                continue
-        
-        elif signals.get('signal') == 'tp_short':
-            try:
-                omf.tp_short(session, agent, pair, stp, inval_ratio)
-            except BinanceAPIException as e:
-                print(f'problem with tp_short order for {pair}')
-                print(e)
-                pb.push_note(now, f'exeption during {pair} tp_short order')
-                continue
-        
-        elif signals.get('signal') == 'close_short':
-            try:
-                omf.close_short(session, agent, pair)
-            except BinanceAPIException as e:
-                print(f'problem with close_short order for {pair}')
-                print(e)
-                pb.push_note(now, f'exeption during {pair} close_short order')
-                continue
-        
-    
-# calculate open risk and take profit if necessary ----------------------------
-        agent.tp_signals(asset)
-        if agent.in_pos['real'] == 'long' or agent.in_pos['sim'] == 'long':
-            try:
-                omf.tp_long(session, agent, pair, stp, inval_ratio)
-            except BinanceAPIException as e:
-                print(f'problem with tp_long order for {pair}')
-                print(e)
-                pb.push_note(now, f'exeption during {pair} tp_long order')
-                continue
-        elif agent.in_pos['real'] == 'short' or agent.in_pos['sim'] == 'short':
-            try:
-                omf.tp_short(session, agent, pair, stp, inval_ratio)
-            except BinanceAPIException as e:
-                print(f'problem with tp_short order for {pair}')
-                print(e)
-                pb.push_note(now, f'exeption during {pair} tp_short order')
-                continue
-        
+        if agent.max_positions > 20:
+            print(f'max positions: {agent.max_positions}')
         agent.calc_tor()
-
-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#   
+    
+    #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
+    #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
+    
+    for n, pair in enumerate(pairs):
+        funcs.update_prices(session)
+        # print(pair, 'main loop')
+        asset = pair[:-1*len(session.quote_asset)]
+        for agent in agents:
+            agent.init_in_pos(pair)    
+        df = funcs.prepare_ohlc(session, pair)
         
-# log all data from the session and print/push summary-------------------------
-print('\n*-*-*-*-*-*-*-*-*-*-*-*-*-*-*')
-before = session.usdt_bal
-session.get_usdt_M()
-after = session.usdt_bal
-if before != after:
-    print('USDT balance wrong')
-print('before:', before)
-print('after:', after)
-print('*-*-*-*-*-*-*-*-*-*-*-*-*-*-*\n')
-
-print('-:-' * 20)
-
-for agent in agents:
-    print(agent.name, 'summary')
-    print(f'realised real long pnl: {agent.realised_pnl_long:.1f}R, realised sim long pnl: {agent.sim_pnl_long:.1f}R')
-    print(f'realised real short pnl: {agent.realised_pnl_short:.1f}R, realised sim short pnl: {agent.sim_pnl_short:.1f}R')
-    print(f'tor: {agent.total_open_risk:.1f}')
-    print(f'or list: {[round(x, 2) for x in sorted(agent.or_list, reverse=True)]}')
-    print(f"real open pnl long: {agent.open_pnl('long', 'real'):.1f}R")
-    print(f"real open pnl short: {agent.open_pnl('short', 'real'):.1f}R")
-    print(f"sim open pnl long: {agent.open_pnl('long', 'sim'):.1f}R")
-    print(f"sim open pnl short: {agent.open_pnl('short', 'sim'):.1f}R")
-    agent.real_pos['USDT'] = session.usdt_bal
+        # if pair is too new for all agents, skip it
+        too_new = 0
+        for agent in agents:
+            if agent.too_new(df):
+                too_new += 1
+        if too_new == len(agents):
+            continue
+        
+        if len(df) > session.max_length:
+            print(f"setup_scanner line 121 {pair} df length: {len(df)}")
+            df = df.tail(session.max_length)
+            df.reset_index(drop=True, inplace=True)
+        
+        now = datetime.now().strftime('%d/%m/%y %H:%M')
+        
+    # generate signals ------------------------------------------------------------
+        signals = {}
+        mir = uf.max_init_risk(agent.num_open_positions, agent.target_risk)
+        usdt_depth_l, usdt_depth_s = funcs.get_depth(session, pair)
+        for agent in agents:
+            # print('*****', agent.name)
+            
+            signals = agent.margin_signals(session, df, pair)
+        
+            price = df.at[len(df)-1, 'close']
+            if signals.get('signal'):
+                inval = signals.get('inval')
+                inval_ratio = signals.get('inval_ratio')
+                stp = funcs.calc_stop(inval, session.spreads.get(pair), price)
+                risk = abs((price - stp) / price)
+                size_l, usdt_size_l, size_s, usdt_size_s = funcs.get_size(agent, price, session.bal, risk)
+            
+            # remove indicators to avoid errors
+            df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
+            
+            if inval == 0:
+                note = f'{pair} supertrend 0 error, skipping pair'
+                print(note)
+                pb.push_note(now, note)
+                continue
+        
+    # update positions dictionary with current pair's open_risk values ------------
+                real_qty = float(agent.real_pos[asset]['qty'])
+                agent.real_pos[asset].update(funcs.update_pos_M(session, asset, real_qty, inval_ratio, agent.in_pos['real'], agent.in_pos['real_pfrd']))
+                if agent.in_pos['real_ep']:
+                    agent.in_pos['real_price_delta'] = (price - agent.in_pos['real_ep']) / agent.in_pos['real_ep'] # how much has price moved since entry
+                
+                # check if price has moved beyond reach of normal close signal
+                if agent.real_pos[asset]['or_R'] < 0:
+                    dir = agent.in_pos['real']
+                    signals['signal'] = f"close_{dir}"
+                    
+            if agent.in_pos['sim']:
+                sim_qty = float(agent.sim_pos[asset]['qty'])
+                agent.sim_pos[asset].update(funcs.update_pos_M(session, asset, sim_qty, inval_ratio, agent.in_pos['sim'], agent.in_pos['sim_pfrd']))
+                if agent.in_pos['sim_ep']:
+                    agent.in_pos['sim_price_delta'] = (price - agent.in_pos['sim_ep']) / agent.in_pos['sim_ep']
+                
+                # check if price has moved beyond reach of normal close signal
+                if agent.sim_pos[asset]['or_R'] < 0:
+                    dir = agent.in_pos['sim']
+                    signals['signal'] = f"close_{dir}"
+            
+                
+    # margin order execution ------------------------------------------------------
+            if signals.get('signal') == 'open_long':
+                # risk = (price - stp) / price
+                # mir = uf.max_init_risk(agent.num_open_positions, agent.target_risk)
+                # size, usdt_size = funcs.get_size(price, agent.fixed_risk_l, session.bal, risk)
+                # usdt_depth = funcs.get_depth(pair, 'buy', session.max_spread)
+                
+                if usdt_size_l > usdt_depth_l > (usdt_size_l / 2): # only trim size if books are a bit too thin
+                    agent.counts_dict['books_too_thin'] += 1
+                    trim_size = f'{now} {pair} books too thin, reducing size from {usdt_size_l:.3} to {usdt_depth_l:.3}'
+                    print(trim_size)
+                    usdt_size_l = usdt_depth_l
+                sim_reason = None
+                if usdt_size_l < 30:
+                    if not agent.in_pos['sim']:
+                        agent.counts_dict['too_small'] += 1
+                    sim_reason = 'too_small'
+                elif risk > mir:
+                    if not agent.in_pos['sim']:
+                        agent.counts_dict['too_risky'] += 1
+                    sim_reason = 'too_risky'
+                elif usdt_depth_l == 0:
+                    if not agent.in_pos['sim']:
+                        agent.counts_dict['too_much_spread'] += 1
+                    sim_reason = 'too_much_spread'
+                elif usdt_depth_l < usdt_size_l:
+                    if not agent.in_pos['sim']:
+                        agent.counts_dict['books_too_thin'] += 1
+                    sim_reason = 'books_too_thin'
+                
+        # check total open risk and close profitable positions if necessary -----------
+                omf.reduce_risk_M(session, agent)
+                agent.real_pos['USDT'] = session.usdt_bal
+                    
+        # make sure there aren't too many open positions now --------------------------
+                agent.calc_tor()
+                if agent.num_open_positions >= agent.max_positions:
+                    if not agent.in_pos['sim']:
+                        agent.counts_dict['too_many_pos'] += 1
+                    sim_reason = 'too_many_pos'
+                elif agent.total_open_risk > agent.total_r_limit:
+                    if not agent.in_pos['sim']:
+                        agent.counts_dict['too_much_or'] += 1
+                    sim_reason = 'too_much_or'
+                elif float(agent.real_pos['USDT']['qty']) < usdt_size_l:
+                    if not agent.in_pos['sim']:
+                        agent.counts_dict['not_enough_usdt'] += 1
+                    sim_reason = 'not_enough_usdt'
+                
+                try:
+                    omf.open_long(session, agent, pair, size_l, stp, inval_ratio, sim_reason)
+                except BinanceAPIException as e:
+                    print(f'problem with open_long order for {pair}')
+                    print(e)
+                    pb.push_note(now, f'exeption during {pair} open_long order')
+                    continue
+            
+            elif signals.get('signal') == 'tp_long':
+                try:
+                    omf.tp_long(session, agent, pair, stp, inval_ratio)
+                except BinanceAPIException as e:
+                    print(f'problem with tp_long order for {pair}')
+                    print(e)
+                    pb.push_note(now, f'exeption during {pair} tp_long order')
+                    continue
+            
+            elif signals.get('signal') == 'close_long':
+                try:
+                    omf.close_long(session, agent, pair)
+                except BinanceAPIException as e:
+                    print(f'problem with close_long order for {pair}')
+                    print(e)
+                    pb.push_note(now, f'exeption during {pair} close_long order')
+                    continue
+            
+            elif signals.get('signal') == 'open_short':
+                # risk = (stp - price) / price
+                # mir = uf.max_init_risk(agent.num_open_positions, agent.target_risk)
+                # size, usdt_size = funcs.get_size(price, agent.fixed_risk_s, session.bal, risk)
+                # usdt_depth = funcs.get_depth(pair, 'sell', session.max_spread)
+                
+                if usdt_size_s > usdt_depth_s > (usdt_size_s / 2): # only trim size if books are a bit too thin
+                    agent.counts_dict['books_too_thin'] += 1
+                    trim_size = f'{now} {pair} books too thin, reducing size from {usdt_size_s:.3} to {usdt_depth_s:.3}'
+                    print(trim_size)
+                    usdt_size_s = usdt_depth_s
+                sim_reason = None
+                if usdt_size_s < 30:
+                    if not agent.in_pos['sim']:
+                        agent.counts_dict['too_small'] += 1
+                    sim_reason = 'too_small'
+                elif risk > mir:
+                    if not agent.in_pos['sim']:
+                        agent.counts_dict['too_risky'] += 1
+                    sim_reason = 'too_risky'
+                elif usdt_depth_s == 0:
+                    if not agent.in_pos['sim']:
+                        agent.counts_dict['too_much_spread'] += 1
+                    sim_reason = 'too_much_spread'
+                elif usdt_depth_s < usdt_size_s:
+                    if not agent.in_pos['sim']:
+                        agent.counts_dict['books_too_thin'] += 1
+                    sim_reason = 'books_too_thin'
+                
+        # check total open risk and close profitable positions if necessary -----------
+                omf.reduce_risk_M(session, agent)
+                agent.real_pos['USDT'] = session.usdt_bal
+                    
+        # make sure there aren't too many open positions now --------------------------
+                agent.calc_tor()
+                if agent.num_open_positions >= agent.max_positions:
+                    if not agent.in_pos['sim']:
+                        agent.counts_dict['too_many_pos'] += 1
+                    sim_reason = 'too_many_pos'
+                elif agent.total_open_risk > agent.total_r_limit:
+                    if not agent.in_pos['sim']:
+                        agent.counts_dict['too_much_or'] += 1
+                    sim_reason = 'too_much_or'
+                elif float(agent.real_pos['USDT']['qty']) < usdt_size_s:
+                    if not agent.in_pos['sim']:
+                        agent.counts_dict['not_enough_usdt'] += 1
+                    sim_reason = 'not_enough_usdt'
+                
+                try:
+                    omf.open_short(session, agent, pair, size_s, stp, inval_ratio, sim_reason)
+                except BinanceAPIException as e:
+                    print(f'problem with open_short order for {pair}')
+                    print(e)
+                    pb.push_note(now, f'exeption during {pair} open_short order')
+                    continue
+            
+            elif signals.get('signal') == 'tp_short':
+                try:
+                    omf.tp_short(session, agent, pair, stp, inval_ratio)
+                except BinanceAPIException as e:
+                    print(f'problem with tp_short order for {pair}')
+                    print(e)
+                    pb.push_note(now, f'exeption during {pair} tp_short order')
+                    continue
+            
+            elif signals.get('signal') == 'close_short':
+                try:
+                    omf.close_short(session, agent, pair)
+                except BinanceAPIException as e:
+                    print(f'problem with close_short order for {pair}')
+                    print(e)
+                    pb.push_note(now, f'exeption during {pair} close_short order')
+                    continue
+            
+        
+    # calculate open risk and take profit if necessary ----------------------------
+            agent.tp_signals(asset)
+            if agent.in_pos['real'] == 'long' or agent.in_pos['sim'] == 'long':
+                try:
+                    omf.tp_long(session, agent, pair, stp, inval_ratio)
+                except BinanceAPIException as e:
+                    print(f'problem with tp_long order for {pair}')
+                    print(e)
+                    pb.push_note(now, f'exeption during {pair} tp_long order')
+                    continue
+            elif agent.in_pos['real'] == 'short' or agent.in_pos['sim'] == 'short':
+                try:
+                    omf.tp_short(session, agent, pair, stp, inval_ratio)
+                except BinanceAPIException as e:
+                    print(f'problem with tp_short order for {pair}')
+                    print(e)
+                    pb.push_note(now, f'exeption during {pair} tp_short order')
+                    continue
+            
+            agent.calc_tor()
     
-    if not session.live:
-        print('\n*** real_pos ***')
-        pprint(agent.real_pos)
-        print('\n*** sim_pos ***')
-        pprint(agent.sim_pos.keys())
-        print('warning: logging directed to test_records')
+    #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
+    #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#   
+            
+    # log all data from the session and print/push summary-------------------------
+    print('\n*-*-*-*-*-*-*-*-*-*-*-*-*-*-*')
+    before = session.usdt_bal
+    session.get_usdt_M()
+    after = session.usdt_bal
+    if before != after:
+        print('USDT balance wrong')
+    print('before:', before)
+    print('after:', after)
+    print('*-*-*-*-*-*-*-*-*-*-*-*-*-*-*\n')
     
-    benchmark = uf.log(session, [agent])
-    
-    print('Counts:')
-    for k, v in agent.counts_dict.items():
-        if v:
-            print(k, v)
     print('-:-' * 20)
+    
+    for agent in agents:
+        print(agent.name, 'summary')
+        print(f'realised real long pnl: {agent.realised_pnl_long:.1f}R, realised sim long pnl: {agent.sim_pnl_long:.1f}R')
+        print(f'realised real short pnl: {agent.realised_pnl_short:.1f}R, realised sim short pnl: {agent.sim_pnl_short:.1f}R')
+        print(f'tor: {agent.total_open_risk:.1f}')
+        print(f'or list: {[round(x, 2) for x in sorted(agent.or_list, reverse=True)]}')
+        print(f"real open pnl long: {agent.open_pnl('long', 'real'):.1f}R")
+        print(f"real open pnl short: {agent.open_pnl('short', 'real'):.1f}R")
+        print(f"sim open pnl long: {agent.open_pnl('long', 'sim'):.1f}R")
+        print(f"sim open pnl short: {agent.open_pnl('short', 'sim'):.1f}R")
+        agent.real_pos['USDT'] = session.usdt_bal
+        
+        if not session.live:
+            print('\n*** real_pos ***')
+            pprint(agent.real_pos)
+            print('\n*** sim_pos ***')
+            pprint(agent.sim_pos.keys())
+            print('warning: logging directed to test_records')
+        
+        uf.log(session, [agent])
+        
+        print('Counts:')
+        for k, v in agent.counts_dict.items():
+            if v:
+                print(k, v)
+        print('-:-' * 20)
+    
+    uf.scanner_summary(session, agents)
+    
+    uf.interpret_benchmark(session, agents)
+    
+    print('-')
+    for k, v in Timer.timers.items():
+        if v > 30:
+            print(k, round(v))
+    
+    end = time.perf_counter()
+    elapsed = round(end - all_start)
+    print(f'Total time taken: {elapsed//60}m, {elapsed%60}s')
+    print('\n-------------------------------------------------------------------------------\n')
 
-uf.scanner_summary(session, agents)
+script_start = time.perf_counter()
 
-uf.interpret_benchmark(session, agents)
+z = [1, 4, 12, 24]
+hour = datetime.utcnow().hour
+scripts = [tf for tf in z if hour%tf == 0]
+d = {1: '1h', 4: '4h', 12: '12h', 24: '1d'}
 
-print('-')
-for k, v in Timer.timers.items():
-    if v > 30:
-        print(k, round(v))
+for run_tf in scripts:
+    setup_scan(d[run_tf], None)
 
-end = time.perf_counter()
-elapsed = round(end - all_start)
-print(f'Total time taken: {elapsed//60}m, {elapsed%60}s')
-print('\n-------------------------------------------------------------------------------\n')
+script_end = time.perf_counter()
+
+total_time = script_end - script_start
+print(f"Scanner finished, total time taken: {int(total_time // 60)}m {int(total_time % 60)}s")

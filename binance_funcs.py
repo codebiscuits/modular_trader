@@ -453,7 +453,7 @@ def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame) -> pd.DataFrame
     return df_new
 
 
-def prepare_ohlc(pair: str, is_live: bool, timeframe: str='4H', offset: Optional[str]=None, bars: int=2190) -> pd.DataFrame:
+def prepare_ohlc(session, pair: str) -> pd.DataFrame:
     '''checks if there is old data already, if so it loads the old data and 
     downloads an update, if not it downloads all data from scratch, then 
     resamples all data to desired timeframe'''
@@ -461,32 +461,38 @@ def prepare_ohlc(pair: str, is_live: bool, timeframe: str='4H', offset: Optional
     ds = Timer('prepare_ohlc')
     ds.start()
 
-    if is_live:
+    if session.live:
         filepath = Path(f'{ohlc_data}/{pair}.pkl')
     else:
         filepath = Path(f'/home/ross/Documents/backtester_2021/bin_ohlc/{pair}.pkl')
     if filepath.exists():
         df = pd.read_pickle(filepath)
         if len(df) > 2:
-            df = df.iloc[:-1, ]
+            df = df.iloc[:-1, :]
             df = update_ohlc(pair, '1h', df)
         
     else:
         df = get_ohlc(pair, '1h', '1 year ago UTC')
         print(f'downloaded {pair} from scratch')
 
-    if len(df) > 17520:  # 17520 is 2 year's worth of 1h periods
-        df = df.tail(17520)
+    # calculate how many 1hour bars are needed to produce 'session.max_length' bars of new timeframe
+    len_mult = {'1h': 1, '2h': 2, '4h': 4, '6h': 6, '8h': 8, '12h': 12, '1d': 24, '3d': 72, '1w': 168}
+    max_len = (session.max_length + 1) * len_mult[session.tf]
+    
+    if len(df) > max_len:  # 17520 is 2 year's worth of 1h periods
+        df = df.tail(max_len)
         df.reset_index(drop=True, inplace=True)
     df.to_pickle(filepath)
     
-    df = df.resample(timeframe, on='timestamp', offset=offset).agg({'open': 'first',
-                                                     'high': 'max',
-                                                     'low': 'min',
-                                                     'close': 'last',
-                                                     'volume': 'sum'})
-    if len(df) > bars:
-        df = df.tail(bars)
+    df = df.resample(session.tf.upper(), on='timestamp', 
+                     offset=session.offset).agg({'open': 'first',
+                                                 'high': 'max',
+                                                 'low': 'min',
+                                                 'close': 'last',
+                                                 'volume': 'sum'})
+    if len(df) > session.max_length:
+        # print(f"{pair} dataframe has {len(df)} bars, trimming to {session.max_length}")
+        df = df.tail(session.max_length)
     # drop=False because we want to keep the timestamp column
     df.reset_index(inplace=True)
     ds.stop()

@@ -14,7 +14,7 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 class MARGIN_SESSION:
     max_length = 201
     quote_asset = 'USDT'
-    fr_max = 0.0002 # at 0.0025, one agent makes good use of total balance
+    # fr_max = 0.0002
     max_spread = 0.5
     above_200_ema = set()
     below_200_ema = set()
@@ -22,9 +22,12 @@ class MARGIN_SESSION:
     symbol_info = {}
     
     
-    def __init__(self):
+    def __init__(self, timeframe, offset, fr_max):
         t = Timer('session init')
         t.start()
+        self.tf = timeframe
+        self.offset = offset
+        self.fr_max = fr_max # at 0.0025, one agent makes good use of total balance
         self.name = 'agent names here'
         self.bal = self.account_bal_M()
         self.usdt_bal = self.get_usdt_M()
