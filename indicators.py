@@ -121,105 +121,11 @@ def wma(s: pd.Series, lb: int) -> pd.Series:
     return s.rolling(lb).apply(lambda x: ((np.arange(lb)+1)*x).sum()/(np.arange(lb)+1).sum(), raw=True)
 
 def hma(s: pd.Series, lb: int) -> pd.Series:
-    '''calculates the Hull moving average on an input series. typically applied to closing prices'''
+    '''calculates the Hull moving average on an input series. typically applied to closing prices.
+    actually shortens the lookback period by its own square root so that the indicator can be 
+    calculated within the stated lookback period, because i usually want to truncate the ohlc data to 
+    save resources, so this implementation is technically a shorter HMA than it seems'''
+    lb = int(lb - (lb**0.5))
     return wma(wma(s, lb//2).multiply(2).sub(wma(s, lb)), int(np.sqrt(lb)))
 
-
-# def supertrend(high, low, close, lookback, multiplier):
-#     # ATR
-    
-#     tr1 = pd.DataFrame(high - low)
-#     tr2 = pd.DataFrame(abs(high - close.shift(1)))
-#     tr3 = pd.DataFrame(abs(low - close.shift(1)))
-#     frames = [tr1, tr2, tr3]
-#     tr = pd.concat(frames, axis = 1, join = 'inner').max(axis = 1)
-#     atr = tr.ewm(lookback).mean()
-    
-#     # H/L AVG AND BASIC UPPER & LOWER BAND
-    
-#     hl_avg = (high + low) / 2
-#     upper_band = (hl_avg + multiplier * atr).dropna()
-#     lower_band = (hl_avg - multiplier * atr).dropna()
-    
-#     # FILL DATAFRAME WITH ZEROS TO MAKE IT THE RIGHT SIZE
-    
-#     final_bands = pd.DataFrame(columns = ['upper', 'lower'])
-#     final_bands.iloc[:,0] = [x for x in upper_band - upper_band]
-#     final_bands.iloc[:,1] = final_bands.iloc[:,0]
-    
-#     # FINAL UPPER BAND
-    
-#     try:
-#         for i in range(len(final_bands)):
-#             if i == 0:
-#                 final_bands.at[i, 'upper'] = 0
-#             else:
-#                 if (upper_band[i] < final_bands.at[i-1,'upper']) | (close[i-1] > final_bands.at[i-1,'upper']):
-#                     final_bands.at[i,'upper'] = upper_band[i]
-#                 else:
-#                     final_bands.at[i,'upper'] = final_bands.at[i-1,'upper']
-#     except KeyError as e:
-#         print('key error', e)
-#         print(final_bands.head(20))
-    
-#     # FINAL LOWER BAND
-    
-#     for i in range(len(final_bands)):
-#         if i == 0:
-#             final_bands.iloc[i, 1] = 0
-#         else:
-#             if (lower_band[i] > final_bands.iloc[i-1,1]) | (close[i-1] < final_bands.iloc[i-1,1]):
-#                 final_bands.iloc[i,1] = lower_band[i]
-#             else:
-#                 final_bands.iloc[i,1] = final_bands.iloc[i-1,1]
-    
-#     # SUPERTREND
-    
-#     supertrend = pd.DataFrame(columns = [f'supertrend_{lookback}'])
-#     supertrend.iloc[:,0] = [x for x in final_bands['upper'] - final_bands['upper']]
-    
-
-    
-#     for i in range(len(supertrend)):
-#         if i == 0:
-#             supertrend.iloc[i, 0] = 0
-#         elif supertrend.iloc[i-1, 0] == final_bands.iloc[i-1, 0] and close[i] < final_bands.iloc[i, 0]:
-#             supertrend.iloc[i, 0] = final_bands.iloc[i, 0]
-            
-#         elif supertrend.iloc[i-1, 0] == final_bands.iloc[i-1, 0] and close[i] > final_bands.iloc[i, 0]:
-#             supertrend.iloc[i, 0] = final_bands.iloc[i, 1]
-            
-#         elif supertrend.iloc[i-1, 0] == final_bands.iloc[i-1, 1] and close[i] > final_bands.iloc[i, 1]:
-#             supertrend.iloc[i, 0] = final_bands.iloc[i, 1]
-            
-#         elif supertrend.iloc[i-1, 0] == final_bands.iloc[i-1, 1] and close[i] < final_bands.iloc[i, 1]:
-#             supertrend.iloc[i, 0] = final_bands.iloc[i, 0]
-    
-#     supertrend = supertrend.set_index(upper_band.index)
-#     # supertrend = supertrend.dropna()[1:]
-#     # supertrend.reset_index(drop=True, inplace=True)
-    
-#     # ST UPTREND/DOWNTREND
-    
-#     upt = [0]
-#     dt = [0]
-#     close = close.iloc[len(close) - len(supertrend):]
-
-#     for i in range(1, len(supertrend)):
-#         # print('testing', close[i], supertrend.iloc[i, 0])
-#         if close[i] > supertrend.iloc[i, 0]:
-#             upt.append(supertrend.iloc[i, 0])
-#             dt.append(np.nan)
-#         elif close[i] < supertrend.iloc[i, 0]:
-#             upt.append(np.nan)
-#             dt.append(supertrend.iloc[i, 0])
-#         else:
-#             upt.append(np.nan)
-#             dt.append(np.nan)
-
-#     st, upt, dt = pd.Series(supertrend.iloc[:, 0]), pd.Series(upt), pd.Series(dt)
-    
-#     upt.index, dt.index = supertrend.index, supertrend.index
-    
-#     return st, upt, dt
 

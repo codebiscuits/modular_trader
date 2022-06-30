@@ -85,8 +85,8 @@ def setup_scan(timeframe, offset):
     #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
     
     for n, pair in enumerate(pairs):
-        funcs.update_prices(session)
         # print(pair, 'main loop')
+        funcs.update_prices(session)
         asset = pair[:-1*len(session.quote_asset)]
         for agent in agents:
             agent.init_in_pos(pair)    
@@ -96,6 +96,7 @@ def setup_scan(timeframe, offset):
         too_new = 0
         for agent in agents:
             if agent.too_new(df):
+                print(f"{pair} too new")
                 too_new += 1
         if too_new == len(agents):
             continue
@@ -117,9 +118,9 @@ def setup_scan(timeframe, offset):
             signals = agent.margin_signals(session, df, pair)
         
             price = df.at[len(df)-1, 'close']
+            inval = signals.get('inval')
+            inval_ratio = signals.get('inval_ratio')
             if signals.get('signal'):
-                inval = signals.get('inval')
-                inval_ratio = signals.get('inval_ratio')
                 stp = funcs.calc_stop(inval, session.spreads.get(pair), price)
                 risk = abs((price - stp) / price)
                 size_l, usdt_size_l, size_s, usdt_size_s = funcs.get_size(agent, price, session.bal, risk)

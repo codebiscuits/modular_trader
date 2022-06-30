@@ -850,7 +850,7 @@ class Agent():
         high_atr = df.at[len(df)-1, 'atr_upper']
         
         if state == 'real' and direction == 'long' and low_atr > current_stop:
-            print(f"*** {pair} {state} {direction} move stop from {current_stop} to {low_atr}")
+            print(f"*** {self.name} {pair} {state} {direction} move stop from {current_stop:.3} to {low_atr:.3}")
             _, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
             stop_order = funcs.set_stop_M(session, pair, base_size, direction, low_atr, low_atr*0.8)
             self.open_trades[pair][-1]['stop_id'] = stop_order.get('orderId')
@@ -858,12 +858,12 @@ class Agent():
             self.record_trades(session, 'open')
         
         elif state == 'sim' and direction == 'long' and low_atr > current_stop:
-            print(f"*** {pair} {state} {direction} move stop from {current_stop} to {low_atr}")
+            print(f"*** {self.name} {pair} {state} {direction} move stop from {current_stop:.3} to {low_atr:.3}")
             self.sim_trades[pair][-1]['hard_stop'] = low_atr
             self.record_trades(session, 'sim')
             
         elif state == 'real' and direction == 'short' and high_atr < current_stop:
-            print(f"*** {pair} {state} {direction} move stop from {current_stop} to {high_atr}")
+            print(f"*** {self.name} {pair} {state} {direction} move stop from {current_stop:.3} to {high_atr:.3}")
             _, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
             stop_order = funcs.set_stop_M(session, pair, base_size, direction, high_atr, high_atr*1.2)
             self.open_trades[pair][-1]['stop_id'] = stop_order.get('orderId')
@@ -871,7 +871,7 @@ class Agent():
             self.record_trades(session, 'open')
             
         elif state == 'sim' and direction == 'short' and high_atr < current_stop:
-            print(f"*** {pair} {state} {direction} move stop from {current_stop} to {high_atr}")
+            print(f"*** {self.name} {pair} {state} {direction} move stop from {current_stop:.3} to {high_atr:.3}")
             self.sim_trades[pair][-1]['hard_stop'] = high_atr
             self.record_trades(session, 'sim')
     
@@ -895,7 +895,6 @@ class Agent():
             self.in_pos['sim_tp_sig'] = ((float(sim_or) > self.indiv_r_limit) and 
                                          (abs(self.in_pos.get('sim_price_delta', 0)) > 0.001))
         j.stop()
-    
     
 
 class DoubleST(Agent):
@@ -1113,7 +1112,7 @@ class EMACrossHMA(Agent):
         df[fast_ema_str] = df.close.ewm(self.lb1).mean()
         df[slow_ema_str] = df.close.ewm(self.lb2).mean()
         ind.atr_bands(df, 10, 1.2)
-
+        
         bullish_bias = df.at[len(df)-1, 'close'] > df.at[len(df)-1, bias_hma_str]
         bearish_bias = df.at[len(df)-1, 'close'] < df.at[len(df)-1, bias_hma_str]
         bullish_emas = (df.at[len(df)-1, fast_ema_str] > df.at[len(df)-1, slow_ema_str]
@@ -1130,6 +1129,8 @@ class EMACrossHMA(Agent):
                    or self.in_pos['sim'] == 'short'
                    or self.in_pos['tracked'] == 'short')
         flat = not in_long and not in_short
+        
+        # print(f"{pair}\n{bullish_bias = }\n{bearish_bias = }\n{bullish_emas = }\n{bearish_emas = }\n{in_long = }\n{in_short = }\n{flat = }")
         
         if bullish_bias and bullish_emas and flat:
             signal = 'open_long'
