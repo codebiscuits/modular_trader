@@ -12,7 +12,7 @@ client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 class MARGIN_SESSION:
-    max_length = 200
+    max_length = 201
     quote_asset = 'USDT'
     # fr_max = 0.0002
     max_spread = 0.5

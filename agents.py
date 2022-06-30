@@ -419,7 +419,12 @@ class Agent():
             # check lowest low since stop was set
             z = Timer('read ohlc pickles')
             z.start()
-            df = pd.read_pickle(f'{session.ohlc_data}/{pair}.pkl')
+            filepath = Path(f'{session.ohlc_data}/{pair}.pkl')
+            if filepath.exists():
+                df = pd.read_pickle(filepath)
+            else:
+                df = funcs.get_ohlc(pair, session.tf)
+                print(f"downloaded {pair} from scratch")
             z.stop()
             
             # trim df down to just the rows since the last stop was set
@@ -950,20 +955,23 @@ class DoubleST(Agent):
         k = Timer(f'margin_signals')
         k.start()
         
-        if 'ema200' not in df.columns:
-            df['ema200'] = df.close.ewm(self.lookback_limit).mean()
+        if f'ema{self.lookback_limit}' not in df.columns:
+            df[f'ema{self.lookback_limit}'] = df.close.ewm(self.lookback_limit).mean()
         ind.supertrend_new(df, 10, self.mult1)
         df.rename(columns={'st': 'st_loose', 'st_u': 'st_loose_u', 'st_d': 'st_loose_d'}, inplace=True)
         ind.supertrend_new(df, 10, self.mult2)
     
-        
-        
-        bullish_ema = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'ema200']
-        bearish_ema = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'ema200']
-        bullish_loose = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st_loose']
-        bearish_loose = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st_loose']
-        bullish_tight = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st']
-        bearish_tight = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st']
+        try:
+            bullish_ema = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'ema200']
+            bearish_ema = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'ema200']
+            bullish_loose = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st_loose']
+            bearish_loose = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st_loose']
+            bullish_tight = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'st']
+            bearish_tight = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'st']
+        except KeyError as e:
+            print(pair, self.name)
+            print(df.tail())
+            print(e)
         
         if bullish_ema:
             session.above_200_ema.add(pair)
@@ -1029,12 +1037,14 @@ class EMACross(Agent):
 
         bullish_bias = df.at[len(df)-1, 'close'] > df.at[len(df)-1, bias_ema_str]
         bearish_bias = df.at[len(df)-1, 'close'] < df.at[len(df)-1, bias_ema_str]
-        bullish_emas = (df.at[len(df)-1, fast_ema_str] > df.at[len(df)-1, slow_ema_str]
+        bullish_cross = (df.at[len(df)-1, fast_ema_str] > df.at[len(df)-1, slow_ema_str]
                          and
                          df.at[len(df)-2, fast_ema_str] < df.at[len(df)-2, slow_ema_str])
-        bearish_emas = (df.at[len(df)-1, fast_ema_str] < df.at[len(df)-1, slow_ema_str]
+        bearish_cross = (df.at[len(df)-1, fast_ema_str] < df.at[len(df)-1, slow_ema_str]
                          and
                          df.at[len(df)-2, fast_ema_str] > df.at[len(df)-2, slow_ema_str])
+        bullish_emas = df.at[len(df)-1, fast_ema_str] > df.at[len(df)-1, slow_ema_str]
+        bearish_emas = df.at[len(df)-1, fast_ema_str] < df.at[len(df)-1, slow_ema_str]
         
         in_long = (self.in_pos['real'] == 'long' 
                    or self.in_pos['sim'] == 'long'
@@ -1044,9 +1054,9 @@ class EMACross(Agent):
                    or self.in_pos['tracked'] == 'short')
         flat = not in_long and not in_short
         
-        if bullish_bias and bullish_emas and flat:
+        if bullish_bias and bullish_cross and flat:
             signal = 'open_long'
-        elif bearish_bias and bearish_emas and flat:
+        elif bearish_bias and bearish_cross and flat:
             signal = 'open_short'
         elif bearish_emas and in_long:
             signal = 'close_long'
@@ -1069,10 +1079,10 @@ class EMACross(Agent):
             if self.in_pos[state]:
                 self.move_stop(session, pair, df, state, self.in_pos[state])
         
-        if signal == 'open_long' and df.at[len(df)-1, 'atr_lower']:
+        if ((signal == 'open_long') or (bullish_emas and in_long)) and df.at[len(df)-1, 'atr_lower']:
             inval = df.at[len(df)-1, 'atr_lower']
             inval_ratio = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'atr_lower']) # current price proportional to invalidation price
-        elif signal == 'open_short' and df.at[len(df)-1, 'atr_upper']:
+        elif ((signal == 'open_short') or (bearish_emas and in_short)) and df.at[len(df)-1, 'atr_upper']:
             inval = df.at[len(df)-1, 'atr_upper']
             inval_ratio = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'atr_upper']) # current price proportional to invalidation price
         else:
@@ -1115,12 +1125,14 @@ class EMACrossHMA(Agent):
         
         bullish_bias = df.at[len(df)-1, 'close'] > df.at[len(df)-1, bias_hma_str]
         bearish_bias = df.at[len(df)-1, 'close'] < df.at[len(df)-1, bias_hma_str]
-        bullish_emas = (df.at[len(df)-1, fast_ema_str] > df.at[len(df)-1, slow_ema_str]
+        bullish_cross = (df.at[len(df)-1, fast_ema_str] > df.at[len(df)-1, slow_ema_str]
                          and
                          df.at[len(df)-2, fast_ema_str] < df.at[len(df)-2, slow_ema_str])
-        bearish_emas = (df.at[len(df)-1, fast_ema_str] < df.at[len(df)-1, slow_ema_str]
+        bearish_cross = (df.at[len(df)-1, fast_ema_str] < df.at[len(df)-1, slow_ema_str]
                          and
                          df.at[len(df)-2, fast_ema_str] > df.at[len(df)-2, slow_ema_str])
+        bullish_emas = df.at[len(df)-1, fast_ema_str] > df.at[len(df)-1, slow_ema_str]
+        bearish_emas = df.at[len(df)-1, fast_ema_str] < df.at[len(df)-1, slow_ema_str]
         
         in_long = (self.in_pos['real'] == 'long' 
                    or self.in_pos['sim'] == 'long'
@@ -1130,11 +1142,11 @@ class EMACrossHMA(Agent):
                    or self.in_pos['tracked'] == 'short')
         flat = not in_long and not in_short
         
-        # print(f"{pair}\n{bullish_bias = }\n{bearish_bias = }\n{bullish_emas = }\n{bearish_emas = }\n{in_long = }\n{in_short = }\n{flat = }")
+        # print(f"{pair}\n{bullish_bias = }\n{bearish_bias = }\n{bullish_cross = }\n{bearish_cross = }\n{in_long = }\n{in_short = }\n{flat = }")
         
-        if bullish_bias and bullish_emas and flat:
+        if bullish_bias and bullish_cross and flat:
             signal = 'open_long'
-        elif bearish_bias and bearish_emas and flat:
+        elif bearish_bias and bearish_cross and flat:
             signal = 'open_short'
         elif bearish_emas and in_long:
             signal = 'close_long'
@@ -1157,10 +1169,10 @@ class EMACrossHMA(Agent):
             if self.in_pos[state]:
                 self.move_stop(session, pair, df, state, self.in_pos[state])
         
-        if signal == 'open_long' and df.at[len(df)-1, 'atr_lower']:
+        if ((signal == 'open_long') or (bullish_emas and in_long)) and df.at[len(df)-1, 'atr_lower']:
             inval = df.at[len(df)-1, 'atr_lower']
             inval_ratio = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'atr_lower']) # current price proportional to invalidation price
-        elif signal == 'open_short' and df.at[len(df)-1, 'atr_upper']:
+        elif ((signal == 'open_short') or (bearish_emas and in_short)) and df.at[len(df)-1, 'atr_upper']:
             inval = df.at[len(df)-1, 'atr_upper']
             inval_ratio = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'atr_upper']) # current price proportional to invalidation price
         else:

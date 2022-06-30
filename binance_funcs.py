@@ -474,16 +474,16 @@ def prepare_ohlc(session, pair: str) -> pd.DataFrame:
     else:
         df = get_ohlc(pair, '1h', '1 year ago UTC')
         print(f'downloaded {pair} from scratch')
-
-    # calculate how many 1hour bars are needed to produce 'session.max_length' bars of new timeframe
-    len_mult = {'1h': 1, '2h': 2, '4h': 4, '6h': 6, '8h': 8, '12h': 12, '1d': 24, '3d': 72, '1w': 168}
-    max_len = (session.max_length + 1) * len_mult[session.tf]
     
     if len(df) > 17520:  # 17520 is 2 year's worth of 1h periods
         df = df.tail(17520)
         df.reset_index(drop=True, inplace=True)
     df.to_pickle(filepath)
-    if len(df) > max_len:  # 17520 is 2 year's worth of 1h periods
+
+    # calculate how many 1hour bars are needed to produce 'session.max_length' bars of new timeframe
+    len_mult = {'1h': 1, '2h': 2, '4h': 4, '6h': 6, '8h': 8, '12h': 12, '1d': 24, '3d': 72, '1w': 168}
+    max_len = (session.max_length + 1) * len_mult[session.tf]
+    if len(df) > max_len:
         df = df.tail(max_len)
         df.reset_index(drop=True, inplace=True)
     

@@ -96,7 +96,7 @@ def setup_scan(timeframe, offset):
         too_new = 0
         for agent in agents:
             if agent.too_new(df):
-                print(f"{pair} too new")
+                print(f"{agent} {pair} too new: {len(df)}")
                 too_new += 1
         if too_new == len(agents):
             continue
@@ -135,6 +135,7 @@ def setup_scan(timeframe, offset):
                 continue
         
     # update positions dictionary with current pair's open_risk values ------------
+            if agent.in_pos['real']:
                 real_qty = float(agent.real_pos[asset]['qty'])
                 agent.real_pos[asset].update(funcs.update_pos_M(session, asset, real_qty, inval_ratio, agent.in_pos['real'], agent.in_pos['real_pfrd']))
                 if agent.in_pos['real_ep']:
@@ -345,7 +346,8 @@ def setup_scan(timeframe, offset):
     print('-:-' * 20)
     
     for agent in agents:
-        print(agent.name, 'summary')
+        print('')
+        print(agent.name.upper(), 'SUMMARY')
         print(f'realised real long pnl: {agent.realised_pnl_long:.1f}R, realised sim long pnl: {agent.sim_pnl_long:.1f}R')
         print(f'realised real short pnl: {agent.realised_pnl_short:.1f}R, realised sim short pnl: {agent.sim_pnl_short:.1f}R')
         print(f'tor: {agent.total_open_risk:.1f}')

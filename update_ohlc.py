@@ -46,6 +46,7 @@ for pair in pairs:
             df = df.tail(max_len)
             df.reset_index(drop=True, inplace=True)
         df.to_pickle(filepath)
+        print(f"{pair} ohlc length: {len(df)}")
 
 end = time.perf_counter()
 all_time = end - start

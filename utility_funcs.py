@@ -489,8 +489,9 @@ def create_stop_dict(order: dict) -> dict:
     yu.stop()
     return trade_dict
 
-def recent_perf_str(session, agent) -> str:
-    '''generates a string of + and - to represent recent strat performance'''    
+def recent_perf_str(session, agent) -> Tuple[str, int, int]:
+    '''generates a string of + and - to represent recent strat performance
+    returns the perf string and the relevant long and short perf scores'''    
     
     def score_accum(state: str, direction: str) -> Tuple[int, int, str]:
         with open(f"{session.market_data}/{agent.id}/bal_history.txt", "r") as file:
@@ -571,20 +572,24 @@ def recent_perf_str(session, agent) -> str:
     if (agent.open_trades and real_score_l):
         perf_str_l = real_perf_str_l
         perf_summ_l = f"real: score {real_score_l} rpnl {agent.realised_pnl_long:.1f}"
+        score_l = real_score_l
     else:
         perf_str_l = sim_perf_str_l
         perf_summ_l = f"sim: score {sim_score_l} rpnl {agent.sim_pnl_long:.1f}"
+        score_l = sim_score_l
     
     if (agent.open_trades and real_score_s):
         perf_str_s = real_perf_str_s
         perf_summ_s = f"real: score {real_score_s} rpnl {agent.realised_pnl_short:.1f}"
+        score_s = real_score_s
     else:
         perf_str_s = sim_perf_str_s
         perf_summ_s = f"sim: score {sim_score_s} rpnl {agent.sim_pnl_short:.1f}"
+        score_s = sim_score_s
     
     full_perf_str = f'long: {perf_str_l}\n{perf_summ_l}\nshort: {perf_str_s}\n{perf_summ_s}'
     
-    return full_perf_str
+    return full_perf_str, score_l, score_s
 
 def scanner_summary(session, agents: list) -> None:
     '''prints a summary of the agents recent performance, current exposure, 
@@ -608,17 +613,18 @@ def scanner_summary(session, agents: list) -> None:
                 vol_exp += float(v.get('pf%'))
         
         count_str = count_trades(agent.counts_dict)
-        perf_str = recent_perf_str(session, agent)
-        agent_bench = agent.benchmark
-        bench_str = f"1w strat perf: {round(agent_bench.get('strat_1w')*100, 2)}%"
-        agent_msg = f'\n{agent.name}\n{perf_str}\n{bench_str}\n-'
-        exp_str = f"\npositions {num_open_positions}, exposure {vol_exp:.2f}%"
-        if num_open_positions or (vol_exp > 1):
-            agent_msg += exp_str
-        agent_msg += f"\n{count_str}"
-        if abs(agent_bench.get('strat_1w')*100) > 1:
-            agent_msg += bench_str
-        final_msg += agent_msg
+        perf_str, score_l, score_s = recent_perf_str(session, agent)
+        if (score_l > 0) or (score_s > 0):
+            agent_bench = agent.benchmark
+            bench_str = f"1w strat perf: {round(agent_bench.get('strat_1w')*100, 2)}%"
+            agent_msg = f'\n{agent.name}\n{perf_str}\n{bench_str}\n-'
+            exp_str = f"\npositions {num_open_positions}, exposure {vol_exp:.2f}%"
+            if num_open_positions or (vol_exp > 1):
+                agent_msg += exp_str
+            agent_msg += f"\n{count_str}"
+            if abs(agent_bench.get('strat_1w')*100) > 1:
+                agent_msg += bench_str
+            final_msg += agent_msg
     
     print(f'-\n{title}\n{final_msg}')
     
