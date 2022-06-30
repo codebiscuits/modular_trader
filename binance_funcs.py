@@ -770,7 +770,6 @@ def sell_asset_M(session, pair: str, base_size: float, price: float, live: bool)
     return sell_order
 
 
-
 def borrow_asset_M(asset: str, qty: str, live: bool) -> None:
     '''calls the binance api function to take out a margin loan'''
     

@@ -648,17 +648,20 @@ class Agent():
             
             return score_1, score_2, pnls
         
-        real_score_1, real_score_2, real_pnls = score_accum(direction, 'real')
+        # real_score_1, real_score_2, real_pnls = score_accum(direction, 'real')
         sim_score_1, sim_score_2, sim_pnls = score_accum(direction, 'sim')
-        print(f"set_fixed_risk {direction}: real_score {real_score_1 + real_score_2}, sim_score {sim_score_1 + sim_score_2}")
-        if self.open_trades and real_score_2:
-            score = real_score_1 + real_score_2
-            pnls = real_pnls
-            print('real score chosen')
-        else:
-            score = sim_score_1 + sim_score_2
-            pnls = sim_pnls
-            print('sim score chosen')
+        print(f"set_fixed_risk {direction}: sim_score {sim_score_1 + sim_score_2}")
+        score = sim_score_1 + sim_score_2
+        pnls = sim_pnls
+        # print(f"set_fixed_risk {direction}: real_score {real_score_1 + real_score_2}, sim_score {sim_score_1 + sim_score_2}")
+        # if self.open_trades and real_score_2:
+        #     score = real_score_1 + real_score_2
+        #     pnls = real_pnls
+        #     print('real score chosen')
+        # else:
+        #     score = sim_score_1 + sim_score_2
+        #     pnls = sim_pnls
+        #     print('sim score chosen')
         
         if score == 15:
             fr = min(fr_prev + (2*fr_inc), self.fr_max)
@@ -675,10 +678,10 @@ class Agent():
             
         if fr != fr_prev:
             title = f'{now} {self.name}'
-            note = f'fixed risk adjusted from {round(fr_prev*10000, 1)}bps to {round(fr*10000, 1)}bps'
+            note = f'{direction} fixed risk adjusted from {round(fr_prev*10000, 1)}bps to {round(fr*10000, 1)}bps'
             pb.push_note(title, note)
             print(note)
-            print(f"calculated score: {score}, pnls: {pnls}")
+            print(f"calculated {direction} score: {score}, pnls: {pnls}")
         o.stop()
         return round(fr, 5)
     
