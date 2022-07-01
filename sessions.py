@@ -37,7 +37,7 @@ class MARGIN_SESSION:
         self.now_start = datetime.now().strftime('%d/%m/%y %H:%M')
         self.last_price_update = 0
         self.margin_account_info()
-        # self.get_asset_bals
+        self.get_asset_bals
         self.check_margin_lvl()
         t.stop()
         
