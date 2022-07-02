@@ -66,7 +66,8 @@ class Agent():
         self.open_pnl_changes = {}
         self.fixed_risk_l = self.set_fixed_risk('long')
         self.fixed_risk_s = self.set_fixed_risk('short')
-        # self.test_fixed_risk(0.0001, 0.0001)
+        if session.live:
+            self.test_fixed_risk(0.0002, 0.0002)
         self.max_positions = self.set_max_pos()
         self.max_init_r_l = self.fixed_risk_l * self.total_r_limit
         self.max_init_r_s = self.fixed_risk_s * self.total_r_limit
@@ -1128,8 +1129,6 @@ class EMACrossHMA(Agent):
         df[fast_ema_str] = df.close.ewm(self.lb1).mean()
         df[slow_ema_str] = df.close.ewm(self.lb2).mean()
         ind.atr_bands(df, 10, 1.2)
-        
-        # print(df.tail())
         
         bullish_bias = df.at[len(df)-1, 'close'] > df.at[len(df)-1, bias_hma_str]
         bearish_bias = df.at[len(df)-1, 'close'] < df.at[len(df)-1, bias_hma_str]

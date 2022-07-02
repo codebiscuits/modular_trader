@@ -70,7 +70,7 @@ def setup_scan(timeframe, offset):
     
     for agent in agents:
         print(f"{agent.name} fr long: {(agent.fixed_risk_l*10000):.2f}bps, \
-    fr short: {(agent.fixed_risk_s*10000):.2f}bps")
+fr short: {(agent.fixed_risk_s*10000):.2f}bps")
         agent.real_pos['USDT'] = session.usdt_bal
         agent.starting_ropnl_l = agent.open_pnl('long', 'real')
         agent.starting_sopnl_l = agent.open_pnl('long', 'sim')
@@ -102,7 +102,7 @@ def setup_scan(timeframe, offset):
             continue
         
         if len(df) > session.max_length:
-            print(f"setup_scanner line 121 {pair} df length: {len(df)}")
+            print(f"setup_scanner line 105 {pair} df length: {len(df)}")
             df = df.tail(session.max_length)
             df.reset_index(drop=True, inplace=True)
         
@@ -116,7 +116,7 @@ def setup_scan(timeframe, offset):
             # print('*****', agent.name)
             
             signals = agent.margin_signals(session, df, pair)
-            print(signals)
+            # print(signals)
         
             price = df.at[len(df)-1, 'close']
             inval = signals.get('inval')
