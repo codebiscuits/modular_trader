@@ -374,7 +374,7 @@ class Agent():
                 # check for a free balance matching the size. if there is, that means 
                 # the stop was never set in the first place and needs to be set
                 print(f'getting {pair[:-4]} free balance')
-                free_bal = session.asset_bals[pair[:-4]].get('free')
+                free_bal = session.bals_dict[pair[:-4]].get('free')
                 print(f'getting {pair} price')
                 price = session.prices[pair]
                 value = free_bal * price
@@ -865,10 +865,10 @@ class Agent():
             self.open_trades[pair][-1]['hard_stop'] = low_atr
             self.record_trades(session, 'open')
         
-        elif state == 'sim' and direction == 'long' and low_atr > current_stop:
+        elif state in ['sim', 'tracked'] and direction == 'long' and low_atr > current_stop:
             print(f"*** {self.name} {pair} {state} {direction} move stop from {current_stop:.3} to {low_atr:.3}")
             self.sim_trades[pair][-1]['hard_stop'] = low_atr
-            self.record_trades(session, 'sim')
+            self.record_trades(session, state)
             
         elif state == 'real' and direction == 'short' and high_atr < current_stop:
             print(f"*** {self.name} {pair} {state} {direction} move stop from {current_stop:.3} to {high_atr:.3}")
@@ -878,10 +878,10 @@ class Agent():
             self.open_trades[pair][-1]['hard_stop'] = high_atr
             self.record_trades(session, 'open')
             
-        elif state == 'sim' and direction == 'short' and high_atr < current_stop:
+        elif state in ['sim', 'tracked'] and direction == 'short' and high_atr < current_stop:
             print(f"*** {self.name} {pair} {state} {direction} move stop from {current_stop:.3} to {high_atr:.3}")
             self.sim_trades[pair][-1]['hard_stop'] = high_atr
-            self.record_trades(session, 'sim')
+            self.record_trades(session, state)
     
     def tp_signals(self, asset: str) -> None:
         '''calculates whether the current position needs to take profit and stores 
@@ -1055,11 +1055,13 @@ class EMACross(Agent):
         in_short = (self.in_pos['real'] == 'short' 
                    or self.in_pos['sim'] == 'short'
                    or self.in_pos['tracked'] == 'short')
-        flat = not in_long and not in_short
         
-        if bullish_bias and bullish_cross and flat:
+        if bullish_cross or bearish_cross:
+            print(f"{self.name} {pair}\n{bullish_cross = }\n{bearish_cross = }\n{bullish_emas = }\n{bearish_emas = }")
+        
+        if bullish_bias and bullish_cross:
             signal = 'open_long'
-        elif bearish_bias and bearish_cross and flat:
+        elif bearish_bias and bearish_cross:
             signal = 'open_short'
         elif bearish_emas and in_long:
             signal = 'close_long'
@@ -1082,10 +1084,10 @@ class EMACross(Agent):
             if self.in_pos[state]:
                 self.move_stop(session, pair, df, state, self.in_pos[state])
         
-        if ((signal == 'open_long') or (bullish_emas and in_long)) and df.at[len(df)-1, 'atr_lower']:
+        if ((signal == 'open_long') or in_long) and df.at[len(df)-1, 'atr_lower']:
             inval = df.at[len(df)-1, 'atr_lower']
             inval_ratio = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'atr_lower']) # current price proportional to invalidation price
-        elif ((signal == 'open_short') or (bearish_emas and in_short)) and df.at[len(df)-1, 'atr_upper']:
+        elif ((signal == 'open_short') or in_short) and df.at[len(df)-1, 'atr_upper']:
             inval = df.at[len(df)-1, 'atr_upper']
             inval_ratio = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'atr_upper']) # current price proportional to invalidation price
         else:
@@ -1126,6 +1128,8 @@ class EMACrossHMA(Agent):
         df[slow_ema_str] = df.close.ewm(self.lb2).mean()
         ind.atr_bands(df, 10, 1.2)
         
+        # print(df.tail())
+        
         bullish_bias = df.at[len(df)-1, 'close'] > df.at[len(df)-1, bias_hma_str]
         bearish_bias = df.at[len(df)-1, 'close'] < df.at[len(df)-1, bias_hma_str]
         bullish_cross = (df.at[len(df)-1, fast_ema_str] > df.at[len(df)-1, slow_ema_str]
@@ -1143,13 +1147,13 @@ class EMACrossHMA(Agent):
         in_short = (self.in_pos['real'] == 'short' 
                    or self.in_pos['sim'] == 'short'
                    or self.in_pos['tracked'] == 'short')
-        flat = not in_long and not in_short
         
-        # print(f"{pair}\n{bullish_bias = }\n{bearish_bias = }\n{bullish_cross = }\n{bearish_cross = }\n{in_long = }\n{in_short = }\n{flat = }")
+        if bullish_cross or bearish_cross:
+            print(f"{self.name} {pair}\n{bullish_cross = }\n{bearish_cross = }\n{bullish_emas = }\n{bearish_emas = }")
         
-        if bullish_bias and bullish_cross and flat:
+        if bullish_bias and bullish_cross:
             signal = 'open_long'
-        elif bearish_bias and bearish_cross and flat:
+        elif bearish_bias and bearish_cross:
             signal = 'open_short'
         elif bearish_emas and in_long:
             signal = 'close_long'
@@ -1172,10 +1176,10 @@ class EMACrossHMA(Agent):
             if self.in_pos[state]:
                 self.move_stop(session, pair, df, state, self.in_pos[state])
         
-        if ((signal == 'open_long') or (bullish_emas and in_long)) and df.at[len(df)-1, 'atr_lower']:
+        if ((signal == 'open_long') or in_long) and df.at[len(df)-1, 'atr_lower']:
             inval = df.at[len(df)-1, 'atr_lower']
             inval_ratio = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'atr_lower']) # current price proportional to invalidation price
-        elif ((signal == 'open_short') or (bearish_emas and in_short)) and df.at[len(df)-1, 'atr_upper']:
+        elif ((signal == 'open_short') or in_short) and df.at[len(df)-1, 'atr_upper']:
             inval = df.at[len(df)-1, 'atr_upper']
             inval_ratio = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'atr_upper']) # current price proportional to invalidation price
         else:
