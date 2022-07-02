@@ -1059,9 +1059,9 @@ class EMACross(Agent):
         if bullish_cross or bearish_cross:
             print(f"{self.name} {pair}\n{bullish_cross = }\n{bearish_cross = }\n{bullish_emas = }\n{bearish_emas = }")
         
-        if bullish_bias and bullish_cross:
+        if bullish_bias and bullish_emas:
             signal = 'open_long'
-        elif bearish_bias and bearish_cross:
+        elif bearish_bias and bearish_emas:
             signal = 'open_short'
         elif bearish_emas and in_long:
             signal = 'close_long'
@@ -1151,9 +1151,9 @@ class EMACrossHMA(Agent):
         if bullish_cross or bearish_cross:
             print(f"{self.name} {pair}\n{bullish_cross = }\n{bearish_cross = }\n{bullish_emas = }\n{bearish_emas = }")
         
-        if bullish_bias and bullish_cross:
+        if bullish_bias and bullish_emas:
             signal = 'open_long'
-        elif bearish_bias and bearish_cross:
+        elif bearish_bias and bearish_emas:
             signal = 'open_short'
         elif bearish_emas and in_long:
             signal = 'close_long'

@@ -30,7 +30,7 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 
 def setup_scan(timeframe, offset):
-
+    print(f"Running setup_scan({timeframe}, {offset})")
     all_start = time.perf_counter()
     session = sessions.MARGIN_SESSION(timeframe, offset, 0.0001)
     funcs.update_prices(session)
@@ -46,7 +46,7 @@ def setup_scan(timeframe, offset):
         EMACross(session, 12, 21), 
         EMACrossHMA(session, 12, 21)
         ] 
-    # agents = [agent_1, agent_2, agent_3, agent_4, agent_5, agent_6, agent_7, agent_8]
+    
     
     session.name = ' | '.join([n.name for n in agents])
     
@@ -85,7 +85,7 @@ def setup_scan(timeframe, offset):
     #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
     
     for n, pair in enumerate(pairs):
-        # print(pair, 'main loop')
+        print(pair)
         funcs.update_prices(session)
         asset = pair[:-1*len(session.quote_asset)]
         for agent in agents:
@@ -116,11 +116,12 @@ def setup_scan(timeframe, offset):
             # print('*****', agent.name)
             
             signals = agent.margin_signals(session, df, pair)
+            print(signals)
         
             price = df.at[len(df)-1, 'close']
             inval = signals.get('inval')
             inval_ratio = signals.get('inval_ratio')
-            if signals.get('signal'):
+            if inval:
                 stp = funcs.calc_stop(inval, session.spreads.get(pair), price)
                 risk = abs((price - stp) / price)
                 size_l, usdt_size_l, size_s, usdt_size_s = funcs.get_size(agent, price, session.bal, risk)
@@ -210,27 +211,27 @@ def setup_scan(timeframe, offset):
                 try:
                     omf.open_long(session, agent, pair, size_l, stp, inval_ratio, sim_reason)
                 except BinanceAPIException as e:
-                    print(f'problem with open_long order for {pair}')
+                    print(f'{agent.name} problem with open_long order for {pair}')
                     print(e)
-                    pb.push_note(now, f'exeption during {pair} open_long order')
+                    pb.push_note(now, f'{agent.name} exeption during {pair} open_long order')
                     continue
             
             elif signals.get('signal') == 'tp_long':
                 try:
                     omf.tp_long(session, agent, pair, stp, inval_ratio)
                 except BinanceAPIException as e:
-                    print(f'problem with tp_long order for {pair}')
+                    print(f'{agent.name} problem with tp_long order for {pair}')
                     print(e)
-                    pb.push_note(now, f'exeption during {pair} tp_long order')
+                    pb.push_note(now, f'{agent.name} exeption during {pair} tp_long order')
                     continue
             
             elif signals.get('signal') == 'close_long':
                 try:
                     omf.close_long(session, agent, pair)
                 except BinanceAPIException as e:
-                    print(f'problem with close_long order for {pair}')
+                    print(f'{agent.name} problem with close_long order for {pair}')
                     print(e)
-                    pb.push_note(now, f'exeption during {pair} close_long order')
+                    pb.push_note(now, f'{agent.name} exeption during {pair} close_long order')
                     continue
             
             elif signals.get('signal') == 'open_short':
@@ -284,27 +285,27 @@ def setup_scan(timeframe, offset):
                 try:
                     omf.open_short(session, agent, pair, size_s, stp, inval_ratio, sim_reason)
                 except BinanceAPIException as e:
-                    print(f'problem with open_short order for {pair}')
+                    print(f'{agent.name} problem with open_short order for {pair}')
                     print(e)
-                    pb.push_note(now, f'exeption during {pair} open_short order')
+                    pb.push_note(now, f'{agent.name} exeption during {pair} open_short order')
                     continue
             
             elif signals.get('signal') == 'tp_short':
                 try:
                     omf.tp_short(session, agent, pair, stp, inval_ratio)
                 except BinanceAPIException as e:
-                    print(f'problem with tp_short order for {pair}')
+                    print(f'{agent.name} problem with tp_short order for {pair}')
                     print(e)
-                    pb.push_note(now, f'exeption during {pair} tp_short order')
+                    pb.push_note(now, f'{agent.name} exeption during {pair} tp_short order')
                     continue
             
             elif signals.get('signal') == 'close_short':
                 try:
                     omf.close_short(session, agent, pair)
                 except BinanceAPIException as e:
-                    print(f'problem with close_short order for {pair}')
+                    print(f'{agent.name} problem with close_short order for {pair}')
                     print(e)
-                    pb.push_note(now, f'exeption during {pair} close_short order')
+                    pb.push_note(now, f'{agent.name} exeption during {pair} close_short order')
                     continue
             
         
@@ -314,9 +315,9 @@ def setup_scan(timeframe, offset):
                 try:
                     omf.tp_long(session, agent, pair, stp, inval_ratio)
                 except BinanceAPIException as e:
-                    print(f'problem with tp_long order for {pair}')
+                    print(f'{agent.name} problem with tp_long order for {pair}')
                     print(e)
-                    pb.push_note(now, f'exeption during {pair} tp_long order')
+                    pb.push_note(now, f'{agent.name} exeption during {pair} tp_long order')
                     continue
             elif agent.in_pos['real'] == 'short' or agent.in_pos['sim'] == 'short':
                 try:
@@ -324,7 +325,7 @@ def setup_scan(timeframe, offset):
                 except BinanceAPIException as e:
                     print(f'problem with tp_short order for {pair}')
                     print(e)
-                    pb.push_note(now, f'exeption during {pair} tp_short order')
+                    pb.push_note(now, f'{agent.name} exeption during {pair} tp_short order')
                     continue
             
             agent.calc_tor()
@@ -391,6 +392,7 @@ script_start = time.perf_counter()
 
 z = [1, 4, 12, 24]
 hour = datetime.utcnow().hour
+# hour = 0 # for testing all timeframes
 scripts = [tf for tf in z if hour%tf == 0]
 d = {1: '1h', 4: '4h', 12: '12h', 24: '1d'}
 
