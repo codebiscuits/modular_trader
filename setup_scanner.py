@@ -9,7 +9,7 @@ import binance_funcs as funcs
 from agents import DoubleST, EMACross, EMACrossHMA
 import order_management_funcs as omf
 from binance.client import Client
-from binance.exceptions import BinanceAPIException
+import binance.exceptions as bx
 from pushbullet import Pushbullet
 from config import not_pairs
 from pprint import pprint
@@ -85,7 +85,7 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
     #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
     
     for n, pair in enumerate(pairs):
-        print(pair)
+        # print(pair)
         funcs.update_prices(session)
         asset = pair[:-1*len(session.quote_asset)]
         for agent in agents:
@@ -210,7 +210,7 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
                 
                 try:
                     omf.open_long(session, agent, pair, size_l, stp, inval_ratio, sim_reason)
-                except BinanceAPIException as e:
+                except bx.BinanceAPIException as e:
                     print(f'{agent.name} problem with open_long order for {pair}')
                     print(e)
                     pb.push_note(now, f'{agent.name} exeption during {pair} open_long order')
@@ -219,7 +219,7 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
             elif signals.get('signal') == 'tp_long':
                 try:
                     omf.tp_long(session, agent, pair, stp, inval_ratio)
-                except BinanceAPIException as e:
+                except bx.BinanceAPIException as e:
                     print(f'{agent.name} problem with tp_long order for {pair}')
                     print(e)
                     pb.push_note(now, f'{agent.name} exeption during {pair} tp_long order')
@@ -228,7 +228,7 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
             elif signals.get('signal') == 'close_long':
                 try:
                     omf.close_long(session, agent, pair)
-                except BinanceAPIException as e:
+                except bx.BinanceAPIException as e:
                     print(f'{agent.name} problem with close_long order for {pair}')
                     print(e)
                     pb.push_note(now, f'{agent.name} exeption during {pair} close_long order')
@@ -284,7 +284,7 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
                 
                 try:
                     omf.open_short(session, agent, pair, size_s, stp, inval_ratio, sim_reason)
-                except BinanceAPIException as e:
+                except bx.BinanceAPIException as e:
                     print(f'{agent.name} problem with open_short order for {pair}')
                     print(e)
                     pb.push_note(now, f'{agent.name} exeption during {pair} open_short order')
@@ -293,7 +293,7 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
             elif signals.get('signal') == 'tp_short':
                 try:
                     omf.tp_short(session, agent, pair, stp, inval_ratio)
-                except BinanceAPIException as e:
+                except bx.BinanceAPIException as e:
                     print(f'{agent.name} problem with tp_short order for {pair}')
                     print(e)
                     pb.push_note(now, f'{agent.name} exeption during {pair} tp_short order')
@@ -302,7 +302,7 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
             elif signals.get('signal') == 'close_short':
                 try:
                     omf.close_short(session, agent, pair)
-                except BinanceAPIException as e:
+                except bx.BinanceAPIException as e:
                     print(f'{agent.name} problem with close_short order for {pair}')
                     print(e)
                     pb.push_note(now, f'{agent.name} exeption during {pair} close_short order')
@@ -314,7 +314,7 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
             if agent.in_pos['real'] == 'long' or agent.in_pos['sim'] == 'long':
                 try:
                     omf.tp_long(session, agent, pair, stp, inval_ratio)
-                except BinanceAPIException as e:
+                except bx.BinanceAPIException as e:
                     print(f'{agent.name} problem with tp_long order for {pair}')
                     print(e)
                     pb.push_note(now, f'{agent.name} exeption during {pair} tp_long order')
@@ -322,7 +322,7 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
             elif agent.in_pos['real'] == 'short' or agent.in_pos['sim'] == 'short':
                 try:
                     omf.tp_short(session, agent, pair, stp, inval_ratio)
-                except BinanceAPIException as e:
+                except bx.BinanceAPIException as e:
                     print(f'problem with tp_short order for {pair}')
                     print(e)
                     pb.push_note(now, f'{agent.name} exeption during {pair} tp_short order')
@@ -397,7 +397,11 @@ scripts = [tf for tf in z if hour%tf == 0]
 d = {1: '1h', 4: '4h', 12: '12h', 24: '1d'}
 
 for run_tf in scripts:
-    setup_scan(d[run_tf], None)
+    try:
+        setup_scan(d[run_tf], None)
+    except bx.BinanceAPIException as e:
+        print(e)
+        continue
 
 script_end = time.perf_counter()
 

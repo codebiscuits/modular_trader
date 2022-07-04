@@ -577,7 +577,7 @@ def tp_short(session, agent, pair, stp, inval):
                 # set new stop
                 new_size = real_bal - float(buy_order['base_size'])
                 
-                stop_order = funcs.set_stop_M(session, pair, new_size, be.SIDE_SELL, stp, stp*1.2)
+                stop_order = funcs.set_stop_M(session, pair, new_size, be.SIDE_BUY, stp, stp*1.2)
                 buy_order['stop_id'] = stop_order.get('orderId')
                 
                 trade_record.append(buy_order)

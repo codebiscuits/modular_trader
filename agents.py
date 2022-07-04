@@ -868,7 +868,7 @@ class Agent():
             self.record_trades(session, 'open')
         
         elif state in ['sim', 'tracked'] and direction == 'long' and low_atr > current_stop:
-            print(f"*** {self.name} {pair} {state} {direction} move stop from {current_stop:.3} to {low_atr:.3}")
+            # print(f"*** {self.name} {pair} {state} {direction} move stop from {current_stop:.3} to {low_atr:.3}")
             self.sim_trades[pair][-1]['hard_stop'] = low_atr
             self.record_trades(session, state)
             
@@ -881,7 +881,7 @@ class Agent():
             self.record_trades(session, 'open')
             
         elif state in ['sim', 'tracked'] and direction == 'short' and high_atr < current_stop:
-            print(f"*** {self.name} {pair} {state} {direction} move stop from {current_stop:.3} to {high_atr:.3}")
+            # print(f"*** {self.name} {pair} {state} {direction} move stop from {current_stop:.3} to {high_atr:.3}")
             self.sim_trades[pair][-1]['hard_stop'] = high_atr
             self.record_trades(session, state)
     
@@ -1151,9 +1151,9 @@ class EMACrossHMA(Agent):
         if bullish_cross or bearish_cross:
             print(f"{self.name} {pair}\n{bullish_cross = }\n{bearish_cross = }\n{bullish_emas = }\n{bearish_emas = }")
         
-        if bullish_bias and bullish_emas:
+        if bullish_bias and bullish_cross:
             signal = 'open_long'
-        elif bearish_bias and bearish_emas:
+        elif bearish_bias and bearish_cross:
             signal = 'open_short'
         elif bearish_emas and in_long:
             signal = 'close_long'
@@ -1185,6 +1185,9 @@ class EMACrossHMA(Agent):
         else:
             inval = None
             inval_ratio = None
+        
+        if signal:
+            print(f"{signal} inval: {inval:.3} ratio: {inval_ratio:.3f}")
         k.stop()
         return {'signal': signal, 'inval': inval, 'inval_ratio': inval_ratio}
 
