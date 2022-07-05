@@ -683,7 +683,7 @@ def calc_sizing_non_live_tp(session, agent, asset: str, tp_pct: int, switch: str
         stop = agent.in_pos['sim_hs']
     
     qty = pos_dict.get(asset).get('qty') * tp_scalar
-    val = pos_dict.get(asset).get('value') * tp_scalar
+    val = float(pos_dict.get(asset).get('value')) * tp_scalar
     pf = pos_dict.get(asset).get('pf%') * tp_scalar
     or_R = pos_dict.get(asset).get('or_R') * tp_scalar
     or_dol = pos_dict.get(asset).get('or_$') * tp_scalar
@@ -693,7 +693,7 @@ def calc_sizing_non_live_tp(session, agent, asset: str, tp_pct: int, switch: str
     pnl = (curr_price - entry) / entry
     pnl_r = pnl / r
     
-    pos_dict[asset].update({'qty': qty, 'value': val, 'pf%': pf, 'or_R': or_R, 'or_$': or_dol, 'pnl_R': pnl_r})
+    pos_dict[asset].update({'qty': qty, 'value': f"{val:.2f}", 'pf%': pf, 'or_R': or_R, 'or_$': or_dol, 'pnl_R': pnl_r})
     
     qw.stop
 

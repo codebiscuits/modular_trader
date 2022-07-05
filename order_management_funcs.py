@@ -127,7 +127,7 @@ def tp_long(session, agent, pair, stp, inval):
             print(f"{agent.name} Can't be sure which {pair} stop to clear, tp_long aborted")
             pb.push_note(pair, "Can't be sure which stop to clear, tp_long aborted")
         else:
-            if base_size and (real_bal != base_size): # check records match reality
+            if base_size and (real_bal != Decimal(base_size)): # check records match reality
                 print(f"{agent.name} {pair} records don't match real balance. {real_bal = }, {base_size = }")
             if not base_size:
                 base_size = real_bal
@@ -186,7 +186,7 @@ def tp_long(session, agent, pair, stp, inval):
                 sell_order['liability'] = uf.update_liability(trade_record, usdt_size, 'reduce')
                 
                 # set new stop
-                new_size = real_bal - float(sell_order['base_size'])
+                new_size = real_bal - Decimal(sell_order['base_size'])
                 stop_order = funcs.set_stop_M(session, pair, new_size, be.SIDE_SELL, stp, stp*0.8)
                 sell_order['stop_id'] = stop_order.get('orderId')
                 
@@ -592,7 +592,7 @@ def tp_short(session, agent, pair, stp, inval):
                 buy_order['liability'] = uf.update_liability(trade_record, repay_size, 'reduce')
                 
                 # set new stop
-                new_size = real_bal - float(buy_order['base_size'])
+                new_size = real_bal - Decimal(buy_order['base_size'])
                 
                 stop_order = funcs.set_stop_M(session, pair, new_size, be.SIDE_BUY, stp, stp*1.2)
                 buy_order['stop_id'] = stop_order.get('orderId')
