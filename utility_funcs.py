@@ -50,7 +50,10 @@ def open_trade_stats(now: datetime, total_bal: float, v: dict, curr_price: float
     duration = round((now.timestamp() - open_time) / 3600, 1)
     
     trig = float(v[0].get('trig_price'))
-    sl = float(v[0].get('hard_stop'))
+    if v[0].get('init_hs'):
+        sl = float(v[0].get('init_hs'))
+    else:
+        sl = float(v[0].get('hard_stop')) # this is only here for backwards compat, once every open trade has the init_hs key, it won't be needed
     
     if long:
         pnl = 100 * (curr_price - entry_price) / entry_price
@@ -183,7 +186,7 @@ def market_benchmark(session) -> None:
         valid = False
     
     if session.live:
-        print(f'pairs with recent data: {len(all_1d)} / {len(list(data))}')
+        print(f'pairs with recent data: {len(all_1d)} / {all_pairs}')
     
     session.benchmark = {'btc_1d': btc_1d, 'btc_1w': btc_1w, 'btc_1m': btc_1m, 
             'eth_1d': eth_1d, 'eth_1w': eth_1w, 'eth_1m': eth_1m, 
@@ -592,6 +595,39 @@ def recent_perf_str(session, agent) -> Tuple[str, int, int]:
     return full_perf_str, score_l, score_s
 
 def scanner_summary(session, agents: list) -> None:
+    '''prints a summary of the agents recent performance, current exposure, 
+    benchmarks, trade counts etc'''
+    
+    now = datetime.now().strftime('%d/%m/%y %H:%M')
+    title = f'{now} ${session.bal:.2f}'
+    live_str = '' if session.live else '*not live* '
+    above_ema = len(session.above_200_ema)
+    below_ema = len(session.below_200_ema)
+    ema_str = f'above ema: {above_ema}/{above_ema + below_ema}'
+    mkt_bench = session.benchmark
+    final_msg = f"{live_str} {ema_str}\nmkt perf 1w {round(mkt_bench.get('market_1w')*100, 2)}%\n-"
+    
+    for agent in agents:
+        agent_msg = f'\n{agent.name}'
+        
+        or_list = [v.get('or_$') for v in agent.real_pos.values() if v.get('or_$')]
+        num_open_positions = len(or_list)
+        vol_exp = 0
+        for k, v in agent.real_pos.items():
+            if k != 'USDT':
+                vol_exp += float(v.get('pf%'))
+        if num_open_positions or (vol_exp > 1):
+            agent_msg += f"\npositions {num_open_positions}, exposure {vol_exp:.2f}%"
+        
+        agent_msg += count_trades(agent.counts_dict)
+        
+        final_msg += agent_msg
+
+    print(f'-\n{title}\n{final_msg}')
+    if session.live:
+        pb.push_note(title, final_msg)
+
+def scanner_summary_old(session, agents: list) -> None:
     '''prints a summary of the agents recent performance, current exposure, 
     benchmarks, trade counts etc'''
     

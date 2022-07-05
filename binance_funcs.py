@@ -609,7 +609,7 @@ def update_pos_M(session, asset: str, new_bal: str, inval: float, direction: str
     
     pair = asset + 'USDT'
     price = session.prices[pair]
-    value = price * new_bal
+    value = price * float(new_bal)
     pct = round(100 * value / session.bal, 5)
     if direction == 'long':
         open_risk = value - (value / inval)
@@ -621,7 +621,7 @@ def update_pos_M(session, asset: str, new_bal: str, inval: float, direction: str
     else:
         open_risk_r = 0
         jk.stop()
-    return {'qty': new_bal, 'value': value, 'pf%': pct, 'or_R': open_risk_r, 'or_$': open_risk}
+    return {'qty': new_bal, 'value': f"{value:.2f}", 'pf%': pct, 'or_R': open_risk_r, 'or_$': open_risk}
 
 
 #-#-#- Margin Trading Functions

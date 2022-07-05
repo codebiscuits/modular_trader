@@ -382,7 +382,7 @@ class Agent():
                 value = free_bal * price
                 if value > 10:
                     note = f'{pair} in position with no stop-loss'
-                    pb.push_note(session.now_start, note)   
+                    pb.push_note(session.now_start, note)
         m.stop()
     
     def record_stopped_sim_trades(self, session) -> None:
@@ -1058,9 +1058,6 @@ class EMACross(Agent):
                    or self.in_pos['sim'] == 'short'
                    or self.in_pos['tracked'] == 'short')
         
-        if bullish_cross or bearish_cross:
-            print(f"{self.name} {pair}\n{bullish_cross = }\n{bearish_cross = }\n{bullish_emas = }\n{bearish_emas = }")
-        
         if bullish_bias and bullish_emas:
             signal = 'open_long'
         elif bearish_bias and bearish_emas:
@@ -1147,9 +1144,6 @@ class EMACrossHMA(Agent):
         in_short = (self.in_pos['real'] == 'short' 
                    or self.in_pos['sim'] == 'short'
                    or self.in_pos['tracked'] == 'short')
-        
-        if bullish_cross or bearish_cross:
-            print(f"{self.name} {pair}\n{bullish_cross = }\n{bearish_cross = }\n{bullish_emas = }\n{bearish_emas = }")
         
         if bullish_bias and bullish_cross:
             signal = 'open_long'

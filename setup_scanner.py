@@ -33,6 +33,7 @@ def setup_scan(timeframe, offset):
     print(f"Running setup_scan({timeframe}, {offset})")
     all_start = time.perf_counter()
     session = sessions.MARGIN_SESSION(timeframe, offset, 0.0001)
+    print(f"\nCurrent time: {session.now_start}, {session.name}\n")
     funcs.update_prices(session)
     pprint(session.usdt_bal)
     
@@ -64,12 +65,12 @@ def setup_scan(timeframe, offset):
     
     # pairs = pairs[:10] ############# delete when testing is finished #############
     
-    print(f"\nCurrent time: {session.now_start}, {session.name}\n")
     funcs.top_up_bnb_M(15)
     session.spreads = funcs.binance_spreads('USDT') # dict
     
     for agent in agents:
-        print(f"{agent.name} fr long: {(agent.fixed_risk_l*10000):.2f}bps, \
+        if agent.fixed_risk_l or agent.fixed_risk_s:
+            print(f"{agent.name} fr long: {(agent.fixed_risk_l*10000):.2f}bps, \
 fr short: {(agent.fixed_risk_s*10000):.2f}bps")
         agent.real_pos['USDT'] = session.usdt_bal
         agent.starting_ropnl_l = agent.open_pnl('long', 'real')
@@ -102,7 +103,7 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
             continue
         
         if len(df) > session.max_length:
-            print(f"setup_scanner line 105 {pair} df length: {len(df)}")
+            print(f"setup_scanner line 106 {pair} df length: {len(df)}")
             df = df.tail(session.max_length)
             df.reset_index(drop=True, inplace=True)
         
@@ -112,13 +113,13 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
         signals = {}
         mir = uf.max_init_risk(agent.num_open_positions, agent.target_risk)
         usdt_depth_l, usdt_depth_s = funcs.get_depth(session, pair)
+        price = session.prices[pair]
         for agent in agents:
             # print('*****', agent.name)
             
             signals = agent.margin_signals(session, df, pair)
             # print(signals)
         
-            price = df.at[len(df)-1, 'close']
             inval = signals.get('inval')
             inval_ratio = signals.get('inval_ratio')
             if inval:
@@ -334,36 +335,47 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
     #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#   
             
     # log all data from the session and print/push summary-------------------------
-    print('\n*-*-*-*-*-*-*-*-*-*-*-*-*-*-*')
     before = session.usdt_bal
     session.get_usdt_M()
     after = session.usdt_bal
     if before != after:
+        print('\n*-*-*-*-*-*-*-*-*-*-*-*-*-*-*')
         print('USDT balance wrong')
-    print('before:', before)
-    print('after:', after)
-    print('*-*-*-*-*-*-*-*-*-*-*-*-*-*-*\n')
+        print('before:', before)
+        print('after:', after)
+        print('*-*-*-*-*-*-*-*-*-*-*-*-*-*-*\n')
     
     print('-:-' * 20)
     
     for agent in agents:
         print('')
         print(agent.name.upper(), 'SUMMARY')
-        print(f'realised real long pnl: {agent.realised_pnl_long:.1f}R, realised sim long pnl: {agent.sim_pnl_long:.1f}R')
-        print(f'realised real short pnl: {agent.realised_pnl_short:.1f}R, realised sim short pnl: {agent.sim_pnl_short:.1f}R')
+        if agent.realised_pnl_long or agent.sim_pnl_long:
+            print(f'realised real long pnl: {agent.realised_pnl_long:.1f}R, realised sim long pnl: {agent.sim_pnl_long:.1f}R')
+        if agent.realised_pnl_short or agent.sim_pnl_short:
+            print(f'realised real short pnl: {agent.realised_pnl_short:.1f}R, realised sim short pnl: {agent.sim_pnl_short:.1f}R')
         print(f'tor: {agent.total_open_risk:.1f}')
-        print(f'or list: {[round(x, 2) for x in sorted(agent.or_list, reverse=True)]}')
-        print(f"real open pnl long: {agent.open_pnl('long', 'real'):.1f}R")
-        print(f"real open pnl short: {agent.open_pnl('short', 'real'):.1f}R")
-        print(f"sim open pnl long: {agent.open_pnl('long', 'sim'):.1f}R")
-        print(f"sim open pnl short: {agent.open_pnl('short', 'sim'):.1f}R")
+        # print(f'or list: {[round(x, 2) for x in sorted(agent.or_list, reverse=True)]}')
+        lropnl = agent.open_pnl('long', 'real')
+        if lropnl:
+            print(f"real open pnl long: {lropnl:.1f}R")
+        sropnl = agent.open_pnl('short', 'real')
+        if sropnl:
+            print(f"real open pnl short: {sropnl:.1f}R")
+        lsopnl = agent.open_pnl('long', 'sim')
+        if lsopnl:
+            print(f"sim open pnl long: {lsopnl:.1f}R")
+        ssopnl = agent.open_pnl('short', 'sim')
+        if ssopnl:
+            print(f"sim open pnl short: {ssopnl:.1f}R")
+        
         agent.real_pos['USDT'] = session.usdt_bal
         
         if not session.live:
             print('\n*** real_pos ***')
             pprint(agent.real_pos)
-            print('\n*** sim_pos ***')
-            pprint(agent.sim_pos.keys())
+            # print('\n*** sim_pos ***')
+            # pprint(agent.sim_pos.keys())
             print('warning: logging directed to test_records')
         
         uf.log(session, [agent])

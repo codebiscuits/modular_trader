@@ -13,6 +13,7 @@ client = Client(keys.bPkey, keys.bSkey)
 
 
 def open_long(session, agent, pair, size, stp, inval, sim_reason):
+    
     asset = pair[:-4]
     price = session.prices[pair]
     usdt_size: str = f"{size*price:.2f}"
@@ -20,6 +21,20 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
         
     if agent.in_pos['real'] == None and not sim_reason: # if state = real
+        
+        # # insert placeholder record
+        # placeholder = {'order': 'open_long', 
+        #                'state': 'real', 
+        #                'agent': agent.id, 
+        #                'pair': pair, 
+        #                'base_size': size, 
+        #                'stop_price': stp, 
+        #                'inval': inval, 
+        #                'sim_reason': sim_reason, 
+        #                'timestamp': now
+        #                }
+        # agent.open_trades[pair] = [placeholder]
+    
         note = f"{agent.name} real open long {size:.5} {pair} ({usdt_size} usdt) @ {price}, stop @ {stp:.5}"
         print(now, note)
         
@@ -35,6 +50,7 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
         long_order['state'] = 'real'
         long_order['score'] = 'signal score'
         long_order['hard_stop'] = str(stp)
+        long_order['init_hs'] = str(stp)
         long_order['liability'] = uf.update_liability(None, usdt_size, 'increase')
         
         # set stop and add to trade record
@@ -51,7 +67,7 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
         agent.in_pos['real_ep'] = price
         agent.in_pos['real_hs'] = stp
         if session.live:
-            agent.real_pos[asset] = funcs.update_pos_M(session, asset, float(size), inval, agent.in_pos['real'], agent.in_pos['real_pfrd'])
+            agent.real_pos[asset] = funcs.update_pos_M(session, asset, size, inval, agent.in_pos['real'], agent.in_pos['real_pfrd'])
             agent.real_pos[asset]['pnl_R'] = 0
             session.update_usdt_M(borrow=float(usdt_size))
         else:
@@ -101,8 +117,8 @@ def tp_long(session, agent, pair, stp, inval):
     
     if agent.in_pos.get('real_tp_sig'):
         trade_record = agent.open_trades.get(pair)
-        real_bal = abs(float(agent.real_pos[asset]['qty']))
-        real_val = abs(float(agent.real_pos[asset]['value']))
+        real_bal = abs(Decimal(agent.real_pos[asset]['qty']))
+        real_val = abs(Decimal(agent.real_pos[asset]['value']))
         pct = 50 if real_val > 24 else 100
         
         # clear stop
@@ -269,7 +285,7 @@ def close_long(session, agent, pair):
         print(now, note)
         
         trade_record = agent.open_trades.get(pair)
-        real_bal = abs(float(agent.real_pos[asset]['qty']))
+        real_bal = abs(Decimal(agent.real_pos[asset]['qty']))
         
         # cancel stop
         clear, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
@@ -435,6 +451,7 @@ def open_short(session, agent, pair, size, stp, inval, sim_reason):
         short_order['state'] = 'real'
         short_order['score'] = 'signal score'
         short_order['hard_stop'] = str(stp)
+        short_order['init_hs'] = str(stp)
         short_order['liability'] = uf.update_liability(None, str(size), 'increase')
         
         # set stop and add to trade record
@@ -500,8 +517,8 @@ def tp_short(session, agent, pair, stp, inval):
     
     if agent.in_pos.get('real_tp_sig'):
         trade_record = agent.open_trades.get(pair)
-        real_bal = abs(float(agent.real_pos[asset]['qty']))
-        real_val = abs(float(agent.real_pos[asset]['value']))
+        real_bal = abs(Decimal(agent.real_pos[asset]['qty']))
+        real_val = abs(Decimal(agent.real_pos[asset]['value']))
         pct = 50 if real_val > 24 else 100
         
         # clear stop
@@ -676,7 +693,7 @@ def close_short(session, agent, pair):
         print(now, note)
         
         trade_record = agent.open_trades.get(pair)
-        real_bal = abs(float(agent.real_pos[asset]['qty']))
+        real_bal = abs(Decimal(agent.real_pos[asset]['qty']))
         
         # cancel stop
         clear, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
@@ -852,7 +869,7 @@ def reduce_risk_M(session, agent):
                     else:
                         trade_record = []
                     
-                    real_bal = abs(float(agent.real_pos[asset]['qty']))
+                    real_bal = abs(Decimal(agent.real_pos[asset]['qty']))
                     
                     # clear stop
                     clear, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
@@ -919,7 +936,7 @@ def reduce_risk_M(session, agent):
                         else:
                             agent.realised_pnl(trade_record, 'short')
                 except BinanceAPIException as e:
-                    print(f'problem with sell order for {pair}')
+                    print(f'problem with reduce_risk order for {pair}')
                     print(e)
                     pb.push_note(now, f'exeption during {pair} sell order')
                     continue
