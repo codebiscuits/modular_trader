@@ -1008,6 +1008,7 @@ class DoubleST(Agent):
         k.stop()
         return {'signal': signal, 'inval': inval, 'inval_ratio': inval_ratio}
     
+
 class EMACross(Agent):
     '''Simple EMA cross strategy with a longer-term EMA to set bias and a 
     trailing stop based on ATR bands'''
@@ -1095,6 +1096,7 @@ class EMACross(Agent):
         k.stop()
         return {'signal': signal, 'inval': inval, 'inval_ratio': inval_ratio}
 
+
 class EMACrossHMA(Agent):
     '''Simple EMA cross strategy with a longer-term HMA to set bias more 
     responsively and a trailing stop based on ATR bands'''
@@ -1138,12 +1140,12 @@ class EMACrossHMA(Agent):
         bullish_emas = df.at[len(df)-1, fast_ema_str] > df.at[len(df)-1, slow_ema_str]
         bearish_emas = df.at[len(df)-1, fast_ema_str] < df.at[len(df)-1, slow_ema_str]
         
-        if bullish_bias == bearish_bias:
-            print('bias hma broken')
-            print(df.tail(1))
-        elif bullish_emas == bearish_emas:
-            print('emas broken')
-            print(df.tail(1))
+        # if bullish_bias == bearish_bias:
+        #     print(f'bias hma broken {pair}')
+        #     print(df.loc[:, ['close', bias_hma_str]].tail(1))
+        # elif bullish_emas == bearish_emas:
+        #     print(f'emas broken {pair}')
+        #     print(df.loc[:, ['close', bias_hma_str]].tail(1))
         
         in_long = (self.in_pos['real'] == 'long' 
                    or self.in_pos['sim'] == 'long'
@@ -1154,16 +1156,16 @@ class EMACrossHMA(Agent):
         
         if bullish_bias and bullish_cross:
             signal = 'open_long'
-            print(f"{self.name} {pair} {signal}")
+            # print(f"{self.name} {pair} {signal}")
         elif bearish_bias and bearish_cross:
             signal = 'open_short'
-            print(f"{self.name} {pair} {signal}")
+            # print(f"{self.name} {pair} {signal}")
         elif bearish_emas and in_long:
             signal = 'close_long'
-            print(f"{self.name} {pair} {signal}")
+            # print(f"{self.name} {pair} {signal}")
         elif bullish_emas and in_short:
             signal = 'close_short'
-            print(f"{self.name} {pair} {signal}")
+            # print(f"{self.name} {pair} {signal}")
         else:
             signal = None
         
@@ -1191,8 +1193,8 @@ class EMACrossHMA(Agent):
             inval = None
             inval_ratio = None
         
-        if signal:
-            print(f"{signal} inval: {inval:.3} ratio: {inval_ratio:.3f}")
+        # if signal:
+        #     print(f"{signal} inval: {inval:.3} ratio: {inval_ratio:.3f}")
         k.stop()
         return {'signal': signal, 'inval': inval, 'inval_ratio': inval_ratio}
 

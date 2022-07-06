@@ -91,7 +91,7 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
             continue
         
         if len(df) > session.max_length:
-            print(f"setup_scanner line 106 {pair} df length: {len(df)}")
+            print(f"setup_scanner line 94 {pair} df length: {len(df)}")
             df = df.tail(session.max_length)
             df.reset_index(drop=True, inplace=True)
         
@@ -104,8 +104,8 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
         price = session.prices[pair]
         for agent in agents:
             # print('*****', agent.name)
-            
-            signals = agent.margin_signals(session, df, pair)
+            df_2 = df.copy()
+            signals = agent.margin_signals(session, df_2, pair)
             # print(signals)
         
             inval = signals.get('inval')
@@ -116,7 +116,7 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
                 size_l, usdt_size_l, size_s, usdt_size_s = funcs.get_size(agent, price, session.bal, risk)
             
             # remove indicators to avoid errors
-            df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
+            df_2 = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
             
             if inval == 0:
                 note = f'{pair} supertrend 0 error, skipping pair'
