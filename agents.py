@@ -1138,6 +1138,13 @@ class EMACrossHMA(Agent):
         bullish_emas = df.at[len(df)-1, fast_ema_str] > df.at[len(df)-1, slow_ema_str]
         bearish_emas = df.at[len(df)-1, fast_ema_str] < df.at[len(df)-1, slow_ema_str]
         
+        if bullish_bias == bearish_bias:
+            print('bias hma broken')
+            print(df.tail(1))
+        elif bullish_emas == bearish_emas:
+            print('emas broken')
+            print(df.tail(1))
+        
         in_long = (self.in_pos['real'] == 'long' 
                    or self.in_pos['sim'] == 'long'
                    or self.in_pos['tracked'] == 'long')
@@ -1147,16 +1154,16 @@ class EMACrossHMA(Agent):
         
         if bullish_bias and bullish_cross:
             signal = 'open_long'
-            print(f"{self.name} {signal}")
+            print(f"{self.name} {pair} {signal}")
         elif bearish_bias and bearish_cross:
             signal = 'open_short'
-            print(f"{self.name} {signal}")
+            print(f"{self.name} {pair} {signal}")
         elif bearish_emas and in_long:
             signal = 'close_long'
-            print(f"{self.name} {signal}")
+            print(f"{self.name} {pair} {signal}")
         elif bullish_emas and in_short:
             signal = 'close_short'
-            print(f"{self.name} {signal}")
+            print(f"{self.name} {pair} {signal}")
         else:
             signal = None
         
