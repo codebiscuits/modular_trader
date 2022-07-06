@@ -81,7 +81,6 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
         agent.counts_dict['real_open_long'] +=1
         
     if agent.in_pos['sim'] == None and sim_reason:
-        print('')
         
         # # insert placeholder record
         # placeholder = {'order': 'open_long', 
@@ -101,6 +100,7 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
         usdt_size = 128.0
         size = f"{usdt_size/price:.8f}"
         # if not session.live:
+        #     print('')
         #     note = f"{agent.name} sim open long {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
         #     print(now, note)
         
@@ -256,8 +256,8 @@ def tp_long(session, agent, pair, stp, inval):
                 agent.realised_pnl(trade_record, 'long')
             
     if agent.in_pos.get('sim_tp_sig'):
-        print('')
         # if not session.live:
+        #     print('')
         #     note = f"{agent.name} sim take-profit {pair} long 50% @ {price}"
         #     print(now, note)
         
@@ -298,17 +298,14 @@ def tp_long(session, agent, pair, stp, inval):
         print(now, note)
         
         trade_record = agent.tracked_trades.get(pair)
-        tracked_bal = abs(float(agent.tracked[asset]['qty']))
         timestamp = round(datetime.utcnow().timestamp() * 1000)
-        order_size = tracked_bal / 2
-        usdt_size = f"{order_size * price:.2f}"
         
         # execute order
         tp_order = {'pair': pair, 
                      'exe_price': str(price), 
                      'trig_price': str(price), 
-                     'base_size': str(order_size), 
-                     'quote_size': usdt_size, 
+                     'base_size': '0', 
+                     'quote_size': '0', 
                      'reason': 'trade over-extended', 
                      'timestamp': timestamp, 
                      'type': 'tp_long', 
@@ -321,7 +318,6 @@ def tp_long(session, agent, pair, stp, inval):
         agent.tracked_trades[pair] = trade_record
         agent.record_trades(session, 'tracked')
         
-        agent.counts_dict['tracked_tp_long'] += 1
         agent.in_pos['tracked_pfrd'] = agent.in_pos['tracked_pfrd'] / 2
 
 def close_long(session, agent, pair):
@@ -390,8 +386,9 @@ def close_long(session, agent, pair):
             agent.realised_pnl(trade_record, 'long')
     
     if agent.in_pos['sim'] == 'long':
-        print('')
+        
         # if not session.live:
+        #     print('')
         #     note = f"{agent.name} sim close long {pair} @ {price}"
         #     print(now, note)
         
@@ -442,15 +439,14 @@ def close_long(session, agent, pair):
         
         # initialise stuff
         trade_record = agent.tracked_trades[pair]
-        tracked_bal = Decimal(agent.tracked[asset]['qty'])
         timestamp = round(datetime.utcnow().timestamp() * 1000)
         
         # execute order
         long_order = {'pair': pair, 
                      'exe_price': str(price), 
                      'trig_price': str(price), 
-                     'base_size': str(tracked_bal), 
-                     'quote_size': str(round(sim_bal*price, 2)), 
+                     'base_size': '0', 
+                     'quote_size': '0', 
                      'reason': 'strategy close long signal', 
                      'timestamp': timestamp, 
                      'type': 'close_long', 
@@ -476,9 +472,7 @@ def close_long(session, agent, pair):
         del agent.tracked[asset]
         
         agent.in_pos['tracked'] = None
-        agent.in_pos['tracked_pfrd'] = 0        
-        
-        agent.counts_dict['tracked_close_long'] += 1
+        agent.in_pos['tracked_pfrd'] = 0
 
 def open_short(session, agent, pair, size, stp, inval, sim_reason):
     # initialise stuff
@@ -549,7 +543,6 @@ def open_short(session, agent, pair, size, stp, inval, sim_reason):
         agent.counts_dict['real_open_short'] +=1
         
     if agent.in_pos['sim'] == None and sim_reason:
-        print('')
         
         # # insert placeholder record
         # placeholder = {'order': 'open_short', 
@@ -569,6 +562,7 @@ def open_short(session, agent, pair, size, stp, inval, sim_reason):
         usdt_size = 128.0
         size = round(usdt_size / price, 8)
         # if not session.live:
+        #     print('')
         #     note = f"{agent.name} sim open short {size:.5} {pair} ({usdt_size:.5} usdt) @ {price}, stop @ {stp:.5}"
         #     print(now, note)
         
@@ -703,8 +697,9 @@ def tp_short(session, agent, pair, stp, inval):
                 agent.realised_pnl(trade_record, 'short')
             
     if agent.in_pos.get('sim_tp_sig'):
-        print('')
+        
         # if not session.live:
+        #     print('')
         #     note = f"{agent.name} sim take-profit {pair} short 50% @ {price}"
         #     print(now, note) 
         
@@ -745,17 +740,14 @@ def tp_short(session, agent, pair, stp, inval):
         print(now, note) 
         
         trade_record = agent.tracked_trades.get(pair)
-        tracked_bal = abs(float(agent.tracked[asset]['qty']))
         timestamp = round(datetime.utcnow().timestamp() * 1000)
-        order_size = tracked_bal / 2
-        quote_order_size = round(order_size * price, 2)
         
         # execute order
         tp_order = {'pair': pair, 
                      'exe_price': str(price), 
                      'trig_price': str(price), 
-                     'base_size': str(order_size), 
-                     'quote_size': str(quote_order_size), 
+                     'base_size': '0', 
+                     'quote_size': '0', 
                      'reason': 'trade over-extended', 
                      'timestamp': timestamp, 
                      'type': 'tp_short', 
@@ -768,7 +760,6 @@ def tp_short(session, agent, pair, stp, inval):
         agent.tracked_trades[pair] = trade_record
         agent.record_trades(session, 'tracked')
         
-        agent.counts_dict['tracked_tp_short'] += 1
         agent.in_pos['tracked_pfrd'] = agent.in_pos['tracked_pfrd'] / 2
 
 def close_short(session, agent, pair):
@@ -839,8 +830,9 @@ def close_short(session, agent, pair):
             agent.realised_pnl(trade_record, 'short')
     
     if agent.in_pos['sim'] == 'short':
-        print('')
+        
         # if not session.live:
+        #     print('')
         #     note = f"{agent.name} sim close short {pair} @ {price}"
         #     print(now, note)
         
@@ -891,15 +883,14 @@ def close_short(session, agent, pair):
         
         # initialise stuff
         trade_record = agent.tracked_trades[pair]
-        tracked_bal = Decimal(agent.tracked[asset]['qty'])
         timestamp = round(datetime.utcnow().timestamp() * 1000)
         
         # execute order
         short_order = {'pair': pair, 
                      'exe_price': str(price), 
                      'trig_price': str(price), 
-                     'base_size': str(tracked_bal), 
-                     'quote_size': str(round(tracked_bal*price, 2)), 
+                     'base_size': '0', 
+                     'quote_size': '0', 
                      'reason': 'strategy close short signal', 
                      'timestamp': timestamp, 
                      'type': 'close_short', 
@@ -924,9 +915,7 @@ def close_short(session, agent, pair):
         # update live variables
         del agent.tracked[asset]
         agent.in_pos['tracked'] = None
-        agent.in_pos['tracked_pfrd'] = 0        
-        
-        agent.counts_dict['tracked_close_short'] += 1
+        agent.in_pos['tracked_pfrd'] = 0
 
 def reduce_risk_M(session, agent):
     # create a list of open positions in profit and their open risk value

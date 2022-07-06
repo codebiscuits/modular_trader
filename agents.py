@@ -179,10 +179,10 @@ class Agent():
                 except JSONDecodeError as e:
                     open_trades = {}
         else:
-            print("ot_path doesn't exist")
+            # print("ot_path doesn't exist")
             open_trades = {}
             ot_path.touch()
-            print(f'{ot_path} not found')
+            # print(f'{ot_path} not found')
     
             
         w.stop()
@@ -208,7 +208,7 @@ class Agent():
                     self.next_id = 0
         else:
             closed_trades = {}
-            print(f'{ct_path} not found')
+            # print(f'{ct_path} not found')
         e.stop()
         return closed_trades
 
@@ -651,7 +651,8 @@ class Agent():
         
         # real_score_1, real_score_2, real_pnls = score_accum(direction, 'real')
         sim_score_1, sim_score_2, sim_pnls = score_accum(direction, 'sim')
-        print(f"set_fixed_risk {direction}: sim_score {sim_score_1 + sim_score_2}")
+        if sim_score_1 + sim_score_2 >= 11:
+            print(f"set_fixed_risk {direction}: sim_score {sim_score_1 + sim_score_2}")
         score = sim_score_1 + sim_score_2
         pnls = sim_pnls
         # print(f"set_fixed_risk {direction}: real_score {real_score_1 + real_score_2}, sim_score {sim_score_1 + sim_score_2}")

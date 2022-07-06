@@ -11,6 +11,10 @@ for f in folder.glob('*'):
         print(f)
         filepath = f / 'open_trades.json'
         filepath2 = f / 'ot_backup.json'
-        filepath.unlink(missing_ok=True)
-        filepath2.unlink(missing_ok=True)
+        if filepath.exists():
+            filepath.unlink()
+            print(f"deleted {filepath}")
+        if filepath2.exists():
+            filepath2.unlink()
+            print(f"deleted {filepath2}")
 
