@@ -611,6 +611,8 @@ def update_pos_M(session, asset: str, new_bal: str, inval: float, direction: str
     price = session.prices[pair]
     value = price * float(new_bal)
     pct = round(100 * value / session.bal, 5)
+    new_bal = valid_size(session, pair, new_bal)
+    
     if direction == 'long':
         open_risk = value - (value / inval)
     else:
@@ -702,16 +704,16 @@ def buy_asset_M(session, pair: str, size: float, is_base: bool, price: float, li
         now = int(datetime.now().timestamp() * 1000)
         if is_base:
             base_size = size
-            usdt_size = round(size * price, 2)
+            usdt_size = f"{float(size) * price:.2f}"
         else:
             base_size = valid_size(session, pair, size / price)
             print(f'buy_asset_M {size = }, {base_size = }')
             if not base_size: # if size == 0, valid_size will output None
-                print(f'*problem* non-live buy {pair}: {usdt_size = }, {base_size = }')
+                print(f'*problem* non-live buy {pair}: {base_size = }')
                 base_size = 0
-            usdt_size = size
+            usdt_size = str(size)
         buy_order = {'clientOrderId': '111111',
-         'cummulativeQuoteQty': str(usdt_size),
+         'cummulativeQuoteQty': usdt_size,
          'executedQty': str(base_size),
          'fills': [{'commission': '0',
                     'commissionAsset': 'BNB',
@@ -738,7 +740,7 @@ def sell_asset_M(session, pair: str, base_size: float, price: float, live: bool)
     df = Timer('sell_asset_M')
     df.start()
     
-    # base_size = valid_size(session, pair, base_size)
+    base_size = valid_size(session, pair, base_size)
     if not base_size: # if size == 0, valid_size will output None
         base_size = 0
     if live:
@@ -836,6 +838,8 @@ def clear_stop_M(pair: str, trade_record: dict, live: bool) -> Tuple[Any, Decima
                 print('no stop to clear')
                 clear = {}
                 base_size = Decimal(0)
+    else:
+        base_size = trade_record[-1]['base_size']
     fc.stop()
     return clear, base_size
 

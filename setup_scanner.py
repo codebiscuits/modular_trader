@@ -29,7 +29,10 @@ client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 
-def setup_scan(timeframe, offset):
+def setup_scan(timeframe: str, offset: str) -> None:
+    """runs the entire setup scanning process for a specified timeframe and
+    timedelta offset"""
+    
     print(f"Running setup_scan({timeframe}, {offset})")
     all_start = time.perf_counter()
     session = sessions.MARGIN_SESSION(timeframe, offset, 0.0001)
@@ -97,9 +100,9 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
         too_new = 0
         for agent in agents:
             if agent.too_new(df):
-                print(f"{agent} {pair} too new: {len(df)}")
                 too_new += 1
         if too_new == len(agents):
+            print(f"{pair} too new: {len(df)}")
             continue
         
         if len(df) > session.max_length:

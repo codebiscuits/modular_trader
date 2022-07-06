@@ -682,7 +682,7 @@ def calc_sizing_non_live_tp(session, agent, asset: str, tp_pct: int, switch: str
         entry = agent.in_pos['sim_ep']
         stop = agent.in_pos['sim_hs']
     
-    qty = pos_dict.get(asset).get('qty') * tp_scalar
+    qty = float(pos_dict.get(asset).get('qty')) * tp_scalar
     val = float(pos_dict.get(asset).get('value')) * tp_scalar
     pf = pos_dict.get(asset).get('pf%') * tp_scalar
     or_R = pos_dict.get(asset).get('or_R') * tp_scalar

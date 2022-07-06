@@ -66,8 +66,7 @@ class Agent():
         self.open_pnl_changes = {}
         self.fixed_risk_l = self.set_fixed_risk('long')
         self.fixed_risk_s = self.set_fixed_risk('short')
-        if session.live:
-            self.test_fixed_risk(0.0002, 0.0002)
+        # self.test_fixed_risk(0.0002, 0.0002)
         self.max_positions = self.set_max_pos()
         self.max_init_r_l = self.fixed_risk_l * self.total_r_limit
         self.max_init_r_s = self.fixed_risk_s * self.total_r_limit
@@ -1147,12 +1146,16 @@ class EMACrossHMA(Agent):
         
         if bullish_bias and bullish_cross:
             signal = 'open_long'
+            print(f"{self.name} {signal}")
         elif bearish_bias and bearish_cross:
             signal = 'open_short'
+            print(f"{self.name} {signal}")
         elif bearish_emas and in_long:
             signal = 'close_long'
+            print(f"{self.name} {signal}")
         elif bullish_emas and in_short:
             signal = 'close_short'
+            print(f"{self.name} {signal}")
         else:
             signal = None
         

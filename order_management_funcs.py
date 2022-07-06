@@ -21,19 +21,21 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
     now = datetime.now().strftime('%d/%m/%y %H:%M')
         
     if agent.in_pos['real'] == None and not sim_reason: # if state = real
+        print('')
         
         # # insert placeholder record
         # placeholder = {'order': 'open_long', 
-        #                'state': 'real', 
-        #                'agent': agent.id, 
-        #                'pair': pair, 
-        #                'base_size': size, 
-        #                'stop_price': stp, 
-        #                'inval': inval, 
-        #                'sim_reason': sim_reason, 
-        #                'timestamp': now
-        #                }
+        #                 'state': 'real', 
+        #                 'agent': agent.id, 
+        #                 'pair': pair, 
+        #                 'base_size': size, 
+        #                 'stop_price': stp, 
+        #                 'inval': inval, 
+        #                 'timestamp': now, 
+        #                 'completed': None
+        #                 }
         # agent.open_trades[pair] = [placeholder]
+        # agent.record_trades(session, 'open')
     
         note = f"{agent.name} real open long {size:.5} {pair} ({usdt_size} usdt) @ {price}, stop @ {stp:.5}"
         print(now, note)
@@ -79,6 +81,23 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
         agent.counts_dict['real_open_long'] +=1
         
     if agent.in_pos['sim'] == None and sim_reason:
+        print('')
+        
+        # # insert placeholder record
+        # placeholder = {'order': 'open_long', 
+        #                 'state': 'sim', 
+        #                 'agent': agent.id, 
+        #                 'pair': pair, 
+        #                 'base_size': size, 
+        #                 'stop_price': stp, 
+        #                 'inval': inval, 
+        #                 'sim_reason': sim_reason, 
+        #                 'timestamp': now, 
+        #                 'upto': None
+        #                 }
+        # agent.sim_trades[pair] = [placeholder]
+        # agent.record_trades(session, 'sim')
+    
         usdt_size = 128.0
         size = f"{usdt_size/price:.8f}"
         # if not session.live:
@@ -116,26 +135,56 @@ def tp_long(session, agent, pair, stp, inval):
     # session.bal = funcs.account_bal_M()
     
     if agent.in_pos.get('real_tp_sig'):
+        print('')
         trade_record = agent.open_trades.get(pair)
+        
+        # # insert placeholder record
+        # placeholder = {'order': 'tp_long', 
+        #                 'state': 'real', 
+        #                 'agent': agent.id, 
+        #                 'pair': pair, 
+        #                 'stop_price': stp, 
+        #                 'inval': inval, 
+        #                 'timestamp': now, 
+        #                 'completed': None
+        #                 }
+        # agent.open_trades[pair].append(placeholder)
+        # agent.record_trades(session, 'open')
+    
         real_bal = abs(Decimal(agent.real_pos[asset]['qty']))
         real_val = abs(Decimal(agent.real_pos[asset]['value']))
         pct = 50 if real_val > 24 else 100
         
         # clear stop
         clear, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
+        
         if clear == 'error':
             print(f"{agent.name} Can't be sure which {pair} stop to clear, tp_long aborted")
             pb.push_note(pair, "Can't be sure which stop to clear, tp_long aborted")
         else:
-            if base_size and (real_bal != Decimal(base_size)): # check records match reality
+            if base_size and (float(real_bal) != float(base_size)): # check records match reality
                 print(f"{agent.name} {pair} records don't match real balance. {real_bal = }, {base_size = }")
             if not base_size:
                 base_size = real_bal
             
-            # execute trade
             order_size = float(base_size) * (pct/100)
+            
+            # # update placeholder
+            # placeholder['base_size'] = order_size
+            # placeholder['completed'] = 'clear_stop'
+            # agent.open_trades[pair].append(placeholder)
+            # agent.record_trades(session, 'open')
+            
+            # execute trade
             api_order = funcs.sell_asset_M(session, pair, order_size, price, session.live)
             sell_order = funcs.create_trade_dict(api_order, price, session.live)
+            
+            # # update placeholder
+            # placeholder['completed'] = 'sell_asset'
+            # agent.open_trades[pair] = [placeholder]
+            # agent.record_trades(session, 'open')
+            
+            # repay assets
             usdt_size = api_order.get('cummulativeQuoteQty')
             funcs.repay_asset_M('USDT', usdt_size, session.live)
             
@@ -207,6 +256,7 @@ def tp_long(session, agent, pair, stp, inval):
                 agent.realised_pnl(trade_record, 'long')
             
     if agent.in_pos.get('sim_tp_sig'):
+        print('')
         # if not session.live:
         #     note = f"{agent.name} sim take-profit {pair} long 50% @ {price}"
         #     print(now, note)
@@ -243,6 +293,7 @@ def tp_long(session, agent, pair, stp, inval):
         agent.realised_pnl(trade_record, 'long')
         
     if agent.in_pos.get('tracked_tp_sig'):
+        print('')
         note = f"{agent.name} tracked take-profit {pair} long 50% @ {price}"
         print(now, note)
         
@@ -281,6 +332,7 @@ def close_long(session, agent, pair):
     # session.bal = funcs.account_bal_M()
     
     if agent.in_pos['real'] == 'long':
+        print('')
         note = f"{agent.name} real close long {pair} @ {price}"
         print(now, note)
         
@@ -293,7 +345,7 @@ def close_long(session, agent, pair):
             print(f"{agent.name} Can't be sure which {pair} stop to clear, close_long aborted")
             pb.push_note(pair, "Can't be sure which stop to clear, close_long aborted")
         else:
-            if base_size and (real_bal != base_size): # check records match reality
+            if base_size and (float(real_bal) != float(base_size)): # check records match reality
                 print(f"{agent.name} {pair} records don't match real balance. {real_bal = }, {base_size = }")
             if not base_size:
                 base_size = real_bal
@@ -338,6 +390,7 @@ def close_long(session, agent, pair):
             agent.realised_pnl(trade_record, 'long')
     
     if agent.in_pos['sim'] == 'long':
+        print('')
         # if not session.live:
         #     note = f"{agent.name} sim close long {pair} @ {price}"
         #     print(now, note)
@@ -383,6 +436,7 @@ def close_long(session, agent, pair):
         agent.realised_pnl(trade_record, 'long')
         
     if agent.in_pos['tracked'] == 'long':
+        print('')
         note = f"{agent.name} tracked close long {pair} @ {price}"
         print(now, note)
         
@@ -435,6 +489,22 @@ def open_short(session, agent, pair, size, stp, inval, sim_reason):
     # session.bal = funcs.account_bal_M()
     
     if agent.in_pos['real'] == None and not sim_reason:
+        print('')
+        
+        # # insert placeholder record
+        # placeholder = {'order': 'open_short', 
+        #                 'state': 'real', 
+        #                 'agent': agent.id, 
+        #                 'pair': pair, 
+        #                 'base_size': size, 
+        #                 'stop_price': stp, 
+        #                 'inval': inval, 
+        #                 'timestamp': now, 
+        #                 'completed': None
+        #                 }
+        # agent.open_trades[pair] = [placeholder]
+        # agent.record_trades(session, 'open')
+        
         note = f"{agent.name} real open short {size:.5} {pair} ({usdt_size} usdt) @ {price}, stop @ {stp:.5}"
         print(now, note)
         
@@ -479,6 +549,23 @@ def open_short(session, agent, pair, size, stp, inval, sim_reason):
         agent.counts_dict['real_open_short'] +=1
         
     if agent.in_pos['sim'] == None and sim_reason:
+        print('')
+        
+        # # insert placeholder record
+        # placeholder = {'order': 'open_short', 
+        #                 'state': 'sim', 
+        #                 'agent': agent.id, 
+        #                 'pair': pair, 
+        #                 'base_size': size, 
+        #                 'stop_price': stp, 
+        #                 'inval': inval, 
+        #                 'sim_reason': sim_reason, 
+        #                 'timestamp': now, 
+        #                 'upto': None
+        #                 }
+        # agent.sim_trades[pair] = [placeholder]
+        # agent.record_trades(session, 'sim')
+    
         usdt_size = 128.0
         size = round(usdt_size / price, 8)
         # if not session.live:
@@ -516,6 +603,7 @@ def tp_short(session, agent, pair, stp, inval):
     # session.bal = funcs.account_bal_M()
     
     if agent.in_pos.get('real_tp_sig'):
+        print('')
         trade_record = agent.open_trades.get(pair)
         real_bal = abs(Decimal(agent.real_pos[asset]['qty']))
         real_val = abs(Decimal(agent.real_pos[asset]['value']))
@@ -530,7 +618,7 @@ def tp_short(session, agent, pair, stp, inval):
             print(f"{agent.name} Can't be sure which {pair} stop to clear, tp_short aborted")
             pb.push_note(pair, "Can't be sure which stop to clear, tp_short aborted")
         else:
-            if base_size and (real_bal != base_size): # check records match reality
+            if base_size and (float(real_bal) != float(base_size)): # check records match reality
                 print(f"{agent.name} {pair} records don't match real balance. {real_bal = }, {base_size = }")
             if not base_size:
                 base_size = real_bal
@@ -615,6 +703,7 @@ def tp_short(session, agent, pair, stp, inval):
                 agent.realised_pnl(trade_record, 'short')
             
     if agent.in_pos.get('sim_tp_sig'):
+        print('')
         # if not session.live:
         #     note = f"{agent.name} sim take-profit {pair} short 50% @ {price}"
         #     print(now, note) 
@@ -651,6 +740,7 @@ def tp_short(session, agent, pair, stp, inval):
         agent.realised_pnl(trade_record, 'short')
         
     if agent.in_pos.get('tracked_tp_sig'):
+        print('')
         note = f"{agent.name} tracked take-profit {pair} short 50% @ {price}"
         print(now, note) 
         
@@ -689,6 +779,7 @@ def close_short(session, agent, pair):
     # session.bal = funcs.account_bal_M()
     
     if agent.in_pos['real'] == 'short':
+        print('')
         note = f"{agent.name} real close short {pair} @ {price}"
         print(now, note)
         
@@ -701,7 +792,7 @@ def close_short(session, agent, pair):
             print(f"{agent.name} Can't be sure which {pair} stop to clear, close_short aborted")
             pb.push_note(pair, "Can't be sure which stop to clear, close_short aborted")
         else:
-            if base_size and (real_bal != base_size): # check records match reality
+            if base_size and (float(real_bal) != float(base_size)): # check records match reality
                 print(f"{agent.name} {pair} records don't match real balance. {real_bal = }, {base_size = }")
             if not base_size:
                 base_size = real_bal
@@ -739,15 +830,16 @@ def close_short(session, agent, pair):
             else:
                 del agent.real_pos[asset]
                 value = float(agent.real_pos['USDT']['value'])
-                agent.real_pos['USDT']['value'] = value + float(base_size * price)
+                agent.real_pos['USDT']['value'] = value + (float(base_size) * price)
                 owed = float(agent.real_pos['USDT']['owed'])
-                agent.real_pos['USDT']['owed'] = owed - float(base_size * price)
+                agent.real_pos['USDT']['owed'] = owed - (float(base_size) * price)
             
             # save records and update counts
             agent.counts_dict['real_close_short'] +=1
             agent.realised_pnl(trade_record, 'short')
     
     if agent.in_pos['sim'] == 'short':
+        print('')
         # if not session.live:
         #     note = f"{agent.name} sim close short {pair} @ {price}"
         #     print(now, note)
@@ -793,6 +885,7 @@ def close_short(session, agent, pair):
         agent.realised_pnl(trade_record, 'short')
         
     if agent.in_pos['tracked'] == 'short':
+        print('')
         note = f"{agent.name} tracked close short {pair} @ {price}"
         print(now, note)
         
@@ -856,7 +949,7 @@ def reduce_risk_M(session, agent):
             or_R = pos[1]
             pnl_pct = pos[2]
             if total_r > agent.total_r_limit and or_R > agent.indiv_r_limit and pnl_pct > 0.3:
-                print(f'*** tor: {total_r:.1f}, reducing risk ***')
+                print(f'\n*** tor: {total_r:.1f}, reducing risk ***')
                 pair = asset + 'USDT'
                 now = datetime.now().strftime('%d/%m/%y %H:%M')
                 price = funcs.get_price(pair)
@@ -878,7 +971,7 @@ def reduce_risk_M(session, agent):
                         print(note)
                         pb.push_note(pair, note)
                     else:
-                        if base_size and (real_bal != base_size): # check records match reality
+                        if base_size and (float(real_bal) != float(base_size)): # check records match reality
                             print(f"{agent.name} {pair} records don't match real balance. {real_bal = }, {base_size = }")
                             mismatch = 100 * abs(base_size - real_bal) / base_size
                             print(f"{mismatch = }%")
