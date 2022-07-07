@@ -184,19 +184,19 @@ def tp_long(session, agent, pair, stp, inval):
             # agent.open_trades[pair] = [placeholder]
             # agent.record_trades(session, 'open')
             
-            # repay assets
-            usdt_size = api_order.get('cummulativeQuoteQty')
-            funcs.repay_asset_M('USDT', usdt_size, session.live)
-            
             note = f"{agent.name} real take-profit {pair} long {pct}% @ {price}"
             print(now, note)        
             
             if pct == 100:
+                # repay assets
+                usdt_size = max(api_order.get('cummulativeQuoteQty'), trade_record[-1]['liability'])
+                funcs.repay_asset_M('USDT', usdt_size, session.live)
+                
                 # create trade dict
                 sell_order['type'] = 'close_long'
                 sell_order['state'] = 'real'
                 sell_order['reason'] = 'trade over-extended'
-                sell_order['liability'] = uf.update_liability(trade_record, usdt_size, 'reduce')
+                sell_order['liability'] = '0'
                 trade_record.append(sell_order)
                 
                 # update records            
@@ -227,6 +227,10 @@ def tp_long(session, agent, pair, stp, inval):
             
             
             else: # if pct < 100%
+                # repay assets
+                usdt_size = api_order.get('cummulativeQuoteQty')
+                funcs.repay_asset_M('USDT', usdt_size, session.live)
+                
                 # create trade dict
                 sell_order['type'] = 'tp_long'
                 sell_order['state'] = 'real'
@@ -348,8 +352,8 @@ def close_long(session, agent, pair):
             
             # execute trade
             api_order = funcs.sell_asset_M(session, pair, real_bal, price, session.live)
-            usdt_size = api_order.get('cummulativeQuoteQty')
-            funcs.repay_asset_M('USDT', trade_record[-1].get('liability'), session.live)
+            usdt_size = max(api_order.get('cummulativeQuoteQty'), trade_record[-1].get('liability'))
+            funcs.repay_asset_M('USDT', usdt_size, session.live)
             
             sell_order = funcs.create_trade_dict(api_order, price, session.live)
             sell_order['type'] = 'close_long'
@@ -627,16 +631,14 @@ def tp_short(session, agent, pair, stp, inval):
             print(now, note)        
             
             if pct == 100:
-                liability = trade_record[-1].get('liability')
-                if not liability:
-                    repay_size = buy_order.get('base_size') # backup value in case theres something wrong with liability
+                repay_size = max(trade_record[-1].get('liability'), buy_order.get('base_size'))
                 funcs.repay_asset_M(asset, repay_size, session.live)
                 
                 # create trade dict
                 buy_order['type'] = 'close_short'
                 buy_order['state'] = 'real'
                 buy_order['reason'] = 'trade over-extended'
-                buy_order['liability'] = uf.update_liability(trade_record, repay_size, 'reduce')
+                buy_order['liability'] = '0'
                 trade_record.append(buy_order)
                 
                 # update records            
@@ -790,8 +792,8 @@ def close_short(session, agent, pair):
             
             # execute trade
             api_order = funcs.buy_asset_M(session, pair, base_size, True, price, session.live)
-            liability = trade_record[-1]['liability']
-            funcs.repay_asset_M(asset, liability, session.live)
+            repay_size = max(trade_record[-1]['liability'], api_order.get('base_size'))
+            funcs.repay_asset_M(asset, repay_size, session.live)
             
             sell_order = funcs.create_trade_dict(api_order, price, session.live)
             sell_order['type'] = 'close_short'
@@ -971,19 +973,19 @@ def reduce_risk_M(session, agent):
                         if long:
                             api_order = funcs.sell_asset_M(session, pair, base_size, price, session.live)
                             usdt_size = api_order.get('cummulativeQuoteQty')
-                            repay_size = usdt_size
+                            repay_size = max(usdt_size, trade_record[-1].get('liability', 0))
                             funcs.repay_asset_M('USDT', repay_size, session.live)
                         else:
                             api_order = funcs.buy_asset_M(session, pair, base_size, True, price, session.live)
-                            repay_size = str(base_size)
-                            usdt_size = repay_size * price
+                            usdt_size = base_size * price
+                            repay_size = str(max(base_size, trade_record[-1].get('liability', 0)))
                             funcs.repay_asset_M(asset, repay_size, session.live)
                         
                         reduce_order = funcs.create_trade_dict(api_order, price, session.live)
                         reduce_order['type'] = 'close_long' if long else 'close_short'
                         reduce_order['state'] = 'real'
                         reduce_order['reason'] = 'portfolio risk limiting'
-                        reduce_order['liability'] = uf.update_liability(trade_record, repay_size, 'reduce')
+                        reduce_order['liability'] = '0'
                         
                         trade_record.append(reduce_order)
                         

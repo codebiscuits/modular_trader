@@ -1181,7 +1181,11 @@ class EMACrossHMA(Agent):
         
         for state in ['real', 'sim', 'tracked']:
             if self.in_pos[state]:
-                self.move_stop(session, pair, df, state, self.in_pos[state])
+                try:
+                    self.move_stop(session, pair, df, state, self.in_pos[state])
+                except KeyError:
+                    print(f"*** KeyError while attempting to move {pair} {self.name} stop")
+                    continue
         
         if ((signal == 'open_long') or in_long) and df.at[len(df)-1, 'atr_lower']:
             inval = df.at[len(df)-1, 'atr_lower']

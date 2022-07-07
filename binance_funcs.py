@@ -783,7 +783,7 @@ def repay_asset_M(asset:str, qty: str, live: bool) -> None:
     '''calls the binance api function to repay a margin loan'''
     
     if live:
-        client.repay_margin_loan(asset=asset, amount=round(float(qty), 8))
+        client.repay_margin_loan(asset=asset, amount=qty)
 
 
 def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit: float) -> dict:
