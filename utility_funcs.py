@@ -455,7 +455,7 @@ def update_liability(trade_record: Dict[str, str], size: str, operation: str) ->
     
     if trade_record:
         ratio = new_liability / prev_liability
-        if ratio > 0.0001:
+        if not (ratio < 0.0001 or (ratio > 0.48 and ratio < 0.52)):
             pair = trade_record[0].get('pair')
             print(f"***** Warning - {pair} liability records don't add up *****")
             print(f"{prev_liability = } {new_liability = }")

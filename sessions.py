@@ -63,9 +63,7 @@ class MARGIN_SESSION:
         y.start()
         live = Path('/home/ubuntu/rpi_2.txt').exists()
         
-        if live:
-            print('-:-' * 20)
-        else:
+        if not live:
             print('*** Warning: Not Live ***')
         y.stop()
         return live

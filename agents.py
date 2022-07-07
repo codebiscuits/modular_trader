@@ -47,7 +47,7 @@ class Agent():
                            'real_stop_short': 0, 'real_open_short': 0, 'real_add_short': 0, 'real_tp_short': 0, 'real_close_short': 0, 
                            'sim_stop_short': 0, 'sim_open_short': 0, 'sim_add_short': 0, 'sim_tp_short': 0, 'sim_close_short': 0, 
                            'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 'too_much_or': 0, 
-                           'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0}
+                           'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0, 'reduce_risk': 0}
         if not self.live:
             self.sync_test_records()
         self.open_trades = self.read_open_trade_records('open')
