@@ -172,9 +172,9 @@ def market_benchmark(session) -> None:
     market_1d = stats.median(all_1d) if len(all_1d)>3 else 0
     market_1w = stats.median(all_1w) if len(all_1w)>3 else 0
     market_1m = stats.median(all_1m) if len(all_1m)>3 else 0
-    print(f'1d median based on {len(all_1d)} data points')
-    print(f'1w median based on {len(all_1w)} data points')
-    print(f'1m median based on {len(all_1m)} data points')
+    # print(f'1d median based on {len(all_1d)} data points')
+    # print(f'1w median based on {len(all_1w)} data points')
+    # print(f'1m median based on {len(all_1m)} data points')
     
     all_pairs = len(list(data))
     valid_pairs = len(all_1d) > 3
@@ -185,8 +185,8 @@ def market_benchmark(session) -> None:
     else:
         valid = False
     
-    if session.live:
-        print(f'pairs with recent data: {len(all_1d)} / {all_pairs}')
+    # if session.live:
+    #     print(f'pairs with recent data: {len(all_1d)} / {all_pairs}')
     
     session.benchmark = {'btc_1d': btc_1d, 'btc_1w': btc_1w, 'btc_1m': btc_1m, 
             'eth_1d': eth_1d, 'eth_1w': eth_1w, 'eth_1m': eth_1m, 
