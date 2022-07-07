@@ -868,8 +868,11 @@ class Agent():
             self.record_trades(session, 'open')
         
         elif state in ['sim', 'tracked'] and direction == 'long' and low_atr > current_stop:
-            # print(f"*** {self.name} {pair} {state} {direction} move stop from {current_stop:.3} to {low_atr:.3}")
-            self.sim_trades[pair][-1]['hard_stop'] = low_atr
+            print(f"*** {self.name} {pair} {state} {direction} move stop from {current_stop:.3} to {low_atr:.3}")
+            if state == 'sim':
+                self.sim_trades[pair][-1]['hard_stop'] = low_atr
+            else:
+                self.tracked_trades[pair][-1]['hard_stop'] = low_atr
             self.record_trades(session, state)
             
         elif state == 'real' and direction == 'short' and high_atr < current_stop:
@@ -881,8 +884,11 @@ class Agent():
             self.record_trades(session, 'open')
             
         elif state in ['sim', 'tracked'] and direction == 'short' and high_atr < current_stop:
-            # print(f"*** {self.name} {pair} {state} {direction} move stop from {current_stop:.3} to {high_atr:.3}")
-            self.sim_trades[pair][-1]['hard_stop'] = high_atr
+            print(f"*** {self.name} {pair} {state} {direction} move stop from {current_stop:.3} to {high_atr:.3}")
+            if state == 'sim':
+                self.sim_trades[pair][-1]['hard_stop'] = high_atr
+            else:
+                self.tracked_trades[pair][-1]['hard_stop'] = high_atr
             self.record_trades(session, state)
     
     def tp_signals(self, asset: str) -> None:
@@ -1181,12 +1187,8 @@ class EMACrossHMA(Agent):
         
         for state in ['real', 'sim', 'tracked']:
             if self.in_pos[state]:
-                try:
-                    self.move_stop(session, pair, df, state, self.in_pos[state])
-                except KeyError:
-                    print(f"*** KeyError while attempting to move {pair} {self.name} stop")
-                    continue
-        
+                self.move_stop(session, pair, df, state, self.in_pos[state])
+                
         if ((signal == 'open_long') or in_long) and df.at[len(df)-1, 'atr_lower']:
             inval = df.at[len(df)-1, 'atr_lower']
             inval_ratio = float(df.at[len(df)-1, 'close'] / df.at[len(df)-1, 'atr_lower']) # current price proportional to invalidation price

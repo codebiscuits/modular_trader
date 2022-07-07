@@ -211,7 +211,6 @@ def tp_long(session, agent, pair, stp, inval):
                 agent.in_pos['tracked'] = 'long'
                 
                 agent.tracked[asset] = {'qty': '0', 'value': '0', 'pf%': '0', 'or_R': '0', 'or_$': '0'}                
-                del agent.real_pos[asset]
                 if session.live:
                     session.update_usdt_M(repay=float(usdt_size))
                 else:
@@ -222,6 +221,7 @@ def tp_long(session, agent, pair, stp, inval):
                     pf_pct = float(agent.real_pos['USDT']['pf%']) + float(agent.real_pos[asset].get('pf%'))
                     agent.real_pos['USDT']['pf%'] = f"{pf_pct:.2f}"
                 
+                del agent.real_pos[asset]
                 agent.counts_dict['real_close_long'] += 1
                 agent.realised_pnl(trade_record, 'long')
             
@@ -376,7 +376,6 @@ def close_long(session, agent, pair):
             
             agent.in_pos['real'] = None
             agent.in_pos['real_pfrd'] = 0
-            del agent.real_pos[asset]
             if session.live:
                 session.update_usdt_M(repay=float(usdt_size))
             else:
@@ -386,6 +385,7 @@ def close_long(session, agent, pair):
                 agent.real_pos['USDT']['owed'] = f"{owed - float(usdt_size):.2f}"
             
             # save records and update counts
+            del agent.real_pos[asset]
             agent.counts_dict['real_close_long'] +=1
             agent.realised_pnl(trade_record, 'long')
     
@@ -651,7 +651,6 @@ def tp_short(session, agent, pair, stp, inval):
                 
                 agent.in_pos['real'] = None
                 agent.in_pos['tracked'] = 'short'
-                del agent.real_pos[asset]
                 if session.live:
                     usdt_size = round(order_size * price, 5)
                     session.update_usdt_M(down=usdt_size)
@@ -661,6 +660,7 @@ def tp_short(session, agent, pair, stp, inval):
                     agent.real_pos['USDT']['pf%'] -= float(agent.real_pos[asset].get('pf%'))
                 agent.tracked[asset] = {'qty': 0, 'value': 0, 'pf%': 0, 'or_R': 0, 'or_$': 0}                
                 
+                del agent.real_pos[asset]
                 agent.counts_dict['real_close_short'] += 1
                 agent.realised_pnl(trade_record, 'short')
             
@@ -817,17 +817,16 @@ def close_short(session, agent, pair):
             agent.in_pos['real'] = None
             agent.in_pos['real_pfrd'] = 0
             if session.live:
-                del agent.real_pos[asset]
                 usdt_size = round(base_size * price, 5)
                 session.update_usdt_M(down=usdt_size)
             else:
-                del agent.real_pos[asset]
                 value = float(agent.real_pos['USDT']['value'])
                 agent.real_pos['USDT']['value'] = value + (float(base_size) * price)
                 owed = float(agent.real_pos['USDT']['owed'])
                 agent.real_pos['USDT']['owed'] = owed - (float(base_size) * price)
             
             # save records and update counts
+            del agent.real_pos[asset]
             agent.counts_dict['real_close_short'] +=1
             agent.realised_pnl(trade_record, 'short')
     
@@ -1000,20 +999,18 @@ def reduce_risk_M(session, agent):
                         total_r -= or_R
                         
                         if session.live:
-                            del agent.real_pos[asset]
                             if long:
                                 session.update_usdt_M(repay=float(usdt_size))
                             else:
                                 session.update_usdt_M(down=float(usdt_size))
                         elif long and not session.live:
-                            del agent.real_pos[asset]
                             agent.real_pos['USDT']['value'] += float(usdt_size)
                             agent.real_pos['USDT']['owed'] -= float(usdt_size)
                         else:
-                            del agent.real_pos[asset]
                             agent.real_pos['USDT']['value'] += float(base_size * price)
                             agent.real_pos['USDT']['owed'] -= float(base_size * price)
                         
+                        del agent.real_pos[asset]
                         if long:
                             agent.realised_pnl(trade_record, 'long')
                         else:
