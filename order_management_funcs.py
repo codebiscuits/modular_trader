@@ -1012,7 +1012,6 @@ def reduce_risk_M(session, agent):
                             agent.real_pos['USDT']['value'] += float(base_size * price)
                             agent.real_pos['USDT']['owed'] -= float(base_size * price)
                         
-                        del agent.real_pos[asset]
                         if long:
                             agent.realised_pnl(trade_record, 'long')
                         else:
