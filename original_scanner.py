@@ -26,23 +26,17 @@ def setup_scan(timeframe: str, offset: str) -> None:
     pprint(session.usdt_bal)
     
     agents = [
-        DoubleST(session, 3.0, 1.0), 
-        DoubleST(session, 3.0, 1.4), 
-        DoubleST(session, 3.0, 1.8), 
-        DoubleST(session, 5.0, 2.2), 
-        DoubleST(session, 5.0, 2.8), 
-        DoubleST(session, 5.0, 3.4), 
-        EMACross(session, 12, 21, 1.2), 
-        EMACross(session, 12, 21, 1.8), 
-        EMACross(session, 12, 21, 2.4), 
-        EMACrossHMA(session, 12, 21, 1.2), 
-        EMACrossHMA(session, 12, 21, 1.8), 
-        EMACrossHMA(session, 12, 21, 2.4)
+        DoubleST(session, 3, 1.0), 
+        DoubleST(session, 3, 1.4), 
+        DoubleST(session, 3, 1.8), 
+        DoubleST(session, 5, 2.2), 
+        DoubleST(session, 5, 2.8), 
+        DoubleST(session, 5, 3.4), 
+        EMACross(session, 12, 21), 
+        EMACrossHMA(session, 12, 21)
         ] 
     
     
-    # print('\nsession indicators:')
-    # pprint(session.indicators)
     session.name = ' | '.join([n.name for n in agents])
     
     # compile and sort list of pairs to loop through ------------------------------
@@ -97,15 +91,13 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
             continue
         
         if len(df) > session.max_length:
-            print(f"setup_scanner line 96 {pair} df length: {len(df)}")
+            print(f"setup_scanner line 94 {pair} df length: {len(df)}")
             df = df.tail(session.max_length)
             df.reset_index(drop=True, inplace=True)
         
         now = datetime.now().strftime('%d/%m/%y %H:%M')
         
     # generate signals ------------------------------------------------------------
-        session.compute_indicators(df)
-        
         signals = {}
         mir = uf.max_init_risk(agent.num_open_positions, agent.target_risk)
         usdt_depth_l, usdt_depth_s = funcs.get_depth(session, pair)
@@ -386,7 +378,7 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
     
     uf.interpret_benchmark(session, agents)
     
-    print('\n---- Timers ----')
+    print('-')
     for k, v in Timer.timers.items():
         if v > 30:
             print(k, round(v))

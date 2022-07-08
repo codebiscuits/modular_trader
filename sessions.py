@@ -6,7 +6,6 @@ from timers import Timer
 from binance.client import Client
 import keys
 import time
-import indicators as ind
 from typing import Union, List, Tuple, Dict, Set, Optional, Any
 
 client = Client(keys.bPkey, keys.bSkey)
@@ -40,7 +39,6 @@ class MARGIN_SESSION:
         self.margin_account_info()
         self.get_asset_bals()
         self.check_margin_lvl()
-        self.indicators = set()
         t.stop()
         
         
@@ -192,26 +190,7 @@ class MARGIN_SESSION:
                                       'locked': locked, 
                                       'net_asset': net_asset}
     
-    def compute_indicators(self, df):
-        '''takes the set of rquired indicators and the dataframe and applies the 
-        indicator functions as necessary'''
-        
-        ci = Timer('compute_indicators')
-        ci.start()
-        
-        for i in self.indicators:
-            vals = i.split('-')
-            if vals[0] == 'ema':
-                df[f"ema-{vals[1]}"] = df.close.ewm(int(vals[1])).mean()
-            elif vals[0] == 'hma':
-                df[f"hma-{vals[1]}"] = ind.hma(df.close, int(vals[1]))
-            elif vals[0] == 'atr':
-                ind.atr_bands(df, int(vals[1]), float(vals[2]))
-            elif vals[0] == 'st':
-                ind.supertrend_new(df, int(vals[1]), float(vals[2]))
-        
-        ci.stop()
-                
+    
 
     
     
