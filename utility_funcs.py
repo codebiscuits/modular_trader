@@ -10,12 +10,14 @@ import statistics as stats
 from pushbullet import Pushbullet
 import time
 from pprint import pprint
-from decimal import Decimal
+from decimal import Decimal, getcontext
 from timers import Timer
 from typing import Union, List, Tuple, Dict, Set, Optional, Any
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
+ctx = getcontext()
+ctx.prec = 12
 # now = datetime.now().strftime('%d/%m/%y %H:%M')
 
 
@@ -72,7 +74,7 @@ def open_trade_stats(now: datetime, total_bal: float, v: dict, curr_price: float
                 total_liability += Decimal(i.get('liability'))
             elif i.get('type') in ['tp_short', 'close_short', 'tp_long', 'close_long']:
                 total_liability -= Decimal(i.get('liability'))
-        total_liability = str(round(total_liability, 8))
+        total_liability = str(total_liability)
         
         stats_dict = {'qty': str(current_base_size), 'value': str(value), 'pf%': pf_pct, 
                 'pnl_R': round(pnl / r, 5), 'pnl_%': round(pnl, 5), 'liability': total_liability, 
@@ -172,9 +174,9 @@ def market_benchmark(session) -> None:
     market_1d = stats.median(all_1d) if len(all_1d)>3 else 0
     market_1w = stats.median(all_1w) if len(all_1w)>3 else 0
     market_1m = stats.median(all_1m) if len(all_1m)>3 else 0
-    print(f'1d median based on {len(all_1d)} data points')
-    print(f'1w median based on {len(all_1w)} data points')
-    print(f'1m median based on {len(all_1m)} data points')
+    # print(f'1d median based on {len(all_1d)} data points')
+    # print(f'1w median based on {len(all_1w)} data points')
+    # print(f'1m median based on {len(all_1m)} data points')
     
     all_pairs = len(list(data))
     valid_pairs = len(all_1d) > 3
@@ -185,8 +187,8 @@ def market_benchmark(session) -> None:
     else:
         valid = False
     
-    if session.live:
-        print(f'pairs with recent data: {len(all_1d)} / {all_pairs}')
+    # if session.live:
+    #     print(f'pairs with recent data: {len(all_1d)} / {all_pairs}')
     
     session.benchmark = {'btc_1d': btc_1d, 'btc_1w': btc_1w, 'btc_1m': btc_1m, 
             'eth_1d': eth_1d, 'eth_1w': eth_1w, 'eth_1m': eth_1m, 
@@ -284,7 +286,7 @@ def log(session, agents: list) -> None:
             file.write(new_line)
             file.write('\n')
         
-        strat_benchmark(session, agent)
+        # strat_benchmark(session, agent)
 
 def interpret_benchmark(session, agents: list) -> None:
     '''takes the benchmark results, ranks them by performance, and prints them 
@@ -623,9 +625,10 @@ def scanner_summary(session, agents: list) -> None:
         
         final_msg += agent_msg
 
-    print(f'-\n{title}\n{final_msg}')
     if session.live:
         pb.push_note(title, final_msg)
+    else:
+        print(f'-\n{title}\n{final_msg}')
 
 def scanner_summary_old(session, agents: list) -> None:
     '''prints a summary of the agents recent performance, current exposure, 
@@ -696,6 +699,5 @@ def calc_sizing_non_live_tp(session, agent, asset: str, tp_pct: int, switch: str
     pos_dict[asset].update({'qty': qty, 'value': f"{val:.2f}", 'pf%': pf, 'or_R': or_R, 'or_$': or_dol, 'pnl_R': pnl_r})
     
     qw.stop
-
 
 

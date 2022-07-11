@@ -6,10 +6,12 @@ from pushbullet import Pushbullet
 from binance.client import Client
 import keys
 import binance.enums as be
-from decimal import Decimal
+from decimal import Decimal, getcontext
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 client = Client(keys.bPkey, keys.bSkey)
+ctx = getcontext()
+ctx.prec = 12
 
 
 def open_long(session, agent, pair, size, stp, inval, sim_reason):
@@ -189,7 +191,7 @@ def tp_long(session, agent, pair, stp, inval):
             
             if pct == 100:
                 # repay assets
-                usdt_size = max(api_order.get('cummulativeQuoteQty'), trade_record[-1]['liability'])
+                usdt_size = str(max(Decimal(api_order.get('cummulativeQuoteQty', 0)), Decimal(trade_record[-1].get('liability', 0))))
                 funcs.repay_asset_M('USDT', usdt_size, session.live)
                 
                 # create trade dict
@@ -352,7 +354,7 @@ def close_long(session, agent, pair):
             
             # execute trade
             api_order = funcs.sell_asset_M(session, pair, real_bal, price, session.live)
-            usdt_size = max(api_order.get('cummulativeQuoteQty'), trade_record[-1].get('liability'))
+            usdt_size = str(max(Decimal(api_order.get('cummulativeQuoteQty', 0)), Decimal(trade_record[-1].get('liability', 0))))
             funcs.repay_asset_M('USDT', usdt_size, session.live)
             
             sell_order = funcs.create_trade_dict(api_order, price, session.live)
@@ -631,7 +633,7 @@ def tp_short(session, agent, pair, stp, inval):
             print(now, note)        
             
             if pct == 100:
-                repay_size = max(trade_record[-1].get('liability'), buy_order.get('base_size'))
+                repay_size = str(max(Decimal(trade_record[-1].get('liability', 0)), Decimal(buy_order.get('base_size', 0))))
                 funcs.repay_asset_M(asset, repay_size, session.live)
                 
                 # create trade dict
@@ -792,10 +794,10 @@ def close_short(session, agent, pair):
             
             # execute trade
             api_order = funcs.buy_asset_M(session, pair, base_size, True, price, session.live)
-            repay_size = max(trade_record[-1]['liability'], api_order.get('base_size'))
+            sell_order = funcs.create_trade_dict(api_order, price, session.live)
+            repay_size = str(max(Decimal(trade_record[-1].get('liability', 0)), Decimal(sell_order.get('base_size', 0))))
             funcs.repay_asset_M(asset, repay_size, session.live)
             
-            sell_order = funcs.create_trade_dict(api_order, price, session.live)
             sell_order['type'] = 'close_short'
             sell_order['state'] = 'real'
             sell_order['reason'] = 'strategy close short signal'

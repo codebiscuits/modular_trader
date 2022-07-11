@@ -5,7 +5,7 @@ import numpy as np
 from binance.client import Client
 import binance.enums as be
 from pushbullet import Pushbullet
-from decimal import Decimal
+from decimal import Decimal, getcontext
 from pprint import pprint
 from config import ohlc_data, not_pairs
 from pathlib import Path
@@ -16,6 +16,8 @@ from typing import Union, List, Tuple, Dict, Set, Optional, Any
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
+ctx = getcontext()
+ctx.prec = 12
 
 
 #-#-#- Utility Functions

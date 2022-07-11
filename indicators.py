@@ -7,7 +7,7 @@ def atr(df: pd.DataFrame, lb: int) -> None:
     df['tr2'] = abs(df.high - df.close.shift(1))
     df['tr3'] = abs(df.low - df.close.shift(1))
     df['tr'] = df[['tr1', 'tr2', 'tr3']].max(axis=1)
-    df['atr'] = df['tr'].ewm(lb).mean()
+    df[f'atr-{lb}'] = df['tr'].ewm(lb).mean()
     df.drop(['tr1', 'tr2', 'tr3', 'tr'], axis=1, inplace=True)
     
 def atr_bands(df: pd.DataFrame, lb: int, mult: float) -> None:
@@ -16,17 +16,19 @@ def atr_bands(df: pd.DataFrame, lb: int, mult: float) -> None:
     atr(df, lb)
     
     df['hl_avg'] = (df.high + df.low) / 2
-    df['atr_upper'] = (df.hl_avg + mult * df.atr)
-    df['atr_lower'] = (df.hl_avg - mult * df.atr)
-    df.drop(['hl_avg', 'atr'], axis=1, inplace=True)  
+    df[f'atr-{lb}-{mult}-upper'] = (df.hl_avg + mult * df[f'atr-{lb}'])
+    df[f'atr-{lb}-{mult}-lower'] = (df.hl_avg - mult * df[f'atr-{lb}'])
+    df.drop(['hl_avg', f'atr-{lb}'], axis=1, inplace=True)  
 
-def supertrend_new(df, lb, mult):
+def supertrend_new(df: pd.DataFrame, lb: int, mult: float) -> None:
+    '''calculates supertrend indicator and adds it to the input dataframe with the 
+    column names following the format: st-{lb}-{mult}, st-{lb}-{mult}-up, st-{lb}-{mult}-dn'''
     atr(df, lb)
     
     df['hl_avg'] = (df.high + df.low) / 2
-    df['upper_band'] = (df.hl_avg + mult * df.atr)
-    df['lower_band'] = (df.hl_avg - mult * df.atr)
-    df.drop(['hl_avg', 'atr'], axis=1, inplace=True)
+    df['upper_band'] = (df.hl_avg + mult * df[f'atr-{lb}'])
+    df['lower_band'] = (df.hl_avg - mult * df[f'atr-{lb}'])
+    df.drop(['hl_avg', f'atr-{lb}'], axis=1, inplace=True)
     
     df['final_upper'] = 0.0
     df['final_lower'] = 0.0
@@ -51,26 +53,29 @@ def supertrend_new(df, lb, mult):
     
     df.drop(['upper_band', 'lower_band'], axis=1, inplace=True)
     
-    df['st'] = 0.0
+    st = f"st-{lb}-{mult}"
+    stu = f"st-{lb}-{mult}-up"
+    std = f"st-{lb}-{mult}-dn"
+    df[st] = 0.0
     
     for j in df.index:
         if j == 0.0:
-            df.at[j, 'st'] = 0.0
-        elif df.at[j-1, 'st'] == df.at[j-1, 'final_upper'] and df.at[j, 'close'] < df.at[j, 'final_upper']:
-            df.at[j, 'st'] = df.at[j, 'final_upper']
-        elif df.at[j-1, 'st'] == df.at[j-1, 'final_upper'] and df.at[j, 'close'] > df.at[j, 'final_upper']:
-            df.at[j, 'st'] = df.at[j, 'final_lower']
-        elif df.at[j-1, 'st'] == df.at[j-1, 'final_lower'] and df.at[j, 'close'] > df.at[j, 'final_lower']:
-            df.at[j, 'st'] = df.at[j, 'final_lower']
-        elif df.at[j-1, 'st'] == df.at[j-1, 'final_lower'] and df.at[j, 'close'] < df.at[j, 'final_lower']:
-            df.at[j, 'st'] = df.at[j, 'final_upper']
+            df.at[j, st] = 0.0
+        elif df.at[j-1, st] == df.at[j-1, 'final_upper'] and df.at[j, 'close'] < df.at[j, 'final_upper']:
+            df.at[j, st] = df.at[j, 'final_upper']
+        elif df.at[j-1, st] == df.at[j-1, 'final_upper'] and df.at[j, 'close'] > df.at[j, 'final_upper']:
+            df.at[j, st] = df.at[j, 'final_lower']
+        elif df.at[j-1, st] == df.at[j-1, 'final_lower'] and df.at[j, 'close'] > df.at[j, 'final_lower']:
+            df.at[j, st] = df.at[j, 'final_lower']
+        elif df.at[j-1, st] == df.at[j-1, 'final_lower'] and df.at[j, 'close'] < df.at[j, 'final_lower']:
+            df.at[j, st] = df.at[j, 'final_upper']
         
     df.drop(['final_upper', 'final_lower'], axis=1, inplace=True)
     
     # this next step doesn't involve data from previous row in calculating current row,
     # so i can use np.where which is much faster than a for loop
-    df['st_u'] = np.where(df.close >= df.st, df.st, np.nan)
-    df['st_d'] = np.where(df.close < df.st, df.st, np.nan)
+    df[stu] = np.where(df.close >= df[st], df[st], np.nan)
+    df[std] = np.where(df.close < df[st], df[st], np.nan)
     
     
     df.drop(0, inplace=True)

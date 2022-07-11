@@ -32,11 +32,17 @@ def setup_scan(timeframe: str, offset: str) -> None:
         DoubleST(session, 5, 2.2), 
         DoubleST(session, 5, 2.8), 
         DoubleST(session, 5, 3.4), 
-        EMACross(session, 12, 21), 
-        EMACrossHMA(session, 12, 21)
+        EMACross(session, 12, 21, 1.2), 
+        EMACross(session, 12, 21, 1.8), 
+        EMACross(session, 12, 21, 2.4), 
+        EMACrossHMA(session, 12, 21, 1.2), 
+        EMACrossHMA(session, 12, 21, 1.8), 
+        EMACrossHMA(session, 12, 21, 2.4)
         ] 
     
     
+    # print('\nsession indicators:')
+    # pprint(session.indicators)
     session.name = ' | '.join([n.name for n in agents])
     
     # compile and sort list of pairs to loop through ------------------------------
@@ -91,13 +97,15 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
             continue
         
         if len(df) > session.max_length:
-            print(f"setup_scanner line 94 {pair} df length: {len(df)}")
+            print(f"setup_scanner line 96 {pair} df length: {len(df)}")
             df = df.tail(session.max_length)
             df.reset_index(drop=True, inplace=True)
         
         now = datetime.now().strftime('%d/%m/%y %H:%M')
         
     # generate signals ------------------------------------------------------------
+        session.compute_indicators(df)
+        
         signals = {}
         mir = uf.max_init_risk(agent.num_open_positions, agent.target_risk)
         usdt_depth_l, usdt_depth_s = funcs.get_depth(session, pair)
@@ -336,26 +344,27 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
     print('-:-' * 20)
     
     for agent in agents:
-        print('')
-        print(agent.name.upper(), 'SUMMARY')
-        if agent.realised_pnl_long or agent.sim_pnl_long:
-            print(f'realised real long pnl: {agent.realised_pnl_long:.1f}R, realised sim long pnl: {agent.sim_pnl_long:.1f}R')
-        if agent.realised_pnl_short or agent.sim_pnl_short:
-            print(f'realised real short pnl: {agent.realised_pnl_short:.1f}R, realised sim short pnl: {agent.sim_pnl_short:.1f}R')
-        print(f'tor: {agent.total_open_risk:.1f}')
-        # print(f'or list: {[round(x, 2) for x in sorted(agent.or_list, reverse=True)]}')
-        lropnl = agent.open_pnl('long', 'real')
-        if lropnl:
-            print(f"real open pnl long: {lropnl:.1f}R")
-        sropnl = agent.open_pnl('short', 'real')
-        if sropnl:
-            print(f"real open pnl short: {sropnl:.1f}R")
-        lsopnl = agent.open_pnl('long', 'sim')
-        if lsopnl:
-            print(f"sim open pnl long: {lsopnl:.1f}R")
-        ssopnl = agent.open_pnl('short', 'sim')
-        if ssopnl:
-            print(f"sim open pnl short: {ssopnl:.1f}R")
+        if not session.live:
+            print('')
+            print(agent.name.upper(), 'SUMMARY')
+            if agent.realised_pnl_long or agent.sim_pnl_long:
+                print(f'realised real long pnl: {agent.realised_pnl_long:.1f}R, realised sim long pnl: {agent.sim_pnl_long:.1f}R')
+            if agent.realised_pnl_short or agent.sim_pnl_short:
+                print(f'realised real short pnl: {agent.realised_pnl_short:.1f}R, realised sim short pnl: {agent.sim_pnl_short:.1f}R')
+            print(f'tor: {agent.total_open_risk:.1f}')
+            # print(f'or list: {[round(x, 2) for x in sorted(agent.or_list, reverse=True)]}')
+            lropnl = agent.open_pnl('long', 'real')
+            if lropnl:
+                print(f"real open pnl long: {lropnl:.1f}R")
+            sropnl = agent.open_pnl('short', 'real')
+            if sropnl:
+                print(f"real open pnl short: {sropnl:.1f}R")
+            lsopnl = agent.open_pnl('long', 'sim')
+            if lsopnl:
+                print(f"sim open pnl long: {lsopnl:.1f}R")
+            ssopnl = agent.open_pnl('short', 'sim')
+            if ssopnl:
+                print(f"sim open pnl short: {ssopnl:.1f}R")
         
         agent.real_pos['USDT'] = session.usdt_bal
         
@@ -376,9 +385,9 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
     
     uf.scanner_summary(session, agents)
     
-    uf.interpret_benchmark(session, agents)
+    # uf.interpret_benchmark(session, agents)
     
-    print('-')
+    print('\n---- Timers ----')
     for k, v in Timer.timers.items():
         if v > 30:
             print(k, round(v))
