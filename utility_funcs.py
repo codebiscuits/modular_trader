@@ -612,6 +612,11 @@ def scanner_summary(session, agents: list) -> None:
     for agent in agents:
         agent_msg = f'\n{agent.name}'
         
+        if agent.realised_pnl_long:
+            agent_msg += f"\nrealised real long pnl: {agent.realised_pnl_long:.1f}R"
+        if agent.realised_pnl_short:
+            agent_msg += f"\nrealised real short pnl: {agent.realised_pnl_short:.1f}R"
+        
         or_list = [v.get('or_$') for v in agent.real_pos.values() if v.get('or_$')]
         num_open_positions = len(or_list)
         vol_exp = 0

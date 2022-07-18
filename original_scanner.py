@@ -53,7 +53,7 @@ def setup_scan(timeframe: str, offset: str) -> None:
         posis = list(agent.real_pos.keys())
         positions.extend(posis)
     pairs_in_pos = [p + 'USDT' for p in set(positions) if p != 'USDT']
-    print(f"{pairs_in_pos = }")
+    print(f"Total {pairs_in_pos = }")
     other_pairs = [p for p in all_pairs if (not p in pairs_in_pos) and (not p in not_pairs)]
     pairs = pairs_in_pos + other_pairs # this ensures open positions will be checked first
     
@@ -97,7 +97,7 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
             continue
         
         if len(df) > session.max_length:
-            print(f"setup_scanner line 96 {pair} df length: {len(df)}")
+            # print(f"setup_scanner line 96 {pair} df length: {len(df)}")
             df = df.tail(session.max_length)
             df.reset_index(drop=True, inplace=True)
         
@@ -377,11 +377,11 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
         
         uf.log(session, [agent])
         
-        print('Counts:')
-        for k, v in agent.counts_dict.items():
-            if v:
-                print(k, v)
-        print('-:-' * 20)
+        # print(f'{agent.name} Counts:')
+        # for k, v in agent.counts_dict.items():
+        #     if v:
+        #         print(k, v)
+        # print('-:-' * 20)
     
     uf.scanner_summary(session, agents)
     

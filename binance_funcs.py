@@ -104,17 +104,22 @@ def get_size(agent, price: float, balance: float, risk: float) -> Tuple[float]:
     return asset_size_l, usdt_size_l, asset_size_s, usdt_size_s
 
 
-def calc_stop(st: float, spread: float,  price: float, min_risk: float=0.01) -> float:
+def calc_stop(inval: float, spread: float,  price: float, min_risk: float=0.01) -> float:
     '''calculates what the stop-loss trigger price should be based on the current 
     value of the supertrend line and the current spread (slippage proxy). 
     if this is too close to the entry price, the stop will be set at the minimum 
     allowable distance.'''
     buffer = max(spread * 2, min_risk)
     
-    if price > st:
-        stop_price = float(st) * (1 - buffer)
+    if price > inval:
+        stop_price = float(inval) * (1 - buffer)
     else:
-        stop_price = float(st) * (1 + buffer)
+        stop_price = float(inval) * (1 + buffer)
+    
+    # if (((price > inval) and (stop_price > price)) 
+    #     or 
+    #     ((price < inval) and (stop_price < price))):
+    print(f"{price = } {inval = } {buffer = } {stop_price = }")
     
     return stop_price
 
@@ -391,7 +396,8 @@ def get_pairs(quote: str='USDT', market: str='SPOT') -> List[str]:
 
 def get_ohlc(pair:str, timeframe: str, span: str="1 year ago UTC") -> pd.DataFrame:
     '''fetches kline data from binance for the stated pair and timeframe. 
-    span tells the function how far back to start the data, in plain english'''
+    span tells the function how far back to start the data, in plain english
+    for timeframe, use strings like 5m or 1h or 1d'''
     
     client = Client(keys.bPkey, keys.bSkey)
     tf = {'1m': Client.KLINE_INTERVAL_1MINUTE,

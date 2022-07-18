@@ -401,7 +401,7 @@ class Agent():
             if v[0].get('real'):
                 continue
             
-            long_trade = True if 'long' in v[0].get('type') else False
+            long_trade = ('long' in v[0].get('type'))
             
             x = Timer('calc base size and stop')
             x.start()
@@ -419,53 +419,64 @@ class Agent():
                     stop = float(i.get('hard_stop'))
                     stop_time = int(i.get('timestamp'))
                     break
-            x.stop()    
+            x.stop()
+            
             # check lowest low since stop was set
-            z = Timer('read ohlc pickles')
-            z.start()
-            filepath = Path(f'{session.ohlc_data}/{pair}.pkl')
-            if filepath.exists():
-                df = pd.read_pickle(filepath)
-            else:
-                df = funcs.get_ohlc(pair, session.tf)
-                print(f"downloaded {pair} from scratch")
-            z.stop()
+            
+            timespan = datetime.now().timestamp() - (stop_time/1000)
+            
+            if timespan > 36000:
+                z = Timer('read ohlc pickles')
+                z.start()
+                filepath = Path(f'{session.ohlc_data}/{pair}.pkl')
+                if filepath.exists():
+                    df = pd.read_pickle(filepath)
+                else:
+                    df = funcs.get_ohlc(pair, '1h')
+                    print(f"downloaded {pair} from scratch")
+                z.stop()
             
             # trim df down to just the rows since the last stop was set
-            if (datetime.now().timestamp() - stop_time/1000) < 13000:
-                df = df.tail(2)
-            else:
                 stop_dt = datetime.fromtimestamp(stop_time/1000)
                 df = df.loc[df.timestamp > stop_dt]
             
-            if df.empty:
+            else:
                 z = Timer('get_historical_klines')
                 z.start()
-                klines = client.get_historical_klines(pair, Client.KLINE_INTERVAL_1HOUR, stop_time)
+                klines = client.get_historical_klines(pair, Client.KLINE_INTERVAL_5MINUTE, stop_time)
                 cols = ['timestamp', 'open', 'high', 'low', 'close', 'base vol', 'close time',
                         'volume', 'num trades', 'taker buy base vol', 'taker buy quote vol', 'ignore']
                 df = pd.DataFrame(klines, columns=cols)
                 df['timestamp'] = df['timestamp'] * 1000000
                 df = df.astype(float)
-                df['timestamp'] = pd.to_datetime(df['timestamp'])
+                # df['timestamp'] = pd.to_datetime(df['timestamp'])
                 z.stop()
             
             if long_trade:
                 trade_type = 'stop_long'
                 ll = df.low.min()
-                # stop_time = find timestamp of that lowest low candle
                 stopped = ll < stop
                 overshoot_pct = round((100 * (stop - ll) / stop), 3) # % distance that price broke through the stop
+                if stopped:
+                    print(df.head())
+                    for i in range(len(df)):
+                        if df.at[i, 'low'] <= stop:
+                            stop_hit_time = df.at[i, 'timestamp']
             else:
                 trade_type = 'stop_short'
                 hh = df.high.max()
-                # stop_time = find timestamp of that highest high candle
                 stopped = hh > stop
                 overshoot_pct = round((100 * (hh - stop) / stop), 3) # % distance that price broke through the stop
+                if stopped:
+                    print(df.head())
+                    for i in range(len(df)):
+                        if df.at[i, 'high'] >= stop:
+                            stop_hit_time = df.at[i, 'timestamp']
+                    
             
             if stopped:
                 # create trade dict
-                trade_dict = {'timestamp': stop_time, 
+                trade_dict = {'timestamp': stop_hit_time, 
                               'pair': pair, 
                               'type': trade_type, 
                               'exe_price': str(stop), 
@@ -926,7 +937,7 @@ class DoubleST(Agent):
         self.mult2 = mult2
         self.name = f'{session.tf} dst {self.mult1}-{self.mult2}'
         self.id = f"double_st_{session.tf}_{session.offset}_{self.mult1}_{self.mult2}"
-        print(f'\nInitialising {self.name}')
+        # print(f'\nInitialising {self.name}')
         Agent.__init__(self, session)
         session.indicators.update(['ema-200', 
                                    f"st-10-{self.mult1}", 
@@ -1029,7 +1040,7 @@ class EMACross(Agent):
         self.mult = mult
         self.name = f'{session.tf} emacross {self.lb1}-{self.lb2}-{self.mult}'
         self.id = f"ema_cross_{session.tf}_{session.offset}_{self.lb1}_{self.lb2}_{self.mult}"
-        print(f'\nInitialising {self.name}')
+        # print(f'\nInitialising {self.name}')
         Agent.__init__(self, session)
         session.indicators.update(['ema-200', 
                                    f"ema-{self.lb1}", 
@@ -1122,7 +1133,7 @@ class EMACrossHMA(Agent):
         self.mult = mult
         self.name = f'{session.tf} emaxhma {self.lb1}-{self.lb2}-{self.mult}'
         self.id = f"ema_cross_hma_{session.tf}_{session.offset}_{self.lb1}_{self.lb2}_{self.mult}"
-        print(f'\nInitialising {self.name}')
+        # print(f'\nInitialising {self.name}')
         Agent.__init__(self, session)
         session.indicators.update(['hma-200', 
                                    f"ema-{self.lb1}", 
