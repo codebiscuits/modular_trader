@@ -715,14 +715,14 @@ class Agent():
         
         p = Timer('set_max_pos')
         p.start()
-        max_pos = 20
+        max_pos = 10
         if self.real_pos:
             open_pnls = [v.get('pnl') for v in self.real_pos.values() if v.get('pnl')]
             if open_pnls:
                 avg_open_pnl = stats.median(open_pnls)
             else:
                 avg_open_pnl = 0
-            max_pos = 20 if avg_open_pnl <= 0 else 50
+            max_pos = 10 if avg_open_pnl <= 0 else 20
         p.stop()
         return max_pos
     
