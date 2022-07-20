@@ -71,9 +71,9 @@ def open_trade_stats(now: datetime, total_bal: float, v: dict, curr_price: float
         total_liability = 0
         for i in v:
             if i.get('type') in ['open_long', 'add_long', 'open_short', 'add_short']:
-                total_liability += Decimal(i.get('liability'))
+                total_liability += Decimal(i.get('liability', 0))
             elif i.get('type') in ['tp_short', 'close_short', 'tp_long', 'close_long']:
-                total_liability -= Decimal(i.get('liability'))
+                total_liability -= Decimal(i.get('liability', 0))
         total_liability = str(total_liability)
         
         stats_dict = {'qty': str(current_base_size), 'value': str(value), 'pf%': pf_pct, 
