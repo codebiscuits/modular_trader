@@ -439,6 +439,7 @@ class Agent():
             # trim df down to just the rows since the last stop was set
                 stop_dt = datetime.fromtimestamp(stop_time/1000)
                 df = df.loc[df.timestamp > stop_dt]
+                
             
             else:
                 z = Timer('get_historical_klines')
@@ -452,6 +453,8 @@ class Agent():
                 # df['timestamp'] = pd.to_datetime(df['timestamp'])
                 z.stop()
             
+            df.reset_index(inplace=True)
+            
             if long_trade:
                 trade_type = 'stop_long'
                 ll = df.low.min()
@@ -461,7 +464,8 @@ class Agent():
                     print(df.head())
                     for i in range(len(df)):
                         if df.at[i, 'low'] <= stop:
-                            stop_hit_time = df.at[i, 'timestamp']
+                            stop_hit_time = df.at[i, 'timestamp'].timestamp()
+                            print(f"{stop_hit_time = }")
             else:
                 trade_type = 'stop_short'
                 hh = df.high.max()
@@ -471,7 +475,8 @@ class Agent():
                     print(df.head())
                     for i in range(len(df)):
                         if df.at[i, 'high'] >= stop:
-                            stop_hit_time = df.at[i, 'timestamp']
+                            stop_hit_time = df.at[i, 'timestamp'].timestamp()
+                            print(f"{stop_hit_time = }")
                     
             
             if stopped:
@@ -1083,9 +1088,14 @@ class EMACross(Agent):
                    or self.in_pos['sim'] == 'short'
                    or self.in_pos['tracked'] == 'short')
         
-        if bullish_bias and bullish_cross:
+        print(f"{bullish_bias = } {bearish_bias = }")
+        print(f"{bullish_cross = } {bearish_cross = }")
+        print(f"{bullish_emas = } {bearish_emas = }")
+        print(f"{in_long = } {in_short = }")
+        
+        if bullish_bias and bullish_emas and not in_long:
             signal = 'open_long'
-        elif bearish_bias and bearish_cross:
+        elif bearish_bias and bearish_emas and not in_short:
             signal = 'open_short'
         elif bearish_emas and in_long:
             signal = 'close_long'
