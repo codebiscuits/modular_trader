@@ -426,14 +426,25 @@ class Agent():
             timespan = datetime.now().timestamp() - (stop_time/1000)
             
             if timespan > 36000:
+                # print('df from read_pickle')
                 z = Timer('read ohlc pickles')
                 z.start()
                 filepath = Path(f'{session.ohlc_data}/{pair}.pkl')
                 if filepath.exists():
                     df = pd.read_pickle(filepath)
+                    if df['timestamp'].dtype == 'Timestamp':
+                        print(f"recasting {pair} timestamps as posix timestamps")
+                        df['timestamp'] = df['timestamp'].timestamp()
+                    print(pair, df.timestamp.tail(1))
                 else:
-                    df = funcs.get_ohlc(pair, '1h')
-                    print(f"downloaded {pair} from scratch")
+                    # print('df from get_historical_klines')
+                    klines = client.get_historical_klines(pair, Client.KLINE_INTERVAL_1HOUR, stop_time)
+                    cols = ['timestamp', 'open', 'high', 'low', 'close', 'base vol', 'close time',
+                            'volume', 'num trades', 'taker buy base vol', 'taker buy quote vol', 'ignore']
+                    df = pd.DataFrame(klines, columns=cols)
+                    df['timestamp'] = df['timestamp'] * 1000000
+                    print(pair, df.timestamp.tail(1))
+                    df = df.astype(float)
                 z.stop()
             
             # trim df down to just the rows since the last stop was set
@@ -442,6 +453,7 @@ class Agent():
                 
             
             else:
+                # print('df from get_historical_klines')
                 z = Timer('get_historical_klines')
                 z.start()
                 klines = client.get_historical_klines(pair, Client.KLINE_INTERVAL_5MINUTE, stop_time)
@@ -450,7 +462,7 @@ class Agent():
                 df = pd.DataFrame(klines, columns=cols)
                 df['timestamp'] = df['timestamp'] * 1000000
                 df = df.astype(float)
-                # df['timestamp'] = pd.to_datetime(df['timestamp'])
+                print(pair, df.timestamp.tail(1))
                 z.stop()
             
             df.reset_index(inplace=True)
@@ -464,8 +476,12 @@ class Agent():
                     # print(df.head())
                     for i in range(len(df)):
                         if df.at[i, 'low'] <= stop:
-                            stop_hit_time = df.at[i, 'timestamp'].timestamp()
-                            print(f"{stop_hit_time = }")
+                            stop_hit_time = df.at[i, 'timestamp']
+                            print(type(stop_hit_time))
+                            if isinstance(stop_hit_time, pd.Timestamp):
+                                print(f"recasting {pair} stop_hit_time as posix timestamp")
+                                stop_hit_time = stop_hit_time.timestamp()
+                            print(f"{pair} {stop_hit_time = }")
             else:
                 trade_type = 'stop_short'
                 hh = df.high.max()
@@ -475,8 +491,12 @@ class Agent():
                     # print(df.head())
                     for i in range(len(df)):
                         if df.at[i, 'high'] >= stop:
-                            stop_hit_time = df.at[i, 'timestamp'].timestamp()
-                            print(f"{stop_hit_time = }")
+                            stop_hit_time = df.at[i, 'timestamp']
+                            print(type(stop_hit_time))
+                            if isinstance(stop_hit_time, pd.Timestamp):
+                                print(f"recasting {pair} stop_hit_time as posix timestamp")
+                                stop_hit_time = stop_hit_time.timestamp()
+                            print(f"{pair} {stop_hit_time = }")
                     
             
             if stopped:
