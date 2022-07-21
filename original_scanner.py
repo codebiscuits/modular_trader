@@ -26,18 +26,18 @@ def setup_scan(timeframe: str, offset: str) -> None:
     pprint(session.usdt_bal)
     
     agents = [
-        DoubleST(session, 3, 1.0), 
-        DoubleST(session, 3, 1.4), 
-        DoubleST(session, 3, 1.8), 
-        DoubleST(session, 5, 2.2), 
-        DoubleST(session, 5, 2.8), 
-        DoubleST(session, 5, 3.4), 
+        # DoubleST(session, 3, 1.0), 
+        # DoubleST(session, 3, 1.4), 
+        # DoubleST(session, 3, 1.8), 
+        # DoubleST(session, 5, 2.2), 
+        # DoubleST(session, 5, 2.8), 
+        # DoubleST(session, 5, 3.4), 
         EMACross(session, 12, 21, 1.2), 
-        EMACross(session, 12, 21, 1.8), 
-        EMACross(session, 12, 21, 2.4), 
-        EMACrossHMA(session, 12, 21, 1.2), 
-        EMACrossHMA(session, 12, 21, 1.8), 
-        EMACrossHMA(session, 12, 21, 2.4)
+        # EMACross(session, 12, 21, 1.8), 
+        # EMACross(session, 12, 21, 2.4), 
+        # EMACrossHMA(session, 12, 21, 1.2), 
+        # EMACrossHMA(session, 12, 21, 1.8), 
+        # EMACrossHMA(session, 12, 21, 2.4)
         ] 
     
     
@@ -114,7 +114,8 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
             # print('*****', agent.name)
             df_2 = df.copy()
             signals = agent.margin_signals(session, df_2, pair)
-            # print(signals)
+            if signals['signal']:
+                print(agent, pair, signals)
         
             inval = signals.get('inval')
             inval_ratio = signals.get('inval_ratio')

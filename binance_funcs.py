@@ -803,7 +803,7 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit
     trigger = valid_price(session, pair, trigger)
     limit = valid_price(session, pair, limit)
     stop_size = valid_size(session, pair, size)
-    print(f"setting {pair} stop: {stop_size = } {side = } {trigger = } {limit = }")
+    # print(f"setting {pair} stop: {stop_size = } {side = } {trigger = } {limit = }")
     if session.live:
         stop_sell_order = client.create_margin_order(symbol=pair,
                                                  side=side,

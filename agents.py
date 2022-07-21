@@ -461,7 +461,7 @@ class Agent():
                 stopped = ll < stop
                 overshoot_pct = round((100 * (stop - ll) / stop), 3) # % distance that price broke through the stop
                 if stopped:
-                    print(df.head())
+                    # print(df.head())
                     for i in range(len(df)):
                         if df.at[i, 'low'] <= stop:
                             stop_hit_time = df.at[i, 'timestamp'].timestamp()
@@ -472,7 +472,7 @@ class Agent():
                 stopped = hh > stop
                 overshoot_pct = round((100 * (hh - stop) / stop), 3) # % distance that price broke through the stop
                 if stopped:
-                    print(df.head())
+                    # print(df.head())
                     for i in range(len(df)):
                         if df.at[i, 'high'] >= stop:
                             stop_hit_time = df.at[i, 'timestamp'].timestamp()
@@ -1088,11 +1088,6 @@ class EMACross(Agent):
                    or self.in_pos['sim'] == 'short'
                    or self.in_pos['tracked'] == 'short')
         
-        print(f"{bullish_bias = } {bearish_bias = }")
-        print(f"{bullish_cross = } {bearish_cross = }")
-        print(f"{bullish_emas = } {bearish_emas = }")
-        print(f"{in_long = } {in_short = }")
-        
         if bullish_bias and bullish_emas and not in_long:
             signal = 'open_long'
         elif bearish_bias and bearish_emas and not in_short:
@@ -1103,11 +1098,22 @@ class EMACross(Agent):
             signal = 'close_short'
         else:
             signal = None
-        
-        if in_long and in_short:
-            print(f"WARNING: problem with EMACross signals")
-            print(f"signal generated: {signal}")
-            pprint(self.in_pos)
+
+        if not signal:
+            if bullish_bias == bearish_bias:
+                print(f"{bullish_bias = } {bearish_bias = }")
+            if bullish_cross:
+                print("*** bullish_cross ***")
+            elif bearish_cross:
+                print("*** bearish_cross ***")
+            if bullish_emas == bearish_emas:
+                print(f"{bullish_emas = } {bearish_emas = }")
+            print(f"{in_long = } {in_short = }")
+
+        # if in_long and in_short:
+        #     print(f"WARNING: problem with {pair} EMACross signals")
+        #     print(f"signal generated: {signal}")
+        #     pprint(self.in_pos)
         
         if bullish_bias:
             session.above_200_ema.add(pair)
