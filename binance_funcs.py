@@ -119,7 +119,7 @@ def calc_stop(inval: float, spread: float,  price: float, min_risk: float=0.01) 
     # if (((price > inval) and (stop_price > price)) 
     #     or 
     #     ((price < inval) and (stop_price < price))):
-    print(f"{price = } {inval = } {buffer = } {stop_price = }")
+    # print(f"{price = } {inval = } {buffer = } {stop_price = }")
     
     return stop_price
 

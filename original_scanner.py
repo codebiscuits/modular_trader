@@ -23,7 +23,6 @@ def setup_scan(timeframe: str, offset: str) -> None:
     session = sessions.MARGIN_SESSION(timeframe, offset, 0.0002)
     print(f"\nCurrent time: {session.now_start}, {session.name}\n")
     funcs.update_prices(session)
-    pprint(session.usdt_bal)
     
     agents = [
         DoubleST(session, 3, 1.0),
@@ -41,8 +40,6 @@ def setup_scan(timeframe: str, offset: str) -> None:
         ] 
     
     
-    # print('\nsession indicators:')
-    # pprint(session.indicators)
     session.name = ' | '.join([n.name for n in agents])
     
     # compile and sort list of pairs to loop through ------------------------------
@@ -72,7 +69,7 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
         agent.starting_ropnl_s = agent.open_pnl('short', 'real')
         agent.starting_sopnl_s = agent.open_pnl('short', 'sim')
         
-        if agent.max_positions > 20:
+        if agent.max_positions > 10:
             print(f'max positions: {agent.max_positions}')
         agent.calc_tor()
     
@@ -97,7 +94,6 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
             continue
         
         if len(df) > session.max_length:
-            # print(f"setup_scanner line 96 {pair} df length: {len(df)}")
             df = df.tail(session.max_length)
             df.reset_index(drop=True, inplace=True)
         
@@ -114,8 +110,6 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
             # print('*****', agent.name)
             df_2 = df.copy()
             signals = agent.margin_signals(session, df_2, pair)
-            if signals['signal']:
-                print(agent, pair, signals)
         
             inval = signals.get('inval')
             inval_ratio = signals.get('inval_ratio')
@@ -159,11 +153,6 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
                 
     # margin order execution ------------------------------------------------------
             if signals.get('signal') == 'open_long':
-                # risk = (price - stp) / price
-                # mir = uf.max_init_risk(agent.num_open_positions, agent.target_risk)
-                # size, usdt_size = funcs.get_size(price, agent.fixed_risk_l, session.bal, risk)
-                # usdt_depth = funcs.get_depth(pair, 'buy', session.max_spread)
-                
                 if usdt_size_l > usdt_depth_l > (usdt_size_l / 2): # only trim size if books are a bit too thin
                     agent.counts_dict['books_too_thin'] += 1
                     trim_size = f'{now} {pair} books too thin, reducing size from {usdt_size_l:.3} to {usdt_depth_l:.3}'
@@ -233,11 +222,6 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
                     continue
             
             elif signals.get('signal') == 'open_short':
-                # risk = (stp - price) / price
-                # mir = uf.max_init_risk(agent.num_open_positions, agent.target_risk)
-                # size, usdt_size = funcs.get_size(price, agent.fixed_risk_s, session.bal, risk)
-                # usdt_depth = funcs.get_depth(pair, 'sell', session.max_spread)
-                
                 if usdt_size_s > usdt_depth_s > (usdt_size_s / 2): # only trim size if books are a bit too thin
                     agent.counts_dict['books_too_thin'] += 1
                     trim_size = f'{now} {pair} books too thin, reducing size from {usdt_size_s:.3} to {usdt_depth_s:.3}'
@@ -337,11 +321,9 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
     after = session.usdt_bal
     if before != after:
         print('\n*-*-*-*-*-*-*-*-*-*-*-*-*-*-*')
-        print('USDT balance wrong')
-        print('before:', before)
-        print('after:', after)
+        print(f'USDT balance wrong\nbefore: {before}\nafter: {after}')
         print('*-*-*-*-*-*-*-*-*-*-*-*-*-*-*\n')
-    
+
     print('-:-' * 20)
     
     for agent in agents:
@@ -372,17 +354,15 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
         if not session.live:
             print('\n*** real_pos ***')
             pprint(agent.real_pos)
-            # print('\n*** sim_pos ***')
-            # pprint(agent.sim_pos.keys())
             print('warning: logging directed to test_records')
         
         uf.log(session, [agent])
         
-        # print(f'{agent.name} Counts:')
-        # for k, v in agent.counts_dict.items():
-        #     if v:
-        #         print(k, v)
-        # print('-:-' * 20)
+        print(f'{agent.name} Counts:')
+        for k, v in agent.counts_dict.items():
+            if v:
+                print(k, v)
+        print('-:-' * 20)
     
     uf.scanner_summary(session, agents)
     
