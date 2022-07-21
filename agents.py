@@ -375,11 +375,12 @@ class Agent():
                     self.counts_dict['real_stop_short'] += 1
                 
             else:
-                # check for a free balance matching the size. if there is, that means 
+                print(f"no sim stop for {pair} {agent.name}")
+                # check for a free balance matching the size. if there is, that means
                 # the stop was never set in the first place and needs to be set
-                print(f'getting {pair[:-4]} free balance')
                 free_bal = session.bals_dict[pair[:-4]].get('free')
-                print(f'getting {pair} price')
+                # # need to finish writing this bit - check size fits and then set stop if it does or sell if it doesn't
+                # trade_size = trade_record[-1]['base_size']
                 price = session.prices[pair]
                 value = free_bal * price
                 if value > 10:
@@ -426,24 +427,19 @@ class Agent():
             timespan = datetime.now().timestamp() - (stop_time/1000)
             
             if timespan > 36000:
-                # print('df from read_pickle')
                 z = Timer('read ohlc pickles')
                 z.start()
                 filepath = Path(f'{session.ohlc_data}/{pair}.pkl')
                 if filepath.exists():
                     df = pd.read_pickle(filepath)
                     if df['timestamp'].dtype == 'Timestamp':
-                        print(f"recasting {pair} timestamps as posix timestamps")
                         df['timestamp'] = df['timestamp'].timestamp()
-                    print(pair, df.timestamp.tail(1))
                 else:
-                    # print('df from get_historical_klines')
                     klines = client.get_historical_klines(pair, Client.KLINE_INTERVAL_1HOUR, stop_time)
                     cols = ['timestamp', 'open', 'high', 'low', 'close', 'base vol', 'close time',
                             'volume', 'num trades', 'taker buy base vol', 'taker buy quote vol', 'ignore']
                     df = pd.DataFrame(klines, columns=cols)
                     df['timestamp'] = df['timestamp'] * 1000000
-                    print(pair, df.timestamp.tail(1))
                     df = df.astype(float)
                 z.stop()
             
@@ -453,7 +449,6 @@ class Agent():
                 
             
             else:
-                # print('df from get_historical_klines')
                 z = Timer('get_historical_klines')
                 z.start()
                 klines = client.get_historical_klines(pair, Client.KLINE_INTERVAL_5MINUTE, stop_time)
@@ -462,7 +457,6 @@ class Agent():
                 df = pd.DataFrame(klines, columns=cols)
                 df['timestamp'] = df['timestamp'] * 1000000
                 df = df.astype(float)
-                print(pair, df.timestamp.tail(1))
                 z.stop()
             
             df.reset_index(inplace=True)
@@ -473,30 +467,22 @@ class Agent():
                 stopped = ll < stop
                 overshoot_pct = round((100 * (stop - ll) / stop), 3) # % distance that price broke through the stop
                 if stopped:
-                    # print(df.head())
                     for i in range(len(df)):
                         if df.at[i, 'low'] <= stop:
                             stop_hit_time = df.at[i, 'timestamp']
-                            print(type(stop_hit_time))
                             if isinstance(stop_hit_time, pd.Timestamp):
-                                print(f"recasting {pair} stop_hit_time as posix timestamp")
                                 stop_hit_time = stop_hit_time.timestamp()
-                            print(f"{pair} {stop_hit_time = }")
             else:
                 trade_type = 'stop_short'
                 hh = df.high.max()
                 stopped = hh > stop
                 overshoot_pct = round((100 * (hh - stop) / stop), 3) # % distance that price broke through the stop
                 if stopped:
-                    # print(df.head())
                     for i in range(len(df)):
                         if df.at[i, 'high'] >= stop:
                             stop_hit_time = df.at[i, 'timestamp']
-                            print(type(stop_hit_time))
                             if isinstance(stop_hit_time, pd.Timestamp):
-                                print(f"recasting {pair} stop_hit_time as posix timestamp")
                                 stop_hit_time = stop_hit_time.timestamp()
-                            print(f"{pair} {stop_hit_time = }")
                     
             
             if stopped:
@@ -513,9 +499,6 @@ class Agent():
                               'state': 'sim', 
                               'overshoot': overshoot_pct
                               }
-                # if not session.live:
-                #     note = f"*sim* stopped out {pair} @ {stop}"
-                #     print(session.now_start, note)
                 
                 v.append(trade_dict)
                 
@@ -531,8 +514,6 @@ class Agent():
                     self.counts_dict['sim_stop_short'] += 1
                 del_pairs.append(pair)
             
-        # print(f"number of stopped sim trades: {self.counts_dict['sim_stop_long'] +  self.counts_dict['sim_stop_short']}")        
-        
         for p in del_pairs:
             del self.sim_trades[p]
         n.stop()
@@ -556,10 +537,6 @@ class Agent():
         trade_r = round(trade_pnl / r_val, 3)
         scalar = final_size / init_size
         realised_r = trade_r * scalar
-        # print(f'\nrealised pnl: {realised_r:.1f}R')
-        # print(f'{entry = }, {init_stop = }, {final_exit = }')
-        # print(f'{r_val = }, {trade_r = }, {scalar = }')
-        # print(f'{init_size = }, {final_size = }\n')
         
         if trade_record[-1].get('state') == 'real':
             if side == 'long':
@@ -583,7 +560,6 @@ class Agent():
         b.start()
         filepath = Path(f"{session.market_data}/{self.id}/{state}_trades.json")
         if not filepath.exists():
-            print('filepath doesnt exist')
             filepath.touch()
         with open(filepath, "w") as file:
             if state == 'open':
@@ -630,28 +606,21 @@ class Agent():
             '''calculates perf score from recent performance. also saves the
             instance property open_pnl_changes dictionary'''
             
-            # print(f"\n\nrunning {direction} {switch} agent score accumulator\n")
-            
             with open(f"{self.market_data}/{self.id}/bal_history.txt", "r") as file:
                 bal_data = file.readlines()
             
             if bal_data:
                 last = json.loads(bal_data[-1])
-                # pprint(last)
             if bal_data and last.get(f'{switch}_open_pnl_{direction[0]}'):
                 prev_open_pnl = last.get(f'{switch}_open_pnl_{direction[0]}')
                 curr_open_pnl = self.open_pnl(direction, switch)
-                # print(f"{switch} open pnl: {curr_open_pnl:.1f}")
                 pnl_change_pct = 100 * (curr_open_pnl - prev_open_pnl) / prev_open_pnl
                 self.open_pnl_changes[switch] = pnl_change_pct
-                # print(f"{switch} {direction} open pnl change: {pnl_change_pct:.2f}%")
             elif bal_data:
                 prev_bal = last.get('balance')
                 pnl_change_pct = 100 * (self.bal - prev_bal) / prev_bal
-                # print(f"bal change: {pnl_change_pct:.2f}%")
             else:
                 pnl_change_pct = 0
-                # print(f"real open pnl change: {pnl_change_pct}")
             
             lookup = f'realised_pnl_{direction}' if switch == 'real' else f'sim_r_pnl_{direction}'
             pnls = {}
@@ -684,8 +653,6 @@ class Agent():
             elif pnls.get(4) < 0:
                 score_2 -= 1
             
-            # print('\n')
-            
             return score_1, score_2, pnls
         
         # real_score_1, real_score_2, real_pnls = score_accum(direction, 'real')
@@ -694,15 +661,6 @@ class Agent():
             print(f"set_fixed_risk {direction}: sim_score {sim_score_1 + sim_score_2}")
         score = sim_score_1 + sim_score_2
         pnls = sim_pnls
-        # print(f"set_fixed_risk {direction}: real_score {real_score_1 + real_score_2}, sim_score {sim_score_1 + sim_score_2}")
-        # if self.open_trades and real_score_2:
-        #     score = real_score_1 + real_score_2
-        #     pnls = real_pnls
-        #     print('real score chosen')
-        # else:
-        #     score = sim_score_1 + sim_score_2
-        #     pnls = sim_pnls
-        #     print('sim score chosen')
         
         if score == 15:
             fr = min(fr_prev + (2*fr_inc), self.fr_max)
@@ -907,7 +865,6 @@ class Agent():
             self.record_trades(session, 'open')
         
         elif state in ['sim', 'tracked'] and direction == 'long' and low_atr > current_stop:
-            # print(f"*** {self.name} {pair} {state} {direction} move stop from {current_stop:.3} to {low_atr:.3}")
             if state == 'sim':
                 self.sim_trades[pair][-1]['hard_stop'] = low_atr
             else:
@@ -923,7 +880,6 @@ class Agent():
             self.record_trades(session, 'open')
             
         elif state in ['sim', 'tracked'] and direction == 'short' and high_atr < current_stop:
-            # print(f"*** {self.name} {pair} {state} {direction} move stop from {current_stop:.3} to {high_atr:.3}")
             if state == 'sim':
                 self.sim_trades[pair][-1]['hard_stop'] = high_atr
             else:
@@ -962,7 +918,6 @@ class DoubleST(Agent):
         self.mult2 = mult2
         self.name = f'{session.tf} dst {self.mult1}-{self.mult2}'
         self.id = f"double_st_{session.tf}_{session.offset}_{self.mult1}_{self.mult2}"
-        # print(f'\nInitialising {self.name}')
         Agent.__init__(self, session)
         session.indicators.update(['ema-200', 
                                    f"st-10-{self.mult1}", 
@@ -1008,13 +963,6 @@ class DoubleST(Agent):
         k = Timer(f'margin_signals')
         k.start()
         
-        # if 'ema-200' not in df.columns:
-        #     df['ema-200'] = df.close.ewm(200).mean()
-        # ind.supertrend_new(df, 10, self.mult1)
-        # # df.rename(columns={'st': 'st_loose', 'st_u': 'st_loose_u', 'st_d': 'st_loose_d'}, inplace=True)
-        # ind.supertrend_new(df, 10, self.mult2)
-        # print(df.columns)
-    
         bullish_ema = df.at[len(df)-1, 'close'] > df.at[len(df)-1, 'ema-200']
         bearish_ema = df.at[len(df)-1, 'close'] < df.at[len(df)-1, 'ema-200']
         bullish_loose = df.at[len(df)-1, 'close'] > df.at[len(df)-1, f'st-10-{float(self.mult1)}']
@@ -1065,7 +1013,6 @@ class EMACross(Agent):
         self.mult = mult
         self.name = f'{session.tf} emacross {self.lb1}-{self.lb2}-{self.mult}'
         self.id = f"ema_cross_{session.tf}_{session.offset}_{self.lb1}_{self.lb2}_{self.mult}"
-        # print(f'\nInitialising {self.name}')
         Agent.__init__(self, session)
         session.indicators.update(['ema-200', 
                                    f"ema-{self.lb1}", 
@@ -1119,22 +1066,6 @@ class EMACross(Agent):
         else:
             signal = None
 
-        if not signal:
-            if bullish_bias == bearish_bias:
-                print(f"{bullish_bias = } {bearish_bias = }")
-            if bullish_cross:
-                print("*** bullish_cross ***")
-            elif bearish_cross:
-                print("*** bearish_cross ***")
-            if bullish_emas == bearish_emas:
-                print(f"{bullish_emas = } {bearish_emas = }")
-            print(f"{in_long = } {in_short = }")
-
-        # if in_long and in_short:
-        #     print(f"WARNING: problem with {pair} EMACross signals")
-        #     print(f"signal generated: {signal}")
-        #     pprint(self.in_pos)
-        
         if bullish_bias:
             session.above_200_ema.add(pair)
         else:
@@ -1169,7 +1100,6 @@ class EMACrossHMA(Agent):
         self.mult = mult
         self.name = f'{session.tf} emaxhma {self.lb1}-{self.lb2}-{self.mult}'
         self.id = f"ema_cross_hma_{session.tf}_{session.offset}_{self.lb1}_{self.lb2}_{self.mult}"
-        # print(f'\nInitialising {self.name}')
         Agent.__init__(self, session)
         session.indicators.update(['hma-200', 
                                    f"ema-{self.lb1}", 
@@ -1205,14 +1135,7 @@ class EMACrossHMA(Agent):
         bullish_emas = df.at[len(df)-1, fast_ema_str] > df.at[len(df)-1, slow_ema_str]
         bearish_emas = df.at[len(df)-1, fast_ema_str] < df.at[len(df)-1, slow_ema_str]
         
-        # if bullish_bias == bearish_bias:
-        #     print(f'bias hma broken {pair}')
-        #     print(df.loc[:, ['close', bias_hma_str]].tail(1))
-        # elif bullish_emas == bearish_emas:
-        #     print(f'emas broken {pair}')
-        #     print(df.loc[:, ['close', bias_hma_str]].tail(1))
-        
-        in_long = (self.in_pos['real'] == 'long' 
+        in_long = (self.in_pos['real'] == 'long'
                    or self.in_pos['sim'] == 'long'
                    or self.in_pos['tracked'] == 'long')
         in_short = (self.in_pos['real'] == 'short' 
@@ -1221,23 +1144,14 @@ class EMACrossHMA(Agent):
         
         if bullish_bias and bullish_cross:
             signal = 'open_long'
-            # print(f"{self.name} {pair} {signal}")
         elif bearish_bias and bearish_cross:
             signal = 'open_short'
-            # print(f"{self.name} {pair} {signal}")
         elif bearish_emas and in_long:
             signal = 'close_long'
-            # print(f"{self.name} {pair} {signal}")
         elif bullish_emas and in_short:
             signal = 'close_short'
-            # print(f"{self.name} {pair} {signal}")
         else:
             signal = None
-        
-        if in_long and in_short:
-            print(f"WARNING: problem with EMAxHMA signals")
-            print(f"signal generated: {signal}")
-            pprint(self.in_pos)
         
         if bullish_bias:
             session.above_200_ema.add(pair)
@@ -1258,7 +1172,5 @@ class EMACrossHMA(Agent):
             inval = None
             inval_ratio = None
         
-        # if signal:
-        #     print(f"{signal} inval: {inval:.3} ratio: {inval_ratio:.3f}")
         k.stop()
         return {'signal': signal, 'inval': inval, 'inval_ratio': inval_ratio}
