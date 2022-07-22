@@ -74,6 +74,7 @@ class Agent():
         self.max_init_r_s = self.fixed_risk_s * self.total_r_limit
         self.fixed_risk_dol_l = self.fixed_risk_l * self.bal
         self.fixed_risk_dol_s = self.fixed_risk_s * self.bal
+        self.next_id = int(datetime.now().timestamp())
         t.stop()
         
     def __str__(self):
