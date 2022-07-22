@@ -375,7 +375,7 @@ class Agent():
                     self.counts_dict['real_stop_short'] += 1
                 
             else:
-                print(f"no sim stop for {pair} {agent.name}")
+                print(f"no sim stop for {pair} {self.name}")
                 # check for a free balance matching the size. if there is, that means
                 # the stop was never set in the first place and needs to be set
                 free_bal = session.bals_dict[pair[:-4]].get('free')
