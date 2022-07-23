@@ -158,6 +158,7 @@ def tp_long(session, agent, pair, stp, inval):
         pct = 50 if real_val > 24 else 100
         
         # clear stop
+        print(f'{agent.name} clearing {pair} stop')
         clear, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
         
         if clear == 'error':
@@ -342,6 +343,7 @@ def close_long(session, agent, pair):
         real_bal = abs(Decimal(agent.real_pos[asset]['qty']))
         
         # cancel stop
+        print(f'{agent.name} clearing {pair} stop')
         clear, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
         if clear == 'error':
             print(f"{agent.name} Can't be sure which {pair} stop to clear, close_long aborted")
@@ -610,9 +612,7 @@ def tp_short(session, agent, pair, stp, inval):
         pct = 50 if real_val > 24 else 100
         
         # clear stop
-        
-        print('clearing stop')
-        
+        print(f'{agent.name} clearing {pair} stop')
         clear, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
         if clear == 'error':
             print(f"{agent.name} Can't be sure which {pair} stop to clear, tp_short aborted")
@@ -782,6 +782,7 @@ def close_short(session, agent, pair):
         real_bal = abs(Decimal(agent.real_pos[asset]['qty']))
         
         # cancel stop
+        print(f'{agent.name} clearing {pair} stop')
         clear, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
         if clear == 'error':
             print(f"{agent.name} Can't be sure which {pair} stop to clear, close_short aborted")
@@ -957,6 +958,7 @@ def reduce_risk_M(session, agent):
                     real_bal = abs(Decimal(agent.real_pos[asset]['qty']))
                     
                     # clear stop
+                    print(f'{agent.name} clearing {pair} stop')
                     clear, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
                     if clear == 'error':
                         note = f"{agent.name} Can't be sure which {pair} stop to clear, close_short aborted"

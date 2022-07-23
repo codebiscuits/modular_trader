@@ -200,6 +200,7 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
                 except bx.BinanceAPIException as e:
                     print(f'{agent.name} problem with open_long order for {pair}')
                     print(e)
+                    print(f"{size_l = } {stp = } {inval_ratio = }")
                     pb.push_note(now, f'{agent.name} exeption during {pair} open_long order')
                     continue
             
@@ -209,6 +210,10 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
                 except bx.BinanceAPIException as e:
                     print(f'{agent.name} problem with tp_long order for {pair}')
                     print(e)
+                    print(f"{stp = } {inval_ratio = }")
+                    if agent.open_trades[pair]:
+                        print('trade record:')
+                        pprint(agent.open_trades[pair])
                     pb.push_note(now, f'{agent.name} exeption during {pair} tp_long order')
                     continue
             
@@ -218,6 +223,9 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
                 except bx.BinanceAPIException as e:
                     print(f'{agent.name} problem with close_long order for {pair}')
                     print(e)
+                    if agent.open_trades[pair]:
+                        print('trade record:')
+                        pprint(agent.open_trades[pair])
                     pb.push_note(now, f'{agent.name} exeption during {pair} close_long order')
                     continue
             
@@ -269,6 +277,7 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
                 except bx.BinanceAPIException as e:
                     print(f'{agent.name} problem with open_short order for {pair}')
                     print(e)
+                    print(f"{size_s = } {stp = } {inval_ratio = }")
                     pb.push_note(now, f'{agent.name} exeption during {pair} open_short order')
                     continue
             
@@ -278,6 +287,10 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
                 except bx.BinanceAPIException as e:
                     print(f'{agent.name} problem with tp_short order for {pair}')
                     print(e)
+                    print(f"{stp = } {inval_ratio = }")
+                    if agent.open_trades[pair]:
+                        print('trade record:')
+                        pprint(agent.open_trades[pair])
                     pb.push_note(now, f'{agent.name} exeption during {pair} tp_short order')
                     continue
             
@@ -287,6 +300,9 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
                 except bx.BinanceAPIException as e:
                     print(f'{agent.name} problem with close_short order for {pair}')
                     print(e)
+                    if agent.open_trades[pair]:
+                        print('trade record:')
+                        pprint(agent.open_trades[pair])
                     pb.push_note(now, f'{agent.name} exeption during {pair} close_short order')
                     continue
             
