@@ -37,7 +37,13 @@ def setup_scan(timeframe: str, offset: str) -> None:
         EMACrossHMA(session, 12, 21, 1.2),
         EMACrossHMA(session, 12, 21, 1.8),
         EMACrossHMA(session, 12, 21, 2.4)
-        ] 
+        ]
+
+    def count_pos(asset):
+        all_pos = []
+        for agent in agents:
+            all_pos.extend(list(agent.real_pos.keys()))
+        return all_pos.count(asset)
     
     
     session.name = ' | '.join([n.name for n in agents])
@@ -159,7 +165,10 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
                     print(trim_size)
                     usdt_size_l = usdt_depth_l
                 sim_reason = None
-                if usdt_size_l < 30:
+                if count_pos(asset) >= 5:
+                    agent.counts_dict['asset_pos_limit'] += 1
+                    sim_reason = 'asset_pos_limit'
+                elif usdt_size_l < 30:
                     if not agent.in_pos['sim']:
                         agent.counts_dict['too_small'] += 1
                     sim_reason = 'too_small'
@@ -236,7 +245,10 @@ fr short: {(agent.fixed_risk_s*10000):.2f}bps")
                     print(trim_size)
                     usdt_size_s = usdt_depth_s
                 sim_reason = None
-                if usdt_size_s < 30:
+                if count_pos(asset) >= 5:
+                    agent.counts_dict['asset_pos_limit'] += 1
+                    sim_reason = 'asset_pos_limit'
+                elif usdt_size_s < 30:
                     if not agent.in_pos['sim']:
                         agent.counts_dict['too_small'] += 1
                     sim_reason = 'too_small'

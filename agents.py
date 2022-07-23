@@ -48,7 +48,7 @@ class Agent():
                            'sim_stop_long': 0, 'sim_open_long': 0, 'sim_add_long': 0, 'sim_tp_long': 0, 'sim_close_long': 0, 
                            'real_stop_short': 0, 'real_open_short': 0, 'real_add_short': 0, 'real_tp_short': 0, 'real_close_short': 0, 
                            'sim_stop_short': 0, 'sim_open_short': 0, 'sim_add_short': 0, 'sim_tp_short': 0, 'sim_close_short': 0, 
-                           'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 'too_much_or': 0, 
+                           'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 'too_much_or': 0, 'asset_pos_limit': 0,
                            'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0, 'reduce_risk': 0}
         if not self.live:
             self.sync_test_records()
@@ -376,7 +376,7 @@ class Agent():
                     self.counts_dict['real_stop_short'] += 1
                 
             else:
-                print(f"no sim stop for {pair} {self.name}")
+                print(f"no stop for {pair} {self.name}")
                 # check for a free balance matching the size. if there is, that means
                 # the stop was never set in the first place and needs to be set
                 free_bal = session.bals_dict[pair[:-4]].get('free')
