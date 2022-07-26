@@ -860,6 +860,8 @@ class Agent():
         if state == 'real' and direction == 'long' and low_atr > current_stop:
             print(f"*** {self.name} {pair} {state} {direction} move stop from {current_stop:.3} to {low_atr:.3}")
             _, base_size = funcs.clear_stop_M(pair, trade_record, session.live)
+            if trade_record[-1].get('curr_base_size') and not base_size:
+                base_size = trade_record[-1].get('curr_base_size')
             stop_order = funcs.set_stop_M(session, pair, base_size, be.SIDE_SELL, low_atr, low_atr*0.8)
             self.open_trades[pair][-1]['stop_id'] = stop_order.get('orderId')
             self.open_trades[pair][-1]['hard_stop'] = low_atr

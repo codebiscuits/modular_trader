@@ -26,18 +26,18 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
         print('')
         
         # # insert placeholder record
-        # placeholder = {'order': 'open_long', 
-        #                 'state': 'real', 
-        #                 'agent': agent.id, 
-        #                 'pair': pair, 
-        #                 'base_size': size, 
-        #                 'stop_price': stp, 
-        #                 'inval': inval, 
-        #                 'timestamp': now, 
+        # placeholder = {'order': 'open_long',
+        #                 'state': 'real',
+        #                 'agent': agent.id,
+        #                 'pair': pair,
+        #                 'base_size': size,
+        #                 'stop_price': stp,
+        #                 'inval': inval,
+        #                 'timestamp': now,
         #                 'completed': None
         #                 }
         # agent.open_trades[pair] = [placeholder]
-        # agent.record_trades(session, 'open')
+        # # agent.record_trades(session, 'open')
     
         note = f"{agent.name} real open long {size:.5} {pair} ({usdt_size} usdt) @ {price}, stop @ {stp:.5}"
         print(now, note)
@@ -56,6 +56,7 @@ def open_long(session, agent, pair, size, stp, inval, sim_reason):
         long_order['hard_stop'] = str(stp)
         long_order['init_hs'] = str(stp)
         long_order['liability'] = uf.update_liability(None, usdt_size, 'increase')
+        long_order['curr_base_size'] = str(api_order.get('executedQty'))
         
         # set stop and add to trade record
         stop_size = float(api_order.get('executedQty'))
@@ -181,6 +182,9 @@ def tp_long(session, agent, pair, stp, inval):
             # execute trade
             api_order = funcs.sell_asset_M(session, pair, order_size, price, session.live)
             sell_order = funcs.create_trade_dict(api_order, price, session.live)
+            if trade_record[-1].get('curr_base_size'):
+                new_base_size = Decimal(trade_record[-1]['curr_base_size']) - Decimal(api_order.get('executedQty'))
+                sell_order['curr_base_size'] = str(new_base_size)
             
             # # update placeholder
             # placeholder['completed'] = 'sell_asset'
@@ -364,6 +368,10 @@ def close_long(session, agent, pair):
             sell_order['state'] = 'real'
             sell_order['reason'] = 'strategy close long signal'
             sell_order['liability'] = '0'
+            if trade_record[-1].get('curr_base_size'):
+                new_base_size = Decimal(trade_record[-1]['curr_base_size']) - Decimal(api_order.get('executedQty'))
+                sell_order['curr_base_size'] = str(new_base_size)
+                print(f"{agent.name} {pair} position closed, recorded base size: {new_base_size}")
             trade_record.append(sell_order)
             
             if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
@@ -525,6 +533,7 @@ def open_short(session, agent, pair, size, stp, inval, sim_reason):
         short_order['hard_stop'] = str(stp)
         short_order['init_hs'] = str(stp)
         short_order['liability'] = uf.update_liability(None, str(size), 'increase')
+        short_order['curr_base_size'] = str(api_order.get('executedQty'))
         
         # set stop and add to trade record
         stop_size = float(api_order.get('executedQty'))
@@ -628,6 +637,9 @@ def tp_short(session, agent, pair, stp, inval):
             
             api_order = funcs.buy_asset_M(session, pair, order_size, True, price, session.live)
             buy_order = funcs.create_trade_dict(api_order, price, session.live)
+            if trade_record[-1].get('curr_base_size'):
+                new_base_size = Decimal(trade_record[-1]['curr_base_size']) - Decimal(api_order.get('executedQty'))
+                buy_order['curr_base_size'] = str(new_base_size)
             
             note = f"{agent.name} real take-profit {pair} short {pct}% @ {price}"
             print(now, note)        
@@ -795,15 +807,19 @@ def close_short(session, agent, pair):
             
             # execute trade
             api_order = funcs.buy_asset_M(session, pair, base_size, True, price, session.live)
-            sell_order = funcs.create_trade_dict(api_order, price, session.live)
-            repay_size = str(max(Decimal(trade_record[-1].get('liability', 0)), Decimal(sell_order.get('base_size', 0))))
+            buy_order = funcs.create_trade_dict(api_order, price, session.live)
+            repay_size = str(max(Decimal(trade_record[-1].get('liability', 0)), Decimal(buy_order.get('base_size', 0))))
             funcs.repay_asset_M(asset, repay_size, session.live)
             
-            sell_order['type'] = 'close_short'
-            sell_order['state'] = 'real'
-            sell_order['reason'] = 'strategy close short signal'
-            sell_order['liability'] = '0'
-            trade_record.append(sell_order)
+            buy_order['type'] = 'close_short'
+            buy_order['state'] = 'real'
+            buy_order['reason'] = 'strategy close short signal'
+            buy_order['liability'] = '0'
+            if trade_record[-1].get('curr_base_size'):
+                new_base_size = Decimal(trade_record[-1]['curr_base_size']) - Decimal(api_order.get('executedQty'))
+                buy_order['curr_base_size'] = str(new_base_size)
+                print(f"{agent.name} {pair} position closed, recorded base size: {new_base_size}")
+            trade_record.append(buy_order)
             
             if trade_record[0].get('type')[0] == 'o': # if the trade record includes the trade open
                 trade_id = int(trade_record[0].get('timestamp'))
@@ -820,7 +836,7 @@ def close_short(session, agent, pair):
             agent.in_pos['real'] = None
             agent.in_pos['real_pfrd'] = 0
             if session.live:
-                usdt_size = round(base_size * price, 5)
+                usdt_size = round(float(base_size) * price, 5)
                 session.update_usdt_M(down=usdt_size)
             else:
                 value = float(agent.real_pos['USDT']['value'])
@@ -989,6 +1005,10 @@ def reduce_risk_M(session, agent):
                         reduce_order['state'] = 'real'
                         reduce_order['reason'] = 'portfolio risk limiting'
                         reduce_order['liability'] = '0'
+                        if trade_record[-1].get('curr_base_size'):
+                            new_base_size = Decimal(trade_record[-1]['curr_base_size']) - Decimal(api_order.get('executedQty'))
+                            reduce_order['curr_base_size'] = str(new_base_size)
+                            print(f"{agent.name} {pair} position closed, recorded base size: {new_base_size}")
                         
                         trade_record.append(reduce_order)
                         

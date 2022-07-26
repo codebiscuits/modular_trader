@@ -820,8 +820,7 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit
 
 def clear_stop_M(pair: str, trade_record: dict, live: bool) -> Tuple[Any, Decimal]:
     '''finds the order id of the most recent stop-loss from the trade record
-    and cancels that specific order. if no such id can be found, blindly cancels 
-    the most recent stop-limit order relating to the pair'''
+    and cancels that specific order. if no such id can be found, returns null values'''
     
     fc = Timer('clear_stop_M')
     fc.start()
@@ -835,17 +834,17 @@ def clear_stop_M(pair: str, trade_record: dict, live: bool) -> Tuple[Any, Decima
             base_size = Decimal(clear.get('origQty'))
         else:
             print(f'no recorded stop id for {pair}')
-            orders = client.get_open_margin_orders(symbol=pair)
-            if (len(orders) == 1) and (orders[-1].get('type') == 'STOP_LOSS_LIMIT'):
-                stop_id = orders[-1].get('orderId')
-                clear = client.cancel_margin_order(symbol=pair, orderId=str(stop_id))
-                base_size = Decimal(clear.get('origQty'))
-            elif len(orders) > 1:
-                clear = 'error'
-            else:
-                print('no stop to clear')
-                clear = {}
-                base_size = Decimal(0)
+            # orders = client.get_open_margin_orders(symbol=pair)
+            # if (len(orders) == 1) and (orders[-1].get('type') == 'STOP_LOSS_LIMIT'):
+            #     stop_id = orders[-1].get('orderId')
+            #     clear = client.cancel_margin_order(symbol=pair, orderId=str(stop_id))
+            #     base_size = Decimal(clear.get('origQty'))
+            # elif len(orders) > 1:
+            #     clear = 'error'
+            # else:
+            #     print('no stop to clear')
+            clear = {}
+            base_size = Decimal(0)
     else:
         base_size = trade_record[-1]['base_size']
     fc.stop()

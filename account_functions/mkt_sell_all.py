@@ -13,18 +13,34 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 client = Client(keys.bPkey, keys.bSkey)
 
 info = client.get_margin_account()
+orders = client.get_open_margin_orders()
 
-# pprint(info['userAssets'])
+# clear all stop-loss orders
+
+for order in orders:
+    oid = order['orderId']
+    print(order)
+    client.cancel_margin_order(oid)
+
+# sell all free balances
 
 for asset in info['userAssets']:
-    if float(asset['free']):
+    if float(asset['free']) and asset['asset'] not in ['BNB', 'USDT']:
         try:
-            client.create_margin_order(symbol=asset['asset']+'USDT', 
-                                       side=be.SIDE_SELL, 
-                                       type=be.ORDER_TYPE_MARKET, 
+            client.create_margin_order(symbol=asset['asset']+'USDT',
+                                       side=be.SIDE_SELL,
+                                       type=be.ORDER_TYPE_MARKET,
                                        quantity=asset['free'])
             print(f"sold {asset['free']} {asset['asset']}")
         except BinanceAPIException as e:
             print(f"couldn't sell {asset['asset']}")
             print(e)
             continue
+
+# repay all loans
+
+for asset in info['userAssets']:
+    ast = asset['asset']
+    free = Decimal(asset['free'])
+    borrowed = Decimal(asset['borrowed'])
+    interest = Decimal(asset['interest'])
