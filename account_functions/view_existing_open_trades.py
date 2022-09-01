@@ -11,9 +11,11 @@ client = Client(keys.bPkey, keys.bSkey)
 mkt_data_path = Path("/mnt/pi_2/market_data")
 folders = list(mkt_data_path.glob('*'))
 
+
 def inspect_data(data_path):
     with open(data_path, 'r') as file:
         return file.readlines()
+
 
 def split_name(name):
     strats = ['double_st', 'ema_cross', 'ema_cross_hma']
@@ -21,15 +23,16 @@ def split_name(name):
         if strat_name in name:
             strat = strat_name
     parts = name.split('_')
-    
+
     tf = parts[-4]
     offset = parts[-3]
     var1 = parts[-2]
     var2 = parts[-1]
-    
+
     return strat, tf, offset, var1, var2
 
-#%%
+
+# %%
 
 pair = None
 
@@ -51,7 +54,7 @@ for folder in folders:
         #     else:
         #         pprint(rec)
 
-#%%
+# %%
 
 pair = ''
 
@@ -74,6 +77,3 @@ for folder in folders:
                         pprint(x)
             else:
                 pprint(rec)
-                
-                
-                

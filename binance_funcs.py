@@ -20,10 +20,10 @@ ctx = getcontext()
 ctx.prec = 12
 
 
-#-#-#- Utility Functions
+# -#-#- Utility Functions
 
 def step_round(num: float, step: str) -> str:
-    '''rounds down to any step size'''
+    """rounds down to any step size"""
     gv = Timer('step_round')
     gv.start()
     num = Decimal(num)
@@ -33,8 +33,8 @@ def step_round(num: float, step: str) -> str:
 
 
 def resample(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
-    '''resamples a dataframe and resets the datetime index'''
-    
+    """resamples a dataframe and resets the datetime index"""
+
     hb = Timer('resample')
     hb.start()
     df = df.resample(timeframe, on='timestamp').agg({'open': 'first',
@@ -49,10 +49,10 @@ def resample(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
 
 
 def order_by_volsm(pairs: list, lookback: int) -> List[Tuple[str, float]]:
-    '''measures recent volatility of all pairs, then sorts the list of pairs 
-    with the most volatile first'''
+    """measures recent volatility of all pairs, then sorts the list of pairs
+    with the most volatile first"""
     tup_list = []
-    
+
     for pair in pairs:
         # load data
         filepath = Path(f'{ohlc_data}/{pair}.pkl')
@@ -60,12 +60,12 @@ def order_by_volsm(pairs: list, lookback: int) -> List[Tuple[str, float]]:
             df = pd.read_pickle(filepath)
         else:
             continue
-        
+
         # trim data
         if len(df) > lookback:  # 8760 is 1 year's worth of 1h periods
             df = df.tail(lookback)
             df.reset_index(drop=True, inplace=True)
-        
+
             # calc vol and add to list
             df['roc'] = df.close.pct_change(periods=4)
             df['roc_diff'] = abs(df['roc'] - df['roc'].shift(1))
@@ -74,25 +74,25 @@ def order_by_volsm(pairs: list, lookback: int) -> List[Tuple[str, float]]:
                 high = df.high.max()
                 low = df.low.min()
                 mid = (high + low) / 2
-                price_range = ((high - low) / mid)#**2
+                price_range = ((high - low) / mid)  # **2
                 # volatility = df.roc.std()
                 volatility = df.roc_diff.mean()
                 smoothness = round(10 * price_range / volatility)
             except ValueError as e:
                 print(pair, e)
             tup_list.append((pair, smoothness))
-    
+
     # sort tup_list by vol
     tup_list = sorted(tup_list, key=lambda x: x[1], reverse=True)
-    
+
     return tup_list
 
 
 def get_size(agent, price: float, balance: float, risk: float) -> Tuple[float]:
-    '''calculates the desired position size in base or quote denominations 
+    """calculates the desired position size in base or quote denominations
     using the total account balance, current fixed-risk setting, and the distance
-    from current price to stop-loss'''
-    
+    from current price to stop-loss"""
+
     jn = Timer('get_size')
     jn.start()
     usdt_size_l = balance * agent.fixed_risk_l / risk
@@ -104,29 +104,29 @@ def get_size(agent, price: float, balance: float, risk: float) -> Tuple[float]:
     return asset_size_l, usdt_size_l, asset_size_s, usdt_size_s
 
 
-def calc_stop(inval: float, spread: float,  price: float, min_risk: float=0.01) -> float:
-    '''calculates what the stop-loss trigger price should be based on the current 
-    value of the supertrend line and the current spread (slippage proxy). 
-    if this is too close to the entry price, the stop will be set at the minimum 
-    allowable distance.'''
+def calc_stop(inval: float, spread: float, price: float, min_risk: float = 0.01) -> float:
+    """calculates what the stop-loss trigger price should be based on the current
+    value of the supertrend line and the current spread (slippage proxy).
+    if this is too close to the entry price, the stop will be set at the minimum
+    allowable distance."""
     buffer = max(spread * 2, min_risk)
-    
+
     if price > inval:
         stop_price = float(inval) * (1 - buffer)
     else:
         stop_price = float(inval) * (1 + buffer)
-    
+
     # if (((price > inval) and (stop_price > price)) 
     #     or 
     #     ((price < inval) and (stop_price < price))):
     # print(f"{price = } {inval = } {buffer = } {stop_price = }")
-    
+
     return stop_price
 
 
-def calc_fee_bnb(usdt_size: str, fee_rate: float=0.00075) -> float:
-    '''calculates the trade fee denominated in BNB'''
-    
+def calc_fee_bnb(usdt_size: str, fee_rate: float = 0.00075) -> float:
+    """calculates the trade fee denominated in BNB"""
+
     jm = Timer('calc_fee_bnb')
     jm.start()
     bnb_price = get_price('BNBUSDT')
@@ -135,21 +135,21 @@ def calc_fee_bnb(usdt_size: str, fee_rate: float=0.00075) -> float:
     return fee_usdt / bnb_price
 
 
-#-#-#- Market Data Functions
+# -#-#- Market Data Functions
 
 
 def get_price(pair: str) -> float:
-    '''fetches a single pairs price from binance. slow so only use when necessary'''
-    
+    """fetches a single pairs price from binance. slow so only use when necessary"""
+
     hn = Timer('get_price')
     hn.start()
     price = float(client.get_ticker(symbol=pair).get('lastPrice'))
-    hn.stop()    
+    hn.stop()
     return price
 
 
 def update_prices(session) -> None:
-    '''fetches current prices for all pairs on binance. much faster than get_price'''
+    """fetches current prices for all pairs on binance. much faster than get_price"""
     up = Timer('update_prices')
     up.start()
     now = time.perf_counter()
@@ -159,15 +159,15 @@ def update_prices(session) -> None:
         session.prices = {x.get('symbol', None): float(x.get('price', 0)) for x in prices}
         session.last_price_update = time.perf_counter()
     up.stop()
-    
+
 
 def get_mid_price(pair: str) -> float:
-    '''returns the midpoint between first bid and ask price on the orderbook 
-    for the pair in question'''
-    
+    """returns the midpoint between first bid and ask price on the orderbook
+    for the pair in question"""
+
     gb = Timer('get_mid_price')
     gb.start()
-    
+
     t = client.get_orderbook_ticker(symbol=pair)
     bid = float(t.get('bidPrice'))
     ask = float(t.get('askPrice'))
@@ -176,13 +176,13 @@ def get_mid_price(pair: str) -> float:
 
 
 def get_depth(session, pair: str) -> Tuple[float]:
-    '''returns the quantity (in the quote currency) that could be bought/sold 
-    within the % range of price set by the max_slip param'''
+    """returns the quantity (in the quote currency) that could be bought/sold
+    within the % range of price set by the max_slip param"""
 
     max_slip = session.max_spread
     fv = Timer('get_depth')
     fv.start()
-    
+
     price = session.prices[pair]
     book = client.get_order_book(symbol=pair)
 
@@ -205,21 +205,21 @@ def get_depth(session, pair: str) -> Tuple[float]:
             depth_s += float(i[1])
         else:
             break
-    
+
     usdt_depth_l = depth_l * price
     usdt_depth_s = depth_s * price
     fv.stop()
     return usdt_depth_l, usdt_depth_s
 
 
-def get_book_stats(pair: str, quote: str, width: Union[int, float]=2) -> dict:
-    '''returns a dictionary containing the base asset, the quote asset, 
-    the spread, and the bid and ask depth within the % range of price set 
-    by the width param in base and quote denominations'''
+def get_book_stats(pair: str, quote: str, width: Union[int, float] = 2) -> dict:
+    """returns a dictionary containing the base asset, the quote asset,
+    the spread, and the bid and ask depth within the % range of price set
+    by the width param in base and quote denominations"""
 
     dc = Timer('get_book_stats')
     dc.start()
-    
+
     q_len = len(quote) * -1
     base = pair[:q_len]
 
@@ -228,7 +228,7 @@ def get_book_stats(pair: str, quote: str, width: Union[int, float]=2) -> dict:
     best_bid = float(book.get('bids')[0][0])
     best_ask = float(book.get('asks')[0][0])
     mid_price = (best_bid + best_ask) / 2
-    spread = (best_ask-best_bid) / mid_price
+    spread = (best_ask - best_bid) / mid_price
 
     max_price = mid_price * (1 + (width / 100))  # max_price is x% above price
     ask_depth = 0
@@ -255,19 +255,19 @@ def get_book_stats(pair: str, quote: str, width: Union[int, float]=2) -> dict:
     return stats
 
 
-def binance_spreads(quote: str='USDT') -> dict:
-    '''returns a dictionary with pairs as keys and current average spread as values'''
-    
+def binance_spreads(quote: str = 'USDT') -> dict:
+    """returns a dictionary with pairs as keys and current average spread as values"""
+
     sx = Timer('binance_spreads')
     sx.start()
-    
+
     length = len(quote)
     avg_spreads = {}
 
     s_1 = {}
     tickers = client.get_orderbook_tickers()
     for t in tickers:
-        if t.get('symbol')[-1*length:] == quote:
+        if t.get('symbol')[-1 * length:] == quote:
             pair = t.get('symbol')
             bid = float(t.get('bidPrice'))
             ask = float(t.get('askPrice'))
@@ -281,7 +281,7 @@ def binance_spreads(quote: str='USDT') -> dict:
     s_2 = {}
     tickers = client.get_orderbook_tickers()
     for t in tickers:
-        if t.get('symbol')[-1*length:] == quote:
+        if t.get('symbol')[-1 * length:] == quote:
             pair = t.get('symbol')
             bid = float(t.get('bidPrice'))
             ask = float(t.get('askPrice'))
@@ -295,7 +295,7 @@ def binance_spreads(quote: str='USDT') -> dict:
     s_3 = {}
     tickers = client.get_orderbook_tickers()
     for t in tickers:
-        if t.get('symbol')[-1*length:] == quote:
+        if t.get('symbol')[-1 * length:] == quote:
             pair = t.get('symbol')
             bid = float(t.get('bidPrice'))
             ask = float(t.get('askPrice'))
@@ -310,12 +310,15 @@ def binance_spreads(quote: str='USDT') -> dict:
     return avg_spreads
 
 
-def binance_depths(quotes: List[str]=['USDT', 'BTC']) -> dict:
-    '''calls get_orderbook_tickers 3 times, and loops through each pair averaging 
+def binance_depths(quotes: List[str] = None) -> dict:
+    """calls get_orderbook_tickers 3 times, and loops through each pair averaging
     the quantities of the first bid and the first ask across those three. returns
-    a dictionary with all pairs as keys, and a dictionary containing median bid 
-    depth and median ask depth as values'''
-    
+    a dictionary with all pairs as keys, and a dictionary containing median bid
+    depth and median ask depth as values"""
+
+    if quotes is None:
+        quotes = ['USDT', 'BTC']
+
     az = Timer('binance_depths')
     az.start()
     avg_depths = {}
@@ -326,7 +329,7 @@ def binance_depths(quotes: List[str]=['USDT', 'BTC']) -> dict:
         sd_1 = {}
         tickers = client.get_orderbook_tickers()
         for t in tickers:
-            if t.get('symbol')[-1*length:] == quote:
+            if t.get('symbol')[-1 * length:] == quote:
                 pair = t.get('symbol')
                 bid = float(t.get('bidQty'))
                 ask = float(t.get('askQty'))
@@ -339,7 +342,7 @@ def binance_depths(quotes: List[str]=['USDT', 'BTC']) -> dict:
         sd_2 = {}
         tickers = client.get_orderbook_tickers()
         for t in tickers:
-            if t.get('symbol')[-1*length:] == quote:
+            if t.get('symbol')[-1 * length:] == quote:
                 pair = t.get('symbol')
                 bid = float(t.get('bidQty'))
                 ask = float(t.get('askQty'))
@@ -352,7 +355,7 @@ def binance_depths(quotes: List[str]=['USDT', 'BTC']) -> dict:
         sd_3 = {}
         tickers = client.get_orderbook_tickers()
         for t in tickers:
-            if t.get('symbol')[-1*length:] == quote:
+            if t.get('symbol')[-1 * length:] == quote:
                 pair = t.get('symbol')
                 bid = float(t.get('bidQty'))
                 ask = float(t.get('askQty'))
@@ -366,13 +369,13 @@ def binance_depths(quotes: List[str]=['USDT', 'BTC']) -> dict:
     return avg_depths
 
 
-def get_pairs(quote: str='USDT', market: str='SPOT') -> List[str]:
-    '''returns all active pairs for a given quote currency. possible values for 
-    quote are USDT, BTC, BNB etc. possible values for market are SPOT or CROSS'''
-    
+def get_pairs(quote: str = 'USDT', market: str = 'SPOT') -> List[str]:
+    """returns all active pairs for a given quote currency. possible values for
+    quote are USDT, BTC, BNB etc. possible values for market are SPOT or CROSS"""
+
     sa = Timer('get_pairs')
     sa.start()
-    
+
     if market == 'SPOT':
         info = client.get_exchange_info()
         symbols = info.get('symbols')
@@ -394,12 +397,12 @@ def get_pairs(quote: str='USDT', market: str='SPOT') -> List[str]:
     return pairs
 
 
-def get_ohlc(pair:str, timeframe: str, span: str="1 year ago UTC") -> pd.DataFrame:
-    '''fetches kline data from binance for the stated pair and timeframe. 
+def get_ohlc(pair: str, timeframe: str, span: str = "1 year ago UTC") -> pd.DataFrame:
+    """fetches kline data from binance for the stated pair and timeframe.
     span tells the function how far back to start the data, in plain english
-    for timeframe, use strings like 5m or 1h or 1d'''
-    
-    client = Client(keys.bPkey, keys.bSkey)
+    for timeframe, use strings like 5m or 1h or 1d"""
+
+    # client = Client(keys.bPkey, keys.bSkey)
     tf = {'1m': Client.KLINE_INTERVAL_1MINUTE,
           '5m': Client.KLINE_INTERVAL_5MINUTE,
           '15m': Client.KLINE_INTERVAL_15MINUTE,
@@ -427,11 +430,11 @@ def get_ohlc(pair:str, timeframe: str, span: str="1 year ago UTC") -> pd.DataFra
 
 
 def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame) -> pd.DataFrame:
-    '''takes an ohlc dataframe, works out when the data ends, then requests from 
+    """takes an ohlc dataframe, works out when the data ends, then requests from
     binance all data from the end to the current moment. It then joins the new
-    data onto the old data and returns the updated dataframe'''
-    
-    client = Client(keys.bPkey, keys.bSkey)
+    data onto the old data and returns the updated dataframe"""
+
+    # client = Client(keys.bPkey, keys.bSkey)
     tf = {'1m': Client.KLINE_INTERVAL_1MINUTE,
           '5m': Client.KLINE_INTERVAL_5MINUTE,
           '15m': Client.KLINE_INTERVAL_15MINUTE,
@@ -445,7 +448,7 @@ def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame) -> pd.DataFrame
           '3d': Client.KLINE_INTERVAL_3DAY,
           '1w': Client.KLINE_INTERVAL_1WEEK,
           }
-    old_end = int(old_df.at[len(old_df)-1, 'timestamp'].timestamp()) * 1000
+    old_end = int(old_df.at[len(old_df) - 1, 'timestamp'].timestamp()) * 1000
     klines = client.get_klines(symbol=pair, interval=tf.get(timeframe),
                                startTime=old_end)
     cols = ['timestamp', 'open', 'high', 'low', 'close', 'base vol', 'close time',
@@ -462,10 +465,10 @@ def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame) -> pd.DataFrame
 
 
 def prepare_ohlc(session, pair: str) -> pd.DataFrame:
-    '''checks if there is old data already, if so it loads the old data and 
-    downloads an update, if not it downloads all data from scratch, then 
-    resamples all data to desired timeframe'''
-    
+    """checks if there is old data already, if so it loads the old data and
+    downloads an update, if not it downloads all data from scratch, then
+    resamples all data to desired timeframe"""
+
     ds = Timer('prepare_ohlc')
     ds.start()
 
@@ -478,11 +481,11 @@ def prepare_ohlc(session, pair: str) -> pd.DataFrame:
         if len(df) > 2:
             df = df.iloc[:-1, :]
             df = update_ohlc(pair, '1h', df)
-        
+
     else:
         df = get_ohlc(pair, '1h', '1 year ago UTC')
         print(f'downloaded {pair} from scratch')
-    
+
     if len(df) > 17520:  # 17520 is 2 year's worth of 1h periods
         df = df.tail(17520)
         df.reset_index(drop=True, inplace=True)
@@ -494,8 +497,8 @@ def prepare_ohlc(session, pair: str) -> pd.DataFrame:
     if len(df) > max_len:
         df = df.tail(max_len)
         df.reset_index(drop=True, inplace=True)
-    
-    df = df.resample(session.tf.upper(), on='timestamp', 
+
+    df = df.resample(session.tf.upper(), on='timestamp',
                      offset=session.offset).agg({'open': 'first',
                                                  'high': 'max',
                                                  'low': 'min',
@@ -510,14 +513,14 @@ def prepare_ohlc(session, pair: str) -> pd.DataFrame:
     return df
 
 
-#-#-#- Trading Functions
+# -#-#- Trading Functions
 
 def create_trade_dict(order: dict, price: float, live: bool) -> Dict[str, str]:
-    '''collects and returns the details of the order in a dictionary'''
-    
+    """collects and returns the details of the order in a dictionary"""
+
     fd = Timer('create_trade_dict')
     fd.start()
-    
+
     pair = order.get('symbol')
     if live:
         fills = order.get('fills')
@@ -525,14 +528,13 @@ def create_trade_dict(order: dict, price: float, live: bool) -> Dict[str, str]:
         qty = sum([Decimal(fill.get('qty')) for fill in fills])
         exe_prices = [Decimal(fill.get('price')) for fill in fills]
         avg_price = stats.mean(exe_prices)
-        
+
         if float(order.get('cummulativeQuoteQty')):
             quote_qty = order.get('cummulativeQuoteQty')
         else:
             quote_qty = str(qty * avg_price)
 
         trade_dict = {'timestamp': order.get('transactTime'),
-                      'pair': pair,
                       'trig_price': str(price),
                       'exe_price': str(avg_price),
                       'base_size': str(order.get('executedQty')),
@@ -546,7 +548,6 @@ def create_trade_dict(order: dict, price: float, live: bool) -> Dict[str, str]:
 
     else:
         trade_dict = {'timestamp': str(order.get('transactTime')),
-                      "pair": pair, 
                       "trig_price": str(price),
                       "exe_price": str(price),
                       "base_size": str(order.get('executedQty')),
@@ -559,11 +560,11 @@ def create_trade_dict(order: dict, price: float, live: bool) -> Dict[str, str]:
 
 
 def valid_size(session, pair: str, size: float) -> str:
-    '''rounds the desired order size to the correct step size for binance'''
-    
+    """rounds the desired order size to the correct step size for binance"""
+
     gf = Timer('get_symbol_info valid')
     gf.start()
-    
+
     info = session.symbol_info.get(pair)
     if not info:
         info = client.get_symbol_info(pair)
@@ -574,11 +575,11 @@ def valid_size(session, pair: str, size: float) -> str:
 
 
 def valid_price(session, pair: str, price: float) -> str:
-    '''rounds the desired order price to the correct step size for binance'''
-    
+    """rounds the desired order price to the correct step size for binance"""
+
     hg = Timer('get_symbol_info valid')
     hg.start()
-    
+
     info = session.symbol_info.get(pair)
     if not info:
         info = client.get_symbol_info(pair)
@@ -588,15 +589,15 @@ def valid_price(session, pair: str, price: float) -> str:
     return step_round(price, step_size)
 
 
-#-#-#- Margin Account Functions
+# -#-#- Margin Account Functions
 
 
 def free_usdt_M() -> float:
-    '''fetches the free balance of USDT in the margin account'''
-    
+    """fetches the free balance of USDT in the margin account"""
+
     kj = Timer('free_usdt_M')
     kj.start()
-    
+
     info = client.get_margin_account()
     assets = info.get('userAssets')
     bal = 0
@@ -608,24 +609,24 @@ def free_usdt_M() -> float:
 
 
 def update_pos_M(session, asset: str, new_bal: str, inval: float, direction: str, pfrd: float) -> Dict[str, float]:
-    '''checks for the current balance of a particular asset and returns it in 
-    the correct format for the sizing dict. also calculates the open risk for 
-    a given asset and returns it in R and $ denominations'''
+    """checks for the current balance of a particular asset and returns it in
+    the correct format for the sizing dict. also calculates the open risk for
+    a given asset and returns it in R and $ denominations"""
 
     jk = Timer('update_pos_M')
     jk.start()
-    
+
     pair = asset + 'USDT'
     price = session.prices[pair]
     value = price * float(new_bal)
     pct = round(100 * value / session.bal, 5)
     new_bal = valid_size(session, pair, new_bal)
-    
+
     if direction == 'long':
         open_risk = value - (value / inval)
     else:
         open_risk = (value / inval) - value
-    
+
     if pfrd:
         open_risk_r = open_risk / pfrd
     else:
@@ -634,18 +635,18 @@ def update_pos_M(session, asset: str, new_bal: str, inval: float, direction: str
     return {'qty': new_bal, 'value': f"{value:.2f}", 'pf%': pct, 'or_R': open_risk_r, 'or_$': open_risk}
 
 
-#-#-#- Margin Trading Functions
+# -#-#- Margin Trading Functions
 
 
 def top_up_bnb_M(usdt_size: int) -> dict:
-    '''checks net BNB balance and interest owed, if net is below the threshold,
-    buys BNB then repays any interest'''
-    
+    """checks net BNB balance and interest owed, if net is below the threshold,
+    buys BNB then repays any interest"""
+
     gh = Timer('top_up_bnb_M')
     gh.start()
-    
+
     now = datetime.now().strftime('%d/%m/%y %H:%M')
-    
+
     # check balances
     info = client.get_margin_account()
     assets = info.get('userAssets')
@@ -661,12 +662,12 @@ def top_up_bnb_M(usdt_size: int) -> dict:
         if a.get('asset') == 'USDT':
             free_usdt = float(a.get('free'))
     net_bnb = free_bnb - float(interest)
-    
+
     # calculate value
     avg_price = client.get_avg_price(symbol='BNBUSDT')
     price = float(avg_price.get('price'))
     bnb_value = net_bnb * price
-    
+
     # top up if needed
     info = client.get_symbol_info('BNBUSDT')
     if bnb_value < 10:
@@ -682,7 +683,7 @@ def top_up_bnb_M(usdt_size: int) -> dict:
             pb.push_note(now, 'Warning - BNB balance low and not enough USDT to top up')
     else:
         order = None
-    
+
     # repay interest
     if float(interest):
         client.repay_margin_loan(asset='BNB', amount=interest)
@@ -691,12 +692,12 @@ def top_up_bnb_M(usdt_size: int) -> dict:
 
 
 def buy_asset_M(session, pair: str, size: float, is_base: bool, price: float, live: bool) -> dict:
-    '''sends a market buy order to binance in the margin account and returns the
-    order data'''
-    
+    """sends a market buy order to binance in the margin account and returns the
+    order data"""
+
     fg = Timer('buy_asset_M')
     fg.start()
-    
+
     if live and is_base:
         base_size = valid_size(session, pair, size)
         buy_order = client.create_margin_order(symbol=pair,
@@ -716,117 +717,118 @@ def buy_asset_M(session, pair: str, size: float, is_base: bool, price: float, li
         else:
             base_size = valid_size(session, pair, size / price)
             print(f'buy_asset_M {size = }, {base_size = }')
-            if not base_size: # if size == 0, valid_size will output None
+            if not base_size:  # if size == 0, valid_size will output None
                 print(f'*problem* non-live buy {pair}: {base_size = }')
                 base_size = 0
             usdt_size = str(size)
         buy_order = {'clientOrderId': '111111',
-         'cummulativeQuoteQty': usdt_size,
-         'executedQty': str(base_size),
-         'fills': [{'commission': '0',
-                    'commissionAsset': 'BNB',
-                    'price': str(valid_price(session, pair, price)),
-                    'qty': str(base_size)}],
-         'isIsolated': False,
-         'orderId': 123456,
-         'origQty': str(base_size),
-         'price': '0',
-         'side': 'BUY',
-         'status': 'FILLED',
-         'symbol': pair,
-         'timeInForce': 'GTC',
-         'transactTime': now,
-         'type': 'MARKET'}
-    fg.stop()   
+                     'cummulativeQuoteQty': usdt_size,
+                     'executedQty': str(base_size),
+                     'fills': [{'commission': '0',
+                                'commissionAsset': 'BNB',
+                                'price': str(valid_price(session, pair, price)),
+                                'qty': str(base_size)}],
+                     'isIsolated': False,
+                     'orderId': 123456,
+                     'origQty': str(base_size),
+                     'price': '0',
+                     'side': 'BUY',
+                     'status': 'FILLED',
+                     'symbol': pair,
+                     'timeInForce': 'GTC',
+                     'transactTime': now,
+                     'type': 'MARKET'}
+    fg.stop()
     return buy_order
 
 
 def sell_asset_M(session, pair: str, base_size: float, price: float, live: bool) -> dict:
-    '''sends a market sell order to binance in the margin account and returns the
-    order data'''
-    
+    """sends a market sell order to binance in the margin account and returns the
+    order data"""
+
     df = Timer('sell_asset_M')
     df.start()
-    
+
     base_size = valid_size(session, pair, base_size)
-    if not base_size: # if size == 0, valid_size will output None
+    if not base_size:  # if size == 0, valid_size will output None
         base_size = 0
     if live:
-        sell_order = client.create_margin_order(symbol=pair, side=be.SIDE_SELL, type=be.ORDER_TYPE_MARKET, quantity=base_size)
+        sell_order = client.create_margin_order(symbol=pair, side=be.SIDE_SELL, type=be.ORDER_TYPE_MARKET,
+                                                quantity=base_size)
     else:
         now = int(datetime.now().timestamp() * 1000)
         usdt_size = valid_size(session, pair, float(base_size) * price)
         if not usdt_size:
             usdt_size = 0
         sell_order = {
-                    'clientOrderId': '111111',
-                    'cummulativeQuoteQty': str(usdt_size),
-                    'executedQty': str(base_size),
-                    'fills': [{'commission': '0',
-                               'commissionAsset': 'BNB',
-                               'price': str(valid_price(session, pair, price)),
-                               'qty': str(base_size)}],
-                    'isIsolated': False,
-                    'orderId': 123456,
-                    'origQty': str(base_size),
-                    'price': '0',
-                    'side': 'SELL',
-                    'status': 'FILLED',
-                    'symbol': pair,
-                    'timeInForce': 'GTC',
-                    'transactTime': now,
-                    'type': 'MARKET'}
+            'clientOrderId': '111111',
+            'cummulativeQuoteQty': str(usdt_size),
+            'executedQty': str(base_size),
+            'fills': [{'commission': '0',
+                       'commissionAsset': 'BNB',
+                       'price': str(valid_price(session, pair, price)),
+                       'qty': str(base_size)}],
+            'isIsolated': False,
+            'orderId': 123456,
+            'origQty': str(base_size),
+            'price': '0',
+            'side': 'SELL',
+            'status': 'FILLED',
+            'symbol': pair,
+            'timeInForce': 'GTC',
+            'transactTime': now,
+            'type': 'MARKET'}
     df.stop()
     return sell_order
 
 
 def borrow_asset_M(asset: str, qty: str, live: bool) -> None:
-    '''calls the binance api function to take out a margin loan'''
-    
+    """calls the binance api function to take out a margin loan"""
+
     if live:
         client.create_margin_loan(asset=asset, amount=qty)
 
 
-def repay_asset_M(asset:str, qty: str, live: bool) -> None:
-    '''calls the binance api function to repay a margin loan'''
-    
+def repay_asset_M(asset: str, qty: str, live: bool) -> None:
+    """calls the binance api function to repay a margin loan"""
+
     if live:
         client.repay_margin_loan(asset=asset, amount=qty)
 
 
 def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit: float) -> dict:
-    '''sends a margin stop-loss limit order to binance and returns the order data'''
-    
+    """sends a margin stop-loss limit order to binance and returns the order data"""
+
     sd = Timer('set_stop_M')
     sd.start()
-    
+
     trigger = valid_price(session, pair, trigger)
     limit = valid_price(session, pair, limit)
     stop_size = valid_size(session, pair, size)
     # print(f"setting {pair} stop: {stop_size = } {side = } {trigger = } {limit = }")
     if session.live:
         stop_sell_order = client.create_margin_order(symbol=pair,
-                                                 side=side,
-                                                 type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
-                                                 timeInForce=be.TIME_IN_FORCE_GTC,
-                                                 stopPrice=trigger,
-                                                 quantity=stop_size,
-                                                 price=limit)
+                                                     side=side,
+                                                     type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
+                                                     timeInForce=be.TIME_IN_FORCE_GTC,
+                                                     stopPrice=trigger,
+                                                     quantity=stop_size,
+                                                     price=limit)
     else:
         stop_sell_order = {'orderId': 'not live'}
     sd.stop()
     return stop_sell_order
 
 
-def clear_stop_M(pair: str, trade_record: dict, live: bool) -> Tuple[Any, Decimal]:
-    '''finds the order id of the most recent stop-loss from the trade record
-    and cancels that specific order. if no such id can be found, returns null values'''
-    
+def clear_stop_M(pair: str, position: dict, live: bool) -> Tuple[Any, Decimal]:
+    """finds the order id of the most recent stop-loss from the trade record
+    and cancels that specific order. if no such id can be found, returns null values"""
+
     fc = Timer('clear_stop_M')
     fc.start()
-    
-    _, stop_id, _ = uf.latest_stop_id(trade_record)
-    
+
+    stop_id = position['stop_id']
+
     clear, base_size = None, None
     if live:
         if stop_id:
@@ -846,8 +848,6 @@ def clear_stop_M(pair: str, trade_record: dict, live: bool) -> Tuple[Any, Decima
             clear = {}
             base_size = Decimal(0)
     else:
-        base_size = trade_record[-1]['base_size']
+        base_size = position['base_size']
     fc.stop()
     return clear, base_size
-
-

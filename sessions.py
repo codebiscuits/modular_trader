@@ -30,6 +30,7 @@ class MARGIN_SESSION:
         self.offset = offset
         self.fr_max = fr_max # at 0.0025, one agent makes good use of total balance
         self.name = 'agent names here'
+        self.margin_account_info()
         self.bal = self.account_bal_M()
         self.usdt_bal = self.get_usdt_M()
         self.live = self.set_live()
@@ -37,7 +38,6 @@ class MARGIN_SESSION:
         self.ohlc_data = self.ohlc_path()
         self.now_start = datetime.now().strftime('%d/%m/%y %H:%M')
         self.last_price_update = 0
-        self.margin_account_info()
         self.get_asset_bals()
         self.check_margin_lvl()
         self.indicators = set()
@@ -50,7 +50,7 @@ class MARGIN_SESSION:
         
         jh = Timer('account_bal_M')
         jh.start()
-        info = client.get_margin_account()
+        info = self.account_info
         total_net = float(info.get('totalNetAssetOfBtc'))
         btc_price = funcs.get_price('BTCUSDT')
         usdt_total_net = total_net * btc_price
@@ -117,7 +117,7 @@ class MARGIN_SESSION:
         um = Timer('update_usdt_M')
         um.start()
         
-        info = client.get_margin_account()
+        info = self.account_info
         bals = info.get('userAssets')
         
         balance = {}
@@ -140,15 +140,9 @@ class MARGIN_SESSION:
         hj = Timer('update_usdt_M')
         hj.start()
         
-        qty = (self.usdt_bal.get('qty')) + up
-        value = self.usdt_bal.get('value') + up
-        qty = self.usdt_bal.get('qty') - down
-        value = self.usdt_bal.get('value') - down
-        
-        owed = self.usdt_bal.get('owed') + borrow
-        value = self.usdt_bal.get('value') - borrow
-        owed = self.usdt_bal.get('owed') - repay
-        value = self.usdt_bal.get('value') + repay
+        qty = (self.usdt_bal.get('qty')) + up - down
+        value = self.usdt_bal.get('value') + up - down - borrow + repay
+        owed = self.usdt_bal.get('owed') + borrow - repay
         
         pct = round(100 * value / self.bal, 5)
         
@@ -193,7 +187,7 @@ class MARGIN_SESSION:
                                       'net_asset': net_asset}
     
     def compute_indicators(self, df):
-        '''takes the set of rquired indicators and the dataframe and applies the 
+        '''takes the set of required indicators and the dataframe and applies the
         indicator functions as necessary'''
         
         ci = Timer('compute_indicators')

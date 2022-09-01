@@ -8,10 +8,10 @@ if not folder.exists():
 
 filepaths = ['open_trades.json',
              'ot_backup.json',
-             # 'sim_trades.json',
-             # 'st_backup.json',
-             # 'tracked_trades.json',
-             # 'tr_backup.json'
+             'sim_trades.json',
+             'st_backup.json',
+             'tracked_trades.json',
+             'tr_backup.json'
              ]
 
 for f in folder.glob('*'):

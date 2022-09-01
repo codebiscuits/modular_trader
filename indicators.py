@@ -136,53 +136,6 @@ def hma(s: pd.Series, lb: int) -> pd.Series:
 
 def trend_score(df: pd.DataFrame, column: str) -> None:
 
-    df['ema20'] = df[column].ewm(20).mean()
-    df['ema20_up'] = (df['ema20'] > df['ema20'].shift(1)).astype(int)
-    df['ema20_cross'] = (df[column] > df['ema20']).astype(int)
-
-    df['ema50'] = df[column].ewm(50).mean()
-    df['ema50_up'] = (df['ema50'] > df['ema50'].shift(1)).astype(int)
-    df['ema50_cross'] = (df[column] > df['ema50']).astype(int)
-
-    df['ema100'] = df[column].ewm(100).mean()
-    df['ema100_up'] = (df['ema100'] > df['ema100'].shift(1)).astype(int)
-    df['ema100_cross'] = (df[column] > df['ema100']).astype(int)
-
-    df['ema200'] = df[column].ewm(200).mean()
-    df['ema200_up'] = (df['ema200'] > df['ema200'].shift(1)).astype(int)
-    df['ema200_cross'] = (df[column] > df['ema200']).astype(int)
-
-    df['hma20'] = hma(df[column], 20)
-    df['hma20_up'] = (df['hma20'] > df['hma20'].shift(1)).astype(int)
-    df['hma20_cross'] = (df[column] > df['hma20']).astype(int)
-
-    df['hma50'] = hma(df[column], 50)
-    df['hma50_up'] = (df['hma50'] > df['hma50'].shift(1)).astype(int)
-    df['hma50_cross'] = (df[column] > df['hma50']).astype(int)
-
-    df['hma100'] = hma(df[column], 100)
-    df['hma100_up'] = (df['hma100'] > df['hma100'].shift(1)).astype(int)
-    df['hma100_cross'] = (df[column] > df['hma100']).astype(int)
-
-    df['trend_score'] = (df['ema20_up'] + df['ema20_cross'] +
-                         df['ema50_up'] + df['ema50_cross'] +
-                         df['ema100_up'] + df['ema100_cross'] +
-                         df['ema200_up'] + df['ema200_cross'] +
-                         df['hma20_up'] + df['hma20_cross'] +
-                         df['hma50_up'] + df['hma50_cross'] +
-                         df['hma100_up'] + df['hma100_cross']) / 14
-
-    df.drop(['ema20', 'ema20_up', 'ema20_cross',
-             'ema50', 'ema50_up', 'ema50_cross',
-             'ema100', 'ema100_up', 'ema100_cross',
-             'ema200', 'ema200_up', 'ema200_cross',
-             'hma20', 'hma20_up', 'hma20_cross',
-             'hma50', 'hma50_up', 'hma50_cross',
-             'hma100', 'hma100_up', 'hma100_cross'],
-             axis=1, inplace=True)
-
-def trend_score_new(df: pd.DataFrame, column: str) -> None:
-
     all = ['ema50', 'ema100', 'ema200',
            'sma50', 'sma100', 'sma200',
            'hma50', 'hma100', 'hma200']
@@ -207,4 +160,13 @@ def trend_score_new(df: pd.DataFrame, column: str) -> None:
 
     df['trend_score'] = df[all_scores].sum(axis=1) / len(all_scores)
     df.drop(all_scores, axis=1, inplace=True)
+
+def ema_swarm(df: pd.DataFrame, min_lb: int, max_lb: int) -> None:
+    '''calculate 10 EMAs with lookbacks between 10 and 200 periods,
+    spaced apart logarithmically so as not to give to much weight
+    to the slower ones, then derive boolean series from each based
+    on whether they are trending up or down, then add them all together
+    and divide by 10'''
+
+    squares = [x**2 for x in range(1, 11)]
 
