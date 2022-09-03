@@ -473,17 +473,17 @@ def prepare_ohlc(session, pair: str) -> pd.DataFrame:
     ds.start()
 
     if session.live:
-        filepath = Path(f'{ohlc_data}/{pair}.pkl')
+        filepath = Path(f'{session.ohlc_data}/{pair}.pkl')
     else:
-        filepath = Path(f'/home/ross/Documents/backtester_2021/bin_ohlc/{pair}.pkl')
+        filepath = Path(f'/home/ross/Documents/backtester_2021/bin_ohlc_15m/{pair}.pkl')
     if filepath.exists():
         df = pd.read_pickle(filepath)
         if len(df) > 2:
             df = df.iloc[:-1, :]
-            df = update_ohlc(pair, '1h', df)
+            df = update_ohlc(pair, '15m', df)
 
     else:
-        df = get_ohlc(pair, '1h', '1 year ago UTC')
+        df = get_ohlc(pair, '15m', '1 year ago UTC')
         print(f'downloaded {pair} from scratch')
 
     if len(df) > 17520:  # 17520 is 2 year's worth of 1h periods
@@ -491,8 +491,8 @@ def prepare_ohlc(session, pair: str) -> pd.DataFrame:
         df.reset_index(drop=True, inplace=True)
     df.to_pickle(filepath)
 
-    # calculate how many 1hour bars are needed to produce 'session.max_length' bars of new timeframe
-    len_mult = {'1h': 1, '2h': 2, '4h': 4, '6h': 6, '8h': 8, '12h': 12, '1d': 24, '3d': 72, '1w': 168}
+    # calculate how many 15min bars are needed to produce 'session.max_length' bars of new timeframe
+    len_mult = {'1h': 4, '2h': 8, '4h': 16, '6h': 24, '8h': 32, '12h': 48, '1d': 96, '3d': 288, '1w': 672}
     max_len = (session.max_length + 1) * len_mult[session.tf]
     if len(df) > max_len:
         df = df.tail(max_len)
@@ -608,7 +608,7 @@ def free_usdt_M() -> float:
     return bal
 
 
-def update_pos_M(session, asset: str, new_bal: str, inval: float, direction: str, pfrd: float) -> Dict[str, float]:
+def update_pos_M(session, asset: str, new_bal: str, inval: float, direction: str, pfrd: str) -> Dict[str, float]:
     """checks for the current balance of a particular asset and returns it in
     the correct format for the sizing dict. also calculates the open risk for
     a given asset and returns it in R and $ denominations"""
@@ -628,7 +628,7 @@ def update_pos_M(session, asset: str, new_bal: str, inval: float, direction: str
         open_risk = (value / inval) - value
 
     if pfrd:
-        open_risk_r = open_risk / pfrd
+        open_risk_r = open_risk / float(pfrd)
     else:
         open_risk_r = 0
         jk.stop()

@@ -380,6 +380,7 @@ class Agent():
             self.error_print(session, pair, 'find_order', e)
 
         if order:
+            # if an order can be found on binance, complete the records
             stop_size = self.repay_stop(pair, order)
             stop_dict = self.create_stop_dict(pair, order, stop_size)
             ts_id = self.save_records(session, pair, stop_dict)
@@ -387,16 +388,19 @@ class Agent():
             self.realised_pnl(self.closed_trades[ts_id])
             self.counts_dict[f'real_stop_{direction}'] += 1
         else:
+            # if no order can be found, try to close the position
             print(f"record_stopped_trades found no stop for {pair} {self.name}")
             free_bal = session.bals_dict[pair[:-4]].get('free')
             pos_size = self.open_trades[pair]['position']['base_size']
             if Decimal(free_bal) >= Decimal(pos_size):
+                # if the free balance covers the position, close it
                 print(f'{self.name} record_stopped_trades will close {pair} now')
                 try:
                     self.close_real_full(session, self, pair, direction)
                 except bx.BinanceAPIException as e:
                     self.error_print(session, pair, 'close', e)
             else:
+                # if the free balance doesn't cover the position, notify me
                 price = session.prices[pair]
                 value = free_bal * price
                 if value > 10:
@@ -543,10 +547,6 @@ class Agent():
 
         del_pairs = []
         for pair, v in self.sim_trades.items():
-
-            print(pair)
-            print(v)
-            print('')
 
             base_size, stop, stop_time = self.calc_size_and_stop(v)
             df = self.get_data(session, pair, stop_time)
@@ -790,46 +790,20 @@ class Agent():
         a.stop()
         return size_dict
 
-    def set_in_pos(self, pair: str, state: str) -> None:
-        '''fills in in_pos with a trade direction if applicable'''
-        
-        d = Timer(f'set_in_pos {state}')
-        d.start()
-        asset = pair[:-4]
-        if state == 'real':
-            pos_dict = self.real_pos.keys()
-            trade_record = self.open_trades.get(pair)
-        elif state == 'sim':
-            pos_dict = self.sim_pos.keys()
-            trade_record = self.sim_trades.get(pair)
-        elif state == 'tracked':
-            pos_dict = self.tracked.keys()
-            trade_record = self.tracked_trades.get(pair)
-        
-        if asset in pos_dict:
-            if trade_record['position']['direction'] == 'long':
-                self.in_pos[state] = 'long'
-                # calculate dollar denominated fixed-risk per position
-                self.calc_pos_fr_dol(trade_record['trade'], 'long', state)
-            else:
-                self.in_pos[state] = 'short'
-                # calculate dollar denominated fixed-risk per position
-                self.calc_pos_fr_dol(trade_record['trade'], 'short', state)
-        d.stop()
-
     def init_in_pos(self, pair: str) -> None:
-        '''initialises the in_pos dictionary and fills it with None values'''
+        '''initialises the in_pos dictionary for the current pair and fills it with values'''
         
         f = Timer(f'init_in_pos')
         f.start()
-        self.in_pos = {'real':None, 'sim':None, 'tracked':None, 
-                  'real_ep': None, 'sim_ep': None, 'tracked_ep': None, 
-                  'real_hs': None, 'sim_hs': None, 'tracked_hs': None, 
-                  'real_pfrd': None, 'sim_pfrd': None, 'tracked_pfrd': None}
+
+        self.in_pos = {'real':None, 'sim':None, 'tracked':None}
         
-        self.set_in_pos(pair, 'real')
-        self.set_in_pos(pair, 'sim')
-        self.set_in_pos(pair, 'tracked')
+        if pair in self.open_trades.keys():
+            self.in_pos['real'] = self.open_trades[pair]['position']['direction']
+        if pair in self.sim_trades.keys():
+            self.in_pos['sim'] = self.sim_trades[pair]['position']['direction']
+        if pair in self.tracked_trades.keys():
+            self.in_pos['tracked'] = self.tracked_trades[pair]['position']['direction']
         f.stop()
     
     def too_new(self, df: pd.DataFrame) -> bool:
@@ -1392,8 +1366,6 @@ class Agent():
     def open_to_open(self, session, pair, tp_order, direction):
         self.open_trades[pair]['trade'].append(tp_order)
         self.realised_pnl(self.open_trades[pair])
-        print('\ntp partial placeholder')
-        pprint(self.open_trades[pair]['placeholder'])
         del self.open_trades[pair]['placeholder']
         self.record_trades(session, 'open')
 
@@ -1573,7 +1545,8 @@ class Agent():
         print(now, note)
 
         if stage == 0:
-            del self.open_trades[pair]['placeholder']
+            if self.open_trades.get('placeholder'):
+                del self.open_trades[pair]['placeholder']
             self.create_close_placeholder(session, pair, direction)
         if stage <= 1:
             # cancel stop
@@ -1626,9 +1599,11 @@ class Agent():
         self.sim_trades[pair]['trade'] = trade_record
 
         pos_record = {'base_size': size,
+                      'init_base_size': size,
                       'direction': direction,
                       'entry_price': str(price),
                       'hard_stop': str(stp),
+                      'init_hard_stop': str(stp),
                       'open_time': timestamp,
                       'pair': pair,
                       'liability': '0',
@@ -1636,6 +1611,10 @@ class Agent():
                       'stop_time': None}
         self.sim_trades[pair]['position'] = pos_record
         self.sim_trades[pair]['position']['state'] = 'sim'
+        if direction == 'long':
+            self.sim_trades[pair]['position']['pfrd'] = str(self.fixed_risk_dol_l)
+        else:
+            self.sim_trades[pair]['position']['pfrd'] = str(self.fixed_risk_dol_s)
 
         self.record_trades(session, 'sim')
 

@@ -26,17 +26,17 @@ def setup_scan(timeframe: str, offset: str) -> None:
 
     agents = [
         DoubleST(session, 3, 1.0),
-        DoubleST(session, 3, 1.4),
-        DoubleST(session, 3, 1.8),
-        DoubleST(session, 5, 2.2),
-        DoubleST(session, 5, 2.8),
-        DoubleST(session, 5, 3.4),
+        # DoubleST(session, 3, 1.4),
+        # DoubleST(session, 3, 1.8),
+        # DoubleST(session, 5, 2.2),
+        # DoubleST(session, 5, 2.8),
+        # DoubleST(session, 5, 3.4),
         EMACross(session, 12, 21, 1.2),
-        EMACross(session, 12, 21, 1.8),
-        EMACross(session, 12, 21, 2.4),
-        EMACrossHMA(session, 12, 21, 1.2),
-        EMACrossHMA(session, 12, 21, 1.8),
-        EMACrossHMA(session, 12, 21, 2.4)
+        # EMACross(session, 12, 21, 1.8),
+        # EMACross(session, 12, 21, 2.4),
+        # EMACrossHMA(session, 12, 21, 1.2),
+        # EMACrossHMA(session, 12, 21, 1.8),
+        # EMACrossHMA(session, 12, 21, 2.4)
     ]
 
     def count_pos(asset):
@@ -134,31 +134,31 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
 
             # update positions dictionary with current pair's open_risk values ------------
             if agent.in_pos['real']:
-                real_qty = float(agent.real_pos[asset]['qty'])
+                real_qty = float(agent.open_trades[pair]['position']['base_size'])
                 agent.real_pos[asset].update(
                     funcs.update_pos_M(session, asset, real_qty, inval_ratio, agent.in_pos['real'],
-                                       agent.in_pos['real_pfrd']))
-                if agent.in_pos['real_ep']:
-                    agent.in_pos['real_price_delta'] = (price - agent.in_pos['real_ep']) / agent.in_pos[
-                        'real_ep']  # how much has price moved since entry
+                                       agent.open_trades[pair]['position']['pfrd']))
+
+                real_ep = float(agent.open_trades[pair]['position']['entry_price'])
+                if real_ep:
+                    agent.real_pos[asset]['price_delta'] = (price - real_ep) / real_ep  # how much has price moved since entry
 
                 # check if price has moved beyond reach of normal close signal
                 if agent.real_pos[asset]['or_R'] < 0:
-                    direction = agent.in_pos['real']
-                    signals['signal'] = f"close_{direction}"
+                    signals['signal'] = f"close_{agent.in_pos['real']}"
 
             if agent.in_pos['sim']:
-                sim_qty = float(agent.sim_pos[asset]['qty'])
+                sim_qty = float(agent.sim_trades[pair]['position']['base_size'])
                 agent.sim_pos[asset].update(
                     funcs.update_pos_M(session, asset, sim_qty, inval_ratio, agent.in_pos['sim'],
-                                       agent.in_pos['sim_pfrd']))
-                if agent.in_pos['sim_ep']:
-                    agent.in_pos['sim_price_delta'] = (price - agent.in_pos['sim_ep']) / agent.in_pos['sim_ep']
+                                       agent.sim_trades[pair]['position']['pfrd']))
+                sim_ep = agent.sim_trades[pair]['position']['entry_price']
+                if sim_ep:
+                    agent.sim_pos[asset]['price_delta'] = (price - sim_ep) / sim_ep
 
                 # check if price has moved beyond reach of normal close signal
                 if agent.sim_pos[asset]['or_R'] < 0:
-                    direction = agent.in_pos['sim']
-                    signals['signal'] = f"close_{direction}"
+                    signals['signal'] = f"close_{agent.in_pos['sim']}"
 
             # margin order execution ------------------------------------------------------
             if signals.get('signal') in ['open_long', 'tp_long', 'close_long']:

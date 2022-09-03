@@ -30,8 +30,6 @@ def open_trade_stats(now: datetime, total_bal: float, v: dict, curr_price: float
     we = Timer('open_trade_stats')
     we.start()
 
-    pprint(v)
-
     long = v['position']['direction'] == 'long'
 
     if v['trade'][0].get('type')[:4] != 'open':
