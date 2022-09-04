@@ -17,12 +17,8 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 pi2path = Path('/home/ubuntu/rpi_2.txt')
 live = pi2path.exists()
 
-tf = '15m'
-
 if live:
     print('-:-' * 10, ' running update_ohlc ', '-:-' * 10)
-    ohlc_data = Path(f'/media/coding/ohlc_binance_{tf}')
-    ohlc_data.mkdir(exist_ok=True)
 else:
     print('*** Warning: Not Live ***')
 
@@ -32,7 +28,10 @@ start = time.perf_counter()
 pairs = funcs.get_pairs()
 
 def iterations(pair, tf):
-    ohlc_data = Path(f'/home/ross/Documents/backtester_2021/bin_ohlc_{tf}')
+    if live:
+        ohlc_data = Path(f'/home/ross/Documents/backtester_2021/bin_ohlc_{tf}')
+    else:
+        ohlc_data = Path(f'/media/coding/ohlc_binance_{tf}')
     ohlc_data.mkdir(exist_ok=True)
     filepath = Path(f'{ohlc_data}/{pair}.pkl')
     if filepath.exists():
@@ -64,7 +63,7 @@ for pair in pairs:
     if pair in not_pairs:
         continue
 
-    iterations(pair, tf)
+    iterations(pair, '15m')
 
 end = time.perf_counter()
 all_time = end - start
