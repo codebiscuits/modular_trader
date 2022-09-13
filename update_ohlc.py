@@ -1,12 +1,13 @@
 import pandas as pd
-import keys, time
+import keys
+import time
 import binance_funcs as funcs
 from binance.client import Client
 from pushbullet import Pushbullet
 from pathlib import Path
 from config import not_pairs
 
-pd.set_option('display.max_rows', None) 
+pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
 
 client = Client(keys.bPkey, keys.bSkey)
@@ -15,17 +16,16 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 # check to see if this is running on the raspberry pi or not
 pi2path = Path('/home/ubuntu/rpi_2.txt')
-live = pi2path.exists()
-
-if live:
+if live := pi2path.exists():
     print('-:-' * 10, ' running update_ohlc ', '-:-' * 10)
 else:
     print('*** Warning: Not Live ***')
 
-
 start = time.perf_counter()
 
 pairs = funcs.get_pairs()
+good_pairs = [pair for pair in pairs if pair not in not_pairs]
+
 
 def iterations(pair, tf):
     if live:
@@ -50,12 +50,13 @@ def iterations(pair, tf):
     max_dict = {'1m': 1051200,
                 '15m': 70080,
                 '1h': 17520}
-    max_len = max_dict[tf]
-    if len(df) > max_len:  # 17520 is 2 year's worth of 1h periods
+    max_len = max_dict[tf]  # returns 2 years worth of timeframe periods
+    if len(df) > max_len:
         df = df.tail(max_len)
         df.reset_index(drop=True, inplace=True)
     df.to_pickle(filepath)
     # print(f"{pair} ohlc length: {len(df)}")
+
 
 iterations('BTCUSDT', '1m')
 
@@ -67,6 +68,6 @@ for pair in pairs:
 
 end = time.perf_counter()
 all_time = end - start
-elapsed_str = f'Time taken: {round((all_time) // 60)}m {round((all_time) % 60)}s'
-        
-print(f'update_ohlc complete, {elapsed_str}')        
+elapsed_str = f'Time taken: {round(all_time // 60)}m {round(all_time % 60)}s'
+
+print(f'update_ohlc complete, {elapsed_str}')

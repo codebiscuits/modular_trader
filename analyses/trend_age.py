@@ -99,6 +99,7 @@ for tf in timeframe:
     session = sessions.MARGIN_SESSION(tf, 0, 0.0002)
     session.max_length = 70080  # default is 201 for live trading, need much more for backtesting
 
+
     for x in st_1:
         for y in st_2:
             long_ls = []

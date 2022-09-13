@@ -10,6 +10,7 @@ from random import shuffle
 import sessions
 from timers import Timer
 from pushbullet import Pushbullet
+from collections import Counter
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
@@ -26,24 +27,18 @@ def setup_scan(timeframe: str, offset: str) -> None:
 
     agents = [
         DoubleST(session, 3, 1.0),
-        # DoubleST(session, 3, 1.4),
-        # DoubleST(session, 3, 1.8),
-        # DoubleST(session, 5, 2.2),
-        # DoubleST(session, 5, 2.8),
-        # DoubleST(session, 5, 3.4),
+        DoubleST(session, 3, 1.4),
+        DoubleST(session, 3, 1.8),
+        DoubleST(session, 5, 2.2),
+        DoubleST(session, 5, 2.8),
+        DoubleST(session, 5, 3.4),
         EMACross(session, 12, 21, 1.2),
-        # EMACross(session, 12, 21, 1.8),
-        # EMACross(session, 12, 21, 2.4),
-        # EMACrossHMA(session, 12, 21, 1.2),
-        # EMACrossHMA(session, 12, 21, 1.8),
-        # EMACrossHMA(session, 12, 21, 2.4)
+        EMACross(session, 12, 21, 1.8),
+        EMACross(session, 12, 21, 2.4),
+        EMACrossHMA(session, 12, 21, 1.2),
+        EMACrossHMA(session, 12, 21, 1.8),
+        EMACrossHMA(session, 12, 21, 2.4)
     ]
-
-    def count_pos(asset):
-        all_pos = []
-        for agent in agents:
-            all_pos.extend(list(agent.real_pos.keys()))
-        return all_pos.count(asset)
 
     session.name = ' | '.join([n.name for n in agents])
 
@@ -61,7 +56,7 @@ def setup_scan(timeframe: str, offset: str) -> None:
 
     # pairs = pairs[:10] # for testing the loop quickly
 
-    funcs.top_up_bnb_M(15)
+    funcs.top_up_bnb_M(session, 15)
     session.spreads = funcs.binance_spreads('USDT')  # dict
 
     for agent in agents:
@@ -87,6 +82,7 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
         asset = pair[:-1 * len(session.quote_asset)]
         for agent in agents:
             agent.init_in_pos(pair)
+
         df = funcs.prepare_ohlc(session, pair)
 
         # if pair is too new for all agents, skip it
@@ -136,8 +132,7 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
             if agent.in_pos['real']:
                 real_qty = float(agent.open_trades[pair]['position']['base_size'])
                 agent.real_pos[asset].update(
-                    funcs.update_pos_M(session, asset, real_qty, inval_ratio, agent.in_pos['real'],
-                                       agent.open_trades[pair]['position']['pfrd']))
+                    agent.update_pos_M(session, asset, real_qty, inval_ratio, 'real'))
 
                 real_ep = float(agent.open_trades[pair]['position']['entry_price'])
                 if real_ep:
@@ -150,9 +145,8 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
             if agent.in_pos['sim']:
                 sim_qty = float(agent.sim_trades[pair]['position']['base_size'])
                 agent.sim_pos[asset].update(
-                    funcs.update_pos_M(session, asset, sim_qty, inval_ratio, agent.in_pos['sim'],
-                                       agent.sim_trades[pair]['position']['pfrd']))
-                sim_ep = agent.sim_trades[pair]['position']['entry_price']
+                    agent.update_pos_M(session, asset, sim_qty, inval_ratio, 'sim'))
+                sim_ep = float(agent.sim_trades[pair]['position']['entry_price'])
                 if sim_ep:
                     agent.sim_pos[asset]['price_delta'] = (price - sim_ep) / sim_ep
 
@@ -168,16 +162,27 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
                 usdt_size, usdt_depth, size = usdt_size_s, usdt_depth_s, size_s
                 direction = 'short'
 
-            if signals.get('signal') in ['open_long', 'open_short']:
+            if signals.get('signal') in ['close_long', 'close_short']:
+                try:
+                    agent.close_pos(session, pair, direction)
+                except bx.BinanceAPIException as e:
+                    agent.record_trades(session, 'all')
+                    print(f'{agent.name} problem with close_{direction} order for {pair}')
+                    print(e.code)
+                    print(e.message)
+                    pb.push_note(now, f'{agent.name} exeption during {pair} close_{direction} order')
+                    continue
+
+            elif signals.get('signal') in ['open_long', 'open_short']:
                 if usdt_size > usdt_depth > (usdt_size / 2):  # only trim size if books are a bit too thin
                     agent.counts_dict['books_too_thin'] += 1
                     trim_size = f'{now} {pair} books too thin, reducing size from {usdt_size:.3} to {usdt_depth:.3}'
                     print(trim_size)
                     usdt_size = usdt_depth
                 sim_reason = None
-                if count_pos(asset) >= 5:
-                    agent.counts_dict['asset_pos_limit'] += 1
-                    sim_reason = 'asset_pos_limit'
+                if session.algo_limit_reached(pair):
+                    agent.counts_dict['algo_order_limit'] += 1
+                    sim_reason = 'algo_order_limit'
                 elif usdt_size < 30:
                     if not agent.in_pos['sim']:
                         agent.counts_dict['too_small'] += 1
@@ -217,12 +222,16 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
                 try:
                     agent.open_pos(session, pair, size, stp, inval_ratio, sim_reason, direction)
                 except bx.BinanceAPIException as e:
-                    agent.record_trades(session, 'all')
-                    print(f'{agent.name} problem with open_{direction} order for {pair}')
-                    print(e.status_code)
-                    print(e.message)
-                    print(f"{size = } {stp = } {inval_ratio = }")
-                    pb.push_note(now, f'{agent.name} exeption during {pair} open_{direction} order')
+                    if e.code == -3045: # borrow failed because there weren't enough assets to borrow
+                        del agent.open_trades[pair]
+                        agent.open_pos(session, pair, size, stp, inval_ratio, 'not_enough_borrow', direction)
+                    else:
+                        agent.record_trades(session, 'all')
+                        print(f'{agent.name} problem with open_{direction} order for {pair}')
+                        print(e.code)
+                        print(e.message)
+                        print(f"{size = } {stp = } {inval_ratio = }")
+                        pb.push_note(now, f'{agent.name} exeption during {pair} open_{direction} order')
                     continue
 
             elif signals.get('signal') in ['tp_long', 'tp_short']:
@@ -231,21 +240,10 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
                 except bx.BinanceAPIException as e:
                     agent.record_trades(session, 'all')
                     print(f'{agent.name} problem with tp_{direction} order for {pair}')
-                    print(e.status_code)
+                    print(e.code)
                     print(e.message)
                     print(f"{stp = } {inval_ratio = }")
                     pb.push_note(now, f'{agent.name} exception during {pair} tp_{direction} order')
-                    continue
-
-            elif signals.get('signal') in ['close_long', 'close_short']:
-                try:
-                    agent.close_pos(session, pair, direction)
-                except bx.BinanceAPIException as e:
-                    agent.record_trades(session, 'all')
-                    print(f'{agent.name} problem with close_{direction} order for {pair}')
-                    print(e.status_code)
-                    print(e.message)
-                    pb.push_note(now, f'{agent.name} exeption during {pair} close_{direction} order')
                     continue
 
             # calculate open risk and take profit if necessary ----------------------------
@@ -257,7 +255,7 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
                 except bx.BinanceAPIException as e:
                     agent.record_trades(session, 'all')
                     print(f'{agent.name} problem with tp_{direction} order for {pair}')
-                    print(e.status_code)
+                    print(e.code)
                     print(e.message)
                     pb.push_note(now, f'{agent.name} exeption during {pair} tp_{direction} order')
                     continue
@@ -268,7 +266,7 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
                 except bx.BinanceAPIException as e:
                     agent.record_trades(session, 'all')
                     print(f'problem with tp_{direction} order for {pair}')
-                    print(e.status_code)
+                    print(e.code)
                     print(e.message)
                     pb.push_note(now, f'{agent.name} exeption during {pair} tp_{direction} order')
                     continue
@@ -317,8 +315,8 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
         agent.real_pos['USDT'] = session.usdt_bal
 
         if not session.live:
-            print('\n*** real_pos ***')
-            pprint(agent.real_pos)
+            # print('\n*** real_pos ***')
+            # pprint(agent.real_pos)
             print('warning: logging directed to test_records')
 
         uf.log(session, [agent])
@@ -337,6 +335,10 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
     for k, v in Timer.timers.items():
         if v > 30:
             print(k, round(v))
+
+    print('-------------------- Counts --------------------')
+    print(f"pairs tested: {len(pairs)}")
+    pprint(Counter(session.counts))
 
     end = time.perf_counter()
     elapsed = round(end - all_start)

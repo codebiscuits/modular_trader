@@ -13,6 +13,7 @@ from datetime import datetime
 import utility_funcs as uf
 from timers import Timer
 from typing import Union, List, Tuple, Dict, Set, Optional, Any
+from collections import Counter
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
@@ -184,7 +185,7 @@ def get_depth(session, pair: str) -> Tuple[float]:
     fv.start()
 
     price = session.prices[pair]
-    book = client.get_order_book(symbol=pair)
+    book = session.get_book_data(pair)
 
     bid_price = float(book.get('bids')[0][0])
     # max_price is x% above price
@@ -212,7 +213,7 @@ def get_depth(session, pair: str) -> Tuple[float]:
     return usdt_depth_l, usdt_depth_s
 
 
-def get_book_stats(pair: str, quote: str, width: Union[int, float] = 2) -> dict:
+def get_book_stats(session, pair: str, quote: str, width: Union[int, float] = 2) -> dict:
     """returns a dictionary containing the base asset, the quote asset,
     the spread, and the bid and ask depth within the % range of price set
     by the width param in base and quote denominations"""
@@ -223,7 +224,7 @@ def get_book_stats(pair: str, quote: str, width: Union[int, float] = 2) -> dict:
     q_len = len(quote) * -1
     base = pair[:q_len]
 
-    book = client.get_order_book(symbol=pair)
+    book = session.get_book_data(pair)
 
     best_bid = float(book.get('bids')[0][0])
     best_ask = float(book.get('asks')[0][0])
@@ -483,22 +484,26 @@ def prepare_ohlc(session, pair: str) -> pd.DataFrame:
             df = update_ohlc(pair, '15m', df)
 
     else:
-        df = get_ohlc(pair, '15m', '1 year ago UTC')
+        df = get_ohlc(pair, '15m', '2 years ago UTC')
         print(f'downloaded {pair} from scratch')
 
-    if len(df) > 17520:  # 17520 is 2 year's worth of 1h periods
-        df = df.tail(17520)
+    if len(df) > 70080:  # 70080 is 2 year's worth of 15m periods
+        df = df.tail(70080)
         df.reset_index(drop=True, inplace=True)
     df.to_pickle(filepath)
 
     # calculate how many 15min bars are needed to produce 'session.max_length' bars of new timeframe
-    len_mult = {'1h': 4, '2h': 8, '4h': 16, '6h': 24, '8h': 32, '12h': 48, '1d': 96, '3d': 288, '1w': 672}
+    len_mult = {'15m': 1, '30m': 2, '1h': 4, '2h': 8, '4h': 16, '6h': 24,
+                '8h': 32, '12h': 48, '1d': 96, '3d': 288, '1w': 672}
     max_len = (session.max_length + 1) * len_mult[session.tf]
     if len(df) > max_len:
         df = df.tail(max_len)
         df.reset_index(drop=True, inplace=True)
 
-    df = df.resample(session.tf.upper(), on='timestamp',
+    tf_map = {'15m': '15T', '30m': '30T', '1h': '1H', '2h': '2H', '4h': '4H', '6h': '6H',
+                '8h': '8H', '12h': '12H', '1d': '1D', '3d': '3D', '1w': '1W'}
+
+    df = df.resample(tf_map[session.tf], on='timestamp',
                      offset=session.offset).agg({'open': 'first',
                                                  'high': 'max',
                                                  'low': 'min',
@@ -565,10 +570,8 @@ def valid_size(session, pair: str, size: float) -> str:
     gf = Timer('get_symbol_info valid')
     gf.start()
 
-    info = session.symbol_info.get(pair)
-    if not info:
-        info = client.get_symbol_info(pair)
-        session.symbol_info[pair] = info
+    info = session.get_pair_info(pair)
+
     step_size = info.get('filters')[2].get('stepSize')
     gf.stop()
     return step_round(size, step_size)
@@ -580,10 +583,8 @@ def valid_price(session, pair: str, price: float) -> str:
     hg = Timer('get_symbol_info valid')
     hg.start()
 
-    info = session.symbol_info.get(pair)
-    if not info:
-        info = client.get_symbol_info(pair)
-        session.symbol_info[pair] = info
+    info = session.get_pair_info(pair)
+
     step_size = info.get('filters')[0].get('tickSize')
     hg.stop()
     return step_round(price, step_size)
@@ -608,37 +609,10 @@ def free_usdt_M() -> float:
     return bal
 
 
-def update_pos_M(session, asset: str, new_bal: str, inval: float, direction: str, pfrd: str) -> Dict[str, float]:
-    """checks for the current balance of a particular asset and returns it in
-    the correct format for the sizing dict. also calculates the open risk for
-    a given asset and returns it in R and $ denominations"""
-
-    jk = Timer('update_pos_M')
-    jk.start()
-
-    pair = asset + 'USDT'
-    price = session.prices[pair]
-    value = price * float(new_bal)
-    pct = round(100 * value / session.bal, 5)
-    new_bal = valid_size(session, pair, new_bal)
-
-    if direction == 'long':
-        open_risk = value - (value / inval)
-    else:
-        open_risk = (value / inval) - value
-
-    if pfrd:
-        open_risk_r = open_risk / float(pfrd)
-    else:
-        open_risk_r = 0
-        jk.stop()
-    return {'qty': new_bal, 'value': f"{value:.2f}", 'pf%': pct, 'or_R': open_risk_r, 'or_$': open_risk}
-
-
 # -#-#- Margin Trading Functions
 
 
-def top_up_bnb_M(usdt_size: int) -> dict:
+def top_up_bnb_M(session, usdt_size: int) -> dict:
     """checks net BNB balance and interest owed, if net is below the threshold,
     buys BNB then repays any interest"""
 
@@ -648,20 +622,13 @@ def top_up_bnb_M(usdt_size: int) -> dict:
     now = datetime.now().strftime('%d/%m/%y %H:%M')
 
     # check balances
-    info = client.get_margin_account()
-    assets = info.get('userAssets')
-    free_bnb = 0
-    interest = 0
-    free_usdt = 0
-    for a in assets:
-        if a.get('asset') == 'BNB':
-            free_bnb = float(a.get('free'))
-            interest = a.get('interest')
-            if float(interest):
-                print(f'BNB interest: {interest}')
-        if a.get('asset') == 'USDT':
-            free_usdt = float(a.get('free'))
-    net_bnb = free_bnb - float(interest)
+    free_bnb = session.bals_dict['BNB']['free']
+    interest = session.bals_dict['BNB']['interest']
+    free_usdt = session.bals_dict['USDT']['free']
+    net_bnb = free_bnb - interest
+
+    if interest:
+        print(f'BNB interest: {interest}')
 
     # calculate value
     avg_price = client.get_avg_price(symbol='BNBUSDT')
@@ -669,7 +636,6 @@ def top_up_bnb_M(usdt_size: int) -> dict:
     bnb_value = net_bnb * price
 
     # top up if needed
-    info = client.get_symbol_info('BNBUSDT')
     if bnb_value < 10:
         if free_usdt > usdt_size:
             pb.push_note(now, 'Topping up BNB')
@@ -816,11 +782,14 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit
                                                      price=limit)
     else:
         stop_sell_order = {'orderId': 'not live'}
+
+    session.algo_order_counts += Counter([pair])
+
     sd.stop()
     return stop_sell_order
 
 
-def clear_stop_M(pair: str, position: dict, live: bool) -> Tuple[Any, Decimal]:
+def clear_stop_M(session, pair: str, position: dict) -> Tuple[Any, Decimal]:
     """finds the order id of the most recent stop-loss from the trade record
     and cancels that specific order. if no such id can be found, returns null values"""
 
@@ -830,24 +799,18 @@ def clear_stop_M(pair: str, position: dict, live: bool) -> Tuple[Any, Decimal]:
     stop_id = position['stop_id']
 
     clear, base_size = None, None
-    if live:
+    if session.live:
         if stop_id:
             clear = client.cancel_margin_order(symbol=pair, orderId=str(stop_id))
-            base_size = Decimal(clear.get('origQty'))
+            base_size = clear.get('origQty')
         else:
             print(f'no recorded stop id for {pair}')
-            # orders = client.get_open_margin_orders(symbol=pair)
-            # if (len(orders) == 1) and (orders[-1].get('type') == 'STOP_LOSS_LIMIT'):
-            #     stop_id = orders[-1].get('orderId')
-            #     clear = client.cancel_margin_order(symbol=pair, orderId=str(stop_id))
-            #     base_size = Decimal(clear.get('origQty'))
-            # elif len(orders) > 1:
-            #     clear = 'error'
-            # else:
-            #     print('no stop to clear')
             clear = {}
-            base_size = Decimal(0)
+            base_size = 0
     else:
         base_size = position['base_size']
+
+    session.algo_order_counts -= Counter([pair])
+
     fc.stop()
     return clear, base_size

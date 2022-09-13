@@ -77,8 +77,10 @@ def supertrend_new(df: pd.DataFrame, lb: int, mult: float) -> None:
     df[stu] = np.where(df.close >= df[st], df[st], np.nan)
     df[std] = np.where(df.close < df[st], df[st], np.nan)
     
-    
-    df.drop(0, inplace=True)
+    try:
+        df.drop(0, inplace=True)
+    except KeyError:
+        print(df.head())
     df.reset_index(drop=True, inplace=True)
 
 def heikin_ashi(df):

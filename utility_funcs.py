@@ -13,6 +13,7 @@ from pprint import pprint
 from decimal import Decimal, getcontext
 from timers import Timer
 from typing import Union, List, Tuple, Dict, Set, Optional, Any
+import sys
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
@@ -23,40 +24,7 @@ ctx.prec = 12
 # now = datetime.now().strftime('%d/%m/%y %H:%M')
 
 
-def open_trade_stats(now: datetime, total_bal: float, v: dict, curr_price: float) -> dict:
-    """takes an entry from the open_trades dictionary, returns information about
-    that position including current profit, size and direction"""
 
-    we = Timer('open_trade_stats')
-    we.start()
-
-    long = v['position']['direction'] == 'long'
-
-    if v['trade'][0].get('type')[:4] != 'open':
-        print('Warning - {pair} record missing open trade')
-
-    current_base_size = v['position']['base_size']
-    entry_price = float(v['position']['entry_price'])
-
-    open_time = int(v['position']['open_time']) / 1000
-    duration = round((now.timestamp() - open_time) / 3600, 1)
-
-    if long:
-        pnl = 100 * (curr_price - entry_price) / entry_price
-    else:
-        pnl = 100 * (entry_price - curr_price) / entry_price
-    trig = float(v['trade'][0].get('trig_price'))
-    sl = float(v['trade'][0].get('hard_stop'))
-    r = 100 * abs(trig - sl) / sl
-    value = round(float(current_base_size) * curr_price, 2)
-    pf_pct = round(100 * value / total_bal, 5)
-    total_liability = v['position']['liability']
-
-    stats_dict = {'qty': str(current_base_size), 'value': str(value), 'pf%': pf_pct,
-                  'pnl_R': round(pnl / r, 5), 'pnl_%': round(pnl, 5), 'liability': total_liability,
-                  'entry_price': entry_price, 'duration (h)': duration, 'long': long}
-    we.stop()
-    return stats_dict
 
 
 def adjust_max_positions(max_pos: int, sizing: dict) -> int:
@@ -255,7 +223,7 @@ def log(session, agents: list) -> None:
         if session.live:
             filepath = Path(f"{session.market_data}/{agent.id}/bal_history.txt")
         else:
-            filepath = Path(f"/home/ross/Documents/backtester_2021/test_records/{agent.id}/bal_history.txt")
+            filepath = Path(f"/home/ross/Documents/backtester_2021/test_records/{session.tf}/{agent.id}/bal_history.txt")
         filepath.touch(exist_ok=True)
         with open(filepath, "a") as file:
             file.write(new_line)
@@ -267,6 +235,10 @@ def log(session, agents: list) -> None:
 def interpret_benchmark(session, agents: list) -> None:
     '''takes the benchmark results, ranks them by performance, and prints them 
     in a table'''
+
+    func_name = sys._getframe().f_code.co_name
+    x11 = Timer(f'{func_name}')
+    x11.start()
 
     mkt_bench = session.benchmark
     d_ranking = []
@@ -314,6 +286,8 @@ def interpret_benchmark(session, agents: list) -> None:
         print('1 month stats')
         for e, r in enumerate(m_ranking):
             print(f'rank {e + 1}: {r[1]}% {r[0]}')
+
+    x11.stop()
 
 
 def count_trades(counts: dict) -> str:
@@ -382,22 +356,22 @@ def find_bad_keys(c_data: dict) -> list:
     return bad_keys
 
 
-def update_liability(trade_record: Dict[str, dict], size: str, operation: str) -> str:
-    """this function finds the previous value for liability and returns the new value as a string"""
-
-    ty = Timer('update_liability')
-    ty.start()
-
-    prev_liability = Decimal(trade_record['position']['liability'])
-    adjustment = Decimal(size)
-
-    if operation == 'increase':
-        new_liability = prev_liability + adjustment
-    else:
-        new_liability = prev_liability - adjustment
-
-    ty.stop()
-    return str(new_liability)
+# def update_liability(trade_record: Dict[str, dict], size: str, operation: str) -> str:
+#     """this function finds the previous value for liability and returns the new value as a string"""
+#
+#     ty = Timer('update_liability')
+#     ty.start()
+#
+#     prev_liability = Decimal(trade_record['position']['liability'])
+#     adjustment = Decimal(size)
+#
+#     if operation == 'increase':
+#         new_liability = prev_liability + adjustment
+#     else:
+#         new_liability = prev_liability - adjustment
+#
+#     ty.stop()
+#     return str(new_liability)
 
 
 def create_stop_dict(order: dict) -> dict:
@@ -434,7 +408,11 @@ def recent_perf_str(session, agent) -> Tuple[str, int, int]:
     '''generates a string of + and - to represent recent strat performance
     returns the perf string and the relevant long and short perf scores'''
 
-    def score_accum(state: str, direction: str) -> Tuple[int, int, str]:
+    def score_accum(state: str, direction: str) -> tuple[int, str]:
+        func_name = sys._getframe().f_code.co_name
+        x12 = Timer(f'{func_name}')
+        x12.start()
+
         with open(f"{session.market_data}/{agent.id}/bal_history.txt", "r") as file:
             bal_data = file.readlines()
 
@@ -503,7 +481,13 @@ def recent_perf_str(session, agent) -> Tuple[str, int, int]:
             else:
                 perf_str += ' 0'
 
+        x12.stop()
+
         return score, perf_str
+
+    func_name = sys._getframe().f_code.co_name
+    x13 = Timer(f'{func_name}')
+    x13.start()
 
     real_score_l, real_perf_str_l = score_accum('real', 'long')
     real_score_s, real_perf_str_s = score_accum('real', 'short')
@@ -530,12 +514,18 @@ def recent_perf_str(session, agent) -> Tuple[str, int, int]:
 
     full_perf_str = f'long: {perf_str_l}\n{perf_summ_l}\nshort: {perf_str_s}\n{perf_summ_s}'
 
+    x13.stop()
+
     return full_perf_str, score_l, score_s
 
 
 def scanner_summary(session, agents: list) -> None:
     '''prints a summary of the agents recent performance, current exposure, 
     benchmarks, trade counts etc'''
+
+    func_name = sys._getframe().f_code.co_name
+    x14 = Timer(f'{func_name}')
+    x14.start()
 
     now = datetime.now().strftime('%d/%m/%y %H:%M')
     title = f'{now} ${session.bal:.2f}'
@@ -571,6 +561,8 @@ def scanner_summary(session, agents: list) -> None:
         pb.push_note(title, final_msg)
     else:
         print(f'-\n{title}\n{final_msg}')
+
+    x14.stop()
 
 
 
