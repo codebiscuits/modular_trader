@@ -18,16 +18,38 @@ plt.rcParams['figure.figsize'] = (20,10)
 pd.set_option('display.max_rows', None) 
 pd.set_option('display.expand_frame_repr', False)
 
-def get_book_stats(pair, quote, width=2):
+def slippage(quote_size, book, side):
+    best_bid = float(book.get('bids')[0][0])
+    best_ask = float(book.get('asks')[0][0])
+
+    book_side = 'asks' if side == 'buy' else 'bids'
+    opposite = best_bid if side == 'buy' else best_ask
+    cum_depth = 0
+    for i in book[book_side]:
+        cum_depth += (float(i[0])*float(i[1]))
+        if cum_depth > quote_size:
+            slip_price = float(i[0])
+            break
+    if cum_depth < quote_size:
+        scalar = quote_size / cum_depth
+        slip_price = book[book_side][-1][0]
+        slippage = (abs(slip_price - opposite) / opposite) * scalar
+        print('wasnt enough, estimating slippage')
+        pb.push_note('book_stats', f"{pair} downloaded book didn't have enough depth, raise limit")
+    else:
+        slippage = abs(slip_price-opposite) / opposite
+
+    return slippage
+
+
+def get_book_stats(pair, book, quote, width=1):
     '''returns a dictionary containing the base asset, the quote asset, 
     the spread, and the bid and ask depth within the % range of price set 
     by the width param in base and quote denominations'''
     
     q_len = len(quote) * -1
     base = pair[:q_len]
-    
-    book = client.get_order_book(symbol=pair, limit=1000)
-    
+
     best_bid = float(book.get('bids')[0][0])
     best_ask = float(book.get('asks')[0][0])
     mid_price = (best_bid + best_ask) / 2
@@ -64,96 +86,113 @@ now = dt.now().strftime('%d/%m/%y %H:%M')
 print(now, 'running binance book stats')
 
 #######################################################
+curr_year = dt.now().year
 
 filepath1 = Path('/media/coding/market_data/binance_liquidity_history.txt')
 filepath2 = Path('/mnt/pi_2/market_data/binance_liquidity_history.txt')
 filepath3 = 'test.txt'
 
+slip_file1 = Path(f'/media/coding/market_data/binance_slippage_history_{curr_year}.json')
+slip_file2 = Path(f'/mnt/pi_2/market_data/binance_slippage_history_{curr_year}.json')
+slip_file3 = Path(f'slip_test_{curr_year}.json')
+
 live = filepath1.exists()
 
 if filepath1.exists():
     fp = filepath1
+    sf = slip_file1
 elif filepath2.exists():
     fp = filepath2
+    sf = slip_file2
 else:
     fp = filepath3
+    sf = slip_file3
 
-if live: # only record a new observation if this is running on the correct machine
-    quote = 'USDT'
-    
-    pairs = funcs.get_pairs(quote, 'SPOT')
-    
-    depth_dict = {}
-    
-    ba_ratios = []
-    spreads = []
-    
-    for pair in pairs[:100]:
-        pair_stats = get_book_stats(pair, quote, 2)
-        depth_dict[pair] = pair_stats
-        
-        ba_ratio = pair_stats.get('quote_bids') / pair_stats.get('quote_asks')
-        ba_ratios.append(ba_ratio)
-        spreads.append(pair_stats.get('spread'))
-        
-        time.sleep(3)
-        
+if live:
+    sf.touch(exist_ok=True)
+
+quote = 'USDT'
+
+pairs = funcs.get_pairs(quote, 'SPOT')
+
+depth_dict = {}
+slippage_dict = {}
+
+for pair in pairs[:10]:
+    slip_stats = {}
+    book = client.get_order_book(symbol=pair, limit=500)
+    slip_stats['buy_100'] = slippage(100, book, 'buy')
+    slip_stats['sell_100'] = slippage(100, book, 'sell')
+    slip_stats['buy_1000'] = slippage(1000, book, 'buy')
+    slip_stats['sell_1000'] = slippage(1000, book, 'sell')
+    slip_stats['buy_10000'] = slippage(10000, book, 'buy')
+    slip_stats['sell_10000'] = slippage(10000, book, 'sell')
+
+    slippage_dict[pair] = slip_stats
+
+    pair_stats = get_book_stats(pair, book, quote, 2)
+    depth_dict[pair] = pair_stats
+
+if live:  # only record a new observation if this is running on the correct machine
     record = {now: depth_dict}
-
     with open(fp, 'a') as file:
         file.write(json.dumps(record))
         file.write('\n')
 
+    slip_record = {now: slippage_dict}
+    with open(sf, 'a') as slip_file:
+        json.dump(slip_record, slip_file)
+
 #######################################################
 
-with open(fp, 'r') as file:
-    records = file.readlines()
-
-timestamps = []
-avg_ratios = []
-std_ratios = []
-avg_spreads = []
-
-for r in records:
-    x = json.loads(r)
-    
-    timestamps.append(list(x.keys())[0])
-    
-    val = list(x.values())[0]
-    ba_ratios = []
-    spreads = []
-    for k, v in val.items():
-        ba_ratio = v.get('quote_bids') / v.get('quote_asks')
-        ba_ratios.append(ba_ratio)
-        spreads.append(v.get('spread'))
-        
-    avg_ratios.append(stats.median(ba_ratios))
-    std_ratios.append(stats.stdev(ba_ratios))
-    avg_spreads.append(stats.mean(spreads))
-    
-
-history = {'timestamp': timestamps, 'avg_ratio': avg_ratios, 
-           'std_ratio': std_ratios, 'avg_spread': avg_spreads}
-
-df = pd.DataFrame(history)
-
-p1 = Path('/media/coding/scripts/backtester_2021')
-p2 = Path('chart.png')
-if p1.exists():
-    chartpath = Path(p1 / p2)
-else:
-    chartpath = p2
-
-df['avg_ratio_ma'] = df.avg_ratio.ewm(4).mean()
-
-
-plt.plot(df.timestamp, df.avg_ratio, label='avg_ratio', linewidth=1)
-plt.plot(df.timestamp, df.avg_ratio_ma, label='avg_ratio_ma', linewidth=1)
-# plt.plot(df.timestamp, df.std_ratio, label='std_ratio')
-plt.legend()
-plt.xticks(rotation='vertical')
-plt.savefig(chartpath, format='png')
-plt.show()
+# with open(fp, 'r') as file:
+#     records = file.readlines()
+#
+# timestamps = []
+# avg_ratios = []
+# std_ratios = []
+# avg_spreads = []
+#
+# for r in records:
+#     x = json.loads(r)
+#
+#     timestamps.append(list(x.keys())[0])
+#
+#     val = list(x.values())[0]
+#     ba_ratios = []
+#     spreads = []
+#     for k, v in val.items():
+#         ba_ratio = v.get('quote_bids') / v.get('quote_asks')
+#         ba_ratios.append(ba_ratio)
+#         spreads.append(v.get('spread'))
+#
+#     avg_ratios.append(stats.median(ba_ratios))
+#     std_ratios.append(stats.stdev(ba_ratios))
+#     avg_spreads.append(stats.mean(spreads))
+#
+#
+# history = {'timestamp': timestamps, 'avg_ratio': avg_ratios,
+#            'std_ratio': std_ratios, 'avg_spread': avg_spreads}
+#
+# df = pd.DataFrame(history)
+#
+# p1 = Path('/media/coding/scripts/backtester_2021')
+# p2 = Path('chart.png')
+# if p1.exists():
+#     chartpath = Path(p1 / p2)
+# else:
+#     chartpath = p2
+#
+# df['avg_ratio_ma'] = df.avg_ratio.ewm(4).mean()
+#
+#
+# plt.plot(df.timestamp, df.avg_ratio, label='avg_ratio', linewidth=1)
+# plt.plot(df.timestamp, df.avg_ratio_ma, label='avg_ratio_ma', linewidth=1)
+# # plt.plot(df.timestamp, df.std_ratio, label='std_ratio')
+# plt.legend()
+# plt.xticks(rotation='vertical')
+# plt.savefig(chartpath, format='png')
+# plt.show()
 
 end = time.perf_counter()
 
