@@ -5,6 +5,7 @@ import statistics as stats
 from pprint import pprint
 from datetime import datetime as dt
 import json
+from json.decoder import JSONDecodeError
 import time
 from binance.client import Client
 import keys
@@ -118,7 +119,7 @@ pairs = funcs.get_pairs(quote, 'SPOT')
 depth_dict = {}
 slippage_dict = {}
 
-for pair in pairs[:10]:
+for pair in pairs:
     slip_stats = {}
     book = client.get_order_book(symbol=pair, limit=500)
     slip_stats['buy_100'] = slippage(100, book, 'buy')
@@ -139,9 +140,22 @@ if live:  # only record a new observation if this is running on the correct mach
         file.write(json.dumps(record))
         file.write('\n')
 
-    slip_record = {now: slippage_dict}
-    with open(sf, 'a') as slip_file:
-        json.dump(slip_record, slip_file)
+    with open(sf, 'r') as slip_file:
+        try:
+            all_data = json.load(slip_file)
+        except JSONDecodeError as e:
+            print(e)
+            all_data = []
+        except TypeError as e:
+            print(e)
+            all_data = []
+        pprint(all_data)
+
+    all_data.append({now: slippage_dict})
+    pprint(all_data)
+
+    with open(sf, 'w') as slip_file:
+        json.dump(all_data, slip_file)
 
 #######################################################
 
