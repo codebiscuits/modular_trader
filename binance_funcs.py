@@ -464,6 +464,32 @@ def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame) -> pd.DataFrame
     df_new = pd.concat([old_df[:-1], df], copy=True, ignore_index=True)
     return df_new
 
+def resample_ohlc(session, df):
+    # calculate how many 15min bars are needed to produce 'session.max_length' bars of new timeframe
+    len_mult = {'15m': 1, '30m': 2, '1h': 4, '2h': 8, '4h': 16, '6h': 24,
+                '8h': 32, '12h': 48, '1d': 96, '3d': 288, '1w': 672}
+    max_len = (session.max_length + 1) * len_mult[session.tf]
+    if len(df) > max_len:
+        df = df.tail(max_len)
+        df.reset_index(drop=True, inplace=True)
+
+    tf_map = {'15m': '15T', '30m': '30T', '1h': '1H', '2h': '2H', '4h': '4H', '6h': '6H',
+              '8h': '8H', '12h': '12H', '1d': '1D', '3d': '3D', '1w': '1W'}
+
+    df = df.resample(tf_map[session.tf], on='timestamp',
+                     offset=session.offset).agg({'open': 'first',
+                                                 'high': 'max',
+                                                 'low': 'min',
+                                                 'close': 'last',
+                                                 'volume': 'sum'})
+    if len(df) > session.max_length:
+        # print(f"{pair} dataframe has {len(df)} bars, trimming to {ohlc_len}")
+        df = df.tail(session.max_length)
+    # drop=False because we want to keep the timestamp column
+    df.reset_index(inplace=True)
+
+    return df
+
 
 def prepare_ohlc(session, pair: str) -> pd.DataFrame:
     """checks if there is old data already, if so it loads the old data and
@@ -492,28 +518,8 @@ def prepare_ohlc(session, pair: str) -> pd.DataFrame:
         df.reset_index(drop=True, inplace=True)
     df.to_pickle(filepath)
 
-    # calculate how many 15min bars are needed to produce 'session.max_length' bars of new timeframe
-    len_mult = {'15m': 1, '30m': 2, '1h': 4, '2h': 8, '4h': 16, '6h': 24,
-                '8h': 32, '12h': 48, '1d': 96, '3d': 288, '1w': 672}
-    max_len = (session.max_length + 1) * len_mult[session.tf]
-    if len(df) > max_len:
-        df = df.tail(max_len)
-        df.reset_index(drop=True, inplace=True)
+    df = resample_ohlc(session, df)
 
-    tf_map = {'15m': '15T', '30m': '30T', '1h': '1H', '2h': '2H', '4h': '4H', '6h': '6H',
-                '8h': '8H', '12h': '12H', '1d': '1D', '3d': '3D', '1w': '1W'}
-
-    df = df.resample(tf_map[session.tf], on='timestamp',
-                     offset=session.offset).agg({'open': 'first',
-                                                 'high': 'max',
-                                                 'low': 'min',
-                                                 'close': 'last',
-                                                 'volume': 'sum'})
-    if len(df) > session.max_length:
-        # print(f"{pair} dataframe has {len(df)} bars, trimming to {ohlc_len}")
-        df = df.tail(session.max_length)
-    # drop=False because we want to keep the timestamp column
-    df.reset_index(inplace=True)
     ds.stop()
     return df
 

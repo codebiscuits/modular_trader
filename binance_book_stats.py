@@ -12,6 +12,10 @@ import keys
 from pushbullet import Pushbullet
 from pathlib import Path
 
+#TODO if this works, i need to install it on the raspberry pi, wait for it to update the files a couple of times, then
+# check the logs to see if it is updating 'the new way'. if so, delete all the code that chooses old files and old ways
+# of updating. dont forget to check all mentions of the 'live' flag and put right anything ive done to them
+
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 client = Client(keys.bPkey, keys.bSkey)
 plt.style.use('fivethirtyeight')
@@ -78,7 +82,36 @@ def get_book_stats(pair, book, quote, width=1):
              'base_bids': bid_depth, 'base_asks': ask_depth, 
              'quote_bids': q_bid_depth, 'quote_asks': q_ask_depth}
     
-    return stats 
+    return stats
+
+
+def set_paths():
+    curr_year = dt.now().year
+
+    folder_1 = Path('0/media/coding/market_data')
+    folder_2 = Path('0/mnt/pi_2/market_data')
+
+    liq_path_a = Path("binance_liquidity_history.txt")
+    liq_path_b = Path(f"binance_liquidity_history_{curr_year}.json")
+
+    if folder_1.exists():
+        fp = folder_1/liq_path_b if liq_path_b.exists() else folder_1/liq_path_a
+        sf = folder_1 / f"binance_slippage_history_{curr_year}.json"
+    elif folder_2.exists():
+        fp = folder_2/liq_path_b if liq_path_b.exists() else folder_2/liq_path_a
+        sf = folder_2 / f"binance_slippage_history_{curr_year}.json"
+    else:
+        fp = liq_path_b if liq_path_b.exists() else liq_path_a
+        sf = Path(f'slip_test_{curr_year}.json')
+
+    live = folder_1.exists()
+
+    if live:
+        fp.touch(exist_ok=True)
+        sf.touch(exist_ok=True)
+
+    return fp, sf, live
+
 
 start = time.perf_counter()
 
@@ -87,30 +120,13 @@ now = dt.now().strftime('%d/%m/%y %H:%M')
 print(now, 'running binance book stats')
 
 #######################################################
-curr_year = dt.now().year
 
-filepath1 = Path('/media/coding/market_data/binance_liquidity_history.txt')
-filepath2 = Path('/mnt/pi_2/market_data/binance_liquidity_history.txt')
-filepath3 = 'test.txt'
+fp, sf, live = set_paths()
 
-slip_file1 = Path(f'/media/coding/market_data/binance_slippage_history_{curr_year}.json')
-slip_file2 = Path(f'/mnt/pi_2/market_data/binance_slippage_history_{curr_year}.json')
-slip_file3 = Path(f'slip_test_{curr_year}.json')
+print(fp)
+print(sf)
 
-live = filepath1.exists()
-
-if filepath1.exists():
-    fp = filepath1
-    sf = slip_file1
-elif filepath2.exists():
-    fp = filepath2
-    sf = slip_file2
-else:
-    fp = filepath3
-    sf = slip_file3
-
-if live:
-    sf.touch(exist_ok=True)
+live = True
 
 quote = 'USDT'
 
@@ -134,11 +150,42 @@ for pair in pairs:
     pair_stats = get_book_stats(pair, book, quote, 2)
     depth_dict[pair] = pair_stats
 
+# live = True
 if live:  # only record a new observation if this is running on the correct machine
+
+    curr_year = dt.now().year
+
+####################### depth data ####################################
+
+
     record = {now: depth_dict}
-    with open(fp, 'a') as file:
-        file.write(json.dumps(record))
-        file.write('\n')
+
+    try:
+        with open(fp, 'r') as liq_file:
+            try:
+                liq_data = json.load(liq_file)
+                print('loaded data the new way')
+            except JSONDecodeError:
+                print('loading data the old way')
+                liquidity = [json.loads(line) for line in liq_file.readlines()]
+                liq_data = {list(i.keys())[0]: list(i.values())[0] for i in liquidity}
+
+        new_fp = Path(f"binance_liquidity_history_{curr_year}.json")
+        new_fp.touch(exist_ok=True)
+
+        liq_data[now] = depth_dict
+        with open(new_fp, 'w') as liq_file:
+            json.dump(liq_data, liq_file)
+        print('completed saving data the new way')
+
+    except:
+        print('saving data the old way')
+        with open(fp, 'a') as file:
+            file.write(json.dumps(record))
+            file.write('\n')
+
+
+################# slip data ############################
 
     with open(sf, 'r') as slip_file:
         try:
@@ -149,10 +196,14 @@ if live:  # only record a new observation if this is running on the correct mach
         except TypeError as e:
             print(e)
             all_data = []
-        pprint(all_data)
 
-    all_data.append({now: slippage_dict})
-    pprint(all_data)
+    try:
+        all_data[now] = slippage_dict
+        print('updated slip data the new way')
+    except TypeError:
+        print('updating slip data the old way')
+        all_data.append(slippage_dict)
+        all_data = {list(i.keys())[0]: list(i.values())[0] for i in all_data}
 
     with open(sf, 'w') as slip_file:
         json.dump(all_data, slip_file)

@@ -101,7 +101,7 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
         now = datetime.now().strftime('%d/%m/%y %H:%M')
 
         # generate signals ------------------------------------------------------------
-        session.compute_indicators(df)
+        df = session.compute_indicators(df)
 
         signals = {}
         mir = uf.max_init_risk(agent.num_open_positions, agent.target_risk)

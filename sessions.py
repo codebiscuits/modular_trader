@@ -343,6 +343,8 @@ class MARGIN_SESSION:
             elif vals[0] == 'atr':
                 ind.atr_bands(df, int(vals[1]), float(vals[2]))
             elif vals[0] == 'st':
-                ind.supertrend_new(df, int(vals[1]), float(vals[2]))
+                df = ind.supertrend(df, int(vals[1]), float(vals[2]))
+
+        return df
 
         ci.stop()

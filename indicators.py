@@ -20,68 +20,155 @@ def atr_bands(df: pd.DataFrame, lb: int, mult: float) -> None:
     df[f'atr-{lb}-{mult}-lower'] = (df.hl_avg - mult * df[f'atr-{lb}'])
     df.drop(['hl_avg', f'atr-{lb}'], axis=1, inplace=True)  
 
-def supertrend_new(df: pd.DataFrame, lb: int, mult: float) -> None:
-    '''calculates supertrend indicator and adds it to the input dataframe with the 
-    column names following the format: st-{lb}-{mult}, st-{lb}-{mult}-up, st-{lb}-{mult}-dn'''
+def supertrend(df: pd.DataFrame, lb: int, mult: float) -> None:
+    '''calculates supertrend indicator and adds it to the input dataframe with the
+        column names following the format: st-{lb}-{mult}, st-{lb}-{mult}-up, st-{lb}-{mult}-dn'''
+
     atr(df, lb)
-    
+
     df['hl_avg'] = (df.high + df.low) / 2
     df['upper_band'] = (df.hl_avg + mult * df[f'atr-{lb}'])
     df['lower_band'] = (df.hl_avg - mult * df[f'atr-{lb}'])
     df.drop(['hl_avg', f'atr-{lb}'], axis=1, inplace=True)
-    
-    df['final_upper'] = 0.0
-    df['final_lower'] = 0.0
-    
-    # i have to use for loops to calculate the next columns because other methods using conditional
-    # statements work on only 1 row at a time, and these steps base the current value on the previous one
-    for i in df.index:
-        if i == 0.0:
-            df.at[i, 'final_upper'] = 0.0
-        elif (df.at[i, 'upper_band'] < df.at[i-1, 'final_upper']) | (df.at[i-1, 'close'] > df.at[i-1, 'final_upper']):
-            df.at[i, 'final_upper'] = df.at[i, 'upper_band']
+
+    # i have to use iteration to calculate final_upper/lower because
+    # each value is affected by the previously calculated value
+    final_upper = []
+    final_lower = []
+    last_upper = 0
+    last_lower = 0
+    df['close_1'] = df['close'].shift(1)
+
+    for row in df.itertuples(index=True):
+        if row.index == 0:
+            final_upper.append(0.0)
+        elif (row.upper_band < last_upper) | (row.close_1 > last_upper):
+            final_upper.append(row.upper_band)
+            last_upper = row.upper_band
         else:
-            df.at[i, 'final_upper'] = df.at[i-1, 'final_upper']
-    
-    for i in df.index:
-        if i == 0.0:
-            df.at[i, 'final_lower'] = 0.0
-        elif (df.at[i, 'lower_band'] > df.at[i-1, 'final_lower']) | (df.at[i-1, 'close'] < df.at[i-1, 'final_lower']):
-            df.at[i, 'final_lower'] = df.at[i, 'lower_band']
+            final_upper.append(last_upper)
+
+    for row in df.itertuples(index=True):
+        if row.index == 0:
+            final_lower.append(0.0)
+        elif (row.lower_band > last_lower) | (row.close_1 < last_lower):
+            final_lower.append(row.lower_band)
+            last_lower = row.lower_band
         else:
-            df.at[i, 'final_lower'] = df.at[i-1, 'final_lower']
-    
-    df.drop(['upper_band', 'lower_band'], axis=1, inplace=True)
-    
+            final_lower.append(last_lower)
+
+    df['final_upper'] = final_upper
+    df['final_lower'] = final_lower
+
+    df = df.drop(['upper_band', 'lower_band', 'close_1'], axis=1)
+
+    st_vals = []
+    last_st = 0
+    df['final_upper_1'] = df.final_upper.shift(1)
+    df['final_lower_1'] = df.final_lower.shift(1)
+
+    for row in df.itertuples(index=True):
+        if row.index == 0.0:
+            st_vals.append(0.0)
+        elif last_st == row.final_upper_1 and row.close < row.final_upper:
+            st_vals.append(row.final_upper)
+            last_st = row.final_upper
+        elif last_st == row.final_upper_1 and row.close > row.final_upper:
+            st_vals.append(row.final_lower)
+            last_st = row.final_lower
+        elif last_st == row.final_lower_1 and row.close > row.final_lower:
+            st_vals.append(row.final_lower)
+            last_st = row.final_lower
+        elif last_st == row.final_lower_1 and row.close < row.final_lower:
+            st_vals.append(row.final_upper)
+            last_st = row.final_upper
+        else:
+            st_vals.append(last_st)
+
+    df = df.drop(['final_upper', 'final_lower', 'final_upper_1', 'final_lower_1'], axis=1)
+
     st = f"st-{lb}-{mult}"
+    df[st] = st_vals
+
     stu = f"st-{lb}-{mult}-up"
     std = f"st-{lb}-{mult}-dn"
-    df[st] = 0.0
-    
-    for j in df.index:
-        if j == 0.0:
-            df.at[j, st] = 0.0
-        elif df.at[j-1, st] == df.at[j-1, 'final_upper'] and df.at[j, 'close'] < df.at[j, 'final_upper']:
-            df.at[j, st] = df.at[j, 'final_upper']
-        elif df.at[j-1, st] == df.at[j-1, 'final_upper'] and df.at[j, 'close'] > df.at[j, 'final_upper']:
-            df.at[j, st] = df.at[j, 'final_lower']
-        elif df.at[j-1, st] == df.at[j-1, 'final_lower'] and df.at[j, 'close'] > df.at[j, 'final_lower']:
-            df.at[j, st] = df.at[j, 'final_lower']
-        elif df.at[j-1, st] == df.at[j-1, 'final_lower'] and df.at[j, 'close'] < df.at[j, 'final_lower']:
-            df.at[j, st] = df.at[j, 'final_upper']
-        
-    df.drop(['final_upper', 'final_lower'], axis=1, inplace=True)
-    
+
     # this next step doesn't involve data from previous row in calculating current row,
     # so i can use np.where which is much faster than a for loop
     df[stu] = np.where(df.close >= df[st], df[st], np.nan)
     df[std] = np.where(df.close < df[st], df[st], np.nan)
-    
+
     try:
-        df.drop(0, inplace=True)
-    except KeyError:
+        df = df.drop(0)
+        df = df.reset_index(drop=True)
+    except KeyError as e:
+        print(e)
         print(df.head())
-    df.reset_index(drop=True, inplace=True)
+
+    return df
+
+# def supertrend_new(df: pd.DataFrame, lb: int, mult: float) -> None:
+#     '''calculates supertrend indicator and adds it to the input dataframe with the
+#     column names following the format: st-{lb}-{mult}, st-{lb}-{mult}-up, st-{lb}-{mult}-dn'''
+#     atr(df, lb)
+#
+#     df['hl_avg'] = (df.high + df.low) / 2
+#     df['upper_band'] = (df.hl_avg + mult * df[f'atr-{lb}'])
+#     df['lower_band'] = (df.hl_avg - mult * df[f'atr-{lb}'])
+#     df.drop(['hl_avg', f'atr-{lb}'], axis=1, inplace=True)
+#
+#     df['final_upper'] = 0.0
+#     df['final_lower'] = 0.0
+#
+#     # i have to use for loops to calculate the next columns because other methods using conditional
+#     # statements work on only 1 row at a time, and these steps base the current value on the previous one
+#     for i in df.index:
+#         if i == 0.0:
+#             df.at[i, 'final_upper'] = 0.0
+#         elif (df.at[i, 'upper_band'] < df.at[i-1, 'final_upper']) | (df.at[i-1, 'close'] > df.at[i-1, 'final_upper']):
+#             df.at[i, 'final_upper'] = df.at[i, 'upper_band']
+#         else:
+#             df.at[i, 'final_upper'] = df.at[i-1, 'final_upper']
+#
+#     for i in df.index:
+#         if i == 0.0:
+#             df.at[i, 'final_lower'] = 0.0
+#         elif (df.at[i, 'lower_band'] > df.at[i-1, 'final_lower']) | (df.at[i-1, 'close'] < df.at[i-1, 'final_lower']):
+#             df.at[i, 'final_lower'] = df.at[i, 'lower_band']
+#         else:
+#             df.at[i, 'final_lower'] = df.at[i-1, 'final_lower']
+#
+#     df.drop(['upper_band', 'lower_band'], axis=1, inplace=True)
+#
+#     st = f"st-{lb}-{mult}"
+#     stu = f"st-{lb}-{mult}-up"
+#     std = f"st-{lb}-{mult}-dn"
+#     df[st] = 0.0
+#
+#     for j in df.index:
+#         if j == 0.0:
+#             df.at[j, st] = 0.0
+#         elif df.at[j-1, st] == df.at[j-1, 'final_upper'] and df.at[j, 'close'] < df.at[j, 'final_upper']:
+#             df.at[j, st] = df.at[j, 'final_upper']
+#         elif df.at[j-1, st] == df.at[j-1, 'final_upper'] and df.at[j, 'close'] > df.at[j, 'final_upper']:
+#             df.at[j, st] = df.at[j, 'final_lower']
+#         elif df.at[j-1, st] == df.at[j-1, 'final_lower'] and df.at[j, 'close'] > df.at[j, 'final_lower']:
+#             df.at[j, st] = df.at[j, 'final_lower']
+#         elif df.at[j-1, st] == df.at[j-1, 'final_lower'] and df.at[j, 'close'] < df.at[j, 'final_lower']:
+#             df.at[j, st] = df.at[j, 'final_upper']
+#
+#     df.drop(['final_upper', 'final_lower'], axis=1, inplace=True)
+#
+#     # this next step doesn't involve data from previous row in calculating current row,
+#     # so i can use np.where which is much faster than a for loop
+#     df[stu] = np.where(df.close >= df[st], df[st], np.nan)
+#     df[std] = np.where(df.close < df[st], df[st], np.nan)
+#
+#     try:
+#         df.drop(0, inplace=True)
+#     except KeyError:
+#         print(df.head())
+#     df.reset_index(drop=True, inplace=True)
 
 def heikin_ashi(df):
     df['ha_close'] = (df.open + df.high + df.low + df.close) / 4
@@ -165,7 +252,7 @@ def trend_score(df: pd.DataFrame, column: str) -> None:
 
 def ema_swarm(df: pd.DataFrame, min_lb: int, max_lb: int) -> None:
     '''calculate 10 EMAs with lookbacks between 10 and 200 periods,
-    spaced apart logarithmically so as not to give to much weight
+    spaced apart logarithmically so as not to give too much weight
     to the slower ones, then derive boolean series from each based
     on whether they are trending up or down, then add them all together
     and divide by 10'''
