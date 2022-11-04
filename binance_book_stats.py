@@ -88,8 +88,8 @@ def get_book_stats(pair, book, quote, width=1):
 def set_paths():
     curr_year = dt.now().year
 
-    folder_1 = Path('0/media/coding/market_data')
-    folder_2 = Path('0/mnt/pi_2/market_data')
+    folder_1 = Path('/media/coding/market_data')
+    folder_2 = Path('/mnt/pi_2/market_data')
 
     liq_path_a = Path("binance_liquidity_history.txt")
     liq_path_b = Path(f"binance_liquidity_history_{curr_year}.json")
@@ -126,8 +126,6 @@ fp, sf, live = set_paths()
 print(fp)
 print(sf)
 
-live = True
-
 quote = 'USDT'
 
 pairs = funcs.get_pairs(quote, 'SPOT')
@@ -150,7 +148,6 @@ for pair in pairs:
     pair_stats = get_book_stats(pair, book, quote, 2)
     depth_dict[pair] = pair_stats
 
-# live = True
 if live:  # only record a new observation if this is running on the correct machine
 
     curr_year = dt.now().year
@@ -170,11 +167,8 @@ if live:  # only record a new observation if this is running on the correct mach
                 liquidity = [json.loads(line) for line in liq_file.readlines()]
                 liq_data = {list(i.keys())[0]: list(i.values())[0] for i in liquidity}
 
-        new_fp = Path(f"binance_liquidity_history_{curr_year}.json")
-        new_fp.touch(exist_ok=True)
-
         liq_data[now] = depth_dict
-        with open(new_fp, 'w') as liq_file:
+        with open(fp, 'w') as liq_file:
             json.dump(liq_data, liq_file)
         print('completed saving data the new way')
 
