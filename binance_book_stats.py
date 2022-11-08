@@ -153,7 +153,7 @@ for i in exchanges:
     try:
         with open(fp, 'r') as liq_file:
             liq_data = json.load(liq_file)
-    except FileNotFoundError:
+    except (FileNotFoundError, JSONDecodeError):
         liq_data = {}
 
     if not live:
@@ -167,8 +167,8 @@ for i in exchanges:
     try:
         with open(sf, 'r') as slip_file:
             all_data = json.load(slip_file)
-    except FileNotFoundError:
-        all_data = {}
+    except (FileNotFoundError, JSONDecodeError):
+        liq_data = {}
 
     if not live:
         sf = Path(f'{ex.id}_slip_test_{curr_year}.json')
