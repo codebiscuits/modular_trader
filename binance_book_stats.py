@@ -119,7 +119,7 @@ now = dt.now().strftime('%d/%m/%y %H:%M')
 print(now, 'running book stats')
 curr_year = dt.now().year
 quote = 'USDT'
-exchanges = [ccxt.ascendex, ccxt.binance, ccxt.ftx, ccxt.kucoin]
+exchanges = [ccxt.ascendex, ccxt.binance, ccxt.kucoin]
 
 depth_dict = {}
 slippage_dict = {}
