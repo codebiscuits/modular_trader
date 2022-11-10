@@ -40,7 +40,7 @@ def slippage(pair, quote_size, book, side, limit):
         if len(book[book_side]) < limit:
             # print(f"{pair} book only has ${cum_depth} liquidity which would cause {slip_pct:.1%} slippage")
             return 1
-        print(f"{book.get('symbol')} cum depth: {cum_depth}")
+        # print(f"{book.get('symbol')} cum depth: {cum_depth}")
         scalar = quote_size / cum_depth
         # print(f'wasnt enough for ${quote_size} size, estimating slippage')
         # pb.push_note('book_stats', f"{pair} downloaded book didn't have enough depth, raise limit")
