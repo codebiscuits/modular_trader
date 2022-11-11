@@ -13,13 +13,12 @@ import math
 import statistics as stats
 import time
 import numpy as np
+import indicators as ind
+from config import not_pairs
 
 pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
 pd.set_option('display.precision', 4)
-
-# from pandarallel import pandarallel
-# pandarallel.initialize()
 
 # CONSTANTS
 client = Client(keys.bPkey, keys.bSkey)
@@ -27,9 +26,6 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 ctx = getcontext()
 ctx.prec = 12
 ohlc_path = Path("/mnt/pi_2/ohlc_binance_1m")
-not_pairs = ['GBPUSDT', 'AUDUSDT', 'BUSDUSDT', 'EURUSDT', 'TUSDUSDT',
-             'USDCUSDT', 'PAXUSDT', 'COCOSUSDT', 'SUSDUSDT', 'USDPUSDT',
-             'USTUSDT']
 
 
 # FUNCTIONS
@@ -115,7 +111,7 @@ def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame) -> pd.DataFrame
 
 
 def ohlc_1yr(pair):
-    fp = Path(f"{pair}_1m.pkl")
+    fp = Path(f"bin_ohlc_1m/{pair}_1m.pkl")
     if fp.exists():
         df = pd.read_pickle(fp)
         df = update_ohlc(pair, '1m', df)
@@ -148,150 +144,6 @@ def resample(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
     df = df.dropna(how='any')
     df = df.reset_index()  # don't use drop=True because i want the
     # timestamp index back as a column
-
-    return df
-
-
-def hidden_flow(df, lookback):
-    df['hlc3'] = df[['high', 'low', 'close']].mean(axis=1)
-    df['sma3'] = df.hlc3.rolling(lookback).mean()
-    df['rolling_pricevol'] = (df.hlc3 * df.volume).rolling(lookback).sum()
-    df['rolling_vol'] = df.volume.rolling(lookback).sum()
-    df['vwap'] = df.rolling_pricevol / df.rolling_vol
-
-    df['hidden_flow'] = df.vwap / df.sma3
-    df['hf_avg'] = df.hidden_flow.rolling(lookback * 5).mean()
-    df['hf_std'] = df.hidden_flow.rolling(lookback * 5).std()
-    df['hf_upper'] = df.hf_avg + df.hf_std
-    df['hf_lower'] = df.hf_avg - df.hf_std
-
-    df['hidden_flow_hi'] = df.hidden_flow < df.hf_upper
-    df['hidden_flow_lo'] = df.hidden_flow > df.hf_lower
-
-    return df
-
-
-def atr(df: pd.DataFrame, lb: int) -> None:
-    '''calculates the average true range on an ohlc dataframe'''
-    df['tr1'] = df.high - df.low
-    df['tr2'] = abs(df.high - df.close.shift(1))
-    df['tr3'] = abs(df.low - df.close.shift(1))
-    df['tr'] = df[['tr1', 'tr2', 'tr3']].max(axis=1)
-    df[f'atr-{lb}'] = df['tr'].ewm(lb).mean()
-    df.drop(['tr1', 'tr2', 'tr3', 'tr'], axis=1, inplace=True)
-
-    return df
-
-
-def vwma(df, lookback):
-    df['hlc3'] = df[['high', 'low', 'close']].mean(axis=1)
-    df['rolling_pricevol'] = (df.hlc3 * df.volume).rolling(lookback).sum()
-    df['rolling_vol'] = df.volume.rolling(lookback).sum()
-    df['vwma'] = df.rolling_pricevol / df.rolling_vol
-
-    return df
-
-
-def williams_fractals(df, frac_width, atr_spacing=0):
-    """calculates williams fractals either on the highs and lows or spaced according to average true range.
-    if the spacing value is left at the default 0, no atr spacing will be implemented. if spacing is set to an integer
-    above 0, the atr will be calculated with a lookback length equal to the spacing value, and the resulting atr values
-    will then be multiplied by one tenth of the spacing value. eg if spacing is set to 5, a 5 period atr series will be
-    calculated, and the fractals will be spaced 0.5*atr from the highs and lows of the ohlc candles
-    frac_width determines how many candles are used to decide if the current candle is a local high/low, so a frac_width
-    of five will look at the current candle, the two previous candles, and the two subsequent ones"""
-
-    if atr_spacing:
-        df = atr(df, atr_spacing)
-        mult = atr_spacing / 10
-        df['fractal_high'] = np.where(df.high == df.high.rolling(frac_width, center=True).max(),
-                                      df.high + (mult * df[f'atr-{atr_spacing}']), np.nan)
-        df['fractal_low'] = np.where(df.low == df.low.rolling(frac_width, center=True).min(),
-                                     df.low - (mult * df[f'atr-{atr_spacing}']), np.nan)
-    else:
-        df['fractal_high'] = np.where(df.high == df.high.rolling(frac_width, center=True).max(), df.high, np.nan)
-        df['fractal_low'] = np.where(df.low == df.low.rolling(frac_width, center=True).min(), df.low, np.nan)
-
-    df['inval_high'] = df.fractal_high.interpolate('pad')
-    df['inval_low'] = df.fractal_low.interpolate('pad')
-
-    return df
-
-
-def fractal_density(df, lookback, frac_width):
-    """a way of detecting when price is trending based on how frequently williams fractals are printed, since they are
-    much more common during choppy conditions and spaced further apart during trending conditions.
-    the calculation is simply the total number of fractals (high+low) in a given lookback period divided by the lookback.
-    i could modify it by working out how to normalise the output to a range of 0-1, but for now the range of possible
-    values is from 0 to some number between 0 and 1, since the most fractals you could possibly have in any lookback
-    period is going to be significantly less than the period itself and dependent on the frac_width parameter"""
-
-    df = williams_fractals(df, frac_width)
-
-    return (df.fractal_high.rolling(lookback).count() + df.fractal_low.rolling(lookback).count()) / lookback
-
-
-def inside_bars(df):
-    df['inside_bar'] = (df.high < df.high.shift(1)) & (df.low > df.low.shift(1))
-
-    return df
-
-
-def trend_rate(df, z, bars, mult, source):
-    """returns True for any ohlc period which follows a strong trend as defined by the rate-of-change and bars params.
-    if price has moved at least a certain percentage within the set number of bars, it meets the criteria"""
-
-    df[f"roc_{bars}"] = df[f"{source}"].pct_change(bars)
-    m = df[f"roc_{bars}"].abs().rolling(bars * mult).mean()
-    s = df[f"roc_{bars}"].abs().rolling(bars * mult).std()
-    df['thresh'] = m + (z * s)
-
-    df['trend_up'] = df[f"roc_{bars}"] > df['thresh']
-    df['trend_down'] = df[f"roc_{bars}"] < 0 - df['thresh']
-
-    return df
-
-
-def trend_consec_bars(df, bars):
-    """returns True for any ohlc period which follows a strong trend as defined by a sequence of consecutive periods
-    that all move in the same direction"""
-
-    df['up_bar'] = df.close.pct_change() > 0
-    df['dir_diff'] = df.up_bar.diff().cumsum()
-    df['trend_consec'] = df.dir_diff.groupby(df.dir_diff).cumcount()
-    df = df.drop(0)
-    df = df.reset_index(drop=True)
-    df.trend_consec = df.trend_consec.astype(int) + 1
-
-    df['trend_up'] = df.up_bar & (df.trend_consec >= bars)
-    df['trend_down'] = ~df.up_bar & (df.trend_consec >= bars)
-
-    return df
-
-
-def ema_breakout(df, length, lookback):
-    df[f"ema_{length}"] = df.close.ewm(length).mean()
-    df['ema_high'] = df[f"ema_{length}"].shift(1).rolling(lookback).max()
-    df['ema_low'] = df[f"ema_{length}"].shift(1).rolling(lookback).min()
-
-    df['ema_up'] = df[f"ema_{length}"] > df.ema_high
-    df['ema_down'] = df[f"ema_{length}"] < df.ema_low
-
-    return df
-
-
-def ema_trend(df, length, lookback):
-    df[f"ema_{length}"] = df.close.ewm(length).mean()
-
-    df['ema_up'] = df[f"ema_{length}"] > df[f"ema_{length}"].shift(lookback)
-    df['ema_down'] = df[f"ema_{length}"] < df[f"ema_{length}"].shift(lookback)
-
-    return df
-
-
-def entry_signals(df):
-    df['long_signal'] = df.inside_bar & df.trend_down & df.ema_up# & (df.inval_low < df.low)
-    df['short_signal'] = df.inside_bar & df.trend_up & df.ema_down# & (df.inval_high > df.high)
 
     return df
 
@@ -348,7 +200,7 @@ def calc_dd(group, direction):
 
 def test_frac_swing(df):
 
-    df = williams_fractals(df, width)
+    df = ind.williams_fractals(df, width)
 
     # calculate R and invalidation for each signal
     df['long_shift'] = df.long_signal.shift(1, fill_value=False)
@@ -432,16 +284,58 @@ def test_frac_swing(df):
     return df
 
 
-def ib_signals(df, trend_type, z, bars, mult, source, ema_len, ema_lb, width):
-    df = inside_bars(df)
+def ib_signals(df, z, bars, source, ema_len):
+    df = ind.inside_bars(df)
 
-    if trend_type == 'trend':
-        df = ema_trend(df, ema_len, ema_lb)
-    elif trend_type == 'breakout':
-        df = ema_breakout(df, ema_len, ema_len)
+    df = ind.ema_trend(df, ema_len)
 
-    df = trend_rate(df, z, bars, mult, source)
-    df = entry_signals(df)
+    df = ind.trend_rate(df, z, bars, source)
+
+    df['long_signal'] = df.inside_bar & df.trend_down & df.ema_up  # & (df.inval_low < df.low)
+    df['short_signal'] = df.inside_bar & df.trend_up & df.ema_down  # & (df.inval_high > df.high)
+
+    return df
+
+
+def doji_signals(df, z, bars, source, ema_len):
+    df = ind.doji(df)
+
+    df = ind.ema_trend(df, ema_len)
+
+    df = ind.trend_rate(df, z, bars, source)
+
+    df['long_signal'] = (df.bullish_doji > 0.5) & df.trend_down & df.ema_up  # & (df.inval_low < df.low)
+    df['short_signal'] = (df.bearish_doji > 0.5) & df.trend_up & df.ema_down  # & (df.inval_high > df.high)
+
+    return df
+
+
+def bbb_signals(df, z, bars, source, ema_len):
+    df = ind.bull_bear_bar(df)
+
+    df = ind.ema_trend(df, ema_len)
+
+    df = ind.trend_rate(df, z, bars, source)
+
+    df['long_signal'] = df.bullish_bar & df.trend_down & df.ema_up  # & (df.inval_low < df.low)
+    df['short_signal'] = df.bearish_bar & df.trend_up & df.ema_down  # & (df.inval_high > df.high)
+
+    return df
+
+
+def any_bar_signals(df, z, bars, source, ema_len):
+    df = ind.inside_bars(df)
+    df = ind.doji(df)
+    df = ind.bull_bear_bar(df)
+    df['any_bullish_bar'] = df.inside_bar | (df.bullish_doji > 0.5) | df.bullish_bar
+    df['any_bearish_bar'] = df.inside_bar | (df.bearish_doji > 0.5) | df.bearish_bar
+
+    df = ind.ema_trend(df, ema_len)
+
+    df = ind.trend_rate(df, z, bars, source)
+
+    df['long_signal'] = df.any_bullish_bar & df.trend_down & df.ema_up  # & (df.inval_low < df.low)
+    df['short_signal'] = df.any_bearish_bar & df.trend_up & df.ema_down  # & (df.inval_high > df.high)
 
     return df
 
@@ -601,9 +495,9 @@ def calc_pnl_series(pnls, risk_pct):
     return pd.Series(bal_evo)
 
 
-def process(data, source, z, bar, mult, window, lb, width, show_plot):
+def process(data, source, z, bar, window, width, show_plot):
     # print(f"{tf = } {source = } {z = } {bar = } {mult = } {window = } {lb = } {atr_val = }")
-    df = ib_signals(data, t_type, z, bar, mult, source, window, lb, width)
+    df = ib_signals(data, t_type, z, bar, source, window, width)
     df = test_frac_swing(df)
     # plot_fractals(data, 1440)
 
@@ -653,7 +547,7 @@ def process(data, source, z, bar, mult, window, lb, width, show_plot):
     plot_chart(df, pair, t_type, window, bar, 6000, 1500, show=show_plot)
 
     return {'pair': pair, 'timeframe': tf, 'type': t_type, 'source': source, 'z_score': z,
-                        'bars': bar, 'mult': mult, 'ema_window': window, 'lookback': lb, 'width': width,
+                        'bars': bar, 'ema_window': window, 'width': width,
                         'num_signals': len_2, 'mean_long_r': mean_long, 'med_long_r': med_long,
                         'total_long_r': tot_long, 'mean_short_r': mean_short, 'med_short_r': med_short,
                         'total_short_r': tot_short, 'mean_r': mean_r, 'med_r': med_r, 'total_r': tot_r,
@@ -683,12 +577,8 @@ if __name__ == '__main__':
     z_scores = [2]
     # bars = list(range(8, 19, 2))
     bars = [10]
-    # mults = range(5, 11)
-    mults = [9]
     # windows = [200, 400, 600, 800, 1000]
     windows = [600]
-    # lookbacks = range(2, 15, 3)
-    lookbacks = [8]
     # wf_widths = [3, 5, 7]
     wf_widths = [5]
 
@@ -696,7 +586,7 @@ if __name__ == '__main__':
     counter = 0
 
     num_tests = (len(pairs) * len(timeframes.keys()) * len(tr_sources) * len(z_scores)
-                 * len(bars) * len(mults) * len(windows) * len(lookbacks) * len(wf_widths))
+                 * len(bars) * len(windows) * len(wf_widths))
     print(f"number of tests: {num_tests}")
 
     start = time.perf_counter()
@@ -707,11 +597,11 @@ if __name__ == '__main__':
         for tf in timeframes.keys():
             data = df_orig.copy()
             # data = hidden_flow(data, 100)
-            data = vwma(data, timeframes[tf])
+            data = ind.vwma(data, timeframes[tf])
             data = resample(data, tf)
-            for source, z, bar, mult, window, lb, width in it.product(tr_sources, z_scores, bars, mults, windows,
-                                                                        lookbacks, wf_widths):
-                results[counter] = process(data, source, z, bar, mult, window, lb, width, show_plot=True)
+            for source, z, bar, window, width in it.product(tr_sources, z_scores, bars, windows,
+                                                                        wf_widths):
+                results[counter] = process(data, source, z, bar, window, width, show_plot=True)
                 counter += 1
                 projected_time(counter)
 

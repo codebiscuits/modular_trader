@@ -38,6 +38,9 @@ class Agent():
         self.position = 0
         self.inval = None
         self.entry = None
+        self.r = None
+        self.open_time = None
+        self.candle = None
 
         if live:
             self.client = Client(api_key=keys.bPkey, api_secret=keys.bSkey)
@@ -58,6 +61,17 @@ class Agent():
         last_idx = self.df.index[-1]
         # if self.df.at[last_idx, 'inside_bar']:
         #     print(f"{self.stream} inside bar detected. {datetime.datetime.now().strftime('%d/%m/%y %H:%M')}")
+
+    def bar_direction(self):
+        self.df['up_bar'] = self.df.close > self.df.open
+        self.df['down_bar'] = self.df.open > self.df.close
+
+    def doji(self):
+        span = self.df.high - self.df.low
+        upper_wick = self.df.high - self.df[['open', 'close']].max(axis=1)
+        lower_wick = self.df[['open', 'close']].min(axis=1) - self.df.low
+        self.df['bullish_doji'] = (lower_wick / span) > 0.5
+        self.df['bearish_doji'] = (upper_wick / span) > 0.5
 
     def ema_trend(self):
         length = self.bias_lb
@@ -101,9 +115,11 @@ class Agent():
         self.df['inval_low'] = self.df.fractal_low.interpolate('pad')
 
     def entry_signals(self):
-        self.df['long_signal'] = self.df.inside_bar & self.df.trend_down & self.df.ema_up
+        self.df['long_signal'] = (self.df[['inside_bar', 'up_bar', 'bullish_doji']].any(axis=1)
+                                  & self.df.trend_down & self.df.ema_up)
         self.df['long_entry_inval'] = self.df.low.shift(1).rolling(2).min()
-        self.df['short_signal'] = self.df.inside_bar & self.df.trend_up & self.df.ema_down
+        self.df['short_signal'] = (self.df[['inside_bar', 'down_bar', 'bearish_doji']].any(axis=1)
+                                   & self.df.trend_up & self.df.ema_down)
         self.df['short_entry_inval'] = self.df.high.shift(1).rolling(2).max()
 
     def open_trade(self, last):
@@ -119,24 +135,40 @@ class Agent():
 
         vol_delta = 'positive vol delta' if last['vol_delta'] > 0 else 'negative vol delta'
         price = last['close']
+        now = datetime.datetime.now().strftime('%d/%m/%y %H:%M')
+        now_stamp = datetime.datetime.now()
 
         if last['long_signal']:
             self.position = 1
             self.inval = long_inval
             self.entry = price
-            now = datetime.datetime.now().strftime('%d/%m/%y %H:%M')
+            self.r = (price - long_inval) / price
+            self.open_time = now_stamp
             note = f"{self.pair} {self.timeframe} long signal @ ${price}, {long_inval = }, {vol_delta}"
             print(now, note)
-            pb.push_note(title=now, body=note)
+            # pb.push_note(title=now, body=note)
+            if last['inside_bar']:
+                self.candle = 'inside_bar'
+            elif last['bullish_doji']:
+                self.candle = 'doji'
+            elif last['up_bar']:
+                self.candle = 'up_bar'
 
         if last['short_signal']:
             self.position = -1
             self.inval = short_inval
             self.entry = price
-            now = datetime.datetime.now().strftime('%d/%m/%y %H:%M')
+            self.r = (short_inval - price) / price
+            self.open_time = now_stamp
             note = f"{self.pair} {self.timeframe} short signal @ ${price}, {short_inval = }, {vol_delta}"
             print(now, note)
-            pb.push_note(title=now, body=note)
+            # pb.push_note(title=now, body=note)
+            if last['inside_bar']:
+                self.candle = 'inside_bar'
+            elif last['bearish_doji']:
+                self.candle = 'doji'
+            elif last['down_bar']:
+                self.candle = 'down_bar'
 
     def trail_stop(self, method, mult=1):
         if method == 'fractals':
@@ -169,6 +201,8 @@ class Agent():
         self.make_dataframe(ohlc_data)
         if self.position == 0: # check for entry signals
             self.inside_bars()
+            self.doji()
+            self.bar_direction()
             self.ema_trend()
             self.trend_rate()
             self.williams_fractals()
@@ -182,14 +216,24 @@ class Agent():
                 pnl = (last['close'] - self.entry) / self.entry
             else:
                 pnl = (self.entry - last['close']) / self.entry
-            r = abs(self.entry - self.inval) / self.entry
             if self.stopped(last):
-                print(f"{self.pair} {self.timeframe} {pos} stopped out @ {pnl:.3%} PnL ({pnl/r:.1f})R")
+                now = datetime.datetime.now().strftime('%d/%m/%y %H:%M')
+                now_stamp = datetime.datetime.now()
+                duration = f"{(now_stamp - self.open_time).seconds//60} minutes"
+                note = (f"{self.pair} {self.timeframe} {pos} stopped out @ {pnl:.3%} PnL ({pnl/self.r:.1f})R, "
+                        f"{duration = }, signal candle: {self.candle}")
+                print(now, note)
+                pb.push_note(title=now, body=note)
+
                 self.position = 0
                 self.inval = None
                 self.entry = None
+                self.r = None
+                self.open_time = None
+                self.candle = None
+                print('all attributes reset')
             else:
                 self.inval = self.trail_stop('fractals')
                 last_idx = self.df.index[-1]
                 dist = abs(self.df.at[last_idx, 'close'] - self.inval) / self.df.at[last_idx, 'close']
-                print(f"{self.pair} {self.timeframe} currently in {pos} position @ {pnl:.3%} PnL ({pnl/r:.1f}R), {dist:.3%} from trailing stop")
+                print(f"{self.pair} {self.timeframe} currently in {pos} position @ {pnl:.3%} PnL ({pnl/self.r:.1f}R), {dist:.3%} from trailing stop")
