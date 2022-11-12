@@ -28,6 +28,7 @@ pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
 pd.set_option('display.precision', 3)
 
+pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 # FUNCTIONS
 
@@ -42,6 +43,8 @@ def on_close(ws, close_status_code, close_msg):
     if close_status_code or close_msg:
         print("close status code: " + str(close_status_code))
         print("close message: " + str(close_msg))
+        now = datetime.datetime.now().strftime('%d/%m/%y %H:%M')
+        pb.push_note(title=now, body='connection closed')
 
 
 def on_message(ws, msg):
@@ -125,50 +128,50 @@ ctx = getcontext()
 ctx.prec = 12
 
 # Settings
-# agent_params = pd.read_pickle('settings.pkl').to_dict('records')
+agent_params = pd.read_pickle('settings.pkl').to_dict('records')
 
-agent_params = [
-    {'pair': 'btcusdt',
-     'tf': '1m',
-     'bias_lb': 200,  # long-term ema trend for bullish/bearish bias
-     'bias_roc_lb': 8,  # lookback for judging if the long-term ema is moving up or down
-     'source': 'vwap',  # timeseries source for trend_rate calculation
-     'bars': 5,  # lookback for the ROC that is applied to the source in trend_rate
-     'mult': 5,  # bars * mult gives the lookback window for finding the rolling mean and stdev of the ROC series
-     'z': 1,  # z-score that the threshold is set to, to decide what is True or False in trend_rate
-     'width': 3  # for a high/low to qualify as a williams fractal, it must be the highest/lowest of this many bars
-     },
-    {'pair': 'ethusdt',
-     'tf': '1m',
-     'bias_lb': 200,  # long-term ema trend for bullish/bearish bias
-     'bias_roc_lb': 8,  # lookback for judging if the long-term ema is moving up or down
-     'source': 'vwap',  # timeseries source for trend_rate calculation
-     'bars': 5,  # lookback for the ROC that is applied to the source in trend_rate
-     'mult': 5,  # bars * mult gives the lookback window for finding the rolling mean and stdev of the ROC series
-     'z': 1,  # z-score that the threshold is set to, to decide what is True or False in trend_rate
-     'width': 3  # for a high/low to qualify as a williams fractal, it must be the highest/lowest of this many bars
-     },
-    {'pair': 'bnbusdt',
-     'tf': '1m',
-     'bias_lb': 200,  # long-term ema trend for bullish/bearish bias
-     'bias_roc_lb': 8,  # lookback for judging if the long-term ema is moving up or down
-     'source': 'vwap',  # timeseries source for trend_rate calculation
-     'bars': 5,  # lookback for the ROC that is applied to the source in trend_rate
-     'mult': 5,  # bars * mult gives the lookback window for finding the rolling mean and stdev of the ROC series
-     'z': 1,  # z-score that the threshold is set to, to decide what is True or False in trend_rate
-     'width': 3  # for a high/low to qualify as a williams fractal, it must be the highest/lowest of this many bars
-     },
-    {'pair': 'xrpusdt',
-     'tf': '1m',
-     'bias_lb': 200,  # long-term ema trend for bullish/bearish bias
-     'bias_roc_lb': 8,  # lookback for judging if the long-term ema is moving up or down
-     'source': 'vwap',  # timeseries source for trend_rate calculation
-     'bars': 5,  # lookback for the ROC that is applied to the source in trend_rate
-     'mult': 5,  # bars * mult gives the lookback window for finding the rolling mean and stdev of the ROC series
-     'z': 1,  # z-score that the threshold is set to, to decide what is True or False in trend_rate
-     'width': 3  # for a high/low to qualify as a williams fractal, it must be the highest/lowest of this many bars
-     }
-]
+# agent_params = [
+#     {'pair': 'btcusdt',
+#      'tf': '1m',
+#      'bias_lb': 200,  # long-term ema trend for bullish/bearish bias
+#      'bias_roc_lb': 8,  # lookback for judging if the long-term ema is moving up or down
+#      'source': 'vwap',  # timeseries source for trend_rate calculation
+#      'bars': 5,  # lookback for the ROC that is applied to the source in trend_rate
+#      'mult': 5,  # bars * mult gives the lookback window for finding the rolling mean and stdev of the ROC series
+#      'z': 1,  # z-score that the threshold is set to, to decide what is True or False in trend_rate
+#      'width': 3  # for a high/low to qualify as a williams fractal, it must be the highest/lowest of this many bars
+#      },
+#     {'pair': 'ethusdt',
+#      'tf': '1m',
+#      'bias_lb': 200,  # long-term ema trend for bullish/bearish bias
+#      'bias_roc_lb': 8,  # lookback for judging if the long-term ema is moving up or down
+#      'source': 'vwap',  # timeseries source for trend_rate calculation
+#      'bars': 5,  # lookback for the ROC that is applied to the source in trend_rate
+#      'mult': 5,  # bars * mult gives the lookback window for finding the rolling mean and stdev of the ROC series
+#      'z': 1,  # z-score that the threshold is set to, to decide what is True or False in trend_rate
+#      'width': 3  # for a high/low to qualify as a williams fractal, it must be the highest/lowest of this many bars
+#      },
+#     {'pair': 'bnbusdt',
+#      'tf': '1m',
+#      'bias_lb': 200,  # long-term ema trend for bullish/bearish bias
+#      'bias_roc_lb': 8,  # lookback for judging if the long-term ema is moving up or down
+#      'source': 'vwap',  # timeseries source for trend_rate calculation
+#      'bars': 5,  # lookback for the ROC that is applied to the source in trend_rate
+#      'mult': 5,  # bars * mult gives the lookback window for finding the rolling mean and stdev of the ROC series
+#      'z': 1,  # z-score that the threshold is set to, to decide what is True or False in trend_rate
+#      'width': 3  # for a high/low to qualify as a williams fractal, it must be the highest/lowest of this many bars
+#      },
+#     {'pair': 'xrpusdt',
+#      'tf': '1m',
+#      'bias_lb': 200,  # long-term ema trend for bullish/bearish bias
+#      'bias_roc_lb': 8,  # lookback for judging if the long-term ema is moving up or down
+#      'source': 'vwap',  # timeseries source for trend_rate calculation
+#      'bars': 5,  # lookback for the ROC that is applied to the source in trend_rate
+#      'mult': 5,  # bars * mult gives the lookback window for finding the rolling mean and stdev of the ROC series
+#      'z': 1,  # z-score that the threshold is set to, to decide what is True or False in trend_rate
+#      'width': 3  # for a high/low to qualify as a williams fractal, it must be the highest/lowest of this many bars
+#      }
+# ]
 
 live = False
 

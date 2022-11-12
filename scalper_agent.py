@@ -82,7 +82,7 @@ class Agent():
 
     def trend_rate(self):
         """returns True for any ohlc period which follows a strong trend as defined by the rate-of-change and bars params.
-        if price has moved at least a certain percentage within the set number of bars, it meets the criteria"""
+        if source series has moved at least a certain percentage within the set number of bars, it meets the criteria"""
 
         self.df[f"roc_{self.bars}"] = self.df[f"{self.source}"].pct_change(self.bars)
         m = self.df[f"roc_{self.bars}"].abs().rolling(self.bars * self.mult).mean()
@@ -200,19 +200,30 @@ class Agent():
     def run_calcs(self, data, ohlc_data):
         self.make_dataframe(ohlc_data)
         if self.position == 0: # check for entry signals
+            # print(1)
             self.inside_bars()
+            # print(2)
             self.doji()
+            # print(3)
             self.bar_direction()
+            # print(4)
             self.ema_trend()
+            # print(5)
             self.trend_rate()
+            # print(6)
             self.williams_fractals()
+            # print(7)
             self.entry_signals()
+            # print(8)
             last = self.df.to_dict('records')[-1]
+            # print(9)
             self.open_trade(last)
+            # print(10)
         else: # manage position
             pos = 'long' if self.position > 0 else 'short'
             last = self.df.to_dict('records')[-1]
             if pos == 'long':
+                # print(f"run calcs manage pos: {self.entry = }")
                 pnl = (last['close'] - self.entry) / self.entry
             else:
                 pnl = (self.entry - last['close']) / self.entry
@@ -220,8 +231,9 @@ class Agent():
                 now = datetime.datetime.now().strftime('%d/%m/%y %H:%M')
                 now_stamp = datetime.datetime.now()
                 duration = f"{(now_stamp - self.open_time).seconds//60} minutes"
-                note = (f"{self.pair} {self.timeframe} {pos} stopped out @ {pnl:.3%} PnL ({pnl/self.r:.1f})R, "
-                        f"{duration = }, signal candle: {self.candle}")
+                # print(f"run calcs if stopped: {self.r = }")
+                note = (f"{self.pair} {self.timeframe} {pos} stopped out @ {pnl:.3%} PnL ({pnl/self.r:.1f}R), "
+                        f"duration: {duration}, signal candle: {self.candle}")
                 print(now, note)
                 pb.push_note(title=now, body=note)
 
@@ -235,5 +247,8 @@ class Agent():
             else:
                 self.inval = self.trail_stop('fractals')
                 last_idx = self.df.index[-1]
+                # print(f"run calcs if not stopped: {self.df.at[last_idx, 'close'] = }")
                 dist = abs(self.df.at[last_idx, 'close'] - self.inval) / self.df.at[last_idx, 'close']
+                # print(f"run calcs if not stopped: {self.r = }")
                 print(f"{self.pair} {self.timeframe} currently in {pos} position @ {pnl:.3%} PnL ({pnl/self.r:.1f}R), {dist:.3%} from trailing stop")
+        # print(self.df.tail())

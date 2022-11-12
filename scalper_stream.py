@@ -67,7 +67,7 @@ class Ohlc_Stream():
                  'low': float(x[3]),
                  'close': float(x[4]),
                  'volume': float(x[7]),
-                 'vwap': (float(x[1]) + float(x[2]) + float(x[3]) + float(x[4])) / 4,
+                 'vwma': (float(x[1]) + float(x[2]) + float(x[3]) + float(x[4])) / 4,
                  # using ohlc4 to approximate vwap for old data
                  'vol_delta': (2 * float(x[10])) - float(x[7])
                  } for x in klines]
@@ -80,7 +80,7 @@ class Ohlc_Stream():
              'low': float(msg['k']['l']),
              'close': float(msg['k']['c']),
              'volume': float(msg['k']['q']),
-             'vwap': self.vwap(),
+             'vwma': self.vwap(),
              'vol_delta': volume_delta(msg)
              }
         )
