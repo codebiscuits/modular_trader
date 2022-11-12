@@ -340,7 +340,7 @@ def any_bar_signals(df, z, bars, source, ema_len):
     return df
 
 
-def plot_chart(df, pair, trend_type, length, roc_bars, tail_bars, head_bars, show):
+def plot_chart(df, pair, length, roc_bars, tail_bars, head_bars, show):
     # df = (df[['timestamp', 'open', 'high', 'low', 'close', 'volume', 'in_long', 'in_short', 'bal_evo']]
     #       .resample('1D', on='timestamp')
     #       .agg({'open': 'first',
@@ -497,7 +497,7 @@ def calc_pnl_series(pnls, risk_pct):
 
 def process(data, source, z, bar, window, width, show_plot):
     # print(f"{tf = } {source = } {z = } {bar = } {mult = } {window = } {lb = } {atr_val = }")
-    df = ib_signals(data, t_type, z, bar, source, window, width)
+    df = any_bar_signals(data, z, bar, source, window)
     df = test_frac_swing(df)
     # plot_fractals(data, 1440)
 
@@ -544,14 +544,12 @@ def process(data, source, z, bar, window, width, show_plot):
         exp_return = 0
 
     df['bal_evo'] = calc_pnl_series(df.all_rs.fillna(0), 1)
-    plot_chart(df, pair, t_type, window, bar, 6000, 1500, show=show_plot)
+    # plot_chart(df, pair, window, bar, 6000, 1500, show=show_plot)
 
-    return {'pair': pair, 'timeframe': tf, 'type': t_type, 'source': source, 'z_score': z,
-                        'bars': bar, 'ema_window': window, 'width': width,
-                        'num_signals': len_2, 'mean_long_r': mean_long, 'med_long_r': med_long,
-                        'total_long_r': tot_long, 'mean_short_r': mean_short, 'med_short_r': med_short,
-                        'total_short_r': tot_short, 'mean_r': mean_r, 'med_r': med_r, 'total_r': tot_r,
-                        'win_rate': win_rate, 'profit_factor': profit_factor, 'all_rs': all_rs}
+    return {'pair': pair, 'timeframe': tf, 'source': source, 'z_score': z, 'bars': bar, 'ema_window': window, 'width': width,
+            'num_signals': len_2, 'mean_long_r': mean_long, 'med_long_r': med_long, 'total_long_r': tot_long,
+            'mean_short_r': mean_short, 'med_short_r': med_short, 'total_short_r': tot_short, 'mean_r': mean_r,
+            'med_r': med_r, 'total_r': tot_r, 'win_rate': win_rate, 'profit_factor': profit_factor, 'all_rs': all_rs}
 
 
 # MAIN
@@ -565,22 +563,22 @@ if __name__ == '__main__':
 
     # pairs = ['BTCUSDT', 'ETHUSDT', 'ETHBTC', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'SOLUSDT', 'DOGEUSDT', 'DOTUSDT',
     #          'MATICUSDT']
-    pairs = ['BTCUSDT']
+    pairs = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT']
 
     t_type = 'trend'  # trend type ('trend' or 'breakout')
 
-    # timeframes = {'5min': 5, '15min': 15, '30min': 30, '1h': 60}
-    timeframes = {'5min': 5}
-    # tr_sources = ['close', 'vwma']
-    tr_sources = ['close']
-    # z_scores = [1, 1.5, 2, 2.5, 3]
-    z_scores = [2]
-    # bars = list(range(8, 19, 2))
-    bars = [10]
-    # windows = [200, 400, 600, 800, 1000]
-    windows = [600]
-    # wf_widths = [3, 5, 7]
-    wf_widths = [5]
+    timeframes = {'5min': 5, '15min': 15, '30min': 30, '1h': 60}
+    # timeframes = {'5min': 5}
+    tr_sources = ['close', 'vwma']
+    # tr_sources = ['close']
+    z_scores = [1, 1.5, 2, 2.5, 3]
+    # z_scores = [2]
+    bars = [5, 10, 15, 20]
+    # bars = [10]
+    windows = [200, 400, 600, 800, 1000]
+    # windows = [600]
+    wf_widths = [3, 5, 7]
+    # wf_widths = [5]
 
     results = {}
     counter = 0
@@ -599,8 +597,7 @@ if __name__ == '__main__':
             # data = hidden_flow(data, 100)
             data = ind.vwma(data, timeframes[tf])
             data = resample(data, tf)
-            for source, z, bar, window, width in it.product(tr_sources, z_scores, bars, windows,
-                                                                        wf_widths):
+            for source, z, bar, window, width in it.product(tr_sources, z_scores, bars, windows, wf_widths):
                 results[counter] = process(data, source, z, bar, window, width, show_plot=True)
                 counter += 1
                 projected_time(counter)

@@ -17,7 +17,7 @@ pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
 pd.set_option('display.precision', 4)
 
-df = pd.read_pickle('../../PycharmProjects/size_with_trend/results.pkl')
+df = pd.read_pickle('results.pkl')
 # df_v = pd.read_pickle('vwma_results.pkl')
 # df_c = pd.read_pickle('close_results.pkl')
 # df_a = pd.read_pickle('results_all_tfs.pkl')
@@ -155,10 +155,8 @@ for row in df.itertuples():
         res_dict[res_count] = {'pair': row.pair,
                                'tf': convert_tf(row.timeframe),
                                'bias_lb': row.ema_window,
-                               'bias_roc_lb': row.lookback,
                                'source': row.source,
                                'bars': row.bars,
-                               'mult': row.mult,
                                'z': row.z_score,
                                'width': row.width,
                                'trades': len(all_rs),
@@ -187,6 +185,6 @@ res_df['score'] = (res_df.pnl_pct.rank() +
                    / 8)
 # print(res_df.sort_values('score', ascending=False).reset_index(drop=True).head(100))
 settings = (res_df.sort_values('score', ascending=False).reset_index(drop=True).head(20)
-.loc[:, ['pair', 'tf', 'bias_lb', 'bias_roc_lb', 'source', 'bars', 'mult', 'z', 'width']])
+.loc[:, ['pair', 'tf', 'bias_lb', 'source', 'bars', 'z', 'width']])
 print(settings)
 settings.to_pickle('settings.pkl')
