@@ -3,7 +3,7 @@ from json.decoder import JSONDecodeError
 import binance_funcs as funcs
 from binance.client import Client
 from pathlib import Path
-from config import ohlc_data
+from config import testing
 import pandas as pd
 from datetime import datetime, timedelta
 import statistics as stats
@@ -15,16 +15,13 @@ from timers import Timer
 from typing import Union, List, Tuple, Dict, Set, Optional, Any
 import sys
 
-client = Client(keys.bPkey, keys.bSkey)
+client = Client(keys.bPkey, keys.bSkey, testnet=testing)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 ctx = getcontext()
 ctx.prec = 12
 
 
 # now = datetime.now().strftime('%d/%m/%y %H:%M')
-
-
-
 
 
 def adjust_max_positions(max_pos: int, sizing: dict) -> int:

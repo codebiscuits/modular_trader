@@ -5,6 +5,8 @@ from datetime import datetime
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 now = datetime.now().strftime('%d/%m/%y %H:%M')
 
+testing = False
+
 not_pairs = ['GBPUSDT', 'AUDUSDT', 'BUSDUSDT', 'EURUSDT', 'TUSDUSDT', 
              'USDCUSDT', 'PAXUSDT', 'COCOSUSDT', 'SUSDUSDT', 'USDPUSDT', 
              'USTUSDT']

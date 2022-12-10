@@ -3,14 +3,14 @@ from json.decoder import JSONDecodeError
 import binance_funcs as funcs
 from binance.client import Client
 from pathlib import Path
-from config import ohlc_data
+from config import ohlc_data, testing
 import pandas as pd
 from datetime import datetime, timedelta
 import statistics as stats
 from pushbullet import Pushbullet
 import time
 
-client = Client(keys.bPkey, keys.bSkey)
+client = Client(keys.bPkey, keys.bSkey, testnet=testing)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 

@@ -120,7 +120,8 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
                 size_l, usdt_size_l, size_s, usdt_size_s = funcs.get_size(agent, price, session.bal, risk)
 
             # remove indicators to avoid errors
-            df_2 = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']]
+            df_2 = df[['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'quote_vol',
+                       'num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol']]
 
             if inval == 0:
                 note = f'{pair} supertrend 0 error, skipping pair'

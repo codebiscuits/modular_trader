@@ -59,6 +59,7 @@ def iterations(pair, tf):
 
 
 iterations('BTCUSDT', '1m')
+iterations('ETHUSDT', '1m')
 
 for pair in pairs:
     if pair in not_pairs:

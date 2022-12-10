@@ -8,9 +8,10 @@ import keys
 import binance.enums as be
 from decimal import Decimal, getcontext
 from pprint import pprint
+from config import testing
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
-client = Client(keys.bPkey, keys.bSkey)
+client = Client(keys.bPkey, keys.bSkey, testnet=testing)
 ctx = getcontext()
 ctx.prec = 12
 

@@ -17,7 +17,7 @@ pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
 pd.set_option('display.precision', 4)
 
-df = pd.read_pickle('results.pkl')
+df = pd.read_pickle('../results.pkl')
 # df_v = pd.read_pickle('vwma_results.pkl')
 # df_c = pd.read_pickle('close_results.pkl')
 # df_a = pd.read_pickle('results_all_tfs.pkl')

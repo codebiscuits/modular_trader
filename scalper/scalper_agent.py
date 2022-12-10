@@ -22,21 +22,21 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 class Agent():
 
-    def __init__(self, params, live):
+    def __init__(self, params, id, live):
 
         self.pair = params['pair']
         self.timeframe = params['tf']
         self.stream = f"{self.pair.lower()}@kline_{self.timeframe}"
         self.bias_lb = params['bias_lb']
-        self.bias_roc_lb = params['bias_roc_lb']
         self.source = params['source']
         self.bars = params['bars']
-        self.mult = params['mult']
         self.z = params['z']
         self.width = params['width']
-        self.name = f"{self.pair}_{self.timeframe}_{self.bias_lb}_{self.source}_{self.bars}_{self.mult}_{self.z}_{self.width}"
+        self.name = f"{self.pair}_{self.timeframe}_{self.bias_lb}_{self.source}_{self.bars}_{self.z}_{self.width}"
+        self.short_name = f"{self.pair}_{self.timeframe}_{id}"
         self.position = 0
-        self.inval = None
+        self.inval_atr = None
+        self.inval_frac = None
         self.entry = None
         self.r = None
         self.open_time = None
@@ -48,9 +48,9 @@ class Agent():
             self.client = Client(api_key=keys.bPkey, api_secret=keys.bSkey, testnet=True)
 
         # max_lb = the highest of bias_lb and bars*mult, but not more than 1000
-        self.max_lb = min(max(self.bias_lb, (self.bars * self.mult)), 1000)
+        self.max_lb = min(max(self.bias_lb, (self.bars * 9)), 1000)
 
-        print(f"init agent: {self.name}")
+        print(f"init agent {id}: {self.name}")
 
     def make_dataframe(self, ohlc_data):
         self.df = pd.DataFrame(ohlc_data)
@@ -75,7 +75,7 @@ class Agent():
 
     def ema_trend(self):
         length = self.bias_lb
-        span = self.bias_roc_lb
+        span = int(length/100)
         self.df[f"ema_{length}"] = self.df.close.ewm(length).mean()
         self.df['ema_up'] = self.df[f"ema_{length}"] > self.df[f"ema_{length}"].shift(span)
         self.df['ema_down'] = self.df[f"ema_{length}"] < self.df[f"ema_{length}"].shift(span)
@@ -85,8 +85,8 @@ class Agent():
         if source series has moved at least a certain percentage within the set number of bars, it meets the criteria"""
 
         self.df[f"roc_{self.bars}"] = self.df[f"{self.source}"].pct_change(self.bars)
-        m = self.df[f"roc_{self.bars}"].abs().rolling(self.bars * self.mult).mean()
-        s = self.df[f"roc_{self.bars}"].abs().rolling(self.bars * self.mult).std()
+        m = self.df[f"roc_{self.bars}"].abs().rolling(self.bars * 9).mean()
+        s = self.df[f"roc_{self.bars}"].abs().rolling(self.bars * 9).std()
         self.df['thresh'] = m + (self.z * s)
 
         self.df['trend_up'] = self.df[f"roc_{self.bars}"] > self.df['thresh']
@@ -101,28 +101,18 @@ class Agent():
         self.df['atr'] = self.df['tr'].ewm(lb).mean()
         self.df.drop(['tr1', 'tr2', 'tr3', 'tr'], axis=1, inplace=True)
 
-    def williams_fractals(self):
-        """calculates williams fractals on the highs and lows.
-        frac_width determines how many candles are used to decide if the current candle is a local high/low, so a frac_width
-        of five will look at the current candle, the two previous candles, and the two subsequent ones"""
-
-        self.df['fractal_high'] = np.where(self.df.high == self.df.high.rolling(self.width, center=True).max(),
-                                           self.df.high, np.nan)
-        self.df['fractal_low'] = np.where(self.df.low == self.df.low.rolling(self.width, center=True).min(),
-                                          self.df.low, np.nan)
-
-        self.df['inval_high'] = self.df.fractal_high.interpolate('pad')
-        self.df['inval_low'] = self.df.fractal_low.interpolate('pad')
-
     def entry_signals(self):
         self.df['long_signal'] = (self.df[['inside_bar', 'up_bar', 'bullish_doji']].any(axis=1)
                                   & self.df.trend_down & self.df.ema_up)
-        self.df['long_entry_inval'] = self.df.low.shift(1).rolling(2).min()
+
         self.df['short_signal'] = (self.df[['inside_bar', 'down_bar', 'bearish_doji']].any(axis=1)
                                    & self.df.trend_up & self.df.ema_down)
+
+    def open_trade(self):
+        self.df['long_entry_inval'] = self.df.low.shift(1).rolling(2).min()
         self.df['short_entry_inval'] = self.df.high.shift(1).rolling(2).max()
 
-    def open_trade(self, last):
+        last = self.df.to_dict('records')[-1]
         if 'inval_low' in last:
             long_inval = min(last['inval_low'], last['long_entry_inval'])
         else:
@@ -173,10 +163,12 @@ class Agent():
     def trail_stop(self, method, mult=1):
         if method == 'fractals':
             self.williams_fractals()
+            self.df['inval_high'] = self.df.fractal_high.interpolate('pad')
+            self.df['inval_low'] = self.df.fractal_low.interpolate('pad')
         elif method == 'atr':
             self.calc_atr(10)
-            self.df['inval_high'] = self.df.vwap + (self.df.atr * mult)
-            self.df['inval_low'] = self.df.vwap - (self.df.atr * mult)
+            self.df['inval_high'] = self.df.vwma + (self.df.atr * mult)
+            self.df['inval_low'] = self.df.vwma - (self.df.atr * mult)
 
         last_idx = self.df.index[-1]
         if self.position > 0:
@@ -211,28 +203,26 @@ class Agent():
             # print(5)
             self.trend_rate()
             # print(6)
-            self.williams_fractals()
-            # print(7)
             self.entry_signals()
+            # print(7)
+            self.open_trade()
             # print(8)
-            last = self.df.to_dict('records')[-1]
-            # print(9)
-            self.open_trade(last)
-            # print(10)
         else: # manage position
-            pos = 'long' if self.position > 0 else 'short'
             last = self.df.to_dict('records')[-1]
-            if pos == 'long':
+            if self.position > 0:
+                pos = 'long'
                 # print(f"run calcs manage pos: {self.entry = }")
                 pnl = (last['close'] - self.entry) / self.entry
             else:
+                pos = 'short'
                 pnl = (self.entry - last['close']) / self.entry
+
             if self.stopped(last):
                 now = datetime.datetime.now().strftime('%d/%m/%y %H:%M')
                 now_stamp = datetime.datetime.now()
                 duration = f"{(now_stamp - self.open_time).seconds//60} minutes"
                 # print(f"run calcs if stopped: {self.r = }")
-                note = (f"{self.pair} {self.timeframe} {pos} stopped out @ {pnl:.3%} PnL ({pnl/self.r:.1f}R), "
+                note = (f"{self.short_name} {pos} stopped out @ {pnl:.3%} PnL ({pnl/self.r:.1f}R), "
                         f"duration: {duration}, signal candle: {self.candle}")
                 print(now, note)
                 pb.push_note(title=now, body=note)
@@ -245,10 +235,11 @@ class Agent():
                 self.candle = None
                 print('all attributes reset')
             else:
-                self.inval = self.trail_stop('fractals')
+                self.inval = self.trail_stop('atr')
                 last_idx = self.df.index[-1]
                 # print(f"run calcs if not stopped: {self.df.at[last_idx, 'close'] = }")
                 dist = abs(self.df.at[last_idx, 'close'] - self.inval) / self.df.at[last_idx, 'close']
                 # print(f"run calcs if not stopped: {self.r = }")
-                print(f"{self.pair} {self.timeframe} currently in {pos} position @ {pnl:.3%} PnL ({pnl/self.r:.1f}R), {dist:.3%} from trailing stop")
+                print(f"{self.short_name} currently in {pos} position @ {pnl:.3%} PnL ({pnl/self.r:.1f}R), "
+                      f"{dist:.3%} ({dist/self.r:.1f}R) from trailing stop")
         # print(self.df.tail())

@@ -14,8 +14,9 @@ import utility_funcs as uf
 from timers import Timer
 from typing import Union, List, Tuple, Dict, Set, Optional, Any
 from collections import Counter
+from config import testing
 
-client = Client(keys.bPkey, keys.bSkey)
+client = Client(keys.bPkey, keys.bSkey, testnet=testing)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 ctx = getcontext()
 ctx.prec = 12
@@ -418,14 +419,13 @@ def get_ohlc(pair: str, timeframe: str, span: str = "1 year ago UTC") -> pd.Data
           '1w': Client.KLINE_INTERVAL_1WEEK,
           }
     klines = client.get_historical_klines(pair, tf.get(timeframe), span)
-    cols = ['timestamp', 'open', 'high', 'low', 'close', 'base vol', 'close time',
-            'volume', 'num trades', 'taker buy base vol', 'taker buy quote vol', 'ignore']
+    cols = ['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'close_time',
+            'quote_vol', 'num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol', 'ignore']
     df = pd.DataFrame(klines, columns=cols)
     df['timestamp'] = df['timestamp'] * 1000000
     df = df.astype(float)
     df['timestamp'] = pd.to_datetime(df['timestamp'])
-    df.drop(['base vol', 'close time', 'num trades', 'taker buy base vol',
-             'taker buy quote vol', 'ignore'], axis=1, inplace=True)
+    df = df.drop(['close_time', 'ignore'], axis=1)
 
     return df
 
@@ -452,14 +452,13 @@ def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame) -> pd.DataFrame
     old_end = int(old_df.at[len(old_df) - 1, 'timestamp'].timestamp()) * 1000
     klines = client.get_klines(symbol=pair, interval=tf.get(timeframe),
                                startTime=old_end)
-    cols = ['timestamp', 'open', 'high', 'low', 'close', 'base vol', 'close time',
-            'volume', 'num trades', 'taker buy base vol', 'taker buy quote vol', 'ignore']
+    cols = ['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'close_time',
+            'quote_vol', 'num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol', 'ignore']
     df = pd.DataFrame(klines, columns=cols)
     df['timestamp'] = df['timestamp'] * 1000000
     df = df.astype(float)
     df['timestamp'] = pd.to_datetime(df['timestamp'])
-    df.drop(['base vol', 'close time', 'num trades', 'taker buy base vol',
-             'taker buy quote vol', 'ignore'], axis=1, inplace=True)
+    df = df.drop(['close_time', 'ignore'], axis=1)
 
     df_new = pd.concat([old_df[:-1], df], copy=True, ignore_index=True)
     return df_new
@@ -481,7 +480,11 @@ def resample_ohlc(session, df):
                                                  'high': 'max',
                                                  'low': 'min',
                                                  'close': 'last',
-                                                 'volume': 'sum'})
+                                                 'base_vol': 'sum',
+                                                 'quote_vol': 'sum',
+                                                 'num_trades': 'sum',
+                                                 'taker_buy_base_vol': 'sum',
+                                                 'taker_buy_quote_vol': 'sum'})
     if len(df) > session.max_length:
         # print(f"{pair} dataframe has {len(df)} bars, trimming to {ohlc_len}")
         df = df.tail(session.max_length)

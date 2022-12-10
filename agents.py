@@ -17,8 +17,9 @@ import binance.enums as be
 from decimal import Decimal, getcontext
 from pprint import pprint
 import sys
+from config import testing
 
-client = Client(keys.bPkey, keys.bSkey)
+client = Client(keys.bPkey, keys.bSkey, testnet=testing)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 ctx = getcontext()
 ctx.prec = 12
@@ -572,28 +573,28 @@ class Agent():
         if not filepath.exists():
             filepath.touch()
         with open(filepath, "w") as file:
-            if state in ['open', 'all']:
+            if state in {'open', 'all'}:
                 json.dump(self.open_trades, file)
-            if state in ['sim', 'all']:
+            if state in {'sim', 'all'}:
                 json.dump(self.sim_trades, file)
-            if state in ['tracked', 'all']:
+            if state in {'tracked', 'all'}:
                 json.dump(self.tracked_trades, file)
-            if state in ['closed', 'all']:
+            if state in {'closed', 'all'}:
                 json.dump(self.closed_trades, file)
-            if state in ['closed_sim', 'all']:
+            if state in {'closed_sim', 'all'}:
                 json.dump(self.closed_sim_trades, file)
         b.stop()
 
     def set_fixed_risk(self, session, direction: str) -> None:
-        '''calculates fixed risk setting for new trades based on recent performance 
+        """calculates fixed risk setting for new trades based on recent performance
         and previous setting. if recent performance is very good, fr is increased slightly.
-        if not, fr is decreased by thirds'''
+        if not, fr is decreased by thirds"""
 
         o = Timer(f'set_fixed_risk-{direction}')
         o.start()
 
         def reduce_fr(factor: float, fr_prev: float, fr_inc: float):
-            '''reduces fixed_risk by factor (with the floor value being 0)'''
+            """reduces fixed_risk by factor (with the floor value being 0)"""
             ideal = fr_prev * factor
             reduce = max(ideal, fr_inc)
             return max((fr_prev - reduce), 0)
@@ -688,23 +689,23 @@ class Agent():
         if fr != fr_prev:
             title = f'{now} {self.name}'
             note = f'{direction} fixed risk adjusted from {round(fr_prev * 10000, 1)}bps to {round(fr * 10000, 1)}bps'
-            pb.push_note(title, note)
+            # pb.push_note(title, note)
             print(note)
             print(f"calculated {direction} score: {score}, pnls: {pnls}")
         o.stop()
         return round(fr, 5)
 
     def test_fixed_risk(self, fr_l: float, fr_s: float) -> None:
-        '''manually overrides fixed risk settings for testing purposes'''
+        """manually overrides fixed risk settings for testing purposes"""
         if not self.live:
             print(f'*** WARNING: FIXED RISK MANUALLY SET to {fr_l} / {fr_s} ***')
             self.fixed_risk_l = fr_l
             self.fixed_risk_s = fr_s
 
     def set_max_pos(self) -> int:
-        '''sets the maximum number of open positions for the agent. if the median 
-        pnl of current open positions is greater than 0, max pos will be set to 50, 
-        otherwise max_pos will be set to 20'''
+        """sets the maximum number of open positions for the agent. if the median
+        pnl of current open positions is greater than 0, max pos will be set to 50,
+        otherwise max_pos will be set to 20"""
 
         p = Timer('set_max_pos')
         p.start()
@@ -812,8 +813,8 @@ class Agent():
         return {'value': f"{value:.2f}", 'pf%': pct, 'or_R': open_risk_r, 'or_$': open_risk}
 
     def update_non_live_tp(self, asset: str, tp_pct: int, switch: str) -> dict[str, float | str | Any]:
-        '''updates sizing dictionaries (real/sim) with new open trade stats when
-        state is sim or real but not live and a take-profit is triggered'''
+        """updates sizing dictionaries (real/sim) with new open trade stats when
+        state is sim or real but not live and a take-profit is triggered"""
         qw = Timer('update_non_live_tp')
         qw.start()
         tp_scalar = 1 - (tp_pct / 100)
@@ -832,7 +833,7 @@ class Agent():
         return {'value': f"{val:.2f}", 'pf%': pf, 'or_R': or_R, 'or_$': or_dol}
 
     def init_in_pos(self, pair: str) -> None:
-        '''initialises the in_pos dictionary for the current pair and fills it with values'''
+        """initialises the in_pos dictionary for the current pair and fills it with values"""
 
         f = Timer(f'init_in_pos')
         f.start()
@@ -848,8 +849,8 @@ class Agent():
         f.stop()
 
     def too_new(self, df: pd.DataFrame) -> bool:
-        '''returns True if there is less than 200 periods of history AND if
-        there are no current positions in the asset'''
+        """returns True if there is less than 200 periods of history AND if
+        there are no current positions in the asset"""
 
         g = Timer('too_new')
         g.start()
@@ -2249,6 +2250,7 @@ class EMACross(Agent):
         else:
             inval = None
             inval_ratio = None
+
         k.stop()
         return {'signal': signal, 'inval': inval, 'inval_ratio': inval_ratio}
 

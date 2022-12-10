@@ -22,7 +22,9 @@ def atr_bands(df: pd.DataFrame, lb: int, mult: float) -> None:
     df['hl_avg'] = (df.high + df.low) / 2
     df[f'atr-{lb}-{mult}-upper'] = (df.hl_avg + mult * df[f'atr-{lb}'])
     df[f'atr-{lb}-{mult}-lower'] = (df.hl_avg - mult * df[f'atr-{lb}'])
-    df.drop(['hl_avg', f'atr-{lb}'], axis=1, inplace=True)  
+    df.drop(['hl_avg', f'atr-{lb}'], axis=1, inplace=True)
+
+    return df
 
 
 def supertrend(df: pd.DataFrame, lb: int, mult: float) -> None:
@@ -346,6 +348,22 @@ def ema_trend(df, length):
 def vol_delta_div(df):
     df['roc'] = df.close.pct_change(1)
     # df['vol_delta'] = (2 * df.)
+
+
+def rsi(s: pd.Series, lookback: int=14):
+    avg_up = s.pct_change().clip(lower=0).rolling(lookback).mean()
+    avg_dn = s.pct_change().clip(upper=0).abs().rolling(lookback).mean()
+
+    return pd.Series(100 - (100/(1+(avg_up/avg_dn))))
+
+
+def ats_z(df: pd.DataFrame, lookback: int):
+    avg_trade_size_sm = (df.base_vol / df.num_trades).ewm(5).mean()
+    ats_long_mean = avg_trade_size_sm.rolling(lookback).mean()
+    ats_std = avg_trade_size_sm.rolling(lookback).std()
+    df['ats_z'] = (avg_trade_size_sm - ats_long_mean) / ats_std
+
+    return df
 
 
 # def supertrend_new(df: pd.DataFrame, lb: int, mult: float) -> None:

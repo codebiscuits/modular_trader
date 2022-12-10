@@ -9,8 +9,9 @@ import indicators as ind
 from typing import Union, List, Tuple, Dict, Set, Optional, Any
 from collections import Counter
 import sys
+from config import testing
 
-client = Client(keys.bPkey, keys.bSkey)
+client = Client(keys.bPkey, keys.bSkey, testnet=testing)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 
@@ -341,7 +342,7 @@ class MARGIN_SESSION:
             elif vals[0] == 'hma':
                 df[f"hma-{vals[1]}"] = ind.hma(df.close, int(vals[1]))
             elif vals[0] == 'atr':
-                ind.atr_bands(df, int(vals[1]), float(vals[2]))
+                df = ind.atr_bands(df, int(vals[1]), float(vals[2]))
             elif vals[0] == 'st':
                 df = ind.supertrend(df, int(vals[1]), float(vals[2]))
 

@@ -9,12 +9,13 @@ import binance.exceptions as bx
 from datetime import timezone
 from pushbullet import Pushbullet
 from original_scanner import setup_scan
+from config import testing
 
 # import argparse
 
 # setup
 if __name__ == '__main__':
-    client = Client(keys.bPkey, keys.bSkey)
+    client = Client(keys.bPkey, keys.bSkey, testnet=testing)
     pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
     script_start = time.perf_counter()
