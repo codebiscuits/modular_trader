@@ -6,6 +6,9 @@ import indicators as ind
 import binance_funcs as funcs
 import datetime
 import time
+from itertools import product
+
+print(f"{datetime.datetime.now().strftime('%d/%m/%y %H:%M')} - Running ATS_Z Backtesting")
 
 all_start = time.perf_counter()
 
@@ -108,7 +111,7 @@ tf = '6h'
 min_z = 2
 atsz_lb = 200
 mults = [1, 2, 3, 4]
-rr_ratio = 2
+rr_ratios = [1, 2, 3]
 
 count = 0
 completed = 0
@@ -130,11 +133,21 @@ trade_log = dict(
     ats_z=[],
     pattern=[],
     ema=[],
+    rr_ratio=[],
     r=[],
     pnl_r=[],
+    win=[],
     duration=[]
 )
-for pair in pairs:
+for n, pair in enumerate(pairs):
+    split = time.perf_counter() - all_start
+    completed = n/len(pairs)
+    projected = round(split * ((1 - completed) / completed)) if n else 360000
+    remaining_hours = f"{projected // 3600}h" if (projected // 3600) else ''
+    remaining_mins = f"{(projected // 60) % 60}m"# if ((projected // 60) % 60) else ''
+    remaining_secs = f"{projected % 60}s" if (projected % 60) else ''
+    remaining = ' '.join([remaining_hours, remaining_mins, remaining_secs])
+    print(f"{datetime.datetime.now().strftime('%d/%m/%y %H:%M')} - Backtesting, {completed:.1%} complete, {remaining} remaining")
     signals = []
 
     # get 1min data
@@ -149,7 +162,7 @@ for pair in pairs:
     data_1h = funcs.update_ohlc(pair, '1h', data_1h)
     data_1h = data_1h.tail(8760).reset_index(drop=True)
 
-    for mult in mults:
+    for mult, ratio in product(mults, rr_ratios):
         df = data_1h.copy()
         if tf != '1h':
             df = funcs.resample_ohlc(tf, 0, df)
@@ -189,10 +202,11 @@ for pair in pairs:
             record_dict['inval_ratio'] = row.close / row.atr_lower # current price proportional to inval price
 
             if bullish_atsz and bullish_candles and (record_dict['inval_ratio'] > 1):
-                record_dict['target'] = row.close * (record_dict['inval_ratio'] ** rr_ratio)
+                record_dict['target'] = row.close * (record_dict['inval_ratio'] ** ratio)
                 record_dict['time'] = row.timestamp.timestamp()
                 record_dict['pair'] = pair
                 record_dict['timeframe'] = tf
+                record_dict['rr_ratio'] = ratio
                 record_dict['entry'] = row.close
                 record_dict['avg_volume'] = row.avg_volume
                 record_dict['vol_delta_1'] = row.vol_delta_1
@@ -256,35 +270,40 @@ for pair in pairs:
         trade_log['atr_mult'].append(signal['atr_mult'])
         trade_log['start'].append(start_stamp)
         trade_log['entry_price'].append(entry_price)
+        trade_log['rr_ratio'].append(signal['rr_ratio'])
         trade_log['init_stop'].append(init_stop)
         trade_log['exit_price'].append(trade_result['exit_price'])
         trade_log['exit_time'].append(trade_result['exit_time'])
         trade_log['avg_volume'].append(signal['avg_volume'])
+        trade_log['vol_delta_1'].append(signal['vol_delta_1'])
+        trade_log['vol_delta_10'].append(signal['vol_delta_10'])
+        trade_log['vol_delta_100'].append(signal['vol_delta_100'])
         trade_log['stoch_rsi'].append(signal['stoch_rsi'])
         trade_log['ats_z'].append(signal['ats_z'])
         trade_log['pattern'].append(signal['pattern'])
         trade_log['ema'].append(signal['bullish_ema'])
         trade_log['r'].append(r)
         trade_log['pnl_r'].append(pnl_r)
+        trade_log['win'].append(pnl_r > 0)
         trade_log['duration'].append(trade_duration)
 
 ########################################################################################################################
 
 results_df = pd.DataFrame.from_dict(trade_log)
 results_df['start'] = pd.to_datetime(results_df.start*1000000000)
-# df = df.loc[df.stoch_rsi < 0.5]
 
 results_df = results_df.loc[results_df.exit == 'oco']
+results_df.to_pickle('forest_input.pkl')
 
 # print('overall')
 # print(f"{len(results_df)} trades, winrate: {len(results_df.loc[results_df.pnl_r > 0]) / len(results_df):.1%}, "
 #           f"avg_pnl_r: {results_df.pnl_r.mean():.2f}\n")
-
-for i, group in results_df.groupby(['atr_mult']):
-    print(f"{i}, {len(group)} trades, winrate: {len(group.loc[group.pnl_r > 0]) / len(group):.1%}, "
-          f"avg_pnl_r: {group.pnl_r.mean():.2f}")
-    print(group.sort_values('pnl_r', ascending=False).head())
-    print(group.sort_values('pnl_r', ascending=False).tail())
+#
+# for i, group in results_df.groupby(['atr_mult']):
+#     print(f"{i}, {len(group)} trades, winrate: {len(group.loc[group.pnl_r > 0]) / len(group):.1%}, "
+#           f"avg_pnl_r: {group.pnl_r.mean():.2f}")
+#     print(group.sort_values('pnl_r', ascending=False).head())
+#     print(group.sort_values('pnl_r', ascending=False).tail())
 
 all_end = time.perf_counter()
 elapsed = round(all_end - all_start)
