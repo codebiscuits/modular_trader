@@ -9,16 +9,9 @@ import time
 
 all_start = time.perf_counter()
 
-# TODO investigate relationship between avg_volume and outcome
-# TODO investigate relationship between ats_z value and outcome
-# TODO investigate relationship between stoch_rsi and outcome
-# TODO investigate relationship between candles and outcome
-# TODO investigate relationship between timeframe and outcome
 # TODO investigate relationship between ats_z lookback and outcome
-# TODO investigate relationship between ema and outcome
 # TODO investigate relationship between rr_ratio and outcome
 # TODO investigate relationship between atr_mult and outcome
-# TODO investigate relationship between ats_z value and outcome
 # TODO investigate relationship between doji score and outcome
 
 # TODO try doing the same test with completely random entries and see how the outcome compares to ats_z filtered entries
@@ -130,6 +123,9 @@ trade_log = dict(
     exit_price=[],
     exit_time=[],
     avg_volume=[],
+    vol_delta_1=[],
+    vol_delta_10=[],
+    vol_delta_100=[],
     stoch_rsi=[],
     ats_z=[],
     pattern=[],
@@ -158,6 +154,9 @@ for pair in pairs:
         if tf != '1h':
             df = funcs.resample_ohlc(tf, 0, df)
         df['avg_volume'] = df.quote_vol.rolling(50).mean()
+        df['vol_delta_1'] = (df.taker_buy_base_vol - df.base_vol) > 0
+        df['vol_delta_10'] = (df.taker_buy_base_vol - df.base_vol).rolling(10).sum() > 0
+        df['vol_delta_100'] = (df.taker_buy_base_vol - df.base_vol).rolling(100).sum() > 0
         df = ind.ats_z(df, atsz_lb)
         df['atsz_max'] = df.ats_z.rolling(10).max()
         df['ema-200'] = df.close.ewm(200).mean()
@@ -196,6 +195,9 @@ for pair in pairs:
                 record_dict['timeframe'] = tf
                 record_dict['entry'] = row.close
                 record_dict['avg_volume'] = row.avg_volume
+                record_dict['vol_delta_1'] = row.vol_delta_1
+                record_dict['vol_delta_10'] = row.vol_delta_10
+                record_dict['vol_delta_100'] = row.vol_delta_100
                 record_dict['stoch_rsi'] = stoch_rsi
                 record_dict['ats_z'] = atsz
                 record_dict['pattern'] = candle
