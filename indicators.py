@@ -1,6 +1,10 @@
 import pandas as pd
 import numpy as np
 
+pd.set_option('display.max_rows', None)
+pd.set_option('display.expand_frame_repr', False)
+pd.set_option('display.precision', 4)
+
 
 def atr(df: pd.DataFrame, lb: int) -> None:
     '''calculates the average true range on an ohlc dataframe'''
@@ -14,20 +18,20 @@ def atr(df: pd.DataFrame, lb: int) -> None:
     return df
 
 
-def atr_bands(df: pd.DataFrame, lb: int, mult: float) -> None:
+def atr_bands(df: pd.DataFrame, lb: int, mult: float) -> pd.DataFrame:
     '''calculates bands at a specified multiple of atr above and below price 
     on a given dataframe'''
     df = atr(df, lb)
-    
-    df['hl_avg'] = (df.high + df.low) / 2
-    df[f'atr-{lb}-{mult}-upper'] = (df.hl_avg + mult * df[f'atr-{lb}'])
-    df[f'atr-{lb}-{mult}-lower'] = (df.hl_avg - mult * df[f'atr-{lb}'])
+
+    df['hl_avg'] = ((df.high + df.low) / 2).ewm(lb).mean()
+    df[f'atr-{lb}-{mult}-upper'] = df.hl_avg + (mult * df[f'atr-{lb}'])
+    df[f'atr-{lb}-{mult}-lower'] = df.hl_avg - (mult * df[f'atr-{lb}'])
     df.drop(['hl_avg', f'atr-{lb}'], axis=1, inplace=True)
 
     return df
 
 
-def supertrend(df: pd.DataFrame, lb: int, mult: float) -> None:
+def supertrend(df: pd.DataFrame, lb: int, mult: float) -> pd.DataFrame:
     '''calculates supertrend indicator and adds it to the input dataframe with the
         column names following the format: st-{lb}-{mult}, st-{lb}-{mult}-up, st-{lb}-{mult}-dn'''
 
@@ -115,7 +119,7 @@ def supertrend(df: pd.DataFrame, lb: int, mult: float) -> None:
     return df
 
 
-def heikin_ashi(df):
+def heikin_ashi(df: pd.DataFrame) -> pd.DataFrame:
     df['ha_close'] = (df.open + df.high + df.low + df.close) / 4
     df['ha_open'] = (df.open + df.close) / 2
     df.ha_open = df.ha_open.shift(1)
@@ -124,11 +128,11 @@ def heikin_ashi(df):
 
     df.drop(0, inplace=True)
     df.reset_index(drop=True, inplace=True)
-    
+
     return df
 
 
-def k_candles(df):
+def k_candles(df: pd.DataFrame) -> pd.DataFrame:
     df['k_open'] = (df.open + df.open.shift(1)) / 2
     df['k_high'] = (df.high + df.high.shift(1)) / 2
     df['k_low'] = (df.low + df.low.shift(1)) / 2
@@ -136,32 +140,35 @@ def k_candles(df):
 
     df.drop(0, inplace=True)
     df.reset_index(drop=True, inplace=True)
-    
+
     return df
 
 
-def signal_noise_ratio(df, periods):
+def signal_noise_ratio(df: pd.DataFrame, periods: int) -> pd.DataFrame:
     df['hh'] = df.high.rolling(periods).max()
     df['ll'] = df.low.rolling(periods).min()
     df['mid'] = (df.hh + df.ll) / 2
     df['signal'] = (df.hh - df.ll) / df.mid
-    
+
     df['abs_range'] = df.high - df.low
     df['range_mid'] = (df.high + df.low) / 2
     df['pct_range'] = df.abs_range / df.range_mid
     df['noise'] = df.pct_range.rolling(periods).mean()
     df['snr'] = df.signal / df.noise
-    
+
     df.drop(['hh', 'll', 'mid', 'signal', 'abs_range', 'noise'], axis=1, inplace=True)
 
 
-def stochastic(data, lookback):
-    pass
+def stochastic(data: pd.Series, lookback: int) -> pd.Series:
+    hh = data.rolling(lookback).max()
+    ll = data.rolling(lookback).min()
+
+    return (data - ll) / (hh - ll)
 
 
 def wma(s: pd.Series, lb: int) -> pd.Series:
     '''calculates the weighted moving average on an input series'''
-    return s.rolling(lb).apply(lambda x: ((np.arange(lb)+1)*x).sum()/(np.arange(lb)+1).sum(), raw=True)
+    return s.rolling(lb).apply(lambda x: ((np.arange(lb) + 1) * x).sum() / (np.arange(lb) + 1).sum(), raw=True)
 
 
 def hma(s: pd.Series, lb: int) -> pd.Series:
@@ -169,12 +176,11 @@ def hma(s: pd.Series, lb: int) -> pd.Series:
     actually shortens the lookback period by its own square root so that the indicator can be 
     calculated within the stated lookback period, because i usually want to truncate the ohlc data to 
     save resources, so this implementation is technically a shorter HMA than it seems'''
-    lb = int(lb - (lb**0.5))
-    return wma(wma(s, lb//2).multiply(2).sub(wma(s, lb)), int(np.sqrt(lb)))
+    lb = int(lb - (lb ** 0.5))
+    return wma(wma(s, lb // 2).multiply(2).sub(wma(s, lb)), int(np.sqrt(lb)))
 
 
 def trend_score(df: pd.DataFrame, column: str) -> None:
-
     all = ['ema50', 'ema100', 'ema200',
            'sma50', 'sma100', 'sma200',
            'hma50', 'hma100', 'hma200']
@@ -229,7 +235,7 @@ def vwma(df, lookback):
     return df
 
 
-def williams_fractals(df, frac_width, atr_spacing=0):
+def williams_fractals(df: pd.DataFrame, frac_width: int, atr_spacing: int = 0) -> pd.DataFrame:
     """calculates williams fractals either on the highs and lows or spaced according to average true range.
     if the spacing value is left at the default 0, no atr spacing will be implemented. if spacing is set to an integer
     above 0, the atr will be calculated with a lookback length equal to the spacing value, and the resulting atr values
@@ -255,7 +261,7 @@ def williams_fractals(df, frac_width, atr_spacing=0):
     return df
 
 
-def fractal_density(df, lookback, frac_width):
+def fractal_density(df: pd.DataFrame, lookback: int, frac_width: int) -> pd.DataFrame:
     """a way of detecting when price is trending based on how frequently williams fractals are printed, since they are
     much more common during choppy conditions and spaced further apart during trending conditions.
     the calculation is simply the total number of fractals (high+low) in a given lookback period divided by the lookback.
@@ -270,6 +276,25 @@ def fractal_density(df, lookback, frac_width):
 
 def inside_bars(df):
     df['inside_bar'] = (df.high < df.high.shift(1)) & (df.low > df.low.shift(1))
+
+    return df
+
+
+def engulfing(df: pd.DataFrame, lookback: int = 1) -> pd.DataFrame:
+    """compares the current bar to the previous number of bars as specified by the lookback param.
+    if the body of the current bar fully retraces the bodies of the previous bars, the function returns True"""
+
+    bars_dict = df.to_dict(orient='records')
+    current_bar = bars_dict[-1]
+    prev_bars = bars_dict[(0 - (lookback + 1)):-1]
+
+    current_open = current_bar['open']
+    current_close = current_bar['close']
+    prev_max = max(max(x['open'], x['close']) for x in prev_bars)
+    prev_min = min(min(x['open'], x['close']) for x in prev_bars)
+
+    df['bullish_engulf'] = current_open <= prev_min and current_close > prev_max
+    df['bearish_engulf'] = current_open >= prev_max and current_close < prev_min
 
     return df
 
@@ -335,7 +360,7 @@ def ema_breakout(df, length, lookback):
 
 
 def ema_trend(df, length):
-    lookback = max(1, int(length/100))
+    lookback = max(1, int(length / 100))
 
     df[f"ema_{length}"] = df.close.ewm(length).mean()
 
@@ -350,21 +375,24 @@ def vol_delta_div(df):
     # df['vol_delta'] = (2 * df.)
 
 
-def rsi(s: pd.Series, lookback: int=14):
+def rsi(s: pd.Series, lookback: int = 14) -> pd.Series:
     avg_up = s.pct_change().clip(lower=0).rolling(lookback).mean()
     avg_dn = s.pct_change().clip(upper=0).abs().rolling(lookback).mean()
 
-    return pd.Series(100 - (100/(1+(avg_up/avg_dn))))
+    return pd.Series(100 - (100 / (1 + (avg_up / avg_dn))))
 
 
 def ats_z(df: pd.DataFrame, lookback: int):
     avg_trade_size_sm = (df.base_vol / df.num_trades).ewm(5).mean()
-    ats_long_mean = avg_trade_size_sm.rolling(lookback).mean()
-    ats_std = avg_trade_size_sm.rolling(lookback).std()
+    ats_long_mean = avg_trade_size_sm.ewm(lookback).mean()
+    ats_std = avg_trade_size_sm.ewm(lookback).std()
     df['ats_z'] = (avg_trade_size_sm - ats_long_mean) / ats_std
 
     return df
 
+def stoch_rsi(data: pd.Series, rsi_lb: int = 14, stoch_lb: int = 14) -> pd.Series:
+    rsi_data = rsi(data, rsi_lb)
+    return stochastic(rsi_data, stoch_lb)
 
 # def supertrend_new(df: pd.DataFrame, lb: int, mult: float) -> None:
 #     '''calculates supertrend indicator and adds it to the input dataframe with the
@@ -428,5 +456,3 @@ def ats_z(df: pd.DataFrame, lookback: int):
 #     except KeyError:
 #         print(df.head())
 #     df.reset_index(drop=True, inplace=True)
-
-

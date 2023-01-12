@@ -28,6 +28,8 @@ def step_round(num: float, step: str) -> str:
     """rounds down to any step size"""
     gv = Timer('step_round')
     gv.start()
+    if not float(step):
+        return str(num)
     num = Decimal(num)
     step = Decimal(step)
     gv.stop()
@@ -460,23 +462,17 @@ def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame) -> pd.DataFrame
     df['timestamp'] = pd.to_datetime(df['timestamp'])
     df = df.drop(['close_time', 'ignore'], axis=1)
 
-    df_new = pd.concat([old_df[:-1], df], copy=True, ignore_index=True)
-    return df_new
+    return pd.concat([old_df[:-1], df], copy=True, ignore_index=True)
 
-def resample_ohlc(session, df):
-    # calculate how many 15min bars are needed to produce 'session.max_length' bars of new timeframe
-    len_mult = {'15m': 1, '30m': 2, '1h': 4, '2h': 8, '4h': 16, '6h': 24,
-                '8h': 32, '12h': 48, '1d': 96, '3d': 288, '1w': 672}
-    max_len = (session.max_length + 1) * len_mult[session.tf]
-    if len(df) > max_len:
-        df = df.tail(max_len)
-        df.reset_index(drop=True, inplace=True)
+def resample_ohlc(tf, offset, df):
+    """resamples ohlc data to the required timeframe and offset, then discards older rows if necessary to return a
+    dataframe of the desired length"""
 
     tf_map = {'15m': '15T', '30m': '30T', '1h': '1H', '2h': '2H', '4h': '4H', '6h': '6H',
               '8h': '8H', '12h': '12H', '1d': '1D', '3d': '3D', '1w': '1W'}
 
-    df = df.resample(tf_map[session.tf], on='timestamp',
-                     offset=session.offset).agg({'open': 'first',
+    df = df.resample(tf_map[tf], on='timestamp',
+                     offset=offset).agg({'open': 'first',
                                                  'high': 'max',
                                                  'low': 'min',
                                                  'close': 'last',
@@ -485,11 +481,8 @@ def resample_ohlc(session, df):
                                                  'num_trades': 'sum',
                                                  'taker_buy_base_vol': 'sum',
                                                  'taker_buy_quote_vol': 'sum'})
-    if len(df) > session.max_length:
-        # print(f"{pair} dataframe has {len(df)} bars, trimming to {ohlc_len}")
-        df = df.tail(session.max_length)
-    # drop=False because we want to keep the timestamp column
-    df.reset_index(inplace=True)
+
+    df = df.reset_index() # drop=False because we want to keep the timestamp column
 
     return df
 
@@ -521,7 +514,8 @@ def prepare_ohlc(session, pair: str) -> pd.DataFrame:
         df.reset_index(drop=True, inplace=True)
     df.to_pickle(filepath)
 
-    df = resample_ohlc(session, df)
+    df = resample_ohlc(session.tf, session.offset, df)
+    df = df.tail(session.max_length).reset_index(drop=True)
 
     ds.stop()
     return df
@@ -574,14 +568,17 @@ def create_trade_dict(order: dict, price: float, live: bool) -> Dict[str, str]:
 
 
 def valid_size(session, pair: str, size: float) -> str:
-    """rounds the desired order size to the correct step size for binance"""
+    """rounds the desired order size to the correct step size for *MARKET ORDERS* on binance"""
 
     gf = Timer('get_symbol_info valid')
     gf.start()
 
     info = session.get_pair_info(pair)
 
-    step_size = info.get('filters')[2].get('stepSize')
+    for f in info.get('filters'):
+        if f.get('filterType') == 'MARKET_LOT_SIZE':
+            step_size = f.get('stepSize')
+
     gf.stop()
     return step_round(size, step_size)
 

@@ -24,7 +24,6 @@ else:
 start = time.perf_counter()
 
 pairs = funcs.get_pairs()
-good_pairs = [pair for pair in pairs if pair not in not_pairs]
 
 
 def iterations(pair, tf):
@@ -37,23 +36,23 @@ def iterations(pair, tf):
     if filepath.exists():
         df = pd.read_pickle(filepath)
         if len(df) > 2:
-            df = df.iloc[:-1, :]
             df = funcs.update_ohlc(pair, tf, df)
 
     else:
         df_start = time.perf_counter()
-        df = funcs.get_ohlc(pair, tf, '1 year ago UTC')
+        df = funcs.get_ohlc(pair, tf, '2 years ago UTC')
         df_end = time.perf_counter()
         elapsed = df_end - df_start
         print(f'downloaded {pair} from scratch, took {elapsed % 60:.1f}s')
+
+    print(pair, df.timestamp.iloc[-1])
 
     max_dict = {'1m': 1051200,
                 '15m': 70080,
                 '1h': 17520}
     max_len = max_dict[tf]  # returns 2 years worth of timeframe periods
     if len(df) > max_len:
-        df = df.tail(max_len)
-        df.reset_index(drop=True, inplace=True)
+        df = df.tail(max_len).reset_index(drop=True)
     df.to_pickle(filepath)
     # print(f"{pair} ohlc length: {len(df)}")
 
@@ -62,10 +61,8 @@ iterations('BTCUSDT', '1m')
 iterations('ETHUSDT', '1m')
 
 for pair in pairs:
-    if pair in not_pairs:
-        continue
-
     iterations(pair, '15m')
+    iterations(pair, '1h')
 
 end = time.perf_counter()
 all_time = end - start

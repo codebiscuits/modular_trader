@@ -35,36 +35,36 @@ def adjust_max_positions(max_pos: int, sizing: dict) -> int:
     pass
 
 
-def max_init_risk(n: int, target_risk: float) -> float:
-    '''n = number of open positions, target_risk is the percentage distance 
-    from invalidation this function should converge on, max_pos is the maximum
-    number of open positions as set in the main script
-    
-    this function takes a target max risk and adjusts that up to 2x target depending
-    on how many positions are currently open.
-    whatever the output is, the system will ignore entry signals further away 
-    from invalidation than that. if there are a lot of open positions, i want
-    to be more picky about what new trades i open, but if there are few trades
-    available then i don't want to be so picky
-    
-    the formula is set so that when there are no trades currently open, the 
-    upper limit on initial risk will be twice as high as the main script has
-    set, and as more trades are opened, that upper limit comes down relatively
-    quickly, then gradually settles on the target limit'''
-
-    if n > 20:
-        n = 20
-
-    exp = 4
-    scale = (20 - n) ** exp
-    scale_limit = 20 ** exp
-
-    # when n is 0, scale and scale_limit cancel out
-    # and the whole thing becomes (2 * target) + target
-    output = (2 * target_risk * scale / scale_limit) + target_risk
-    # print(f'mir output: {round(output, 2) * 100}%')
-
-    return round(output, 2)
+# def max_init_risk(n: int, target_risk: float) -> float:
+#     '''n = number of open positions, target_risk is the percentage distance
+#     from invalidation this function should converge on, max_pos is the maximum
+#     number of open positions as set in the main script
+#
+#     this function takes a target max risk and adjusts that up to 2x target depending
+#     on how many positions are currently open.
+#     whatever the output is, the system will ignore entry signals further away
+#     from invalidation than that. if there are a lot of open positions, i want
+#     to be more picky about what new trades i open, but if there are few trades
+#     available then i don't want to be so picky
+#
+#     the formula is set so that when there are no trades currently open, the
+#     upper limit on initial risk will be twice as high as the main script has
+#     set, and as more trades are opened, that upper limit comes down relatively
+#     quickly, then gradually settles on the target limit'''
+#
+#     if n > 20:
+#         n = 20
+#
+#     exp = 4
+#     scale = (20 - n) ** exp
+#     scale_limit = 20 ** exp
+#
+#     # when n is 0, scale and scale_limit cancel out
+#     # and the whole thing becomes (2 * target) + target
+#     output = (2 * target_risk * scale / scale_limit) + target_risk
+#     # print(f'mir output: {round(output, 2) * 100}%')
+#
+#     return round(output, 2)
 
 
 def market_benchmark(session) -> None:
@@ -145,8 +145,15 @@ def strat_benchmark(session, agent) -> None:
 
     bal_now, bal_1d, bal_1w, bal_1m = session.bal, None, None, None
 
-    with open(f"{session.market_data}/{agent.id}/bal_history.txt", "r") as file:
-        bal_data = file.readlines()
+    if session.live:
+        filepath = Path(f"{session.market_data}/{agent.id}/perf_log.json")
+    else:
+        filepath = Path(f"/home/ross/Documents/backtester_2021/test_records/{session.tf}/{agent.id}/perf_log.json")
+    try:
+        with open(filepath, 'r') as rec_file:
+            bal_data = json.load(rec_file)
+    except (FileNotFoundError, JSONDecodeError):
+        bal_data = {}
 
     benchmark = {}
     if bal_data:
@@ -194,39 +201,48 @@ def strat_benchmark(session, agent) -> None:
 
 
 def log(session, agents: list) -> None:
-    '''records all data from the session as a line in the bal_history.txt file'''
+    '''records all data from the session as a line in the perf_log.json file'''
 
     market_benchmark(session)
     for agent in agents:
-        params = {'quote_asset': 'USDT',
-                  'fr_max': session.fr_max,
-                  'max_spread': session.max_spread,
-                  'indiv_r_limit': agent.indiv_r_limit,
-                  'total_r_limit': agent.total_r_limit,
-                  'target_risk': agent.target_risk,
-                  'max_pos': agent.max_positions}
+        params = {}
 
-        bal_record = {'timestamp': session.now_start, 'balance': round(session.bal, 2),
+        new_record = {'timestamp': session.now_start, 'balance': round(session.bal, 2),
                       'fr_long': agent.fixed_risk_l, 'fr_short': agent.fixed_risk_s,
-                      'positions': agent.real_pos, 'params': params, 'trade_counts': agent.counts_dict,
+                      'positions': agent.real_pos, 'trade_counts': agent.counts_dict,
                       'realised_pnl_long': agent.realised_pnl_long, 'sim_r_pnl_long': agent.sim_pnl_long,
                       'realised_pnl_short': agent.realised_pnl_short, 'sim_r_pnl_short': agent.sim_pnl_short,
                       'median_spread': stats.median(session.spreads.values()),
                       'real_open_pnl_l': agent.open_pnl('long', 'real'),
                       'real_open_pnl_s': agent.open_pnl('short', 'real'),
                       'sim_open_pnl_l': agent.open_pnl('long', 'sim'),
-                      'sim_open_pnl_s': agent.open_pnl('short', 'sim')}
-        new_line = json.dumps(bal_record)
-        if session.live:
-            filepath = Path(f"{session.market_data}/{agent.id}/bal_history.txt")
-        else:
-            filepath = Path(f"/home/ross/Documents/backtester_2021/test_records/{session.tf}/{agent.id}/bal_history.txt")
-        filepath.touch(exist_ok=True)
-        with open(filepath, "a") as file:
-            file.write(new_line)
-            file.write('\n')
+                      'sim_open_pnl_s': agent.open_pnl('short', 'sim'),
+                      'quote_asset': session.quote_asset, 'fr_max': session.fr_max,
+                      'max_spread': session.max_spread, 'indiv_r_limit': agent.indiv_r_limit,
+                      'total_r_limit': agent.total_r_limit, 'target_risk': agent.target_risk,
+                      'max_pos': agent.max_positions}
 
-        # strat_benchmark(session, agent)
+        if session.live:
+            filepath = Path(f"{session.market_data}/{agent.id}/perf_log.json")
+        else:
+            filepath = Path(f"/home/ross/Documents/backtester_2021/test_records/{session.tf}/{agent.id}/perf_log.json")
+        filepath.touch(exist_ok=True)
+
+        try:
+            with open(filepath, 'r') as rec_file:
+                old_records = json.load(rec_file)
+        except (FileNotFoundError, JSONDecodeError):
+            print(f'{agent} log file not found')
+            old_records = None
+
+        if old_records:
+            all_records = old_records.append(new_record)
+        else:
+            all_records = [new_record]
+        with open(filepath, 'w') as rec_file:
+            json.dump(all_records, rec_file)
+
+        strat_benchmark(session, agent)
 
 
 def interpret_benchmark(session, agents: list) -> None:
@@ -410,8 +426,15 @@ def recent_perf_str(session, agent) -> Tuple[str, int, int]:
         x12 = Timer(f'{func_name}')
         x12.start()
 
-        with open(f"{session.market_data}/{agent.id}/bal_history.txt", "r") as file:
-            bal_data = file.readlines()
+        if session.live:
+            filepath = Path(f"{session.market_data}/{agent.id}/perf_log.json")
+        else:
+            filepath = Path(f"/home/ross/Documents/backtester_2021/test_records/{session.tf}/{agent.id}/perf_log.json")
+        try:
+            with open(filepath, 'r') as rec_file:
+                bal_data = json.load(rec_file)
+        except (FileNotFoundError, JSONDecodeError):
+            bal_data = {}
 
         # if bal_data:
         #     prev_bal = json.loads(bal_data[-1]).get('balance')
@@ -531,7 +554,7 @@ def scanner_summary(session, agents: list) -> None:
     below_ema = len(session.below_200_ema)
     ema_str = f'above ema: {above_ema}/{above_ema + below_ema}'
     mkt_bench = session.benchmark
-    final_msg = f"{live_str} {ema_str}\nmkt perf 1w {round(mkt_bench.get('market_1w') * 100, 2)}%\n-"
+    final_msg = f"{live_str} {ema_str}\nmkt perf 1w {mkt_bench.get('market_1w'):.2%}\n-"
 
     for agent in agents:
         agent_msg = f'\n{agent.name}'

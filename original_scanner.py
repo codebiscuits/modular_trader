@@ -1,7 +1,7 @@
 import time
 from datetime import datetime
 import binance_funcs as funcs
-from agents import DoubleST, EMACross, EMACrossHMA
+from agents import DoubleST, EMACross, EMACrossHMA, AvgTradeSize
 import binance.exceptions as bx
 from config import not_pairs
 from pprint import pprint
@@ -26,24 +26,33 @@ def setup_scan(timeframe: str, offset: str) -> None:
     funcs.update_prices(session)
 
     agents = [
-        DoubleST(session, 3, 1.0),
-        DoubleST(session, 3, 1.4),
-        DoubleST(session, 3, 1.8),
-        DoubleST(session, 5, 2.2),
-        DoubleST(session, 5, 2.8),
-        DoubleST(session, 5, 3.4),
-        EMACross(session, 12, 21, 1.2),
-        EMACross(session, 12, 21, 1.8),
-        EMACross(session, 12, 21, 2.4),
-        EMACrossHMA(session, 12, 21, 1.2),
-        EMACrossHMA(session, 12, 21, 1.8),
-        EMACrossHMA(session, 12, 21, 2.4)
+        # DoubleST(session, 3, 1.0),
+        # DoubleST(session, 3, 1.4),
+        # DoubleST(session, 3, 1.8),
+        # DoubleST(session, 5, 2.2),
+        # DoubleST(session, 5, 2.8),
+        # DoubleST(session, 5, 3.4),
+        # EMACross(session, 12, 21, 1.2),
+        # EMACross(session, 12, 21, 1.8),
+        # EMACross(session, 12, 21, 2.4),
+        # EMACrossHMA(session, 12, 21, 1.2),
+        # EMACrossHMA(session, 12, 21, 1.8),
+        # EMACrossHMA(session, 12, 21, 2.4),
+        AvgTradeSize(session, 2, 1000, 1.1, 'oco'),
+        AvgTradeSize(session, 2, 1000, 1.1, 'trail'),
+        AvgTradeSize(session, 2, 1000, 2.0, 'oco'),
+        AvgTradeSize(session, 2, 1000, 2.0, 'trail'),
+        AvgTradeSize(session, 2, 1000, 3.0, 'oco'),
+        AvgTradeSize(session, 2, 1000, 3.0, 'trail'),
+        AvgTradeSize(session, 2, 1000, 4.0, 'oco'),
+        AvgTradeSize(session, 2, 1000, 4.0, 'trail'),
     ]
 
     session.name = ' | '.join([n.name for n in agents])
 
     # compile and sort list of pairs to loop through ------------------------------
-    all_pairs = funcs.get_pairs(market='CROSS')
+    # TODO need to work out what to do when some strats want the spot pairs list and others just want the cross pairs
+    all_pairs = funcs.get_pairs(market='SPOT')
     shuffle(all_pairs)
     positions = []
     for agent in agents:
@@ -104,13 +113,12 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
         df = session.compute_indicators(df)
 
         signals = {}
-        mir = uf.max_init_risk(agent.num_open_positions, agent.target_risk)
         usdt_depth_l, usdt_depth_s = funcs.get_depth(session, pair)
         price = session.prices[pair]
         for agent in agents:
             # print('*****', agent.name)
             df_2 = df.copy()
-            signals = agent.margin_signals(session, df_2, pair)
+            signals = agent.signals(session, df_2, pair)
 
             inval = signals.get('inval')
             inval_ratio = signals.get('inval_ratio')
@@ -120,8 +128,8 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
                 size_l, usdt_size_l, size_s, usdt_size_s = funcs.get_size(agent, price, session.bal, risk)
 
             # remove indicators to avoid errors
-            df_2 = df[['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'quote_vol',
-                       'num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol']]
+            df_2 = df_2[['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'quote_vol',
+                         'num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol']]
 
             if inval == 0:
                 note = f'{pair} supertrend 0 error, skipping pair'
@@ -133,7 +141,7 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
             if agent.in_pos['real']:
                 real_qty = float(agent.open_trades[pair]['position']['base_size'])
                 agent.real_pos[asset].update(
-                    agent.update_pos_M(session, asset, real_qty, inval_ratio, 'real'))
+                    agent.update_pos(session, asset, real_qty, inval_ratio, 'real'))
 
                 real_ep = float(agent.open_trades[pair]['position']['entry_price'])
                 if real_ep:
@@ -146,7 +154,7 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
             if agent.in_pos['sim']:
                 sim_qty = float(agent.sim_trades[pair]['position']['base_size'])
                 agent.sim_pos[asset].update(
-                    agent.update_pos_M(session, asset, sim_qty, inval_ratio, 'sim'))
+                    agent.update_pos(session, asset, sim_qty, inval_ratio, 'sim'))
                 sim_ep = float(agent.sim_trades[pair]['position']['entry_price'])
                 if sim_ep:
                     agent.sim_pos[asset]['price_delta'] = (price - sim_ep) / sim_ep
@@ -156,14 +164,20 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
                     signals['signal'] = f"close_{agent.in_pos['sim']}"
 
             # margin order execution ------------------------------------------------------
-            if signals.get('signal') in ['open_long', 'tp_long', 'close_long']:
+            agent.max_init_r_l = agent.max_init_risk(agent.fixed_risk_l)
+            agent.max_init_r_s = agent.max_init_risk(agent.fixed_risk_s)
+
+            if signals.get('signal') in ['open_spot', 'tp_spot', 'close_spot']:
+                usdt_size, usdt_depth, size = usdt_size_l, usdt_depth_l, size_l
+                direction = 'spot'
+            elif signals.get('signal') in ['open_long', 'tp_long', 'close_long']:
                 usdt_size, usdt_depth, size = usdt_size_l, usdt_depth_l, size_l
                 direction = 'long'
             elif signals.get('signal') in ['open_short', 'tp_short', 'close_short']:
                 usdt_size, usdt_depth, size = usdt_size_s, usdt_depth_s, size_s
                 direction = 'short'
 
-            if signals.get('signal') in ['close_long', 'close_short']:
+            if signals.get('signal') in ['close_spot', 'close_long', 'close_short']:
                 try:
                     agent.close_pos(session, pair, direction)
                 except bx.BinanceAPIException as e:
@@ -174,7 +188,7 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
                     pb.push_note(now, f'{agent.name} exeption during {pair} close_{direction} order')
                     continue
 
-            elif signals.get('signal') in ['open_long', 'open_short']:
+            elif signals.get('signal') in ['open_spot', 'open_long', 'open_short']:
                 if usdt_size > usdt_depth > (usdt_size / 2):  # only trim size if books are a bit too thin
                     agent.counts_dict['books_too_thin'] += 1
                     trim_size = f'{now} {pair} books too thin, reducing size from {usdt_size:.3} to {usdt_depth:.3}'
@@ -184,18 +198,24 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
                 if session.algo_limit_reached(pair):
                     agent.counts_dict['algo_order_limit'] += 1
                     sim_reason = 'algo_order_limit'
+
                 elif usdt_size < 30:
                     if not agent.in_pos['sim']:
                         agent.counts_dict['too_small'] += 1
                     sim_reason = 'too_small'
-                elif risk > mir:
+
+                elif ((('long' in signals.get('signal')) and (risk > agent.max_init_r_l))
+                      or
+                      (('short' in signals.get('signal')) and (risk > agent.max_init_r_s))):
                     if not agent.in_pos['sim']:
                         agent.counts_dict['too_risky'] += 1
                     sim_reason = 'too_risky'
+
                 elif usdt_depth == 0:
                     if not agent.in_pos['sim']:
                         agent.counts_dict['too_much_spread'] += 1
                     sim_reason = 'too_much_spread'
+
                 elif usdt_depth < usdt_size:
                     if not agent.in_pos['sim']:
                         agent.counts_dict['books_too_thin'] += 1
@@ -315,19 +335,18 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
 
         agent.real_pos['USDT'] = session.usdt_bal
 
-        if not session.live:
-            # print('\n*** real_pos ***')
-            # pprint(agent.real_pos)
-            print('warning: logging directed to test_records')
-
-        uf.log(session, [agent])
-
         print(f'{agent.name} Counts:')
         for k, v in agent.counts_dict.items():
             if v:
                 print(k, v)
         print('-:-' * 20)
 
+    if not session.live:
+        # print('\n*** real_pos ***')
+        # pprint(agent.real_pos)
+        print('warning: logging directed to test_records')
+
+    uf.log(session, agents)
     uf.scanner_summary(session, agents)
 
     # uf.interpret_benchmark(session, agents)

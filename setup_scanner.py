@@ -22,7 +22,9 @@ if __name__ == '__main__':
 
     print('\n-+-+-+-+-+-+-+-+-+-+-+- Running Setup Scanner -+-+-+-+-+-+-+-+-+-+-+-\n')
 
-    z = [1, 4, 12, 24]
+    z = [1, 4, 12,
+         # 24
+         ]
     hour = datetime.now(timezone.utc).hour
     # hour = 0 # for testing all timeframes
     scripts = [tf for tf in z if hour % tf == 0]

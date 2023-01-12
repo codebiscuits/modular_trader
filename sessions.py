@@ -16,7 +16,7 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 
 class MARGIN_SESSION:
-    max_length = 201
+    max_length = 1000
     quote_asset = 'USDT'
     # fr_max = 0.0002
     max_spread = 0.5
@@ -308,7 +308,7 @@ class MARGIN_SESSION:
         x9.start()
 
         if not self.max_loan_amounts.get(asset):
-            self.max_loan_amounts[asset] = client.get_max_margin_loan(asset='SUSHI')
+            self.max_loan_amounts[asset] = client.get_max_margin_loan(asset=asset)
 
         x9.stop()
 
@@ -345,6 +345,18 @@ class MARGIN_SESSION:
                 df = ind.atr_bands(df, int(vals[1]), float(vals[2]))
             elif vals[0] == 'st':
                 df = ind.supertrend(df, int(vals[1]), float(vals[2]))
+            elif vals[0] == 'atsz':
+                df = ind.ats_z(df, int(vals[1]))
+            elif vals[0] == 'stoch_rsi':
+                df['stoch_rsi'] = ind.stoch_rsi(df.close, int(vals[1]), int(vals[2]))
+            elif vals[0] == 'inside':
+                df = ind.inside_bars(df)
+            elif vals[0] == 'doji':
+                df = ind.doji(df)
+            elif vals[0] == 'engulfing':
+                df = ind.engulfing(df, int(vals[1]))
+            elif vals[0] == 'bbb':
+                df = ind.bull_bear_bar(df)
 
         return df
 
