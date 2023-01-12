@@ -151,13 +151,13 @@ for n, pair in enumerate(pairs):
     signals = []
 
     # get 1min data
-    path_1m = Path(f"/home/ross/Documents/backtester_2021/bin_ohlc_1m/{pair}.pkl")
+    path_1m = Path(f"bin_ohlc_1m/{pair}.pkl")
     data_1m = pd.read_pickle(path_1m)
     data_1m = funcs.update_ohlc(pair, '1m', data_1m)
     data_1m = data_1m.tail(525600).reset_index(drop=True)
 
     # get 1h data
-    path_1h = Path(f"/home/ross/Documents/backtester_2021/bin_ohlc_1h/{pair}.pkl")
+    path_1h = Path(f"bin_ohlc_1h/{pair}.pkl")
     data_1h = pd.read_pickle(path_1h)
     data_1h = funcs.update_ohlc(pair, '1h', data_1h)
     data_1h = data_1h.tail(8760).reset_index(drop=True)
