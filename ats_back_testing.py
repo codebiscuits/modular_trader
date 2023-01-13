@@ -105,13 +105,17 @@ def track_trail(trade: dict) -> dict:
 
 
 timeframes = ['1h', '4h', '6h', '8h', '12h']
-pairs = funcs.get_pairs()
+pairs = funcs.get_pairs()#[::100]
 tf = '6h'
 
 min_z = 2
 atsz_lb = 200
-mults = [1, 2, 3, 4]
-rr_ratios = [1, 2, 3]
+mults = [1,
+         2, 3, 4
+         ]
+rr_ratios = [1,
+             2, 3
+             ]
 
 count = 0
 completed = 0
@@ -131,8 +135,13 @@ trade_log = dict(
     vol_delta_100=[],
     stoch_rsi=[],
     ats_z=[],
-    pattern=[],
-    ema=[],
+    doji=[],
+    engulfing=[],
+    inside_bar=[],
+    ema_30=[],
+    ema_200=[],
+    ema_30_ratio=[],
+    ema_200_ratio=[],
     rr_ratio=[],
     r=[],
     pnl_r=[],
@@ -172,8 +181,9 @@ for n, pair in enumerate(pairs):
         df['vol_delta_100'] = (df.taker_buy_base_vol - df.base_vol).rolling(100).sum() > 0
         df = ind.ats_z(df, atsz_lb)
         df['atsz_max'] = df.ats_z.rolling(10).max()
-        df['ema-200'] = df.close.ewm(200).mean()
-        df['bullish_ema'] = (df['ema-200'] > df['ema-200'].shift(5)).astype(int)
+        df['ema_30'] = df.close.ewm(30).mean()
+        df['ema_200'] = df.close.ewm(200).mean()
+        df['bullish_ema'] = (df.ema_200 > df.ema_200.shift(5)).astype(int)
         df['stoch_rsi'] = ind.stoch_rsi(df.close, 14, 14)
         df = ind.atr_bands(df, 5, mult)
         df['atr_lower'] = df[f'atr-5-{mult}-lower']
@@ -181,27 +191,24 @@ for n, pair in enumerate(pairs):
         df = ind.engulfing(df)
         df = ind.doji(df)
         df = ind.bull_bear_bar(df)
-
+        df = df.dropna().reset_index(drop=True)
 
         for row in df.itertuples():
             atsz = row.atsz_max
             stoch_rsi = row.stoch_rsi
-            doji = 'doji' if row.bullish_doji else ''
-            engulf = 'engulf' if row.bullish_engulf else ''
-            ib = 'inside bar' if row.inside_bar else ''
-            candle = ' '.join([doji, engulf, ib])
-
-            bullish_atsz = atsz > min_z
-            bullish_candles = row.inside_bar or row.bullish_doji or row.bullish_engulf
-
-            # TODO i need to add a signal score into the dictionary. perhaps i could start by just observing which candle
-            #  pattern gives the best signals and basing the score on that, or maybe also use the atsz score
+            # doji = 'doji' if row.bullish_doji else ''
+            # engulf = 'engulf' if row.bullish_engulf else ''
+            # ib = 'inside bar' if row.inside_bar else ''
+            # candle = ' '.join([doji, engulf, ib])
 
             record_dict = {}
             record_dict['inval'] = row.atr_lower
             record_dict['inval_ratio'] = row.close / row.atr_lower # current price proportional to inval price
 
-            if bullish_atsz and bullish_candles and (record_dict['inval_ratio'] > 1):
+            # bullish_atsz = atsz > min_z
+            # bullish_candles = row.inside_bar or row.bullish_doji or row.bullish_engulf
+
+            if (record_dict['inval_ratio'] > 1):
                 record_dict['target'] = row.close * (record_dict['inval_ratio'] ** ratio)
                 record_dict['time'] = row.timestamp.timestamp()
                 record_dict['pair'] = pair
@@ -214,11 +221,15 @@ for n, pair in enumerate(pairs):
                 record_dict['vol_delta_100'] = row.vol_delta_100
                 record_dict['stoch_rsi'] = stoch_rsi
                 record_dict['ats_z'] = atsz
-                record_dict['pattern'] = candle
+                record_dict['doji'] = row.bullish_doji
+                record_dict['engulfing'] = row.bullish_engulf
+                record_dict['inside_bar'] = row.inside_bar
                 record_dict['min_z'] = min_z
                 record_dict['atsz_lb'] = atsz_lb
                 record_dict['atr_mult'] = mult
                 record_dict['bullish_ema'] = row.bullish_ema
+                record_dict['ema_30_ratio'] = row.close / row.ema_30
+                record_dict['ema_200_ratio'] = row.close / row.ema_200
 
                 signals.append(record_dict)
 
@@ -227,18 +238,16 @@ for n, pair in enumerate(pairs):
     ####################################################################################################################
 
     exit_type = 'oco'
+    # if exit_type == 'trail': resample htf df to 1m and concat indicator columns
 
     for signal in signals:
         tf = signal.get('timeframe')
         count += 1
+        trade_start = datetime.datetime.fromtimestamp(signal['time'])
+        trade_ohlc = data_1m.loc[data_1m.timestamp > trade_start].reset_index(drop=True)
         if exit_type == 'oco':
-            trade_start = datetime.datetime.fromtimestamp(signal['time'])
-            trade_ohlc = data_1m.loc[data_1m.timestamp > trade_start].reset_index(drop=True)
             trade_result = track_oco(signal, trade_ohlc)
         elif exit_type == 'trail':
-            # resample htf df to 1m and concat
-            trade_start = datetime.datetime.fromtimestamp(signal['time'])
-            trade_ohlc = data_1m.loc[data_1m.timestamp > trade_start].reset_index(drop=True)
             trade_result = track_trail(signal, trade_ohlc)
         if not trade_result:
             continue
@@ -280,8 +289,12 @@ for n, pair in enumerate(pairs):
         trade_log['vol_delta_100'].append(signal['vol_delta_100'])
         trade_log['stoch_rsi'].append(signal['stoch_rsi'])
         trade_log['ats_z'].append(signal['ats_z'])
-        trade_log['pattern'].append(signal['pattern'])
+        trade_log['doji'].append(signal['doji'])
+        trade_log['engulfing'].append(signal['engulfing'])
+        trade_log['inside_bar'].append(signal['inside_bar'])
         trade_log['ema'].append(signal['bullish_ema'])
+        trade_log['ema_30_ratio'].append(signal['ema_30_ratio'])
+        trade_log['ema_200_ratio'].append(signal['ema_200_ratio'])
         trade_log['r'].append(r)
         trade_log['pnl_r'].append(pnl_r)
         trade_log['win'].append(pnl_r > 0)
