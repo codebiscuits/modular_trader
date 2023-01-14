@@ -106,15 +106,15 @@ def track_trail(trade: dict) -> dict:
 
 timeframes = ['1h', '4h', '6h', '8h', '12h']
 pairs = funcs.get_pairs()#[::100]
-tf = '6h'
+tf = '1h'
 
 min_z = 2
 atsz_lb = 200
-mults = [1,
-         2, 3, 4
+mults = [#1,
+         2, 3#, 4
          ]
-rr_ratios = [1,
-             2, 3
+rr_ratios = [#1,
+             2#, 3
              ]
 
 count = 0
@@ -138,7 +138,6 @@ trade_log = dict(
     doji=[],
     engulfing=[],
     inside_bar=[],
-    ema_30=[],
     ema_200=[],
     ema_30_ratio=[],
     ema_200_ratio=[],
@@ -292,7 +291,7 @@ for n, pair in enumerate(pairs):
         trade_log['doji'].append(signal['doji'])
         trade_log['engulfing'].append(signal['engulfing'])
         trade_log['inside_bar'].append(signal['inside_bar'])
-        trade_log['ema'].append(signal['bullish_ema'])
+        trade_log['ema_200'].append(signal['bullish_ema'])
         trade_log['ema_30_ratio'].append(signal['ema_30_ratio'])
         trade_log['ema_200_ratio'].append(signal['ema_200_ratio'])
         trade_log['r'].append(r)
@@ -306,7 +305,7 @@ results_df = pd.DataFrame.from_dict(trade_log)
 results_df['start'] = pd.to_datetime(results_df.start*1000000000)
 
 results_df = results_df.loc[results_df.exit == 'oco']
-results_df.to_pickle('forest_input.pkl')
+results_df.to_pickle(f'forest_input_{tf}.pkl')
 
 # print('overall')
 # print(f"{len(results_df)} trades, winrate: {len(results_df.loc[results_df.pnl_r > 0]) / len(results_df):.1%}, "
