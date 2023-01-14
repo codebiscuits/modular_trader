@@ -845,7 +845,7 @@ class Agent():
 
         return {'value': f"{value:.2f}", 'pf%': pct, 'or_R': open_risk_r, 'or_$': open_risk}
 
-    def update_non_live_tp(self, asset: str, tp_pct: int, switch: str) -> dict[str, float | str | Any]:
+    def update_non_live_tp(self, asset: str, tp_pct: int, switch: str) -> dict: # dict[str, float | str | Any]:
         """updates sizing dictionaries (real/sim) with new open trade stats when
         state is sim or real but not live and a take-profit is triggered"""
         qw = Timer('update_non_live_tp')
