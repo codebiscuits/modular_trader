@@ -106,15 +106,15 @@ def track_trail(trade: dict) -> dict:
 
 timeframes = ['1h', '4h', '6h', '8h', '12h']
 pairs = funcs.get_pairs()#[::100]
-tf = '1h'
+tf = '12h'
 
 min_z = 2
 atsz_lb = 200
-mults = [#1,
-         2, 3#, 4
+mults = [1,
+         2, 3, 4
          ]
-rr_ratios = [#1,
-             2#, 3
+rr_ratios = [1,
+             2, 3
              ]
 
 count = 0
