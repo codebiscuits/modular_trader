@@ -122,8 +122,8 @@ class MARGIN_SESSION:
         v = Timer('ohlc_path in session')
         v.start()
         ohlc_data = None
-        possible_paths = [Path('/media/coding/ohlc_binance_15m'),
-                          Path('/mnt/pi_2/ohlc_binance_15m'),
+        folder = ''
+        possible_paths = [Path('/media/coding/bin_ohlc_15m'),
                           Path('/home/ross/Documents/backtester_2021/bin_ohlc_15m'),
                           Path('/home/ross/PycharmProjects/backtester_2021/bin_ohlc_15m')]
 

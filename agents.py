@@ -409,8 +409,8 @@ class Agent():
                 zzzz = Timer('rsst - get_historical_klines_1h')
                 zzzz.start()
                 klines = client.get_historical_klines(pair, Client.KLINE_INTERVAL_1HOUR, stop_time)
-                cols = ['timestamp', 'open', 'high', 'low', 'close', 'base vol', 'close time',
-                        'volume', 'num trades', 'taker buy base vol', 'taker buy quote vol', 'ignore']
+                cols = ['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'close_time',
+                        'quote_vol', 'num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol', 'ignore']
                 df = pd.DataFrame(klines, columns=cols)
                 df['timestamp'] = df['timestamp'] * 1000000
                 df = df.astype(float)
@@ -429,8 +429,8 @@ class Agent():
 
             zz = Timer('make_dataframe_5m')
             zz.start()
-            cols = ['timestamp', 'open', 'high', 'low', 'close', 'base vol', 'close time',
-                    'volume', 'num trades', 'taker buy base vol', 'taker buy quote vol', 'ignore']
+            cols = ['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'close_time',
+                    'quote_vol', 'num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol', 'ignore']
             df = pd.DataFrame(klines, columns=cols)
             df['timestamp'] = df['timestamp'] * 1000000
             df = df.astype(float)
