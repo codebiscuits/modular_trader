@@ -1,6 +1,4 @@
 import pandas as pd
-import matplotlib.pyplot as plt
-import binance_funcs as funcs
 from datetime import datetime as dt
 import json
 from json.decoder import JSONDecodeError
@@ -14,8 +12,6 @@ from pprint import pprint
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 client = Client(keys.bPkey, keys.bSkey)
-plt.style.use('fivethirtyeight')
-plt.rcParams['figure.figsize'] = (20,10)
 pd.set_option('display.max_rows', None) 
 pd.set_option('display.expand_frame_repr', False)
 
