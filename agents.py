@@ -399,7 +399,6 @@ class Agent():
         if timespan > 3600:  # 3600s = 1h
             filepath = Path(f'{session.ohlc_data}/{pair}.pkl')
             if filepath.exists():
-                print(filepath, 'exists')
                 zzz = Timer('rsst - read ohlc pickles')
                 zzz.start()
                 df = pd.read_pickle(filepath)
