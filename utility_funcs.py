@@ -223,9 +223,11 @@ def log(session, agents: list) -> None:
                       'max_pos': agent.max_positions}
 
         if session.live:
-            filepath = Path(f"{session.market_data}/{agent.id}/perf_log.json")
+            perf_path = Path(f"{session.market_data}/{agent.id}")
         else:
-            filepath = Path(f"/home/ross/Documents/backtester_2021/test_records/{session.tf}/{agent.id}/perf_log.json")
+            perf_path = Path(f"/home/ross/Documents/backtester_2021/test_records/{session.tf}/{agent.id}")
+        perf_path.mkdir(exist_ok=True)
+        filepath = perf_path / "perf_log.json"
         filepath.touch(exist_ok=True)
 
         try:
