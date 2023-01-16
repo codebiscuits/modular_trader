@@ -13,8 +13,7 @@ not_pairs = ['GBPUSDT', 'AUDUSDT', 'BUSDUSDT', 'EURUSDT', 'TUSDUSDT',
 
 # ohlc data paths
 ohlc_data = None
-possible_paths = [Path('/media/coding/ohlc_binance_15m'),
-                  Path('/mnt/pi_2/ohlc_binance_15m'),
+possible_paths = [Path('/media/coding/bin_ohlc_15m'),
                   Path('/home/ross/Documents/backtester_2021/bin_ohlc_15m')]
 
 for ohlc_path in possible_paths:

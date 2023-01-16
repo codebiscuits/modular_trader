@@ -30,10 +30,11 @@ pairs = funcs.get_pairs()
 
 
 def iterations(pair, tf):
+    folder = f"bin_ohlc_{tf}"
     if live:
-        ohlc_data = Path(f'/media/coding/ohlc_binance_{tf}')
+        ohlc_data = Path(f'/media/coding/') / folder
     else:
-        ohlc_data = Path(f'/home/ross/Documents/backtester_2021/bin_ohlc_{tf}')
+        ohlc_data = Path(f'/home/ross/Documents/backtester_2021/') / folder
     ohlc_data.mkdir(exist_ok=True)
     filepath = Path(f'{ohlc_data}/{pair}.pkl')
     if filepath.exists():
