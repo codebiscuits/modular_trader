@@ -415,6 +415,7 @@ class Agent():
                 df = pd.DataFrame(klines, columns=cols)
                 df['timestamp'] = df['timestamp'] * 1000000
                 df = df.astype(float)
+                df['timestamp'] = pd.to_datetime(df.timestamp)
                 zzzz.stop()
 
             # trim df down to just the rows since the last stop was set
