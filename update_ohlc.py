@@ -1,6 +1,7 @@
 import pandas as pd
 import keys
 import time
+from datetime import datetime
 import binance_funcs as funcs
 from binance.client import Client
 from pushbullet import Pushbullet
@@ -14,10 +15,12 @@ client = Client(keys.bPkey, keys.bSkey)
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
+now = datetime.now().strftime('%d/%m/%y %H:%M')
+
 # check to see if this is running on the raspberry pi or not
 pi2path = Path('/home/ubuntu/rpi_2.txt')
 if live := pi2path.exists():
-    print('-:-' * 10, ' running update_ohlc ', '-:-' * 10)
+    print('-:-' * 10, f' {now} running update_ohlc ', '-:-' * 10)
 else:
     print('*** Warning: Not Live ***')
 
@@ -45,7 +48,7 @@ def iterations(pair, tf):
         elapsed = df_end - df_start
         print(f'downloaded {pair} from scratch, took {elapsed % 60:.1f}s')
 
-    print(pair, df.timestamp.iloc[-1])
+    # print(pair, df.timestamp.iloc[-1])
 
     max_dict = {'1m': 1051200,
                 '15m': 70080,

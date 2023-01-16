@@ -839,7 +839,7 @@ class Agent():
         pct = round(100 * value / session.bal, 5)
 
         open_risk = value - (value / inval) if direction in ['long', 'spot'] else (value / inval) - value
-        if pfrd:
+        if float(pfrd):
             open_risk_r = (open_risk / float(pfrd))
         else:
             open_risk_r = 0.0
