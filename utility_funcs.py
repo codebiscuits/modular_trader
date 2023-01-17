@@ -248,11 +248,12 @@ def log(session, agents: list) -> None:
         print(f"{type(old_records) = }")
         print(f"{type(new_record) = }")
 
-        all_records = old_records.append(new_record)
-
-        #temporary debugging
         if isinstance(all_records, list):
+            all_records = old_records.append(new_record)
+            #temporary debugging
             print(f"{agent.name} {len(all_records) = }")
+        else:
+            all_records = []
 
         with open(write_path, 'w') as rec_file:
             json.dump(all_records, rec_file)
