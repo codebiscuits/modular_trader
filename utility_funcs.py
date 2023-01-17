@@ -246,7 +246,7 @@ def log(session, agents: list) -> None:
             all_records = [new_record]
 
         #temporary debugging
-        print(f"{agent.name} {len(all_records = )}")
+        print(f"{agent.name} {len(all_records) = }")
 
         with open(write_path, 'w') as rec_file:
             json.dump(all_records, rec_file)
