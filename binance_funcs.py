@@ -502,8 +502,11 @@ def prepare_ohlc(session, pair: str) -> pd.DataFrame:
     if filepath.exists():
         df = pd.read_pickle(filepath)
         if len(df) > 2:
-            df = df.iloc[:-1, :]
+            df = df.drop(df.index[-1])
             df = update_ohlc(pair, '15m', df)
+        else:
+            df = get_ohlc(pair, '15m', '2 years ago UTC')
+            print(f'downloaded {pair} from scratch')
 
     else:
         df = get_ohlc(pair, '15m', '2 years ago UTC')
