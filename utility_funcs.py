@@ -233,20 +233,26 @@ def log(session, agents: list) -> None:
         write_path = write_folder / "perf_log.json"
         write_path.touch(exist_ok=True)
 
+        #temporary debugging
+        print(read_path)
+        print(write_path)
+
         try:
             with open(read_path, 'r') as rec_file:
                 old_records = json.load(rec_file)
         except (FileNotFoundError, JSONDecodeError):
             print(f'{agent} log file not found')
-            old_records = None
-
-        if old_records:
-            all_records = old_records.append(new_record)
-        else:
-            all_records = [new_record]
+            old_records = []
 
         #temporary debugging
-        print(f"{agent.name} {len(all_records) = }")
+        print(f"{type(old_records) = }")
+        print(f"{type(new_record) = }")
+
+        all_records = old_records.append(new_record)
+
+        #temporary debugging
+        if isinstance(all_records, list):
+            print(f"{agent.name} {len(all_records) = }")
 
         with open(write_path, 'w') as rec_file:
             json.dump(all_records, rec_file)
