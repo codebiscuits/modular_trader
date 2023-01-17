@@ -248,7 +248,7 @@ def log(session, agents: list) -> None:
         print(f"{type(old_records) = }")
         print(f"{type(new_record) = }")
 
-        if isinstance(all_records, list):
+        if isinstance(old_records, list):
             all_records = old_records.append(new_record)
             #temporary debugging
             print(f"{agent.name} {len(all_records) = }")
