@@ -71,6 +71,10 @@ def market_benchmark(session) -> None:
     '''calculates daily, weekly and monthly returns for btc, eth and the median 
     altcoin on binance'''
 
+    func_name = sys._getframe().f_code.co_name
+    x20 = Timer(f'{func_name}')
+    x20.start()
+
     all_1d = []
     all_1w = []
     all_1m = []
@@ -85,31 +89,29 @@ def market_benchmark(session) -> None:
 
     for x in data:
         df = pd.read_pickle(x)
-        if len(df) > 721:
-            df = df.tail(721)
-            df.reset_index(inplace=True)
-        last_idx = len(df) - 1
-        last_stamp = df.at[last_idx, 'timestamp']
+        if len(df) > 2977: # 1 month of 15min periods is 31 * 24 * 4 = 2976
+            df = df.tail(2977).reset_index()
+        last_stamp = df.at[df.index[-1], 'timestamp']
         now = datetime.now()
         window = timedelta(hours=4)
         if last_stamp > now - window:  # if there is data up to the last 4 hours
-            if len(df) >= 25:
-                df['roc_1d'] = df.close.pct_change(24)
-                all_1d.append(df.at[last_idx, 'roc_1d'])
-            if len(df) >= 169:
-                df['roc_1w'] = df.close.pct_change(168)
-                all_1w.append(df.at[last_idx, 'roc_1w'])
-            if len(df) >= 721:
-                df['roc_1m'] = df.close.pct_change(720)
-                all_1m.append(df.at[last_idx, 'roc_1m'])
+            if len(df) >= 97:
+                df['roc_1d'] = df.close.pct_change(96)
+                all_1d.append(df.at[df.index[-1], 'roc_1d'])
+            if len(df) >= 673:
+                df['roc_1w'] = df.close.pct_change(672)
+                all_1w.append(df.at[df.index[-1], 'roc_1w'])
+            if len(df) >= 2977:
+                df['roc_1m'] = df.close.pct_change(2976)
+                all_1m.append(df.at[df.index[-1], 'roc_1m'])
             if x.stem == 'BTCUSDT':
-                btc_1d = df.at[last_idx, 'roc_1d']
-                btc_1w = df.at[last_idx, 'roc_1w']
-                btc_1m = df.at[last_idx, 'roc_1m']
+                btc_1d = df.at[df.index[-1], 'roc_1d']
+                btc_1w = df.at[df.index[-1], 'roc_1w']
+                btc_1m = df.at[df.index[-1], 'roc_1m']
             elif x.stem == 'ETHUSDT':
-                eth_1d = df.at[last_idx, 'roc_1d']
-                eth_1w = df.at[last_idx, 'roc_1w']
-                eth_1m = df.at[last_idx, 'roc_1m']
+                eth_1d = df.at[df.index[-1], 'roc_1d']
+                eth_1w = df.at[df.index[-1], 'roc_1w']
+                eth_1m = df.at[df.index[-1], 'roc_1m']
     market_1d = stats.median(all_1d) if len(all_1d) > 3 else 0
     market_1w = stats.median(all_1w) if len(all_1w) > 3 else 0
     market_1m = stats.median(all_1m) if len(all_1m) > 3 else 0
@@ -129,6 +131,8 @@ def market_benchmark(session) -> None:
     # if session.live:
     #     print(f'pairs with recent data: {len(all_1d)} / {all_pairs}')
 
+    x20.stop()
+
     session.benchmark = {'btc_1d': btc_1d, 'btc_1w': btc_1w, 'btc_1m': btc_1m,
                          'eth_1d': eth_1d, 'eth_1w': eth_1w, 'eth_1m': eth_1m,
                          'market_1d': market_1d, 'market_1w': market_1w, 'market_1m': market_1m,
@@ -145,10 +149,7 @@ def strat_benchmark(session, agent) -> None:
 
     bal_now, bal_1d, bal_1w, bal_1m = session.bal, None, None, None
 
-    if session.live:
-        filepath = Path(f"{session.market_data}/{agent.id}/perf_log.json")
-    else:
-        filepath = Path(f"/home/ross/Documents/backtester_2021/test_records/{session.tf}/{agent.id}/perf_log.json")
+    filepath = Path(f"{session.read_records}/{agent.id}/perf_log.json")
     try:
         with open(filepath, 'r') as rec_file:
             bal_data = json.load(rec_file)
@@ -222,16 +223,18 @@ def log(session, agents: list) -> None:
                       'total_r_limit': agent.total_r_limit, 'target_risk': agent.target_risk,
                       'max_pos': agent.max_positions}
 
-        if session.live:
-            perf_path = Path(f"{session.market_data}/strategy_results/{session.tf}/{agent.id}")
-        else:
-            perf_path = Path(f"/home/ross/Documents/backtester_2021/test_records/{session.tf}/{agent.id}")
-        perf_path.mkdir(parents=True, exist_ok=True)
-        filepath = perf_path / "perf_log.json"
-        filepath.touch(exist_ok=True)
+        read_folder = Path(f"{session.read_records}/{agent.id}")
+        read_folder.mkdir(parents=True, exist_ok=True)
+        read_path = read_folder / "perf_log.json"
+        read_path.touch(exist_ok=True)
+
+        write_folder = Path(f"{session.write_records}/{agent.id}")
+        write_folder.mkdir(parents=True, exist_ok=True)
+        write_path = write_folder / "perf_log.json"
+        write_path.touch(exist_ok=True)
 
         try:
-            with open(filepath, 'r') as rec_file:
+            with open(read_path, 'r') as rec_file:
                 old_records = json.load(rec_file)
         except (FileNotFoundError, JSONDecodeError):
             print(f'{agent} log file not found')
@@ -241,7 +244,7 @@ def log(session, agents: list) -> None:
             all_records = old_records.append(new_record)
         else:
             all_records = [new_record]
-        with open(filepath, 'w') as rec_file:
+        with open(write_path, 'w') as rec_file:
             json.dump(all_records, rec_file)
 
         strat_benchmark(session, agent)
@@ -428,12 +431,9 @@ def recent_perf_str(session, agent) -> Tuple[str, int, int]:
         x12 = Timer(f'{func_name}')
         x12.start()
 
-        if session.live:
-            filepath = Path(f"{session.market_data}/{agent.id}/perf_log.json")
-        else:
-            filepath = Path(f"/home/ross/Documents/backtester_2021/test_records/{session.tf}/{agent.id}/perf_log.json")
+        read_path = Path(f"{session.read_records}/{agent.id}/perf_log.json")
         try:
-            with open(filepath, 'r') as rec_file:
+            with open(read_path, 'r') as rec_file:
                 bal_data = json.load(rec_file)
         except (FileNotFoundError, JSONDecodeError):
             bal_data = {}
