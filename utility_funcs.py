@@ -224,9 +224,7 @@ def log(session, agents: list) -> None:
                       'max_pos': agent.max_positions}
 
         read_folder = Path(f"{session.read_records}/{agent.id}")
-        read_folder.mkdir(parents=True, exist_ok=True)
         read_path = read_folder / "perf_log.json"
-        read_path.touch(exist_ok=True)
 
         write_folder = Path(f"{session.write_records}/{agent.id}")
         write_folder.mkdir(parents=True, exist_ok=True)
@@ -246,14 +244,19 @@ def log(session, agents: list) -> None:
 
         #temporary debugging
         print(f"{type(old_records) = }")
+        print('old_records:', old_records)
         print(f"{type(new_record) = }")
+        print('new_record:', new_record)
 
         if isinstance(old_records, list):
-            all_records = old_records.append(new_record)
+            old_records.append(new_record)
+            all_records = old_records
+            print('all_records:', all_records)
+            print(f"{type(all_records) = }")
             #temporary debugging
             print(f"{agent.name} {len(all_records) = }")
         else:
-            all_records = []
+            all_records = [new_record]
 
         with open(write_path, 'w') as rec_file:
             json.dump(all_records, rec_file)
