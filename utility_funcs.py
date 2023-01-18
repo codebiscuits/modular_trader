@@ -159,7 +159,7 @@ def strat_benchmark(session, agent) -> None:
     benchmark = {}
     if bal_data:
         for row in bal_data[-1:0:-1]:
-            row = json.loads(row)
+            # row = json.load(row)
             row_dt = datetime.strptime(row.get('timestamp'), '%d/%m/%y %H:%M')
             if row_dt > month_ago:  # and not bal_1m:
                 try:
