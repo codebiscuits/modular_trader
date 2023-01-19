@@ -231,10 +231,6 @@ def log(session, agents: list) -> None:
         write_path = write_folder / "perf_log.json"
         write_path.touch(exist_ok=True)
 
-        #temporary debugging
-        print(read_path)
-        print(write_path)
-
         try:
             with open(read_path, 'r') as rec_file:
                 old_records = json.load(rec_file)
@@ -242,19 +238,9 @@ def log(session, agents: list) -> None:
             print(f'{agent} log file not found')
             old_records = []
 
-        #temporary debugging
-        print(f"{type(old_records) = }")
-        print('old_records:', old_records)
-        print(f"{type(new_record) = }")
-        print('new_record:', new_record)
-
         if isinstance(old_records, list):
             old_records.append(new_record)
             all_records = old_records
-            print('all_records:', all_records)
-            print(f"{type(all_records) = }")
-            #temporary debugging
-            print(f"{agent.name} {len(all_records) = }")
         else:
             all_records = [new_record]
 
@@ -577,8 +563,13 @@ def scanner_summary(session, agents: list) -> None:
 
         if agent.realised_pnl_long:
             agent_msg += f"\nrealised real long pnl: {agent.realised_pnl_long:.1f}R"
+        else:
+            agent_msg += f"\nrealised sim long pnl: {agent.sim_pnl_long:.1f}R"
+
         if agent.realised_pnl_short:
             agent_msg += f"\nrealised real short pnl: {agent.realised_pnl_short:.1f}R"
+        else:
+            agent_msg += f"\nrealised sim short pnl: {agent.sim_pnl_short:.1f}R"
 
         or_list = [v.get('or_$') for v in agent.real_pos.values() if v.get('or_$')]
         num_open_positions = len(or_list)
