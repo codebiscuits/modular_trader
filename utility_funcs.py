@@ -88,6 +88,8 @@ def market_benchmark(session) -> None:
     data = session.ohlc_data.glob('*.*')
 
     for x in data:
+        if x.suffix != '.pkl':
+            continue
         df = pd.read_pickle(x)
         if len(df) > 2977: # 1 month of 15min periods is 31 * 24 * 4 = 2976
             df = df.tail(2977).reset_index()

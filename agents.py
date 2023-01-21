@@ -601,14 +601,14 @@ class Agent():
 
         now = datetime.now().strftime('%d/%m/%y %H:%M')
 
-        filepath = Path(f"{session.read_records}/{self.id}/bal_history.txt")
+        filepath = Path(f"{session.read_records}/{self.id}/perf_log.json")
         if self.live:
             filepath.touch(exist_ok=True)
         with open(filepath, "r") as file:
-            bal_data = file.readlines()
+            bal_data = json.load(file)
 
         if bal_data:
-            fr_prev = json.loads(bal_data[-1]).get(f'fr_{direction}', 0)
+            fr_prev = bal_data[-1].get(f'fr_{direction}', 0)
         else:
             fr_prev = 0
         fr_inc = self.fr_max / 10  # increment fr in 10% steps of the range
@@ -617,11 +617,11 @@ class Agent():
             '''calculates perf score from recent performance. also saves the
             instance property open_pnl_changes dictionary'''
 
-            with open(f"{session.read_records}/{self.id}/bal_history.txt", "r") as file:
-                bal_data = file.readlines()
+            with open(f"{session.read_records}/{self.id}/perf_log.json", "r") as file:
+                bal_data = json.load(file)
 
             if bal_data:
-                last = json.loads(bal_data[-1])
+                last = bal_data[-1]
             if bal_data and last.get(f'{switch}_open_pnl_{direction[0]}'):
                 prev_open_pnl = last.get(f'{switch}_open_pnl_{direction[0]}')
                 curr_open_pnl = self.open_pnl(direction, switch)
@@ -637,7 +637,7 @@ class Agent():
             pnls = {}
             for i in range(1, 5):
                 if bal_data and len(bal_data) > 5:
-                    pnls[i] = json.loads(bal_data[-1 * i]).get(lookup, -1)
+                    pnls[i] = bal_data[-1 * i].get(lookup, -1)
                 else:
                     pnls[i] = -1  # if there's no data yet, return -1 instead
 
