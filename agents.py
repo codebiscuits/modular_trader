@@ -673,6 +673,8 @@ class Agent():
         score = sim_score_1 + sim_score_2
         pnls = sim_pnls
 
+        print(f"{self.name} sim_score: {score}")
+
         if score == 15:
             fr = min(fr_prev + (2 * fr_inc), self.fr_max)
         elif score >= 11:
