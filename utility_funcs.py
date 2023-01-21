@@ -561,16 +561,28 @@ def scanner_summary(session, agents: list) -> None:
     final_msg = f"{live_str} {ema_str}\nmkt perf 1w {mkt_bench.get('market_1w'):.2%}\n-"
 
     for agent in agents:
+        print_msg = False
         agent_msg = f'\n{agent.name}'
 
+        if agent.fixed_risk_l:
+            print_msg = True
+            agent_msg += f"\nfixed risk long: {agent.fixed_risk_l}"
+        elif agent.fixed_risk_s:
+            print_msg = True
+            agent_msg += f"\nfixed risk short: {agent.fixed_risk_s}"
+
         if agent.realised_pnl_long:
+            print_msg = True
             agent_msg += f"\nrealised real long pnl: {agent.realised_pnl_long:.1f}R"
-        else:
+        elif agent.sim_pnl_long:
+            print_msg = True
             agent_msg += f"\nrealised sim long pnl: {agent.sim_pnl_long:.1f}R"
 
         if agent.realised_pnl_short:
+            print_msg = True
             agent_msg += f"\nrealised real short pnl: {agent.realised_pnl_short:.1f}R"
-        else:
+        elif agent.sim_pnl_short:
+            print_msg = True
             agent_msg += f"\nrealised sim short pnl: {agent.sim_pnl_short:.1f}R"
 
         or_list = [v.get('or_$') for v in agent.real_pos.values() if v.get('or_$')]
@@ -580,11 +592,13 @@ def scanner_summary(session, agents: list) -> None:
             if k != 'USDT':
                 vol_exp += float(v.get('pf%'))
         if num_open_positions or (vol_exp > 1):
+            print_msg = True
             agent_msg += f"\npositions {num_open_positions}, exposure {vol_exp:.2f}%"
 
         agent_msg += count_trades(agent.counts_dict)
 
-        final_msg += agent_msg
+        if print_msg:
+            final_msg += agent_msg
 
     if session.live:
         pb.push_note(title, final_msg)

@@ -673,8 +673,6 @@ class Agent():
         score = sim_score_1 + sim_score_2
         pnls = sim_pnls
 
-        print(f"{self.name} sim_score: {score}")
-
         if score == 15:
             fr = min(fr_prev + (2 * fr_inc), self.fr_max)
         elif score >= 11:
@@ -689,11 +687,11 @@ class Agent():
             fr = 0
 
         if fr != fr_prev:
-            title = f'{now} {self.name}'
-            note = f'{direction} fixed risk adjusted from {round(fr_prev * 10000, 1)}bps to {round(fr * 10000, 1)}bps'
+            title = f'{now}'
+            note = f'{self.name} {direction} fixed risk adjusted from {round(fr_prev * 10000, 1)}bps to {round(fr * 10000, 1)}bps'
             # pb.push_note(title, note)
             print(note)
-            print(f"calculated {direction} score: {score}, pnls: {pnls}")
+            print(f"{self.name} calculated {direction} score: {score}, pnls: {pnls}")
         o.stop()
         return round(fr, 5)
 
