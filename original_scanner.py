@@ -21,7 +21,7 @@ def setup_scan(timeframe: str, offset: str) -> None:
 
     print(f"Running setup_scan({timeframe}, {offset})")
     all_start = time.perf_counter()
-    session = sessions.MARGIN_SESSION(timeframe, offset, 0.0002)
+    session = sessions.MARGIN_SESSION(timeframe, offset, 0.0005)
     print(f"\nCurrent time: {session.now_start}, {session.name}\n")
     funcs.update_prices(session)
 
