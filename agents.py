@@ -1935,7 +1935,7 @@ class Agent():
         pair = ph['pair']
         stp = ph['stop_price']
 
-        dir_up = ph['direction'] == 'long'
+        dir_up = ph['type'].split('_')[1] == 'long'
         price = session.prices[pair]
         price_up = price > stp
 

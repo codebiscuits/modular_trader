@@ -52,7 +52,7 @@ def setup_scan(timeframe: str, offset: str) -> None:
 
     # compile and sort list of pairs to loop through ------------------------------
     # TODO need to work out what to do when some strats want the spot pairs list and others just want the cross pairs
-    all_pairs = funcs.get_pairs(market='SPOT')
+    all_pairs = funcs.get_pairs(market='CROSS')
     shuffle(all_pairs)
     positions = []
     for agent in agents:
