@@ -376,22 +376,22 @@ def find_bad_keys(c_data: dict) -> list:
     return bad_keys
 
 
-# def update_liability(trade_record: Dict[str, dict], size: str, operation: str) -> str:
-#     """this function finds the previous value for liability and returns the new value as a string"""
-#
-#     ty = Timer('update_liability')
-#     ty.start()
-#
-#     prev_liability = Decimal(trade_record['position']['liability'])
-#     adjustment = Decimal(size)
-#
-#     if operation == 'increase':
-#         new_liability = prev_liability + adjustment
-#     else:
-#         new_liability = prev_liability - adjustment
-#
-#     ty.stop()
-#     return str(new_liability)
+def update_liability(trade_record: Dict[str, dict], size: str, operation: str) -> str:
+    """this function finds the previous value for liability and returns the new value as a string"""
+
+    ty = Timer('update_liability')
+    ty.start()
+
+    prev_liability = Decimal(trade_record['position']['liability'])
+    adjustment = Decimal(size)
+
+    if operation == 'increase':
+        new_liability = prev_liability + adjustment
+    else:
+        new_liability = prev_liability - adjustment
+
+    ty.stop()
+    return str(new_liability)
 
 
 def create_stop_dict(order: dict) -> dict:

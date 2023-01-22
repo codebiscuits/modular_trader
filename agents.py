@@ -306,7 +306,7 @@ class Agent():
     def save_records(self, session, pair, stop_dict):
         self.open_trades[pair]['trade'].append(stop_dict)
         rpnl = self.realised_pnl(self.open_trades[pair])
-        self.open_trades[pair][-1]['rpnl'] = rpnl
+        self.open_trades[pair]['trade'][-1]['rpnl'] = rpnl
 
         ts_id = int(self.open_trades[pair]['position']['open_time'])
         self.closed_trades[ts_id] = {}
@@ -330,7 +330,7 @@ class Agent():
 
         if order:
             # if an order can be found on binance, complete the records
-            stop_size = self.repay_stop(pair, order)
+            stop_size = self.repay_stop(session, pair, order)
             stop_dict = self.create_stop_dict(pair, order, stop_size)
             self.save_records(session, pair, stop_dict)
 
@@ -818,7 +818,9 @@ class Agent():
                     size_dict[asset] = self.open_trade_stats(total_bal, v)
                 except KeyError as e:
                     print(e)
-                    pprint('\n', v, '\n')
+                    print('')
+                    pprint(v)
+                    print('')
         a.stop()
         return size_dict
 
@@ -1082,7 +1084,7 @@ class Agent():
     def close_pos(self, session, pair, direction):
         if self.in_pos['real'] == direction:
             print('')
-            self.close_real_full(session, pair, direction)
+            self.close_real_full_M(session, pair, direction)
 
         if self.in_pos['sim'] == direction:
             self.close_sim(session, pair, direction)
