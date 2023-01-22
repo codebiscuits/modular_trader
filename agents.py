@@ -814,7 +814,11 @@ class Agent():
             if state == 'tracked':
                 size_dict[asset] = {}
             else:
-                size_dict[asset] = self.open_trade_stats(total_bal, v)
+                try:
+                    size_dict[asset] = self.open_trade_stats(total_bal, v)
+                except KeyError as e:
+                    print(e)
+                    pprint('\n', v, '\n')
         a.stop()
         return size_dict
 
