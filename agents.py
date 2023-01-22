@@ -33,9 +33,9 @@ class Agent():
     sim_pnl_long = 0
     sim_pnl_short = 0
     indiv_r_limit = 1.2
-    total_r_limit = 20
+    total_r_limit = 5.5
     target_risk = 0.1
-    max_pos = 20
+    max_pos = 5
 
     # presets = {1: {'timeframe': '4h', 'tf_offset': None}}
 
