@@ -1970,8 +1970,15 @@ class Agent():
             del self.open_trades[pair]
 
         elif ph['completed'] == 'borrow':
-            funcs.repay_asset_M(ph['loan_asset'], ph['liability'], session.live)
-            del self.open_trades[pair]
+            try:
+                funcs.repay_asset_M(ph['loan_asset'], ph['liability'], session.live)
+            except bx.BinanceAPIException as e:
+                print('Problem during repair_open')
+                pprint(ph)
+                print(e.status_code)
+                print(e.message)
+            finally:
+                del self.open_trades[pair]
 
         elif ph['completed'] == 'execute':
             if valid:
