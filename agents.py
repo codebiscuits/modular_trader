@@ -243,16 +243,41 @@ class Agent():
     # record stopped trades ------------------------------------------------
 
     def create_stopped_list(self):
+        # get a list of (pair, stop_id, stop_time) for all open_trades records
         old_ids = [(pair, v['position']['stop_id'], v['position']['stop_time'])
                    for pair, v in self.open_trades.items()]
+
+        # get a list of stop orders currently open on exchange
+        stopped = []
+        for pair, sid, time in old_ids:
+            order = client.get_margin_order(symbol=pair, orderId=sid)
+            if order['status'] == 'FILLED':
+                stopped.append((pair, sid, time))
+            elif order['status'] in ['PARTIALLY_FILLED', 'CANCELLED']:
+                print(f'\nProblem with {self.name} {pair} trade record\n')
+                pprint(self.open_trades[pair])
+                print('')
+                pprint(order['status'])
+
+        # return a list of (pair, stop_id, stop_time) for all stopped trades
+        return stopped
+
+    def create_stopped_list_old(self):
+        # get a list of (pair, stop_id, stop_time) for all open_trades records
+        old_ids = [(pair, v['position']['stop_id'], v['position']['stop_time'])
+                   for pair, v in self.open_trades.items()]
+
+        # get a list of stop orders currently open on exchange
         open_orders = client.get_open_margin_orders()
         remaining_ids = [i.get('orderId') for i in open_orders]
 
+        # compare the two lists to see which trades are no longer open
         stopped = []
         for pair, sid, time in old_ids:
             if sid not in remaining_ids:
                 stopped.append((pair, sid, time))
 
+        # return a list of (pair, stop_id, stop_time) for all stopped trades
         return stopped
 
     def find_order(self, pair, sid):
@@ -381,8 +406,12 @@ class Agent():
         m.start()
 
         stopped = self.create_stopped_list()
+        print('\n', 'stopped trades\n', stopped, '\n')
 
         for pair, sid, time in stopped:
+            print('\nopen trade record')
+            pprint(self.open_trades[pair])
+            print('')
             try:
                 self.rst_iteration(session, pair, sid)
             except bx.BinanceAPIException as e:

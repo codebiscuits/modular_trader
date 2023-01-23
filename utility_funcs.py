@@ -400,6 +400,8 @@ def create_stop_dict(order: dict) -> dict:
     yu = Timer('create_stop-dict')
     yu.start()
 
+    pprint(order)
+
     pair = order.get('symbol')
     quote_qty = order.get('cummulativeQuoteQty')
     base_qty = order.get('executedQty')
