@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from binance.client import Client
 import binance.enums as be
+import binance.exceptions as bx
 from pushbullet import Pushbullet
 from decimal import Decimal, getcontext
 from pprint import pprint
@@ -768,7 +769,11 @@ def repay_asset_M(asset: str, qty: str, live: bool) -> None:
     """calls the binance api function to repay a margin loan"""
 
     if live:
-        client.repay_margin_loan(asset=asset, amount=qty)
+        try:
+            client.repay_margin_loan(asset=asset, amount=qty)
+        except bx.BinanceAPIException:
+            print(f"*** Exception whilst trying to repay {qty} {asset}. Most likely no loan to be repayed.")
+
 
 
 def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit: float) -> dict:
