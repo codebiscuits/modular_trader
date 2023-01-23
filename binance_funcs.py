@@ -1,3 +1,4 @@
+import entry_modelling
 import keys, math, time, json
 import statistics as stats
 import pandas as pd
@@ -771,8 +772,11 @@ def repay_asset_M(asset: str, qty: str, live: bool) -> None:
     if live:
         try:
             client.repay_margin_loan(asset=asset, amount=qty)
-        except bx.BinanceAPIException:
-            print(f"*** Exception whilst trying to repay {qty} {asset}. Most likely no loan to be repayed.")
+        except bx.BinanceAPIException as e:
+            print(f"*** Exception whilst trying to repay {qty} {asset}. If it says 'repay amount larger than loan "
+                  f"amount, it's most likely no loan to be repayed.")
+            print(e.status_code)
+            print(e.message)
 
 
 
@@ -815,7 +819,13 @@ def clear_stop_M(session, pair: str, position: dict) -> Tuple[Any, Decimal]:
     clear, base_size = None, None
     if session.live:
         if stop_id:
-            clear = client.cancel_margin_order(symbol=pair, orderId=str(stop_id))
+            try:
+                clear = client.cancel_margin_order(symbol=pair, orderId=str(stop_id))
+            except bx.BinanceAPIException as e:
+                print(f"Exception during clear_stop_M on {pair}. If it's 'unknown order sent' then it was probably "
+                      f"trying to cancel a stop-loss that had already been cancelled")
+                print(e.status_code)
+                print(e.message)
             base_size = clear.get('origQty')
         else:
             print(f'no recorded stop id for {pair}')
