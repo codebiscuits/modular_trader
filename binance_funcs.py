@@ -768,7 +768,7 @@ def borrow_asset_M(asset: str, qty: str, live: bool) -> None:
 def repay_asset_M(asset: str, qty: str, live: bool) -> None:
     """calls the binance api function to repay a margin loan"""
 
-    if live:
+    if live and float(qty):
         try:
             client.repay_margin_loan(asset=asset, amount=qty)
         except bx.BinanceAPIException as e:
