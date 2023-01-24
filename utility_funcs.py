@@ -568,10 +568,10 @@ def scanner_summary(session, agents: list) -> None:
 
         if agent.fixed_risk_l:
             print_msg = True
-            agent_msg += f"\nfixed risk long: {agent.fixed_risk_l*10000}Bps"
+            agent_msg += f"\nfixed risk long: {agent.fixed_risk_l*10000:.1f}Bps"
         elif agent.fixed_risk_s:
             print_msg = True
-            agent_msg += f"\nfixed risk short: {agent.fixed_risk_s*10000}Bps"
+            agent_msg += f"\nfixed risk short: {agent.fixed_risk_s*10000:.1f}Bps"
 
         if agent.realised_pnl_long:
             print_msg = True

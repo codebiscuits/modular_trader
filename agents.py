@@ -66,7 +66,7 @@ class Agent():
         self.closed_trades = self.read_closed_trade_records(session)
         self.closed_sim_trades = self.read_closed_sim_trade_records(session)
         self.backup_trade_records(session)
-        self.repair_trade_records(session, self)
+        self.repair_trade_records(session)
         self.real_pos = self.current_positions(session.bal, 'open')
         self.sim_pos = self.current_positions(session.bal, 'sim')
         self.tracked = self.current_positions(session.bal, 'tracked')
@@ -846,7 +846,8 @@ class Agent():
                 try:
                     size_dict[asset] = self.open_trade_stats(total_bal, v)
                 except KeyError as e:
-                    print(e)
+                    print(f"Problem calling current_positions on {self.name}.{state}_trades, {asset}")
+                    print('KeyError:', e)
                     print('')
                     pprint(v)
                     print('')
@@ -2133,7 +2134,7 @@ class Agent():
             else:
                 self.close_real_full(session, pair, ph['direction'])
 
-    def repair_trade_records(self, session, agent):
+    def repair_trade_records(self, session):
         k1 = Timer(f'repair trade records')
         k1.start()
         ph_list = []

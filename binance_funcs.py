@@ -465,6 +465,7 @@ def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame) -> pd.DataFrame
 
     return pd.concat([old_df[:-1], df], copy=True, ignore_index=True)
 
+
 def resample_ohlc(tf, offset, df):
     """resamples ohlc data to the required timeframe and offset, then discards older rows if necessary to return a
     dataframe of the desired length"""
@@ -778,7 +779,6 @@ def repay_asset_M(asset: str, qty: str, live: bool) -> None:
             print(e.message)
 
 
-
 def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit: float) -> dict:
     """sends a margin stop-loss limit order to binance and returns the order data"""
 
@@ -815,21 +815,19 @@ def clear_stop_M(session, pair: str, position: dict) -> Tuple[Any, Decimal]:
 
     stop_id = position['stop_id']
 
-    clear, base_size = None, None
+    clear, base_size = {}, 0
     if session.live:
         if stop_id:
             try:
                 clear = client.cancel_margin_order(symbol=pair, orderId=str(stop_id))
+                base_size = clear.get('origQty')
             except bx.BinanceAPIException as e:
                 print(f"Exception during clear_stop_M on {pair}. If it's 'unknown order sent' then it was probably "
                       f"trying to cancel a stop-loss that had already been cancelled")
                 print(e.status_code)
                 print(e.message)
-            base_size = clear.get('origQty')
         else:
             print(f'no recorded stop id for {pair}')
-            clear = {}
-            base_size = 0
     else:
         base_size = position['base_size']
 
