@@ -694,7 +694,7 @@ def buy_asset_M(session, pair: str, size: float, is_base: bool, price: float, li
         else:
             base_size = valid_size(session, pair, size / price)
             print(f'buy_asset_M {size = }, {base_size = }')
-            if not base_size:  # if size == 0, valid_size will output None
+            if not float(base_size):  # if size == 0, valid_size will output None
                 print(f'*problem* non-live buy {pair}: {base_size = }')
                 base_size = 0
             usdt_size = str(size)

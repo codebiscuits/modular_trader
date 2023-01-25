@@ -1702,9 +1702,16 @@ class Agent():
                 cleared_size = self.set_size_from_free(session, pair)
         if stage <= 2:
             # execute trade
-            if size:
+            if size: # this condition is for when this function is called from this specific stage
                 cleared_size = size
-            close_order = self.close_position(session, pair, cleared_size, 'close_signal', direction)
+
+            if cleared_size:
+                close_order = self.close_position(session, pair, cleared_size, 'close_signal', direction)
+            else:
+                # in this case, the trade is closed and the record is ruined, so just delete the record and move on
+                print(f"{self.name} {pair} {direction} position no longer exists, deleting trade record")
+                del self.open_trades[pair]
+                return
         if stage <= 3:
             # repay loan
             repay_size = self.close_repay(session, pair, close_order, direction)
