@@ -95,15 +95,15 @@ class Agent():
         test_folder = Path(f'{session.write_records}/{self.id}')
         if not test_folder.exists():
             test_folder.mkdir(parents=True)
-        bal_path = Path(real_folder / 'bal_history.txt')
-        test_bal = Path(test_folder / 'bal_history.txt')
+        bal_path = Path(real_folder / 'perf_log.json')
+        test_bal = Path(test_folder / 'perf_log.json')
         test_bal.touch(exist_ok=True)
 
         if bal_path.exists():
             with open(bal_path, "r") as file:
-                bal_data = file.readlines()
+                bal_data = json.load(file)
             with open(test_bal, "w") as file:
-                file.writelines(bal_data)
+                json.dump(bal_data, file)
 
         def sync_trades_records(switch):
             w = Timer(f'sync_trades_records-{switch}')
@@ -153,6 +153,8 @@ class Agent():
             open_trades = {}
             ot_path.touch()
             # print(f'{ot_path} not found')
+
+        # print(f"in read_open_trade_records - {self.name} {state} trades: {open_trades.keys()}")
 
         w.stop()
         return open_trades
@@ -241,26 +243,6 @@ class Agent():
         u.stop()
 
     # record stopped trades ------------------------------------------------
-
-    def create_stopped_list(self):
-        # get a list of (pair, stop_id, stop_time) for all open_trades records
-        old_ids = [(pair, v['position']['stop_id'], v['position']['stop_time'])
-                   for pair, v in self.open_trades.items()]
-
-        # get a list of stop orders currently open on exchange
-        stopped = []
-        for pair, sid, time in old_ids:
-            order = client.get_margin_order(symbol=pair, orderId=sid)
-            if order['status'] == 'FILLED':
-                stopped.append((pair, sid, time))
-            elif order['status'] in ['PARTIALLY_FILLED', 'CANCELLED']:
-                print(f'\nProblem with {self.name} {pair} trade record\n')
-                pprint(self.open_trades[pair])
-                print('')
-                pprint(order['status'])
-
-        # return a list of (pair, stop_id, stop_time) for all stopped trades
-        return stopped
 
     def create_stopped_list_old(self):
         # get a list of (pair, stop_id, stop_time) for all open_trades records
@@ -405,19 +387,67 @@ class Agent():
         m = Timer('record_stopped_trades')
         m.start()
 
-        stopped = self.create_stopped_list()
-        print('\n', 'stopped trades\n', stopped, '\n')
+        # get a list of (pair, stop_id, stop_time) for all open_trades records
+        old_ids = [(pair, v['position']['stop_id'], v['position']['stop_time'])
+                   for pair, v in self.open_trades.items()]
 
-        for pair, sid, time in stopped:
-            print('\nopen trade record')
-            pprint(self.open_trades[pair])
-            print('')
-            try:
-                self.rst_iteration(session, pair, sid)
-            except bx.BinanceAPIException as e:
-                self.record_trades(session, 'all')
-                print(f'{self.name} problem with record_stopped_trades during {pair}')
-                print(e)
+        for pair, sid, time in old_ids:
+            order = client.get_margin_order(symbol=pair, orderId=sid)
+            # TODO record request weight 10 in session
+
+            if order['status'] == 'FILLED':
+                print(f"{self.name} {pair} stop order filled")
+                try:
+                    self.rst_iteration(session, pair, sid)
+                except bx.BinanceAPIException as e:
+                    self.record_trades(session, 'all')
+                    print(f'{self.name} problem with record_stopped_trades during {pair}')
+                    print(e)
+
+            elif order['status'] == 'CANCELED':
+                print(f'\nProblem with {self.name} {pair} trade record\n')
+
+                # it should be possible to check the placeholder in the trade record and piece together what to do
+                ph = self.open_trades[pair].get('placeholder')
+
+                if ph:
+                    print(f"{self.name} {pair} stop canceled, placeholder found")
+                    print('use this to modify record_stopped_trades with useful behaviour in this scenario')
+                    pprint(self.open_trades[pair])
+                    print('')
+                    pprint(order)
+                else:
+                    print('\n\n*******************************************\n\n')
+                    print(f"{self.name} {pair} stop canceled, no placeholder found, deleting record")
+                    pprint(self.open_trades[pair])
+                    del self.open_trades[pair]
+                    print('\n\n*******************************************\n\n')
+
+            elif order['status'] == 'PARTIALLY_FILLED':
+                print(f"{self.name} {pair} stop hit and partially filled, recording trade.")
+
+                old_size = Decimal(order['origQty'])
+                exe_size = Decimal(order['executedQty'])
+                stop_price = Decimal(order['stopPrice'])
+
+                # update trade record
+                self.open_trades[pair]['trade'].append(
+                    {'base_size': order['executedQty'],
+                     'exe_price': order['stopPrice'],
+                     'quote_size': str(exe_size * stop_price),
+                     'state': 'real',
+                     'stop_id': order['orderId'],
+                     'timestamp': order['updateTime'],
+                     'trig_price': order['stopPrice'],
+                     'type': 'partstop_long'}
+                )
+
+                # update position record
+                self.open_trades[pair]['position']['base_size'] = str(old_size - exe_size)
+
+            else:
+                print(f"{self.name} {pair} stop order (id {sid}) not filled, status: {order['status']}")
+
         m.stop()
 
     # record stopped sim trades ----------------------------------------------
@@ -654,13 +684,13 @@ class Agent():
             if bal_data and last.get(f'{switch}_open_pnl_{direction[0]}'):
                 prev_open_pnl = last.get(f'{switch}_open_pnl_{direction[0]}')
                 curr_open_pnl = self.open_pnl(direction, switch)
-                pnl_change_pct = 100 * (curr_open_pnl - prev_open_pnl) / prev_open_pnl
-                self.open_pnl_changes[switch] = pnl_change_pct
+                opnl_change_pct = 100 * (curr_open_pnl - prev_open_pnl) / prev_open_pnl
+                self.open_pnl_changes[switch] = opnl_change_pct
             elif bal_data:
                 prev_bal = last.get('balance')
-                pnl_change_pct = 100 * (session.bal - prev_bal) / prev_bal
+                opnl_change_pct = 100 * (session.bal - prev_bal) / prev_bal
             else:
-                pnl_change_pct = 0
+                opnl_change_pct = 0
 
             lookup = f'realised_pnl_{direction}' if switch == 'real' else f'sim_r_pnl_{direction}'
             pnls = {}
@@ -672,9 +702,9 @@ class Agent():
 
             score_1 = 0
             score_2 = 0
-            if pnl_change_pct > 0.1:
+            if opnl_change_pct > 0.1:
                 score_1 += 5
-            elif pnl_change_pct < -0.1:
+            elif opnl_change_pct < -0.1:
                 score_1 -= 5
             if pnls.get(1) > 0:
                 score_2 += 4
@@ -1099,7 +1129,6 @@ class Agent():
 
         # # spot
         # if direction == 'spot' and self.in_pos['real'] is None and not sim_reason:
-
 
     def tp_pos(self, session, pair, stp, inval, direction):
         if self.in_pos.get('real_tp_sig'):
