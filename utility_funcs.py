@@ -573,17 +573,17 @@ def scanner_summary(session, agents: list) -> None:
             print_msg = True
             agent_msg += f"\nfixed risk short: {agent.fixed_risk_s*10000:.1f}Bps"
 
-        if agent.realised_pnl_long:
+        if agent.realised_pnl_long > 0:
             print_msg = True
             agent_msg += f"\nrealised real long pnl: {agent.realised_pnl_long:.1f}R"
-        elif agent.sim_pnl_long:
+        elif agent.sim_pnl_long > 0:
             print_msg = True
             agent_msg += f"\nrealised sim long pnl: {agent.sim_pnl_long:.1f}R"
 
-        if agent.realised_pnl_short:
+        if agent.realised_pnl_short > 0:
             print_msg = True
             agent_msg += f"\nrealised real short pnl: {agent.realised_pnl_short:.1f}R"
-        elif agent.sim_pnl_short:
+        elif agent.sim_pnl_short > 0:
             print_msg = True
             agent_msg += f"\nrealised sim short pnl: {agent.sim_pnl_short:.1f}R"
 
