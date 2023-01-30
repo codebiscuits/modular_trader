@@ -461,8 +461,6 @@ class Agent():
                 zzz = Timer('rsst - read ohlc pickles')
                 zzz.start()
                 df = pd.read_pickle(filepath)
-                if df['timestamp'].dtype == 'Timestamp':
-                    df['timestamp'] = df['timestamp'].timestamp()
                 zzz.stop()
             else:
                 zzzz = Timer('rsst - get_historical_klines_1h')
@@ -473,7 +471,7 @@ class Agent():
                 df = pd.DataFrame(klines, columns=cols)
                 df['timestamp'] = df['timestamp'] * 1000000
                 df = df.astype(float)
-                df['timestamp'] = pd.to_datetime(df.timestamp)
+                # df['timestamp'] = pd.to_datetime(df.timestamp)
                 zzzz.stop()
 
             # trim df down to just the rows since the last stop was set
@@ -512,21 +510,20 @@ class Agent():
             stopped = ll < stop
             overshoot_pct = round((100 * (stop - ll) / stop), 3)  # % distance that price broke through the stop
             if stopped:
-                for i in range(len(df)):
-                    if df.at[i, 'low'] <= stop:
-                        stop_hit_time = df.at[i, 'timestamp']
-                        if isinstance(stop_hit_time, pd.Timestamp):
-                            stop_hit_time = stop_hit_time.timestamp()
+
+                stop_hit_time = df.loc[df.low <= stop].timestamp.iloc[0]
+                if isinstance(stop_hit_time, pd.Timestamp):
+                    stop_hit_time = stop_hit_time.timestamp()
+
         else:
             hh = df.high.max()
             stopped = hh > stop
             overshoot_pct = round((100 * (hh - stop) / stop), 3)  # % distance that price broke through the stop
             if stopped:
-                for i in range(len(df)):
-                    if df.at[i, 'high'] >= stop:
-                        stop_hit_time = df.at[i, 'timestamp']
-                        if isinstance(stop_hit_time, pd.Timestamp):
-                            stop_hit_time = stop_hit_time.timestamp()
+
+                stop_hit_time = df.loc[df.high >= stop].timestamp.iloc[0]
+                if isinstance(stop_hit_time, pd.Timestamp):
+                    stop_hit_time = stop_hit_time.timestamp()
 
         k16.stop()
 
