@@ -192,13 +192,22 @@ class Agent():
         if Path(cs_path).exists():
             with open(cs_path, "r") as cs_file:
                 try:
-                    closed_sim_trades = json.load(cs_file)
+                    cs_trades = json.load(cs_file)
                 except JSONDecodeError:
-                    closed_sim_trades = {}
+                    cs_trades = {}
 
         else:
-            closed_sim_trades = {}
+            cs_trades = {}
             print(f'{cs_path} not found')
+
+        limit = 5000
+        if len(cs_trades.keys()) > limit:
+            print(f"{self.name} closed sim trades on record: {len(cs_trades.keys())}")
+            closed_sim_tups = sorted(zip(cs_trades.keys(), cs_trades.values()), key=lambda x: int(x[0]))
+            closed_sim_trades = dict(closed_sim_tups[-limit:])
+        else:
+            closed_sim_trades = cs_trades
+
         r.stop()
         return closed_sim_trades
 
