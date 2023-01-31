@@ -195,11 +195,8 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
                     print(trim_size)
                     usdt_size = usdt_depth
                 sim_reason = None
-                if session.algo_limit_reached(pair):
-                    agent.counts_dict['algo_order_limit'] += 1
-                    sim_reason = 'algo_order_limit'
 
-                elif usdt_size < 30:
+                if usdt_size < 30:
                     if not agent.in_pos['sim']:
                         agent.counts_dict['too_small'] += 1
                     sim_reason = 'too_small'
@@ -239,6 +236,9 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
                     if not agent.in_pos['sim']:
                         agent.counts_dict['not_enough_usdt'] += 1
                     sim_reason = 'not_enough_usdt'
+                elif session.algo_limit_reached(pair):
+                    agent.counts_dict['algo_order_limit'] += 1
+                    sim_reason = 'algo_order_limit'
 
                 try:
                     agent.open_pos(session, pair, size, stp, inval_ratio, sim_reason, direction)
