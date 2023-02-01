@@ -207,6 +207,7 @@ class MARGIN_SESSION:
         x3.start()
 
         self.account_info = client.get_margin_account()
+        self.counts.append('get_margin_account')
 
         x3.stop()
 
@@ -262,6 +263,7 @@ class MARGIN_SESSION:
         info = self.symbol_info.get(pair)
         if not info:
             info = client.get_symbol_info(pair)
+            self.counts.append('get_symbol_info')
             self.symbol_info[pair] = info
 
         x6.stop()
@@ -275,6 +277,7 @@ class MARGIN_SESSION:
         x7.start()
 
         orders = client.get_open_margin_orders()
+        self.counts.append('get_open_margin_orders')
 
         algo_types = ['STOP_LOSS', 'STOP_LOSS_LIMIT', 'TAKE_PROFIT', 'TAKE_PROFIT_LIMIT']
         order_symbols = [d['symbol'] for d in orders if d['type'] in algo_types]
@@ -309,6 +312,7 @@ class MARGIN_SESSION:
 
         if not self.max_loan_amounts.get(asset):
             self.max_loan_amounts[asset] = client.get_max_margin_loan(asset=asset)
+            self.counts.append('get_max_margin_loan')
 
         x9.stop()
 
@@ -322,9 +326,9 @@ class MARGIN_SESSION:
 
         if not self.book_data.get(pair):
             self.book_data[pair] = client.get_order_book(symbol=pair)
+            self.counts.append('get_order_book')
 
         x10.stop()
-        self.counts.append('depth')
 
         return self.book_data[pair]
 

@@ -100,7 +100,7 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
             if agent.too_new(df):
                 too_new += 1
         if too_new == len(agents):
-            print(f"{pair} too new: {len(df)}")
+            # print(f"{pair} too new: {len(df)}")
             continue
 
         if len(df) > session.max_length:
@@ -333,13 +333,14 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
             if ssopnl:
                 print(f"sim open pnl short: {ssopnl:.1f}R")
 
+            print(f'{agent.name} Counts:')
+            for k, v in agent.counts_dict.items():
+                if v:
+                    print(k, v)
+            print('-:-' * 20)
+
         agent.real_pos['USDT'] = session.usdt_bal
 
-        print(f'{agent.name} Counts:')
-        for k, v in agent.counts_dict.items():
-            if v:
-                print(k, v)
-        print('-:-' * 20)
 
     if not session.live:
         # print('\n*** real_pos ***')

@@ -271,10 +271,11 @@ class Agent():
         # return a list of (pair, stop_id, stop_time) for all stopped trades
         return stopped
 
-    def find_order(self, pair, sid):
+    def find_order(self, session, pair, sid):
         if sid == 'not live':
             return None
         order_list = client.get_all_margin_orders(symbol=pair, orderId=sid)
+        session.counts.append('get_all_margin_orders')
 
         order = order_list[0] if order_list[0]['orderId'] == sid else None
 
@@ -340,7 +341,7 @@ class Agent():
     def rst_iteration(self, session, pair, sid):
         direction = self.open_trades[pair]['position']['direction']
         try:
-            order = self.find_order(pair, sid)
+            order = self.find_order(session, pair, sid)
         except bx.BinanceAPIException as e:
             self.error_print(session, pair, 'find_order', e)
 
@@ -402,6 +403,7 @@ class Agent():
 
         for pair, sid, time in old_ids:
             order = client.get_margin_order(symbol=pair, orderId=sid)
+            session.counts.append('get_margin_order')
             # TODO record request weight 10 in session
 
             if order['status'] == 'FILLED':
@@ -476,6 +478,7 @@ class Agent():
                 zzzz = Timer('rsst - get_historical_klines_1h')
                 zzzz.start()
                 klines = client.get_historical_klines(pair, Client.KLINE_INTERVAL_1HOUR, stop_time)
+                session.counts.append('get_historical_klines_1h')
                 cols = ['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'close_time',
                         'quote_vol', 'num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol', 'ignore']
                 df = pd.DataFrame(klines, columns=cols)
@@ -493,6 +496,7 @@ class Agent():
             z = Timer('rsst - get_historical_klines_5m')
             z.start()
             klines = client.get_historical_klines(pair, Client.KLINE_INTERVAL_5MINUTE, stop_time)
+            session.counts.append('get_historical_klines_5min')
             z.stop()
 
             zz = Timer('make_dataframe_5m')
