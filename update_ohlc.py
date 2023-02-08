@@ -69,7 +69,7 @@ iterations(1, 'ETHUSDT', '1m')
 
 for n, pair in enumerate(pairs):
     iterations(n, pair, '5m')
-    # iterations(n, pair, '15m')
+    iterations(n, pair, '15m')
     # iterations(n, pair, '1h')
 
 end = time.perf_counter()
