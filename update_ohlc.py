@@ -11,6 +11,8 @@ from config import not_pairs
 pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
 
+# TODO after migrating to polars, i want to incorporate market cap data from coingecko/coinmarketcap
+
 client = Client(keys.bPkey, keys.bSkey)
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
