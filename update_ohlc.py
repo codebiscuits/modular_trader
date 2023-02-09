@@ -1,4 +1,5 @@
 import pandas as pd
+from pandas import errors
 import keys
 import time
 from datetime import datetime
@@ -40,6 +41,7 @@ def iterations(n, pair, tf):
     ohlc_data.mkdir(exist_ok=True)
     filepath = Path(f'{ohlc_data}/{pair}.pkl')
     if filepath.exists():
+        print(filepath)
         df = pd.read_pickle(filepath)
         if len(df) > 2:
             df = funcs.update_ohlc(pair, tf, df)
@@ -68,8 +70,11 @@ iterations(0, 'BTCUSDT', '1m')
 iterations(1, 'ETHUSDT', '1m')
 
 for n, pair in enumerate(pairs):
-    iterations(n, pair, '5m')
     iterations(n, pair, '15m')
+    try:
+        iterations(n, pair, '5m')
+    except:
+        continue
     # iterations(n, pair, '1h')
 
 end = time.perf_counter()
