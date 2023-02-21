@@ -109,22 +109,17 @@ def set_paths(curr_year, exchange):
 
     return fp, sf, live
 
-start = time.perf_counter()
 
-now = dt.now().strftime('%d/%m/%y %H:%M')
-print(now, 'running book stats')
-curr_year = dt.now().year
-quote = 'USDT'
-exchanges = [ccxt.ascendex, ccxt.binance, ccxt.kucoin]
-
-depth_dict = {}
-slippage_dict = {}
-for i in exchanges:
-    ex = i()
-    print(ex.id)
+def gather_data(ex):
+    depth_dict = {}
+    slippage_dict = {}
+    pprint(ex.markets)
+    print('loading markets')
     pairs = ex.load_markets()
+    print('num pairs:', len(pairs))
     for pair in pairs.keys():
         if '/' + quote in pair:
+            print(f"{ex} {pair}")
             slip_stats = {}
             base = pairs[pair]['base']
             quote = pairs[pair]['quote']
@@ -142,36 +137,49 @@ for i in exchanges:
             pair_stats = get_book_stats(pair, book, quote, 2)
             depth_dict[pair] = pair_stats
 
-    fp, sf, live = set_paths(curr_year, ex)
-    print(f"{fp}\n{sf}")
+    return depth_dict, slippage_dict
 
-    # depth data
+
+def save_data(mkt_data, path, type):
     try:
-        with open(fp, 'r') as liq_file:
-            liq_data = json.load(liq_file)
+        with open(path, 'r') as file:
+            data = json.load(file)
     except (FileNotFoundError, JSONDecodeError):
-        liq_data = {}
+        data = {}
 
     if not live:
-        fp = Path(f"{ex.id}_liq_test_{curr_year}.json")
+        fp = Path(f"{ex.id}_{type}_test_{curr_year}.json")
         fp.touch(exist_ok=True)
-    liq_data[now] = depth_dict
-    with open(fp, 'w') as liq_file:
-        json.dump(liq_data, liq_file)
+    data[now] = mkt_data
+    with open(fp, 'w') as file:
+        json.dump(data, file)
 
-    # slip data
+
+start = time.perf_counter()
+
+now = dt.now().strftime('%d/%m/%y %H:%M')
+print(now, 'running book stats')
+curr_year = dt.now().year
+quote = 'USDT'
+exchanges = [ccxt.ascendex, ccxt.binance, ccxt.kucoin]
+
+for i in exchanges:
+    ex = i()
+    print(ex.id)
     try:
-        with open(sf, 'r') as slip_file:
-            all_data = json.load(slip_file)
-    except (FileNotFoundError, JSONDecodeError):
-        all_data = {}
+        depth_dict, slippage_dict = gather_data(ex)
 
-    if not live:
-        sf = Path(f'{ex.id}_slip_test_{curr_year}.json')
-        sf.touch(exist_ok=True)
-    all_data[now] = slippage_dict
-    with open(sf, 'w') as slip_file:
-        json.dump(all_data, slip_file)
+        fp, sf, live = set_paths(curr_year, ex)
+        print(f"{fp}\n{sf}")
+
+        # depth data
+        save_data(depth_dict, fp, 'liq')
+
+        # slip data
+        save_data(slippage_dict, sf, 'slip')
+    except:
+        print(f"Problem with {ex.id}")
+        continue
 
 
 end = time.perf_counter()

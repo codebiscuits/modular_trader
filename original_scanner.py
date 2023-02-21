@@ -1,9 +1,8 @@
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 import binance_funcs as funcs
 from agents import DoubleST, EMACross, EMACrossHMA, AvgTradeSize
 import binance.exceptions as bx
-from config import not_pairs
 from pprint import pprint
 import utility_funcs as uf
 from random import shuffle
@@ -14,69 +13,96 @@ from collections import Counter
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
+# TODO before committing;
+#  i need to finish implementing signal scores using inval (create agent method which translates inval into score then
+#  replace the inval risk filter on open_trade signals with a check for the score)
 
-def setup_scan(timeframe: str, offset: str) -> None:
+
+def get_timeframes():
+    hour = datetime.now(timezone.utc).hour
+    # hour = 0 # for testing all timeframes
+    d = {1: ('1h', None), 4: ('4h', None), 12: ('12h', None), 24: ('1d', None)}
+
+    return [d[tf] for tf in d if hour % tf == 0]
+
+
+# def setup_scan(timeframe: str, offset: str) -> None:
+def setup_scan() -> None:
     """this function scans all pairs for a particular quote asset looking for setups
     which match the criteria for a trade, then executes the trade if possible"""
 
-    print(f"Running setup_scan({timeframe}, {offset})")
+    timeframes = get_timeframes()
+
+    print(f"Running setup_scan({timeframes})")
     all_start = time.perf_counter()
-    session = sessions.MARGIN_SESSION(timeframe, offset, 0.0005)
+    session = sessions.TradingSession(0.0005)
     print(f"\nCurrent time: {session.now_start}, {session.name}\n")
-    funcs.update_prices(session)
 
-    agents = [
-        DoubleST(session, 3, 1.0),
-        DoubleST(session, 3, 1.4),
-        DoubleST(session, 3, 1.8),
-        DoubleST(session, 5, 2.2),
-        DoubleST(session, 5, 2.8),
-        DoubleST(session, 5, 3.4),
-        EMACross(session, 12, 21, 1.2),
-        EMACross(session, 12, 21, 1.8),
-        EMACross(session, 12, 21, 2.4),
-        EMACrossHMA(session, 12, 21, 1.2),
-        EMACrossHMA(session, 12, 21, 1.8),
-        EMACrossHMA(session, 12, 21, 2.4),
-        # AvgTradeSize(session, 2, 1000, 1.1, 'oco'),
-        # AvgTradeSize(session, 2, 1000, 1.1, 'trail'),
-        # AvgTradeSize(session, 2, 1000, 2.0, 'oco'),
-        # AvgTradeSize(session, 2, 1000, 2.0, 'trail'),
-        # AvgTradeSize(session, 2, 1000, 3.0, 'oco'),
-        # AvgTradeSize(session, 2, 1000, 3.0, 'trail'),
-        # AvgTradeSize(session, 2, 1000, 4.0, 'oco'),
-        # AvgTradeSize(session, 2, 1000, 4.0, 'trail'),
-    ]
+    agents = []
 
-    session.name = ' | '.join([n.name for n in agents])
+    for timeframe, offset in timeframes:
+        agents.extend(
+            [
+                DoubleST(session, timeframe, offset, 3, 1.0),
+                DoubleST(session, timeframe, offset, 3, 1.4),
+                DoubleST(session, timeframe, offset, 3, 1.8),
+                DoubleST(session, timeframe, offset, 5, 2.2),
+                DoubleST(session, timeframe, offset, 5, 2.8),
+                DoubleST(session, timeframe, offset, 5, 3.4),
+                EMACross(session, timeframe, offset, 12, 21, 1.2),
+                EMACross(session, timeframe, offset, 12, 21, 1.8),
+                EMACross(session, timeframe, offset, 12, 21, 2.4),
+                EMACrossHMA(session, timeframe, offset, 12, 21, 1.2),
+                EMACrossHMA(session, timeframe, offset, 12, 21, 1.8),
+                EMACrossHMA(session, timeframe, offset, 12, 21, 2.4),
+                # AvgTradeSize(session, timeframe, offset, 2, 1000, 1.1, 'oco'),
+                # AvgTradeSize(session, timeframe, offset, 2, 1000, 2.0, 'oco'),
+                # AvgTradeSize(session, timeframe, offset, 2, 1000, 3.0, 'oco'),
+                # AvgTradeSize(session, timeframe, offset, 2, 1000, 4.0, 'oco'),
+            ]
+        )
+
+        pprint(agents)
+
+    # session.name = ' | '.join([n.name for n in agents])
 
     # compile and sort list of pairs to loop through ------------------------------
-    # TODO need to work out what to do when some strats want the spot pairs list and others just want the cross pairs
-    all_pairs = funcs.get_pairs(market='CROSS')
+    all_pairs = [k for k in session.pairs_data.keys()
+                 if (session.pairs_data[k]['status'] == 'TRADING')
+                 and (session.pairs_data[k]['margin_allowed'])]
+    # all_pairs = funcs.get_pairs(market='MARGIN', session=session)
     shuffle(all_pairs)
+
     positions = []
     for agent in agents:
         posis = list(agent.real_pos.keys())
         positions.extend(posis)
     pairs_in_pos = [p + 'USDT' for p in set(positions) if p != 'USDT']
     print(f"Total {pairs_in_pos = }")
-    other_pairs = [p for p in all_pairs if (p not in pairs_in_pos) and (p not in not_pairs)]
+    other_pairs = [p for p in all_pairs if p not in pairs_in_pos]
     pairs = pairs_in_pos + other_pairs  # this ensures open positions will be checked first
-
     # pairs = pairs[:10] # for testing the loop quickly
 
-    funcs.top_up_bnb_M(session, 15)
-    session.spreads = funcs.binance_spreads('USDT')  # dict
-
+    # calculate initial open pnl for comparison with end of previous session
+    # TODO this might be ok to do inside each agent's __init__ method, unless theres some reason why the pairs list has
+    #  to come first, in which case it could still be an agent method which i just call at this point in the script
     for agent in agents:
-        if agent.fixed_risk_l or agent.fixed_risk_s:
-            print(f"{agent.name} fr long: {(agent.fixed_risk_l * 10000):.2f}bps, \
-fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
-        agent.real_pos['USDT'] = session.usdt_bal
-        agent.starting_ropnl_l = agent.open_pnl('long', 'real')
-        agent.starting_sopnl_l = agent.open_pnl('long', 'sim')
-        agent.starting_ropnl_s = agent.open_pnl('short', 'real')
-        agent.starting_sopnl_s = agent.open_pnl('short', 'sim')
+        if agent.mode == 'spot':
+            if agent.fixed_risk_spot:
+                print(f"{agent.name} fixed risk: {(agent.fixed_risk_spot * 10000):.2f}bps")
+            agent.real_pos['USDT'] = session.spot_usdt_bal
+            agent.starting_ropnl_spot = agent.open_pnl('spot', 'real')
+            agent.starting_sopnl_spot = agent.open_pnl('spot', 'sim')
+        elif agent.mode == 'margin':
+            if agent.fixed_risk_l or agent.fixed_risk_s:
+                frl_bps = agent.fixed_risk_l * 10000
+                frs_bps = agent.fixed_risk_s * 10000
+                print(f"{agent.name} fr long: {(frl_bps):.2f}bps, fr short: {(frs_bps):.2f}bps")
+            agent.real_pos['USDT'] = session.margin_usdt_bal
+            agent.starting_ropnl_l = agent.open_pnl('long', 'real')
+            agent.starting_sopnl_l = agent.open_pnl('long', 'sim')
+            agent.starting_ropnl_s = agent.open_pnl('short', 'real')
+            agent.starting_sopnl_s = agent.open_pnl('short', 'sim')
 
         if agent.max_positions > 10:
             print(f'max positions: {agent.max_positions}')
@@ -86,56 +112,63 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
     # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 
     for n, pair in enumerate(pairs):
-        # print(pair)
-        funcs.update_prices(session)
+        print(n, pair)
+        session.update_prices()
         asset = pair[:-1 * len(session.quote_asset)]
         for agent in agents:
             agent.init_in_pos(pair)
 
-        df = funcs.prepare_ohlc(session, pair)
-
-        # if pair is too new for all agents, skip it
-        too_new = 0
-        for agent in agents:
-            if agent.too_new(df):
-                too_new += 1
-        if too_new == len(agents):
-            # print(f"{pair} too new: {len(df)}")
-            continue
-
-        if len(df) > session.max_length:
-            df = df.tail(session.max_length)
-            df.reset_index(drop=True, inplace=True)
+        # df_dict contains ohlc dataframes for each active timeframe for the current pair
+        df_dict = funcs.prepare_ohlc(session, timeframes, pair)
+        # TODO i will need to add columns to prepare_ohlc and update_ohlc and any other function that loads those files,
+        #  because they are going to have extra columns from now on. i will also need to stop downloading new files in
+        #  setup_scanner unless i can add in all the extra data at that stage too
 
         now = datetime.now().strftime('%d/%m/%y %H:%M')
 
         # generate signals ------------------------------------------------------------
-        df = session.compute_indicators(df)
+        # if there is not enough history at a given timeframe, this function will return None instead of the df
+        # TODO this would be a good function to start the migration to polars
+        for tf, df in df_dict.items():
+            if len(df) < session.min_length:
+                print(f"length of {pair} {tf} data: {len(df)}")
+                df_dict[tf] = None
+            else:
+                df_dict[tf] = session.compute_indicators(df)
 
-        signals = {}
+        # signals = {}
+
+        # TODO think about whether an api call is necessary here or if these can be served by local data
         usdt_depth_l, usdt_depth_s = funcs.get_depth(session, pair)
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
+
         for agent in agents:
             # print('*****', agent.name)
-            df_2 = df.copy()
+            if df_dict[agent.tf] is not None:
+                df_2 = df_dict[agent.tf].copy()
+            else:
+                print(f"{pair} too new for {agent.name}")
+                continue
             signals = agent.signals(session, df_2, pair)
 
             inval = signals.get('inval')
             inval_ratio = signals.get('inval_ratio')
             if inval:
-                stp = funcs.calc_stop(inval, session.spreads.get(pair), price)
-                risk = abs((price - stp) / price)
-                size_l, usdt_size_l, size_s, usdt_size_s = funcs.get_size(agent, price, session.bal, risk)
+                stp = funcs.calc_stop(inval, session.pairs_data[pair]['spread'], price)
+                inval_risk = abs((price - stp) / price)
+                inval_risk_score = agent.calc_inval_risk_score(inval_risk)
+                bal = session.spot_bal if agent.mode == 'spot' else session.margin_bal
+                size_l, usdt_size_l, size_s, usdt_size_s = funcs.get_size(agent, price, bal, inval_risk)
 
             # remove indicators to avoid errors
             df_2 = df_2[['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'quote_vol',
                          'num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol']]
 
-            if inval == 0:
-                note = f'{pair} supertrend 0 error, skipping pair'
-                print(note)
-                pb.push_note(now, note)
-                continue
+            # if inval == 0:
+            #     note = f'{pair} supertrend 0 error, skipping pair'
+            #     print(note)
+            #     pb.push_note(now, note)
+            #     continue
 
             # update positions dictionary with current pair's open_risk values ------------
             if agent.in_pos['real']:
@@ -201,9 +234,9 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
                         agent.counts_dict['too_small'] += 1
                     sim_reason = 'too_small'
 
-                elif ((('long' in signals.get('signal')) and (risk > agent.max_init_r_l))
+                elif ((('long' in signals.get('signal')) and (inval_risk_score < 0.5))
                       or
-                      (('short' in signals.get('signal')) and (risk > agent.max_init_r_s))):
+                      (('short' in signals.get('signal')) and (inval_risk_score < 0.5))):
                     if not agent.in_pos['sim']:
                         agent.counts_dict['too_risky'] += 1
                     sim_reason = 'too_risky'
@@ -220,7 +253,8 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
 
                 # check total open risk and close profitable positions if necessary -----------
                 agent.reduce_risk_M(session)
-                agent.real_pos['USDT'] = session.usdt_bal
+                usdt_bal = session.spot_usdt_bal if agent.mode == 'spot' else session.margin_usdt_bal
+                agent.real_pos['USDT'] = usdt_bal
 
                 # make sure there aren't too many open positions now --------------------------
                 agent.calc_tor()
@@ -243,7 +277,7 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
                 try:
                     agent.open_pos(session, pair, size, stp, inval_ratio, sim_reason, direction)
                 except bx.BinanceAPIException as e:
-                    if e.code == -3045: # borrow failed because there weren't enough assets to borrow
+                    if e.code == -3045:  # borrow failed because there weren't enough assets to borrow
                         del agent.open_trades[pair]
                         agent.open_pos(session, pair, size, stp, inval_ratio, 'not_enough_borrow', direction)
                     else:
@@ -298,9 +332,10 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
     # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 
     # log all data from the session and print/push summary-------------------------
-    before = session.usdt_bal
-    session.get_usdt_M()
-    after = session.usdt_bal
+    # TODO need this for spot as well
+    before = session.margin_usdt_bal
+    session.get_usdt_m()
+    after = session.margin_usdt_bal
     if before != after:
         print('\n*-*-*-*-*-*-*-*-*-*-*-*-*-*-*')
         print(f'USDT balance wrong\nbefore: {before}\nafter: {after}')
@@ -339,18 +374,21 @@ fr short: {(agent.fixed_risk_s * 10000):.2f}bps")
                     print(k, v)
             print('-:-' * 20)
 
-        agent.real_pos['USDT'] = session.usdt_bal
-
+        usdt_bal = session.spot_usdt_bal if agent.mode == 'spot' else session.margin_usdt_bal
+        agent.real_pos['USDT'] = usdt_bal
 
     if not session.live:
         # print('\n*** real_pos ***')
         # pprint(agent.real_pos)
         print('warning: logging directed to test_records')
 
-    uf.log(session, agents)
+    uf.market_benchmark(session)
+    for agent in agents:
+        uf.log(session, agent)
+        uf.strat_benchmark(session, agent)
     uf.scanner_summary(session, agents)
 
-    # uf.interpret_benchmark(session, agents)
+    uf.interpret_benchmark(session, agents)
 
     print('\n---- Timers ----')
     for k, v in Timer.timers.items():

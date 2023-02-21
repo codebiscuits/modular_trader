@@ -17,19 +17,28 @@ import binance.enums as be
 from decimal import Decimal, getcontext
 from pprint import pprint
 import sys
-from config import testing
+import math
 
-client = Client(keys.bPkey, keys.bSkey, testnet=testing)
+client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 ctx = getcontext()
 ctx.prec = 12
 
+# TODO i need to check every function which puts a timestamp in a trade record because i don't think they are being
+#  consistent with the numbers they are recording. datetime.datetime expects timestamp numbers to be between
+#  1_000_000_000 and 10_000_000_000 to produce dates that make sense. anything outside this range needs to be scaled up
+#  or down by factors of 1000 until it is within this range
+
+# TODO i need to check that every agent is working out inval and inval ratio in the same way, because i have a feeling
+#  that one or more of them may be inverting something by accident on the short trades
 
 class Agent():
     '''generic agent class for each strategy to inherit from'''
 
+    realised_pnl_spot = 0
     realised_pnl_long = 0
     realised_pnl_short = 0
+    sim_pnl_spot = 0
     sim_pnl_long = 0
     sim_pnl_short = 0
     indiv_r_limit = 1.2
@@ -44,11 +53,14 @@ class Agent():
         t.start()
         self.live = session.live
         self.fr_max = session.fr_max
-        self.prices = session.prices
-        self.lookback_limit = session.max_length - 1
+        # self.prices = session.prices
         self.market_data = session.market_data
 
-        self.counts_dict = {'real_stop_long': 0, 'real_open_long': 0, 'real_add_long': 0, 'real_tp_long': 0,
+        self.counts_dict = {'real_stop_spot': 0, 'real_open_spot': 0, 'real_add_spot': 0, 'real_tp_spot': 0,
+                            'real_close_spot': 0,
+                            'sim_stop_spot': 0, 'sim_open_spot': 0, 'sim_add_spot': 0, 'sim_tp_spot': 0,
+                            'sim_close_spot': 0,
+                            'real_stop_long': 0, 'real_open_long': 0, 'real_add_long': 0, 'real_tp_long': 0,
                             'real_close_long': 0,
                             'sim_stop_long': 0, 'sim_open_long': 0, 'sim_add_long': 0, 'sim_tp_long': 0,
                             'sim_close_long': 0,
@@ -67,19 +79,23 @@ class Agent():
         self.closed_sim_trades = self.read_closed_sim_trade_records(session)
         self.backup_trade_records(session)
         self.repair_trade_records(session)
-        self.real_pos = self.current_positions(session.bal, 'open')
-        self.sim_pos = self.current_positions(session.bal, 'sim')
-        self.tracked = self.current_positions(session.bal, 'tracked')
+        self.real_pos = self.current_positions(session, 'open')
+        self.sim_pos = self.current_positions(session, 'sim')
+        self.tracked = self.current_positions(session, 'tracked')
         self.record_stopped_trades(session)
         self.record_stopped_sim_trades(session)
         self.open_pnl_changes = {}
+        self.fixed_risk_spot = self.set_fixed_risk(session, 'spot')
         self.fixed_risk_l = self.set_fixed_risk(session, 'long')
         self.fixed_risk_s = self.set_fixed_risk(session, 'short')
         self.test_fixed_risk(0.0002, 0.0002)
         self.max_positions = self.set_max_pos()
-        self.fixed_risk_dol_l = self.fixed_risk_l * session.bal
-        self.fixed_risk_dol_s = self.fixed_risk_s * session.bal
+        self.fr_dol_spot = self.fixed_risk_spot * session.spot_bal
+        self.fixed_risk_dol_l = self.fixed_risk_l * session.margin_bal
+        self.fixed_risk_dol_s = self.fixed_risk_s * session.margin_bal
         self.next_id = int(datetime.now().timestamp())
+        session.ohlc_length = max(session.ohlc_length, self.ohlc_length)
+        print(f"{session.ohlc_length = }")
         t.stop()
 
     def __str__(self):
@@ -91,8 +107,8 @@ class Agent():
 
         q = Timer('sync_test_records')
         q.start()
-        real_folder = Path(f"{session.read_records}/{self.id}")
-        test_folder = Path(f'{session.write_records}/{self.id}')
+        real_folder = Path(f"{session.read_records}/{self.tf}/{self.id}")
+        test_folder = Path(f'{session.write_records}/{self.tf}/{self.id}')
         if not test_folder.exists():
             test_folder.mkdir(parents=True)
         bal_path = Path(real_folder / 'perf_log.json')
@@ -108,8 +124,8 @@ class Agent():
         def sync_trades_records(switch):
             w = Timer(f'sync_trades_records-{switch}')
             w.start()
-            trades_path = Path(f'{session.read_records}/{self.id}/{switch}_trades.json')
-            test_trades = Path(f'{session.write_records}/{self.id}/{switch}_trades.json')
+            trades_path = Path(f'{session.read_records}/{self.tf}/{self.id}/{switch}_trades.json')
+            test_trades = Path(f'{session.write_records}/{self.tf}/{self.id}/{switch}_trades.json')
             test_trades.touch(exist_ok=True)
 
             if trades_path.exists():
@@ -138,7 +154,7 @@ class Agent():
 
         w = Timer(f'read_open_trade_records-{state}')
         w.start()
-        ot_path = Path(f"{session.read_records}/{self.id}")
+        ot_path = Path(f"{session.read_records}/{self.tf}/{self.id}")
         ot_path.mkdir(parents=True, exist_ok=True)
         ot_path = ot_path / f'{state}_trades.json'
 
@@ -164,7 +180,7 @@ class Agent():
 
         e = Timer('read_closed_trade_records')
         e.start()
-        ct_path = Path(f"{session.read_records}/{self.id}/closed_trades.json")
+        ct_path = Path(f"{session.read_records}/{self.tf}/{self.id}/closed_trades.json")
         if Path(ct_path).exists():
             with open(ct_path, "r") as ct_file:
                 try:
@@ -188,7 +204,7 @@ class Agent():
 
         r = Timer('read_closed_sim_trade_records')
         r.start()
-        cs_path = Path(f"{session.read_records}/{self.id}/closed_sim_trades.json")
+        cs_path = Path(f"{session.read_records}/{self.tf}/{self.id}/closed_sim_trades.json")
         if Path(cs_path).exists():
             with open(cs_path, "r") as cs_file:
                 try:
@@ -219,23 +235,23 @@ class Agent():
         y.start()
         now = datetime.now().strftime('%d/%m/%y %H:%M')
         if self.open_trades:
-            with open(f"{session.write_records}/{self.id}/ot_backup.json", "w") as ot_file:
+            with open(f"{session.write_records}/{self.tf}/{self.id}/ot_backup.json", "w") as ot_file:
                 json.dump(self.open_trades, ot_file)
 
         if self.sim_trades:
-            with open(f"{session.write_records}/{self.id}/st_backup.json", "w") as st_file:
+            with open(f"{session.write_records}/{self.tf}/{self.id}/st_backup.json", "w") as st_file:
                 json.dump(self.sim_trades, st_file)
 
         if self.tracked_trades:
-            with open(f"{session.write_records}/{self.id}/tr_backup.json", "w") as tr_file:
+            with open(f"{session.write_records}/{self.tf}/{self.id}/tr_backup.json", "w") as tr_file:
                 json.dump(self.tracked_trades, tr_file)
 
         if self.closed_trades:
-            with open(f"{session.write_records}/{self.id}/ct_backup.json", "w") as ct_file:
+            with open(f"{session.write_records}/{self.tf}/{self.id}/ct_backup.json", "w") as ct_file:
                 json.dump(self.closed_trades, ct_file)
 
         if self.closed_sim_trades:
-            with open(f"{session.write_records}/{self.id}/cs_backup.json", "w") as cs_file:
+            with open(f"{session.write_records}/{self.tf}/{self.id}/cs_backup.json", "w") as cs_file:
                 json.dump(self.closed_sim_trades, cs_file)
 
         y.stop()
@@ -253,28 +269,15 @@ class Agent():
 
     # record stopped trades ------------------------------------------------
 
-    def create_stopped_list_old(self):
-        # get a list of (pair, stop_id, stop_time) for all open_trades records
-        old_ids = [(pair, v['position']['stop_id'], v['position']['stop_time'])
-                   for pair, v in self.open_trades.items()]
-
-        # get a list of stop orders currently open on exchange
-        open_orders = client.get_open_margin_orders()
-        remaining_ids = [i.get('orderId') for i in open_orders]
-
-        # compare the two lists to see which trades are no longer open
-        stopped = []
-        for pair, sid, time in old_ids:
-            if sid not in remaining_ids:
-                stopped.append((pair, sid, time))
-
-        # return a list of (pair, stop_id, stop_time) for all stopped trades
-        return stopped
-
     def find_order(self, session, pair, sid):
         if sid == 'not live':
             return None
+        print('get_all_margin_orders')
+        session.track_weights(200)
+        abc = Timer('all binance calls')
+        abc.start()
         order_list = client.get_all_margin_orders(symbol=pair, orderId=sid)
+        abc.stop()
         session.counts.append('get_all_margin_orders')
 
         order = order_list[0] if order_list[0]['orderId'] == sid else None
@@ -323,6 +326,8 @@ class Agent():
     def save_records(self, session, pair, stop_dict):
         self.open_trades[pair]['trade'].append(stop_dict)
         rpnl = self.realised_pnl(self.open_trades[pair])
+        # TODO i feel like realised pnl should be able to put the value straight into the trade record rather than
+        #  returning the value and then updating the record outside the function
         self.open_trades[pair]['trade'][-1]['rpnl'] = rpnl
 
         ts_id = int(self.open_trades[pair]['position']['open_time'])
@@ -357,7 +362,7 @@ class Agent():
             if session.live:
                 print(f"record_stopped_trades found no stop for {pair} {self.name}")
             if direction == 'long':
-                free_bal = session.bals_dict[pair[:-4]].get('free')
+                free_bal = session.margin_bals[pair[:-4]].get('free')
                 pos_size = self.open_trades[pair]['position']['base_size']
 
                 if Decimal(free_bal) >= Decimal(pos_size):
@@ -369,7 +374,7 @@ class Agent():
                         self.error_print(session, pair, 'close', e)
                 else:
                     # if the free balance doesn't cover the position, notify me
-                    price = session.prices[pair]
+                    price = session.pairs_data[pair]['price']
                     value = free_bal * price
                     if pair == 'BNBUSDT' and value > 15:
                         note = f'{pair} in position with no stop-loss'
@@ -379,7 +384,7 @@ class Agent():
                         pb.push_note(session.now_start, note)
 
             else:  # if direction == 'short'
-                owed = float(session.bals_dict[pair[:-4]].get('borrowed'))
+                owed = float(session.margin_bals[pair[:-4]].get('borrowed'))
                 if session.live and not owed:
                     print(f'{pair[:-4]} loan already repaid, no action needed')
                     del self.open_trades[pair]
@@ -402,9 +407,17 @@ class Agent():
                    for pair, v in self.open_trades.items()]
 
         for pair, sid, time in old_ids:
+            if sid == 'not live':
+                print(f"{pair} record non-live")
+                continue
+
+            print('get_margin_order')
+            session.track_weights(10)
+            abc = Timer('all binance calls')
+            abc.start()
             order = client.get_margin_order(symbol=pair, orderId=sid)
+            abc.stop()
             session.counts.append('get_margin_order')
-            # TODO record request weight 10 in session
 
             if order['status'] == 'FILLED':
                 print(f"{self.name} {pair} stop order filled")
@@ -477,7 +490,11 @@ class Agent():
             else:
                 zzzz = Timer('rsst - get_historical_klines_1h')
                 zzzz.start()
+                session.track_weights(1)
+                abc = Timer('all binance calls')
+                abc.start()
                 klines = client.get_historical_klines(pair, Client.KLINE_INTERVAL_1HOUR, stop_time)
+                abc.stop()
                 session.counts.append('get_historical_klines_1h')
                 cols = ['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'close_time',
                         'quote_vol', 'num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol', 'ignore']
@@ -488,14 +505,18 @@ class Agent():
                 zzzz.stop()
 
             # trim df down to just the rows since the last stop was set
-            stop_dt = datetime.fromtimestamp(stop_time / 1000)
-            df = df.loc[df.timestamp > stop_dt]
+            # stop_dt = datetime.fromtimestamp(stop_time / 1000)
+            df = df.loc[df.timestamp > stop_time / 1000]
 
 
         else:
             z = Timer('rsst - get_historical_klines_5m')
             z.start()
+            session.track_weights(1)
+            abc = Timer('all binance calls')
+            abc.start()
             klines = client.get_historical_klines(pair, Client.KLINE_INTERVAL_5MINUTE, stop_time)
+            abc.stop()
             session.counts.append('get_historical_klines_5min')
             z.stop()
 
@@ -604,7 +625,7 @@ class Agent():
         final_exit = float(trades[-1].get('exe_price'))
         final_size = float(trades[-1].get('base_size'))
         r_val = abs((entry - init_stop) / entry)
-        if side == 'long':
+        if side in ['spot', 'long']:
             trade_pnl = (final_exit - entry) / entry
         else:
             trade_pnl = (entry - final_exit) / entry
@@ -616,12 +637,16 @@ class Agent():
         realised_r = trade_r * scalar
 
         if position.get('state') == 'real':
-            if side == 'long':
+            if side == 'spot':
+                self.realised_pnl_spot += realised_r
+            elif side == 'long':
                 self.realised_pnl_long += realised_r
             else:
                 self.realised_pnl_short += realised_r
         elif position.get('state') == 'sim':
-            if side == 'long':
+            if side == 'spot':
+                self.sim_pnl_spot += realised_r
+            elif side == 'long':
                 self.sim_pnl_long += realised_r
             else:
                 self.sim_pnl_short += realised_r
@@ -639,7 +664,7 @@ class Agent():
 
         b = Timer(f'record_trades {state}')
         b.start()
-        filepath = Path(f"{session.write_records}/{self.id}/{state}_trades.json")
+        filepath = Path(f"{session.write_records}/{self.tf}/{self.id}/{state}_trades.json")
         if not filepath.exists():
             filepath.touch()
         with open(filepath, "w") as file:
@@ -655,6 +680,68 @@ class Agent():
                 json.dump(self.closed_sim_trades, file)
         b.stop()
 
+    def reduce_fr(self, factor: float, fr_prev: float, fr_inc: float):
+        """reduces fixed_risk by factor (with the floor value being 0)"""
+        ideal = fr_prev * factor
+        reduce = max(ideal, fr_inc)
+        return max((fr_prev - reduce), 0)
+
+    def score_accum(self, session, direction: str, switch: str):
+        '''calculates perf score from recent performance. also saves the
+        instance property open_pnl_changes dictionary'''
+
+        # TODO this whole function assumes margin positions, i need to make it accommodate spot as well as long/short
+
+        with open(f"{session.read_records}/{self.tf}/{self.id}/perf_log.json", "r") as file:
+            bal_data = json.load(file)
+
+        if bal_data:
+            last = bal_data[-1]
+        if bal_data and last.get(f'{switch}_open_pnl_{direction[0]}'):
+            prev_open_pnl = last.get(f'{switch}_open_pnl_{direction[0]}')
+            curr_open_pnl = self.open_pnl(direction, switch)
+            opnl_change_pct = 100 * (curr_open_pnl - prev_open_pnl) / prev_open_pnl
+            self.open_pnl_changes[switch] = opnl_change_pct
+        elif bal_data:
+            total_bal = session.spot_bal if direction == 'spot' else session.margin_bal
+            prev_bal = last.get('spot_balance', total_bal) if direction == 'spot' else last.get('margin_balance', total_bal)
+            opnl_change_pct = 100 * (total_bal - prev_bal) / prev_bal
+        else:
+            opnl_change_pct = 0
+
+        lookup = f'realised_pnl_{direction}' if switch == 'real' else f'sim_r_pnl_{direction}'
+        pnls = {}
+        for i in range(1, 5):
+            if bal_data and len(bal_data) > 5:
+                pnls[i] = bal_data[-1 * i].get(lookup, -1)
+            else:
+                pnls[i] = -1  # if there's no data yet, return -1 instead
+
+        score_1 = 0
+        score_2 = 0
+        if opnl_change_pct > 0.1:
+            score_1 += 5
+        elif opnl_change_pct < -0.1:
+            score_1 -= 5
+        if pnls.get(1) > 0:
+            score_2 += 4
+        elif pnls.get(1) < 0:
+            score_2 -= 4
+        if pnls.get(2) > 0:
+            score_2 += 3
+        elif pnls.get(2) < 0:
+            score_2 -= 3
+        if pnls.get(3) > 0:
+            score_2 += 2
+        elif pnls.get(3) < 0:
+            score_2 -= 2
+        if pnls.get(4) > 0:
+            score_2 += 1
+        elif pnls.get(4) < 0:
+            score_2 -= 1
+
+        return score_1, score_2, pnls
+
     def set_fixed_risk(self, session, direction: str) -> float:
         """calculates fixed risk setting for new trades based on recent performance
         and previous setting. if recent performance is very good, fr is increased slightly.
@@ -663,15 +750,9 @@ class Agent():
         o = Timer(f'set_fixed_risk-{direction}')
         o.start()
 
-        def reduce_fr(factor: float, fr_prev: float, fr_inc: float):
-            """reduces fixed_risk by factor (with the floor value being 0)"""
-            ideal = fr_prev * factor
-            reduce = max(ideal, fr_inc)
-            return max((fr_prev - reduce), 0)
-
         now = datetime.now().strftime('%d/%m/%y %H:%M')
 
-        filepath = Path(f"{session.read_records}/{self.id}/perf_log.json")
+        filepath = Path(f"{session.read_records}/{self.tf}/{self.id}/perf_log.json")
         if self.live:
             filepath.touch(exist_ok=True)
         with open(filepath, "r") as file:
@@ -683,61 +764,8 @@ class Agent():
             fr_prev = 0
         fr_inc = self.fr_max / 10  # increment fr in 10% steps of the range
 
-        def score_accum(session, direction: str, switch: str):
-            '''calculates perf score from recent performance. also saves the
-            instance property open_pnl_changes dictionary'''
-
-            with open(f"{session.read_records}/{self.id}/perf_log.json", "r") as file:
-                bal_data = json.load(file)
-
-            if bal_data:
-                last = bal_data[-1]
-            if bal_data and last.get(f'{switch}_open_pnl_{direction[0]}'):
-                prev_open_pnl = last.get(f'{switch}_open_pnl_{direction[0]}')
-                curr_open_pnl = self.open_pnl(direction, switch)
-                opnl_change_pct = 100 * (curr_open_pnl - prev_open_pnl) / prev_open_pnl
-                self.open_pnl_changes[switch] = opnl_change_pct
-            elif bal_data:
-                prev_bal = last.get('balance')
-                opnl_change_pct = 100 * (session.bal - prev_bal) / prev_bal
-            else:
-                opnl_change_pct = 0
-
-            lookup = f'realised_pnl_{direction}' if switch == 'real' else f'sim_r_pnl_{direction}'
-            pnls = {}
-            for i in range(1, 5):
-                if bal_data and len(bal_data) > 5:
-                    pnls[i] = bal_data[-1 * i].get(lookup, -1)
-                else:
-                    pnls[i] = -1  # if there's no data yet, return -1 instead
-
-            score_1 = 0
-            score_2 = 0
-            if opnl_change_pct > 0.1:
-                score_1 += 5
-            elif opnl_change_pct < -0.1:
-                score_1 -= 5
-            if pnls.get(1) > 0:
-                score_2 += 4
-            elif pnls.get(1) < 0:
-                score_2 -= 4
-            if pnls.get(2) > 0:
-                score_2 += 3
-            elif pnls.get(2) < 0:
-                score_2 -= 3
-            if pnls.get(3) > 0:
-                score_2 += 2
-            elif pnls.get(3) < 0:
-                score_2 -= 2
-            if pnls.get(4) > 0:
-                score_2 += 1
-            elif pnls.get(4) < 0:
-                score_2 -= 1
-
-            return score_1, score_2, pnls
-
         # real_score_1, real_score_2, real_pnls = score_accum(direction, 'real')
-        sim_score_1, sim_score_2, sim_pnls = score_accum(session, direction, 'sim')
+        sim_score_1, sim_score_2, sim_pnls = self.score_accum(session, direction, 'sim')
         if sim_score_1 + sim_score_2 >= 11:
             print(f"set_fixed_risk {direction}: sim_score {sim_score_1 + sim_score_2}")
         score = sim_score_1 + sim_score_2
@@ -750,9 +778,9 @@ class Agent():
         elif score >= 3:
             fr = fr_prev
         elif score >= -3:
-            fr = reduce_fr(0.333, fr_prev, fr_inc)
+            fr = self.reduce_fr(0.333, fr_prev, fr_inc)
         elif score >= -7:
-            fr = reduce_fr(0.5, fr_prev, fr_inc)
+            fr = self.reduce_fr(0.5, fr_prev, fr_inc)
         else:
             fr = 0
 
@@ -824,9 +852,40 @@ class Agent():
 
         return round(output, 2)
 
-    # positions
+    # signal scores -------------------------------------------------------------
 
-    def open_trade_stats(self, total_bal: float, v: dict) -> dict:
+    def calc_inval_risk_score(self, inval: float) -> float:
+        """i want to analyse the probability of any given value of inval_risk at trade entry producing a positive pnl.
+        Once i have a set of scores (1 for each band of inval_risk range) i can normalise them to a 0-1 range and output
+        that as the inval_risk_score"""
+
+        # TODO ulitmately i want this function to work as described in the docstring but for a quick fix it can just use
+        #  a normal probability density function to achieve a similar result
+
+        def normpdf(x, mean, sd):
+            var = float(sd) ** 2
+            denom = (2 * math.pi * var) ** .5
+            num = math.exp(-(float(x) - float(mean)) ** 2 / (2 * var))
+            return num / denom
+
+        return normpdf(inval, 0, 0.03)
+
+    # positions -----------------------------------------------------------------
+
+    def inval_risk_score(self, inval: float) -> float:
+        """ultimately i want this function to be able to look up the values for its calculations from data that is
+        regularly updated from analysis of recent closed trades, but for now the values will have to be hard-coded
+
+        the function looks at the proportional distance between trade entry and invalidation price and returns a score
+        which represents the statistical likelihood that the trade will be profitable based solely on that distance
+
+        when the big refactor is done, i want to use this as part of the signal scoring system, but for now it can just
+        be used as a binary filter"""
+
+        ideal = 0.02
+
+
+    def open_trade_stats(self, session, total_bal: float, v: dict) -> dict:
         """takes an entry from the open_trades dictionary, returns information about
         that position including current profit, size and direction"""
 
@@ -844,7 +903,7 @@ class Agent():
 
         direction = v['position']['direction']
 
-        curr_price = self.prices[pair]
+        curr_price = session.pairs_data[pair]['price']
         long = v['position']['direction'] == 'long'
         if long:
             pnl = 100 * (curr_price - entry_price) / entry_price
@@ -862,7 +921,7 @@ class Agent():
         we.stop()
         return stats_dict
 
-    def current_positions(self, total_bal, state: str) -> dict:
+    def current_positions(self, session, state: str) -> dict:
         '''creates a dictionary of open positions by checking either 
         open_trades.json, sim_trades.json or tracked_trades.json'''
 
@@ -877,21 +936,43 @@ class Agent():
             data = self.tracked_trades
 
         size_dict = {}
-        total_bal = total_bal
 
+        drop_items = []
         for k, v in data.items():
+
+            if state == 'open':
+                # need to work out what to do with open trades on coins which have been delisted
+                pass
+            elif state == 'sim':
+                status = session.pairs_data[k]['status']
+                if status != 'TRADING':
+                    drop_items.append(k)
+                    continue
+            elif state == 'tracked':
+                # need to work out what to do with tracked trades on coins which have been delisted
+                pass
+
             asset = k[:-4]
+            if v['position']['direction'] == 'spot':
+                total_bal = session.spot_bal
+            elif v['position']['direction'] in ['long', 'short']:
+                total_bal = session.margin_bal
             if state == 'tracked':
                 size_dict[asset] = {}
             else:
                 try:
-                    size_dict[asset] = self.open_trade_stats(total_bal, v)
+                    size_dict[asset] = self.open_trade_stats(session, total_bal, v)
                 except KeyError as e:
-                    print(f"Problem calling current_positions on {self.name}.{state}_trades, {asset}")
+                    print(f"Problem calling open_trade_stats on {self.name}.{state}_trades, {asset}")
                     print('KeyError:', e)
                     print('')
                     pprint(v)
                     print('')
+
+        for i in drop_items:
+            del self.sim_trades[i]
+        self.record_trades(session, 'sim')
+
         a.stop()
         return size_dict
 
@@ -904,7 +985,7 @@ class Agent():
         jk.start()
 
         pair = f'{asset}USDT'
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
 
         if state == 'real':
             direction = self.open_trades[pair]['position']['direction']
@@ -914,7 +995,8 @@ class Agent():
             pfrd = self.sim_trades[pair]['position']['pfrd']
 
         value = price * float(new_bal)
-        pct = round(100 * value / session.bal, 5)
+        bal = session.spot_bal if self.mode == 'spot' else session.margin_bal
+        pct = round(100 * value / bal, 5)
 
         open_risk = value - (value / inval) if direction in ['long', 'spot'] else (value / inval) - value
         if float(pfrd):
@@ -976,7 +1058,7 @@ class Agent():
 
         g.stop()
 
-        return len(df) <= self.lookback_limit and no_pos
+        return len(df) < self.ohlc_length and no_pos
 
     def open_pnl(self, direction: str, state: str) -> Union[int, float]:
         '''adds up the pnls of all open positions for a given state'''
@@ -1221,7 +1303,7 @@ class Agent():
     # real open
 
     def create_record(self, session, pair, size, stp, inval, direction):
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
         usdt_size: str = f"{size * price:.2f}"
         now = datetime.now().strftime('%d/%m/%y %H:%M')
 
@@ -1246,13 +1328,13 @@ class Agent():
 
     def omf_borrow(self, session, pair, size, direction):
         if direction == 'long':
-            price = session.prices[pair]
+            price = session.pairs_data[pair]['price']
             borrow_size = f"{size * price:.2f}"
             funcs.borrow_asset_M('USDT', borrow_size, session.live)
             self.open_trades[pair]['placeholder']['loan_asset'] = 'USDT'
         elif direction == 'short':
             asset = pair[:-4]
-            borrow_size = funcs.valid_size(session, pair, size)
+            borrow_size = uf.valid_size(session, pair, size)
             funcs.borrow_asset_M(asset, borrow_size, session.live)
             self.open_trades[pair]['placeholder']['loan_asset'] = asset
         else:
@@ -1263,7 +1345,7 @@ class Agent():
         self.open_trades[pair]['placeholder']['completed'] = 'borrow'
 
     def increase_position(self, session, pair, size, direction):
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
         usdt_size = f"{size * price:.2f}"
 
         if direction == 'long':
@@ -1280,7 +1362,7 @@ class Agent():
         return api_order
 
     def open_trade_dict(self, session, pair, api_order, stp, direction):
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
 
         open_order = funcs.create_trade_dict(api_order, price, session.live)
         open_order['type'] = f"open_{direction}"
@@ -1324,7 +1406,7 @@ class Agent():
         self.record_trades(session, 'open')
 
     def open_update_real_pos_usdtM_counts(self, session, pair, size, inval, direction):
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
         usdt_size = f"{size * price:.2f}"
         asset = pair[:-4]
 
@@ -1338,11 +1420,12 @@ class Agent():
             elif direction == 'short':
                 session.update_usdt_M(up=float(usdt_size))
         else:
-            pf = f"{float(usdt_size) / session.bal:.2f}"
+            bal = session.spot_bal if self.mode == 'spot' else session.margin_bal
+            pf = f"{float(usdt_size) / bal:.2f}"
             if direction == 'long':
-                or_dol = f"{session.bal * self.fixed_risk_l:.2f}"
+                or_dol = f"{bal * self.fixed_risk_l:.2f}"
             elif direction == 'short':
-                or_dol = f"{session.bal * self.fixed_risk_s:.2f}"
+                or_dol = f"{bal * self.fixed_risk_s:.2f}"
             self.real_pos[asset] = {'value': usdt_size, 'pf%': pf, 'or_R': '1', 'or_$': str(or_dol)}
 
         self.counts_dict[f'real_open_{direction}'] += 1
@@ -1369,7 +1452,7 @@ class Agent():
     # real tp
 
     def create_tp_placeholder(self, session, pair, stp, inval, direction):
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
         now = datetime.now().strftime('%d/%m/%y %H:%M')
 
         # insert placeholder record
@@ -1406,7 +1489,7 @@ class Agent():
         return cleared_size
 
     def tp_reduce_position(self, session, pair, base_size, pct, direction):
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
         order_size = float(base_size) * (pct / 100)
         if direction == 'long':
             api_order = funcs.sell_asset_M(session, pair, order_size, price, session.live)
@@ -1429,7 +1512,7 @@ class Agent():
         return tp_order
 
     def tp_repay_100(self, session, pair, tp_order, direction):
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
         asset = pair[:-4]
         liability = self.open_trades[pair]['position']['liability']
         if direction == 'long':
@@ -1473,7 +1556,7 @@ class Agent():
 
     def tp_update_records_100(self, session, pair, order_size, usdt_size, direction):
         asset = pair[:-4]
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
 
         if session.live and direction == 'long':
             session.update_usdt_M(repay=float(usdt_size))
@@ -1547,7 +1630,7 @@ class Agent():
 
     def tp_update_records_partial(self, session, pair, pct, inval, order_size, tp_order, direction):
         asset = pair[:-4]
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
         new_size = self.open_trades[pair]['position']['base_size']
 
         self.open_trades['position']['pfrd'] = self.open_trades['position']['pfrd'] * (pct / 100)
@@ -1569,7 +1652,7 @@ class Agent():
         k10 = Timer(f'tp_real_full')
         k10.start()
 
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
         now = datetime.now().strftime('%d/%m/%y %H:%M')
         print('')
 
@@ -1610,7 +1693,7 @@ class Agent():
     # real close
 
     def create_close_placeholder(self, session, pair, direction):
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
         now = datetime.now().strftime('%d/%m/%y %H:%M')
 
         # temporary check to catch a possible bug, can delete after ive had a few reduce_risk calls with no bugs
@@ -1642,7 +1725,7 @@ class Agent():
         return cleared_size
 
     def close_position(self, session, pair, close_size, reason, direction):
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
 
         if direction == 'long':
             api_order = funcs.sell_asset_M(session, pair, close_size, price, session.live)
@@ -1700,7 +1783,7 @@ class Agent():
 
     def close_real_7(self, session, pair, close_size, direction):
         asset = pair[:-4]
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
 
         if direction == 'long' and session.live:
             session.update_usdt_M(repay=float(close_size))
@@ -1722,7 +1805,7 @@ class Agent():
         k9 = Timer(f'close_real_full')
         k9.start()
 
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
         now = datetime.now().strftime('%d/%m/%y %H:%M')
 
         note = f"{self.name} real close {direction} {pair} @ {price}"
@@ -1769,7 +1852,7 @@ class Agent():
         k8.start()
 
         asset = pair[:-4]
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
         bin_ts = round(datetime.utcnow().timestamp() * 1000)
         usdt_size = 128.0
         size = f"{usdt_size / price:.8f}"
@@ -1816,7 +1899,7 @@ class Agent():
         k7 = Timer(f'tp_sim')
         k7.start()
 
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
         asset = pair[:-4]
         bin_ts = round(datetime.utcnow().timestamp() * 1000)
         sim_bal = float(self.sim_trades[pair]['position']['base_size'])
@@ -1871,7 +1954,7 @@ class Agent():
         k6 = Timer(f'close_sim')
         k6.start()
 
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
         asset = pair[:-4]
         bin_ts = round(datetime.utcnow().timestamp() * 1000)
         sim_bal = float(self.sim_trades[pair]['position']['base_size'])
@@ -1904,7 +1987,7 @@ class Agent():
         k5 = Timer(f'tp_tracked')
         k5.start()
         print('')
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
         now = datetime.now().strftime('%d/%m/%y %H:%M')
 
         note = f"{self.name} tracked take-profit {pair} {direction} 50% @ {price}"
@@ -1958,7 +2041,7 @@ class Agent():
         k4.start()
 
         print('')
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
         now = datetime.now().strftime('%d/%m/%y %H:%M')
         timestamp = round(datetime.utcnow().timestamp() * 1000)
         note = f"{self.name} tracked close {direction} {pair} @ {price}"
@@ -2005,7 +2088,7 @@ class Agent():
 
         session.margin_account_info()
         session.get_asset_bals()
-        free_bal = session.bals_dict[asset]['free']
+        free_bal = session.margin_bals[asset]['free']
 
         k2.stop()
 
@@ -2019,7 +2102,7 @@ class Agent():
         stp = ph['stop_price']
 
         dir_up = ph['type'].split('_')[1] == 'long'
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
         price_up = price > stp
 
         return dir_up == price_up
@@ -2031,7 +2114,7 @@ class Agent():
         trig = ph['trig_price']
 
         dir_up = ph['direction'] == 'long'
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
         price_up = price > trig
 
         return dir_up == price_up
@@ -2040,7 +2123,7 @@ class Agent():
         pair = ph['pair']
         size = ph['base_size']
         stp = ph['stop_price']
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
         valid = self.check_invalidation(session, ph)
 
         if ph['completed'] is None:
@@ -2164,7 +2247,7 @@ class Agent():
         # stop, the position should also be closed but will already have been if the old stop was still in place
 
         pair = ph['pair']
-        price = session.prices[pair]
+        price = session.pairs_data[pair]['price']
         pos_record = self.open_trades[pair]['position']
 
         if ph['completed'] == None:
@@ -2211,13 +2294,15 @@ class Agent():
 class DoubleST(Agent):
     '''200EMA and regular supertrend for bias with tight supertrend for entries/exits'''
 
-    def __init__(self, session, mult1: float, mult2: float):
-        # self.tf = session.tf
-        # self.offset = session.offset
+    def __init__(self, session, tf, offset, mult1: float, mult2: float):
+        self.mode = 'margin'
+        self.tf = tf
+        self.offset = offset
         self.mult1 = mult1
         self.mult2 = mult2
-        self.name = f'{session.tf} dst {self.mult1}-{self.mult2}'
-        self.id = f"double_st_{session.tf}_{session.offset}_{self.mult1}_{self.mult2}"
+        self.name = f'{self.tf} dst {self.mult1}-{self.mult2}'
+        self.id = f"double_st_{self.tf}_{self.offset}_{self.mult1}_{self.mult2}"
+        self.ohlc_length = 200
         Agent.__init__(self, session)
         session.indicators.update(['ema-200',
                                    f"st-10-{self.mult1}",
@@ -2302,14 +2387,16 @@ class EMACross(Agent):
     '''Simple EMA cross strategy with a longer-term EMA to set bias and a 
     trailing stop based on ATR bands'''
 
-    def __init__(self, session, lookback_1, lookback_2, mult):
-        # self.tf = session.tf
-        # self.offset = session.offset
+    def __init__(self, session, tf, offset, lookback_1, lookback_2, mult):
+        self.mode = 'margin'
+        self.tf = tf
+        self.offset = offset
         self.lb1 = lookback_1
         self.lb2 = lookback_2
         self.mult = mult
-        self.name = f'{session.tf} emacross {self.lb1}-{self.lb2}-{self.mult}'
-        self.id = f"ema_cross_{session.tf}_{session.offset}_{self.lb1}_{self.lb2}_{self.mult}"
+        self.name = f'{self.tf} emacross {self.lb1}-{self.lb2}-{self.mult}'
+        self.id = f"ema_cross_{self.tf}_{self.offset}_{self.lb1}_{self.lb2}_{self.mult}"
+        self.ohlc_length = max(200, self.lb1, self.lb2)
         Agent.__init__(self, session)
         session.indicators.update(['ema-200',
                                    f"ema-{self.lb1}",
@@ -2393,14 +2480,16 @@ class EMACrossHMA(Agent):
     """Simple EMA cross strategy with a longer-term HMA to set bias more
     responsively and a trailing stop based on ATR bands"""
 
-    def __init__(self, session, lookback_1, lookback_2, mult):
-        # self.tf = session.tf
-        # self.offset = session.offset
+    def __init__(self, session, tf, offset, lookback_1, lookback_2, mult):
+        self.mode = 'margin'
+        self.tf = tf
+        self.offset = offset
         self.lb1 = lookback_1
         self.lb2 = lookback_2
         self.mult = mult
-        self.name = f'{session.tf} emaxhma {self.lb1}-{self.lb2}-{self.mult}'
-        self.id = f"ema_cross_hma_{session.tf}_{session.offset}_{self.lb1}_{self.lb2}_{self.mult}"
+        self.name = f'{self.tf} emaxhma {self.lb1}-{self.lb2}-{self.mult}'
+        self.id = f"ema_cross_hma_{self.tf}_{self.offset}_{self.lb1}_{self.lb2}_{self.mult}"
+        self.ohlc_length = max(200, self.lb1, self.lb2)
         Agent.__init__(self, session)
         session.indicators.update(['hma-200',
                                    f"ema-{self.lb1}",
@@ -2483,18 +2572,22 @@ class EMACrossHMA(Agent):
 class AvgTradeSize(Agent):
     """Long-only strategy that looks for unusual spikes in average trade size to detect bullish reversals"""
 
-    def __init__(self, session, min_z: int, lookback: int, mult: float, exit_strat: str) -> None:
+    def __init__(self, session, tf, offset, min_z: int, lookback: int, mult: float, exit_strat: str) -> None:
+        self.mode = 'spot'
+        self.tf = tf
+        self.offset = offset
         self.mult = mult # atr multiplier for trailing stop / oco targets
         self.atr_lb = 5
         self.min_z = min_z
         self.lookback = lookback
         self.exit = exit_strat
         self.rr_ratio = 2
-        self.name = f'{session.tf} ats {self.min_z}-{self.lookback}-{self.mult}-{self.exit}'
-        self.id = f"avg_trade_size_{session.tf}_{session.offset}_{self.min_z}_{self.lookback}_{self.mult}_{self.exit}"
+        self.name = f'{self.tf} ats {self.min_z}-{self.lookback}-{self.mult}-{self.exit}'
+        self.id = f"avg_trade_size_{self.tf}_{self.offset}_{self.min_z}_{self.lookback}_{self.mult}_{self.exit}"
+        self.ohlc_length = max(200, self.lookback)
         Agent.__init__(self, session)
         session.indicators.update(['ema-200',
-                                   'atsz-1000',
+                                   f'atsz-{lookback}',
                                    'stoch_rsi-14-14',
                                    'inside',
                                    'doji',
@@ -2550,7 +2643,7 @@ class AvgTradeSize(Agent):
             record_dict = signal_dict
             record_dict['time'] = df.timestamp.iloc[-1].timestamp()
             record_dict['pair'] = pair
-            record_dict['timeframe'] = session.tf
+            record_dict['timeframe'] = self.tf
             record_dict['entry'] = df.close.iloc[-1]
             record_dict['stoch_rsi'] = stoch_rsi
             record_dict['ats_z'] = atsz
