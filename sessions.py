@@ -378,16 +378,16 @@ class TradingSession():
         x1.start()
 
         if self.live:
-            read_records = Path(f'/coding/records')
-            write_records = Path(f'/coding/records')
+            read_records = Path(f'/home/pi/Documents/backtester_2021/records')
+            write_records = Path(f'/home/pi/Documents/backtester_2021/records')
         elif Path(f'/mnt/pi_2/records').exists():
             read_records = Path(f'/mnt/pi_2/records')
-            write_records = Path(f'/home/ross/Documents/backtester_2021/test_records')
+            write_records = Path(f'/home/ross/Documents/backtester_2021/records')
         else:
-            read_records = Path(f'/home/ross/Documents/backtester_2021/test_records')
-            write_records = Path(f'/home/ross/Documents/backtester_2021/test_records')
+            read_records = Path(f'/home/ross/Documents/backtester_2021/records')
+            write_records = Path(f'/home/ross/Documents/backtester_2021/records')
 
-        read_records.mkdir(parents=True, exist_ok=True)
+        write_records.mkdir(parents=True, exist_ok=True)
 
         x1.stop()
         return read_records, write_records
@@ -402,7 +402,7 @@ class TradingSession():
         v = Timer('ohlc_path in session')
         v.start()
         ohlc_data = None
-        possible_paths = [Path(f'/coding/bin_ohlc_{self.ohlc_tf}'),
+        possible_paths = [Path(f'/home/pi/Documents/backtester_2021/bin_ohlc_{self.ohlc_tf}'),
                           Path(f'/home/ross/Documents/backtester_2021/bin_ohlc_{self.ohlc_tf}'),
                           Path(f'/home/ross/PycharmProjects/backtester_2021/bin_ohlc_{self.ohlc_tf}')]
 
