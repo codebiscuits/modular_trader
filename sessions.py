@@ -345,7 +345,7 @@ class TradingSession():
 
         y = Timer('set_live')
         y.start()
-        live = Path('/home/ubuntu/rpi_2.txt').exists()
+        live = Path('/pi_downstairs.txt').exists()
 
         if not live:
             print('*** Warning: Not Live ***')
