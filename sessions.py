@@ -22,7 +22,7 @@ cg = CoinGeckoAPI()
 
 
 class TradingSession():
-    ohlc_length = 0
+    min_length = 10000
     quote_asset = 'USDT'
     max_spread = 0.5
     ohlc_tf = '5m'
@@ -386,6 +386,9 @@ class TradingSession():
         else:
             read_records = Path(f'/home/ross/Documents/backtester_2021/records')
             write_records = Path(f'/home/ross/Documents/backtester_2021/records')
+
+        print(f"{read_records = }")
+        print(f"{write_records = }")
 
         write_records.mkdir(parents=True, exist_ok=True)
 
@@ -831,6 +834,7 @@ class LightSession(TradingSession):
         self.market_data, self.test_mkt_data = self.mkt_data_path()
         self.read_records, self.write_records = self.records_path()
         self.ohlc_data = self.ohlc_path()
+
 
 class CheckRecordsSession(TradingSession):
     def __init__(self):

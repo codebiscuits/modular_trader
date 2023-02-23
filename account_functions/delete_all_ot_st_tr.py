@@ -4,7 +4,7 @@ from pathlib import Path
 
 folder = Path('/media/coding/records')
 if not folder.exists():
-    folder = Path('/home/ross/Documents/backtester_2021/test_records')
+    folder = Path('/home/ross/Documents/backtester_2021/records')
 
 filepaths = ['open_trades.json',
              'ot_backup.json',
@@ -25,5 +25,6 @@ for tf in timeframes:
                 filepath = f / fp
                 if filepath.exists():
                     filepath.unlink()
+                    print(f"{filepath} unlinked")
 
 

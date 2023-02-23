@@ -85,11 +85,6 @@ def calc_stop(inval: float, spread: float, price: float, min_risk: float = 0.002
     else:
         stop_price = float(inval) * (1 + buffer)
 
-    # if (((price > inval) and (stop_price > price)) 
-    #     or 
-    #     ((price < inval) and (stop_price < price))):
-    # print(f"{price = } {inval = } {buffer = } {stop_price = }")
-
     return stop_price
 
 
@@ -106,7 +101,6 @@ def get_depth(session, pair: str) -> tuple[float, float]:
 
     price = session.pairs_data[pair]['price']
     book = session.get_book_data(pair)
-    print('get_depth - size of book object in memory:', sys.getsizeof(book))
 
     bid_price = float(book.get('bids')[0][0])
     # max_price is x% above price
@@ -311,6 +305,9 @@ def resample_ohlc(tf, offset, df):
     tf_map = {'15m': '15T', '30m': '30T', '1h': '1H', '2h': '2H', '4h': '4H', '6h': '6H',
               '8h': '8H', '12h': '12H', '1d': '1D', '3d': '3D', '1w': '1W'}
 
+    print('about to resample')
+    print(f"timestamp col: {df.timestamp.dtype}")
+
     df = df.resample(tf_map[tf], on='timestamp',
                      offset=offset).agg({'open': 'first',
                                                  'high': 'max',
@@ -335,52 +332,92 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
     ds = Timer('prepare_ohlc')
     ds.start()
 
-    if session.pairs_data[pair].get('ohlc_5m'):
+    if session.pairs_data[pair].get('ohlc_5m', None) is not None:
         df = session.pairs_data[pair]['ohlc_5m']
+        print('got ohlc from session.pairs_data')
+        print(f"timestamp col: {df.timestamp.dtype}")
 
     else:
         filepath = Path(f'{session.ohlc_data}/{pair}.parquet')
 
         if filepath.exists():
             df = pd.read_parquet(filepath)
+            print('got ohlc from file')
+            print(f"timestamp col: {df.timestamp.dtype}")
+
             last_timestamp = df.timestamp.iloc[-1].timestamp()
             now = datetime.now().timestamp()
             data_age_mins = (now - last_timestamp) / 60
             print(f"\n{pair} ohlc data ends: {(now - last_timestamp) / 60:.1f} minutes ago")
-            if (data_age_mins < 10) and (len(df) > 2):
+            if (data_age_mins < 15) and (len(df) > 2):
                 # update last close price with current price
-                print(f"{pair} ohlc data less than 10 mins old")
-                print(df.tail(3))
+                print(f"{pair} ohlc data less than 15 mins old")
                 print(session.pairs_data[pair]['price'])
                 df.at[df.index[-1]: 'close'] = session.pairs_data[pair]['price']
             elif len(df) > 2:
                 df = update_ohlc(pair, session.ohlc_tf, df, session)
+                print('updated ohlc')
             else:
                 df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
-                print(f'downloaded {pair} from scratch')
+                print(f'{pair} ohlc to short to update, downloaded from scratch')
 
         else:
             df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
             print(f'downloaded {pair} from scratch')
 
         max_len = 210240 # 210240 is 2 years' worth of 5m periods
+
+        print(f"timestamp col: {df.timestamp.dtype}")
+
         if len(df) > max_len:
             df = df.tail(max_len).reset_index(drop=True)
+
+        print(f"timestamp col: {df.timestamp.dtype}")
+
         df.to_parquet(filepath)
         session.pairs_data[pair]['ohlc_5m'] = df
 
-        print(df.tail(3))
-        print(f"\n{pair} ended")
-
     df_dict = {}
     for tf, offset in timeframes:
-        df_dict[tf] = resample_ohlc(tf, offset, df.copy()).tail(session.ohlc_length).reset_index(drop=True)
+        df_dict[tf] = resample_ohlc(tf, offset, df.copy()).tail(session.min_length).reset_index(drop=True)
 
     ds.stop()
     return df_dict
 
 
 # -#-#- Trading Functions
+
+def create_stop_dict(session, order: dict) -> dict:
+    '''collects and returns the details of filled stop-loss order in a dictionary'''
+
+    yu = Timer('create_stop-dict')
+    yu.start()
+
+    pprint(order)
+
+    pair = order.get('symbol')
+    quote_qty = order.get('cummulativeQuoteQty')
+    base_qty = order.get('executedQty')
+    avg_price = round(float(quote_qty) / float(base_qty), 8)
+
+    bnb_fee = quote_qty * session.fees['margin_taker'] / session.pairs_data['BNBUSDT']['price']
+
+    trade_dict = {'timestamp': int(order.get('updateTime') / 1000),
+                  'pair': pair,
+                  'trig_price': order.get('stopPrice'),
+                  'limit_price': order.get('price'),
+                  'exe_price': str(avg_price),
+                  'base_size': base_qty,
+                  'quote_size': quote_qty,
+                  'fee': f"{bnb_fee:.8f}",
+                  'fee_currency': 'BNB'
+                  }
+    if order.get('status') != 'FILLED':
+        print(f'{pair} order not filled')
+        pb.push_note('Warning', f'{pair} stop-loss hit but not filled')
+    yu.stop()
+    return trade_dict
+
 
 def create_trade_dict(order: dict, price: float, live: bool) -> Dict[str, str]:
     """collects and returns the details of the order in a dictionary"""
@@ -401,7 +438,7 @@ def create_trade_dict(order: dict, price: float, live: bool) -> Dict[str, str]:
         else:
             quote_qty = str(qty * avg_price)
 
-        trade_dict = {'timestamp': order.get('transactTime'),
+        trade_dict = {'timestamp': int(float(order.get('transactTime')) / 1000),
                       'trig_price': str(price),
                       'exe_price': str(avg_price),
                       'base_size': str(order.get('executedQty')),
@@ -546,6 +583,8 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit
     sd = Timer('set_stop_M')
     sd.start()
 
+    now = datetime.now().timestamp()
+
     trigger = uf.valid_price(session, pair, trigger)
     limit = uf.valid_price(session, pair, limit)
     stop_size = uf.valid_size(session, pair, size)
@@ -559,7 +598,8 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit
                                                      quantity=stop_size,
                                                      price=limit)
     else:
-        stop_sell_order = {'orderId': 'not live'}
+        stop_sell_order = {'orderId': 'not live',
+                           'transactTime': now * 1000}
 
     session.algo_order_counts += Counter([pair])
 

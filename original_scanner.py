@@ -13,10 +13,6 @@ from collections import Counter
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
-# TODO before committing;
-#  i need to finish implementing signal scores using inval (create agent method which translates inval into score then
-#  replace the inval risk filter on open_trade signals with a check for the score)
-
 
 def get_timeframes():
     hour = datetime.now(timezone.utc).hour
@@ -87,59 +83,56 @@ def setup_scan() -> None:
     # TODO this might be ok to do inside each agent's __init__ method, unless theres some reason why the pairs list has
     #  to come first, in which case it could still be an agent method which i just call at this point in the script
     for agent in agents:
-        if agent.mode == 'spot':
-            if agent.fixed_risk_spot:
-                print(f"{agent.name} fixed risk: {(agent.fixed_risk_spot * 10000):.2f}bps")
-            agent.real_pos['USDT'] = session.spot_usdt_bal
-            agent.starting_ropnl_spot = agent.open_pnl('spot', 'real')
-            agent.starting_sopnl_spot = agent.open_pnl('spot', 'sim')
-        elif agent.mode == 'margin':
-            if agent.fixed_risk_l or agent.fixed_risk_s:
-                frl_bps = agent.fixed_risk_l * 10000
-                frs_bps = agent.fixed_risk_s * 10000
-                print(f"{agent.name} fr long: {(frl_bps):.2f}bps, fr short: {(frs_bps):.2f}bps")
-            agent.real_pos['USDT'] = session.margin_usdt_bal
-            agent.starting_ropnl_l = agent.open_pnl('long', 'real')
-            agent.starting_sopnl_l = agent.open_pnl('long', 'sim')
-            agent.starting_ropnl_s = agent.open_pnl('short', 'real')
-            agent.starting_sopnl_s = agent.open_pnl('short', 'sim')
+        # if agent.mode == 'spot':
+        #     if agent.fixed_risk_spot:
+        #         print(f"{agent.name} fixed risk: {(agent.fixed_risk_spot * 10000):.2f}bps")
+        #     agent.real_pos['USDT'] = session.spot_usdt_bal
+        #     agent.starting_ropnl_spot = agent.open_pnl('spot', 'real')
+        #     agent.starting_sopnl_spot = agent.open_pnl('spot', 'sim')
+        # elif agent.mode == 'margin':
+        #     if agent.fixed_risk_l or agent.fixed_risk_s:
+        #         frl_bps = agent.fixed_risk_l * 10000
+        #         frs_bps = agent.fixed_risk_s * 10000
+        #         print(f"{agent.name} fr long: {(frl_bps):.2f}bps, fr short: {(frs_bps):.2f}bps")
+        #     agent.real_pos['USDT'] = session.margin_usdt_bal
+        #     agent.starting_ropnl_l = agent.open_pnl('long', 'real')
+        #     agent.starting_sopnl_l = agent.open_pnl('long', 'sim')
+        #     agent.starting_ropnl_s = agent.open_pnl('short', 'real')
+        #     agent.starting_sopnl_s = agent.open_pnl('short', 'sim')
 
         if agent.max_positions > 10:
             print(f'max positions: {agent.max_positions}')
-        agent.calc_tor()
+        # agent.calc_tor()
 
     # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
     # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 
     for n, pair in enumerate(pairs):
-        print(n, pair)
+        print('\n', n, pair, '\n')
         session.update_prices()
         asset = pair[:-1 * len(session.quote_asset)]
         for agent in agents:
             agent.init_in_pos(pair)
 
-        # df_dict contains ohlc dataframes for each active timeframe for the current pair
-        df_dict = funcs.prepare_ohlc(session, timeframes, pair)
-        # TODO i will need to add columns to prepare_ohlc and update_ohlc and any other function that loads those files,
-        #  because they are going to have extra columns from now on. i will also need to stop downloading new files in
-        #  setup_scanner unless i can add in all the extra data at that stage too
-
         now = datetime.now().strftime('%d/%m/%y %H:%M')
 
         # generate signals ------------------------------------------------------------
+
+        # df_dict contains ohlc dataframes for each active timeframe for the current pair
+        df_dict = funcs.prepare_ohlc(session, timeframes, pair)
+
         # if there is not enough history at a given timeframe, this function will return None instead of the df
         # TODO this would be a good function to start the migration to polars
         for tf, df in df_dict.items():
-            if len(df) < session.min_length:
+            if len(df) >= session.min_length:
+                df_dict[tf] = session.compute_indicators(df)
+            else:
                 print(f"length of {pair} {tf} data: {len(df)}")
                 df_dict[tf] = None
-            else:
-                df_dict[tf] = session.compute_indicators(df)
 
         # signals = {}
 
-        # TODO think about whether an api call is necessary here or if these can be served by local data
-        usdt_depth_l, usdt_depth_s = funcs.get_depth(session, pair)
+
         price = session.pairs_data[pair]['price']
 
         for agent in agents:
@@ -151,10 +144,8 @@ def setup_scan() -> None:
                 continue
             signals = agent.signals(session, df_2, pair)
 
-            inval = signals.get('inval')
-            inval_ratio = signals.get('inval_ratio')
-            if inval:
-                stp = funcs.calc_stop(inval, session.pairs_data[pair]['spread'], price)
+            if signals.get('inval'):
+                stp = funcs.calc_stop(signals.get('inval'), session.pairs_data[pair]['spread'], price)
                 inval_risk = abs((price - stp) / price)
                 inval_risk_score = agent.calc_inval_risk_score(inval_risk)
                 bal = session.spot_bal if agent.mode == 'spot' else session.margin_bal
@@ -174,7 +165,7 @@ def setup_scan() -> None:
             if agent.in_pos['real']:
                 real_qty = float(agent.open_trades[pair]['position']['base_size'])
                 agent.real_pos[asset].update(
-                    agent.update_pos(session, asset, real_qty, inval_ratio, 'real'))
+                    agent.update_pos(session, asset, real_qty, signals['inval_ratio'], 'real'))
 
                 real_ep = float(agent.open_trades[pair]['position']['entry_price'])
                 if real_ep:
@@ -187,7 +178,7 @@ def setup_scan() -> None:
             if agent.in_pos['sim']:
                 sim_qty = float(agent.sim_trades[pair]['position']['base_size'])
                 agent.sim_pos[asset].update(
-                    agent.update_pos(session, asset, sim_qty, inval_ratio, 'sim'))
+                    agent.update_pos(session, asset, sim_qty, signals['inval_ratio'], 'sim'))
                 sim_ep = float(agent.sim_trades[pair]['position']['entry_price'])
                 if sim_ep:
                     agent.sim_pos[asset]['price_delta'] = (price - sim_ep) / sim_ep
@@ -201,12 +192,15 @@ def setup_scan() -> None:
             agent.max_init_r_s = agent.max_init_risk(agent.fixed_risk_s)
 
             if signals.get('signal') in ['open_spot', 'tp_spot', 'close_spot']:
+                usdt_depth_l, _ = funcs.get_depth(session, pair)
                 usdt_size, usdt_depth, size = usdt_size_l, usdt_depth_l, size_l
                 direction = 'spot'
             elif signals.get('signal') in ['open_long', 'tp_long', 'close_long']:
+                usdt_depth_l, _ = funcs.get_depth(session, pair)
                 usdt_size, usdt_depth, size = usdt_size_l, usdt_depth_l, size_l
                 direction = 'long'
             elif signals.get('signal') in ['open_short', 'tp_short', 'close_short']:
+                _, usdt_depth_s = funcs.get_depth(session, pair)
                 usdt_size, usdt_depth, size = usdt_size_s, usdt_depth_s, size_s
                 direction = 'short'
 
@@ -275,29 +269,29 @@ def setup_scan() -> None:
                     sim_reason = 'algo_order_limit'
 
                 try:
-                    agent.open_pos(session, pair, size, stp, inval_ratio, sim_reason, direction)
+                    agent.open_pos(session, pair, size, stp, signals['inval_ratio'], sim_reason, direction)
                 except bx.BinanceAPIException as e:
                     if e.code == -3045:  # borrow failed because there weren't enough assets to borrow
                         del agent.open_trades[pair]
-                        agent.open_pos(session, pair, size, stp, inval_ratio, 'not_enough_borrow', direction)
+                        agent.open_pos(session, pair, size, stp, signals['inval_ratio'], 'not_enough_borrow', direction)
                     else:
                         agent.record_trades(session, 'all')
                         print(f'{agent.name} problem with open_{direction} order for {pair}')
                         print(e.code)
                         print(e.message)
-                        print(f"{size = } {stp = } {inval_ratio = }")
+                        print(f"{size = } {stp = } {signals['inval_ratio'] = }")
                         pb.push_note(now, f'{agent.name} exeption during {pair} open_{direction} order')
                     continue
 
             elif signals.get('signal') in ['tp_long', 'tp_short']:
                 try:
-                    agent.tp_pos(session, pair, stp, inval_ratio, direction)
+                    agent.tp_pos(session, pair, stp, signals['inval_ratio'], direction)
                 except bx.BinanceAPIException as e:
                     agent.record_trades(session, 'all')
                     print(f'{agent.name} problem with tp_{direction} order for {pair}')
                     print(e.code)
                     print(e.message)
-                    print(f"{stp = } {inval_ratio = }")
+                    print(f"{stp = } {signals['inval_ratio'] = }")
                     pb.push_note(now, f'{agent.name} exception during {pair} tp_{direction} order')
                     continue
 
@@ -306,7 +300,7 @@ def setup_scan() -> None:
             if agent.in_pos['real']:
                 direction = agent.in_pos['real']
                 try:
-                    agent.tp_pos(session, pair, stp, inval_ratio, direction)
+                    agent.tp_pos(session, pair, stp, signals['inval_ratio'], direction)
                 except bx.BinanceAPIException as e:
                     agent.record_trades(session, 'all')
                     print(f'{agent.name} problem with tp_{direction} order for {pair}')
@@ -317,7 +311,7 @@ def setup_scan() -> None:
             if agent.in_pos['sim']:
                 direction = agent.in_pos['sim']
                 try:
-                    agent.tp_pos(session, pair, stp, inval_ratio, direction)
+                    agent.tp_pos(session, pair, stp, signals['inval_ratio'], direction)
                 except bx.BinanceAPIException as e:
                     agent.record_trades(session, 'all')
                     print(f'problem with tp_{direction} order for {pair}')
@@ -385,7 +379,7 @@ def setup_scan() -> None:
     uf.market_benchmark(session)
     for agent in agents:
         uf.log(session, agent)
-        uf.strat_benchmark(session, agent)
+        agent.benchmark = uf.strat_benchmark(session, agent)
     uf.scanner_summary(session, agents)
 
     uf.interpret_benchmark(session, agents)

@@ -25,32 +25,9 @@ else:
     print('*** Warning: Not Live ***')
 
 
-# def get_filepath(pair, tf):
-#     folder = f"bin_ohlc_{tf}"
-#     if live:
-#         ohlc_data = Path('/media/coding/') / folder
-#     else:
-#         ohlc_data = Path('/home/ross/Documents/backtester_2021/') / folder
-#     ohlc_data.mkdir(exist_ok=True)
-#     return Path(f'{ohlc_data}/{pair}.parquet')
-
-
 start = time.perf_counter()
 
 pairs = list(session.pairs_data.keys())
-
-# TODO i want to try running a function which records the roc of different timeframes for each pair in a separate file
-#  for setup_scanner to use as a ranking metric (relative strength)
-
-# TODO once i have a market cap column, i can make a 24h volume / market cap column
-
-# TODO i also want really high timeframe stuff like 200 week sma and emas. it might be possible to download daily or
-#  weekly ohlc data from exchange to get that, or i might be able to get those kind of metrics from coingecko. these
-#  will need to be interpolated too
-
-# TODO it would also be nice to have some on-chain metrics being included in this script as well but i will have to work
-#  out where to get that data from
-
 
 def iterations(n, pair, tf):
     # print(f"{n} {pair} {tf}")
@@ -77,6 +54,9 @@ def iterations(n, pair, tf):
     max_len = max_dict[tf]  # returns 2 years worth of timeframe periods
     if len(df) > max_len:
         df = df.tail(max_len).reset_index(drop=True)
+
+    print(pair, df.timestamp.dtype)
+
     df.to_parquet(filepath)
     # print(f"{n} {pair} ohlc length: {len(df)}")
 

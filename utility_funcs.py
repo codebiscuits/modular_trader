@@ -13,6 +13,7 @@ from decimal import Decimal, getcontext
 from timers import Timer
 from typing import Union, List, Tuple, Dict, Set, Optional, Any
 import sys
+import math
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
@@ -389,38 +390,6 @@ def update_liability(trade_record: Dict[str, dict], size: str, operation: str) -
 
     ty.stop()
     return str(new_liability)
-
-
-def create_stop_dict(order: dict) -> dict:
-    '''collects and returns the details of filled stop-loss order in a dictionary'''
-
-    yu = Timer('create_stop-dict')
-    yu.start()
-
-    pprint(order)
-
-    pair = order.get('symbol')
-    quote_qty = order.get('cummulativeQuoteQty')
-    base_qty = order.get('executedQty')
-    avg_price = round(float(quote_qty) / float(base_qty), 8)
-
-    bnb_fee = funcs.calc_fee_bnb(quote_qty)
-
-    trade_dict = {'timestamp': order.get('updateTime'),
-                  'pair': pair,
-                  'trig_price': order.get('stopPrice'),
-                  'limit_price': order.get('price'),
-                  'exe_price': str(avg_price),
-                  'base_size': base_qty,
-                  'quote_size': quote_qty,
-                  'fee': str(bnb_fee),
-                  'fee_currency': 'BNB'
-                  }
-    if order.get('status') != 'FILLED':
-        print(f'{pair} order not filled')
-        pb.push_note('Warning', f'{pair} stop-loss hit but not filled')
-    yu.stop()
-    return trade_dict
 
 
 def score_accum(log_path, state: str, direction: str) -> tuple[int, str]:
