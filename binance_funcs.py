@@ -353,7 +353,7 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
                 # update last close price with current price
                 print(f"{pair} ohlc data less than 15 mins old")
                 print(session.pairs_data[pair]['price'])
-                df.at[df.index[-1]: 'close'] = session.pairs_data[pair]['price']
+                df.close.iloc[-1] = session.pairs_data[pair]['price']
             elif len(df) > 2:
                 df = update_ohlc(pair, session.ohlc_tf, df, session)
                 print('updated ohlc')

@@ -469,14 +469,20 @@ class Agent():
         # TODO i have logic here for loading saved data, i also need code for updating loaded data which is not recent,
         #  and downloading from scratch when there is no data to load
 
+        if session.pairs_data[pair].get('ohlc_5m', None) is not None:
+            df = session.pairs_data[pair]['ohlc_5m']
+            source = 'mem'
+
+        else:
+            filepath = Path(f'{session.ohlc_data}/{pair}.parquet')
+            df = pd.read_parquet(filepath)
+            source = 'file'
+
+            session.pairs_data[pair]['ohlc_5m'] = df
+
         stop_dt = datetime.fromtimestamp(stop_time / 1000)
-        filepath = Path(f'{session.ohlc_data}/{pair}.parquet')
-        df = pd.read_parquet(filepath)
-
-        session.pairs_data[pair]['ohlc_5m'] = df
-
         df = df.loc[df.timestamp > stop_dt].reset_index(drop=True)
-        print(f'::: rsst get_data {pair} timestamp col = {df.timestamp.dtype} :::')
+        print(f'::: rsst get_data {pair} timestamp col = {df.timestamp.dtype} from {source} :::')
 
         return df
 
