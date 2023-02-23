@@ -1,4 +1,5 @@
 import pandas as pd
+import polars as pl
 import keys
 import time
 from datetime import datetime
@@ -37,7 +38,11 @@ def iterations(n, pair, tf):
     # print(filepath)
     #-------------------- if theres already some local data -------------------------#
     if filepath.exists():
-        df = pd.read_parquet(filepath)
+
+        pldf = pl.read_parquet(source=filepath, use_pyarrow=True)
+        df = pldf.to_pandas()
+        # df = pd.read_parquet(filepath)
+
         if len(df) > 2:
             df = funcs.update_ohlc(pair, tf, df)
     # -------------------- if theres no local data yet -------------------------#
@@ -55,9 +60,12 @@ def iterations(n, pair, tf):
     if len(df) > max_len:
         df = df.tail(max_len).reset_index(drop=True)
 
-    print(pair, df.timestamp.dtype)
+    # print(pair, df.timestamp.dtype)
 
-    df.to_parquet(filepath)
+    # df.to_parquet(filepath, compression=None)
+    pldf = pl.from_pandas(df)
+    pldf.write_parquet(filepath, use_pyarrow=True)
+
     # print(f"{n} {pair} ohlc length: {len(df)}")
 
 

@@ -1,6 +1,7 @@
 import keys, math, time, json
 import statistics as stats
 import pandas as pd
+import polars as pl
 import numpy as np
 from binance.client import Client
 import binance.enums as be
@@ -341,7 +342,10 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
         filepath = Path(f'{session.ohlc_data}/{pair}.parquet')
 
         if filepath.exists():
-            df = pd.read_parquet(filepath)
+            # df = pd.read_parquet(filepath)
+            pldf = pl.read_parquet(source=filepath, use_pyarrow=True)
+            df = pldf.to_pandas()
+
             print('got ohlc from file')
             print(f"timestamp col: {df.timestamp.dtype}")
 
@@ -353,7 +357,8 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
                 # update last close price with current price
                 print(f"{pair} ohlc data less than 15 mins old")
                 print(session.pairs_data[pair]['price'])
-                df.close.iloc[-1] = session.pairs_data[pair]['price']
+                last_idx = df.index[-1]
+                df.at[last_idx, 'close'] = session.pairs_data[pair]['price']
             elif len(df) > 2:
                 df = update_ohlc(pair, session.ohlc_tf, df, session)
                 print('updated ohlc')
@@ -374,7 +379,10 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
 
         print(f"timestamp col: {df.timestamp.dtype}")
 
-        df.to_parquet(filepath)
+        # df.to_parquet(filepath, compression='gzip')
+        pldf = pl.from_pandas(df)
+        pldf.write_parquet(filepath, use_pyarrow=True)
+
         session.pairs_data[pair]['ohlc_5m'] = df
 
     df_dict = {}
