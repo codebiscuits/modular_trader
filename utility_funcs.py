@@ -89,32 +89,38 @@ def market_benchmark(session) -> None:
     eth_1w = None
     eth_1m = None
 
-    data = session.ohlc_data.glob('*.*')
+    # data = session.ohlc_data.glob('*.*')
 
-    for x in data:
-        if x.suffix != '.pkl':
+    for x in session.pairs_data.keys():
+        # if x.suffix != '.pkl':
+        #     continue
+        # df = pd.read_pickle(x)
+
+        try:
+            df = session.pairs_data[x]['ohlc_5m']
+        except KeyError as e:
             continue
-        df = pd.read_pickle(x)
-        if len(df) > 2977:  # 1 month of 15min periods is 31 * 24 * 4 = 2976
-            df = df.tail(2977).reset_index()
-        last_stamp = df.at[df.index[-1], 'timestamp']
+
+        if len(df) > 8928:  # 1 month of 5min periods is 31 * 24 * 12 = 2976
+            df = df.tail(8928).reset_index()
+        last_stamp = df.timestamp.iloc[-1]
         now = datetime.now()
         window = timedelta(hours=4)
-        if last_stamp > now - window:  # if there is data up to the last 4 hours
-            if len(df) >= 97:
-                df['roc_1d'] = df.close.pct_change(96)
+        if last_stamp > (now - window):  # if there is data up to the last 4 hours
+            if len(df) >= 288:
+                df['roc_1d'] = df.close.pct_change(288)
                 all_1d.append(df.at[df.index[-1], 'roc_1d'])
-            if len(df) >= 673:
-                df['roc_1w'] = df.close.pct_change(672)
+            if len(df) >= 2016:
+                df['roc_1w'] = df.close.pct_change(2016)
                 all_1w.append(df.at[df.index[-1], 'roc_1w'])
-            if len(df) >= 2977:
-                df['roc_1m'] = df.close.pct_change(2976)
+            if len(df) >= 8928:
+                df['roc_1m'] = df.close.pct_change(8928)
                 all_1m.append(df.at[df.index[-1], 'roc_1m'])
-            if x.stem == 'BTCUSDT':
+            if x == 'BTCUSDT':
                 btc_1d = df.at[df.index[-1], 'roc_1d']
                 btc_1w = df.at[df.index[-1], 'roc_1w']
                 btc_1m = df.at[df.index[-1], 'roc_1m']
-            elif x.stem == 'ETHUSDT':
+            elif x == 'ETHUSDT':
                 eth_1d = df.at[df.index[-1], 'roc_1d']
                 eth_1w = df.at[df.index[-1], 'roc_1w']
                 eth_1m = df.at[df.index[-1], 'roc_1m']
@@ -125,7 +131,7 @@ def market_benchmark(session) -> None:
     # print(f'1w median based on {len(all_1w)} data points')
     # print(f'1m median based on {len(all_1m)} data points')
 
-    all_pairs = len(list(data))
+    all_pairs = len(list(session.pairs_data.keys()))
     valid_pairs = len(all_1d) > 3
     if valid_pairs:
         valid = True

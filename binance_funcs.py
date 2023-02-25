@@ -306,9 +306,6 @@ def resample_ohlc(tf, offset, df):
     tf_map = {'15m': '15T', '30m': '30T', '1h': '1H', '2h': '2H', '4h': '4H', '6h': '6H',
               '8h': '8H', '12h': '12H', '1d': '1D', '3d': '3D', '1w': '1W'}
 
-    print('about to resample')
-    print(f"timestamp col: {df.timestamp.dtype}")
-
     df = df.resample(tf_map[tf], on='timestamp',
                      offset=offset).agg({'open': 'first',
                                                  'high': 'max',
@@ -347,7 +344,6 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
             df = pldf.to_pandas()
 
             print('got ohlc from file')
-            print(f"timestamp col: {df.timestamp.dtype}")
 
             last_timestamp = df.timestamp.iloc[-1].timestamp()
             now = datetime.now().timestamp()
@@ -356,7 +352,6 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
             if (data_age_mins < 15) and (len(df) > 2):
                 # update last close price with current price
                 print(f"{pair} ohlc data less than 15 mins old")
-                print(session.pairs_data[pair]['price'])
                 last_idx = df.index[-1]
                 df.at[last_idx, 'close'] = session.pairs_data[pair]['price']
             elif len(df) > 2:
@@ -364,7 +359,7 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
                 print('updated ohlc')
             else:
                 df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
-                print(f'{pair} ohlc to short to update, downloaded from scratch')
+                print(f'{pair} ohlc too short to update, downloaded from scratch')
 
         else:
             df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
@@ -372,12 +367,8 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
 
         max_len = 210240 # 210240 is 2 years' worth of 5m periods
 
-        print(f"timestamp col: {df.timestamp.dtype}")
-
         if len(df) > max_len:
             df = df.tail(max_len).reset_index(drop=True)
-
-        print(f"timestamp col: {df.timestamp.dtype}")
 
         # df.to_parquet(filepath, compression='gzip')
         pldf = pl.from_pandas(df)
