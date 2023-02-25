@@ -345,41 +345,6 @@ def count_trades(counts: dict) -> str:
     return '\n' + ', '.join(count_list) if count_list else ''
 
 
-# def find_bad_keys(c_data: dict) -> list:
-#     '''returns the ids of any trade records whos trade sizes don't add up'''
-#
-#     bad_keys = []
-#     for k, v in c_data.items():
-#         try:
-#             init_base = 0
-#             add_base = 0
-#             tp_base = 0
-#             close_base = 0
-#             for x in v:
-#                 if x.get('type')[:4] == 'open':
-#                     init_base = float(x.get('base_size'))
-#                 elif x.get('type')[:3] == 'add':
-#                     add_base += float(x.get('base_size'))
-#                 elif x.get('type')[:2] == 'tp':
-#                     tp_base += float(x.get('base_size'))
-#                 elif x.get('type')[:5] in ['close', 'stop_']:
-#                     close_base = float(x.get('base_size'))
-#
-#             gross_buy = init_base + add_base
-#             gross_sell = tp_base + close_base
-#             diff = (gross_buy - gross_sell) / gross_buy
-#             pair = x.get('pair')
-#             if abs(diff) > 0.03:
-#                 # print(f'{k} {pair} - bought: {gross_buy} sold: {gross_sell}')
-#                 bad_keys.append({'key': k, 'pair': pair, 'buys': gross_buy, 'sells': gross_sell})
-#         except:
-#             bad_keys.append({'key': k, 'pair': pair, 'buys': gross_buy, 'sells': gross_sell})
-#             # print('bad key:', k)
-#             continue
-#
-#     return bad_keys
-
-
 def update_liability(trade_record: Dict[str, dict], size: str, operation: str) -> str:
     """this function finds the previous value for liability and returns the new value as a string"""
 

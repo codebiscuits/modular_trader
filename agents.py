@@ -466,19 +466,35 @@ class Agent():
     # record stopped sim trades ----------------------------------------------
 
     def get_data(self, session, pair, stop_time):
-        # TODO i have logic here for loading saved data, i also need code for updating loaded data which is not recent,
-        #  and downloading from scratch when there is no data to load
+
+        check_recent = False
 
         if session.pairs_data[pair].get('ohlc_5m', None) is not None:
             df = session.pairs_data[pair]['ohlc_5m']
             source = 'mem'
+            check_recent = True
 
         else:
             filepath = Path(f'{session.ohlc_data}/{pair}.parquet')
-            df = pd.read_parquet(filepath)
-            source = 'file'
+            if filepath.exists():
+                df = pd.read_parquet(filepath)
+                source = 'file'
+                check_recent = True
+
+            else:
+                df = funcs.get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
+                source = 'exchange'
+                print(f'downloaded {pair} from scratch')
 
             session.pairs_data[pair]['ohlc_5m'] = df
+
+        if check_recent:
+            last = df.timestamp.iloc[-1]
+            timespan = datetime.now().timestamp() - (last.timestamp)
+            if timespan > 900:
+                df = funcs.update_ohlc(pair, session.ohlc_tf, df, session)
+                source += ' and exchange'
+                session.pairs_data[pair]['ohlc_5m'] = df
 
         stop_dt = datetime.fromtimestamp(stop_time / 1000)
         df = df.loc[df.timestamp > stop_dt].reset_index(drop=True)

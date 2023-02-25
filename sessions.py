@@ -135,7 +135,6 @@ class TradingSession():
                 time.sleep(window - timespan)
             if timespan > max(window, raw_window):
                 flag = 0
-                print('weights count being pruned:')
                 print(self.weights_count[0])
                 print(self.weights_count[n])
                 self.weights_count = self.weights_count[n:]
