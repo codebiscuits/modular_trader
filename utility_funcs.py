@@ -101,11 +101,12 @@ def market_benchmark(session) -> None:
         except KeyError as e:
             continue
 
-        if len(df) > 8928:  # 1 month of 5min periods is 31 * 24 * 12 = 2976
+        if len(df) > 8928:  # 1 month of 5min periods is 31 * 24 * 12 = 8928
             df = df.tail(8928).reset_index()
         last_stamp = df.timestamp.iloc[-1]
         now = datetime.now()
         window = timedelta(hours=4)
+        print(f"market benchmark: {x} {last_stamp = }, now - window = {now - window}, flag: {last_stamp > (now - window)}")
         if last_stamp > (now - window):  # if there is data up to the last 4 hours
             if len(df) >= 288:
                 df['roc_1d'] = df.close.pct_change(288)

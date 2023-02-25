@@ -92,7 +92,8 @@ class Agent():
         self.calc_tor()
         self.next_id = int(datetime.now().timestamp())
         session.min_length = min(session.min_length, self.ohlc_length)
-        print(f"{session.min_length = }")
+        if self.max_positions > 10:
+            print(f'{self.name} max positions: {self.max_positions}')
         t.stop()
 
     def __str__(self):
@@ -315,8 +316,6 @@ class Agent():
     def save_records(self, session, pair, stop_dict):
         self.open_trades[pair]['trade'].append(stop_dict)
         rpnl = self.realised_pnl(self.open_trades[pair])
-        # TODO i feel like realised pnl should be able to put the value straight into the trade record rather than
-        #  returning the value and then updating the record outside the function
         self.open_trades[pair]['trade'][-1]['rpnl'] = rpnl
 
         ts_id = int(self.open_trades[pair]['position']['open_time'])
@@ -467,6 +466,9 @@ class Agent():
 
     def get_data(self, session, pair, stop_time):
 
+        rsst_gd = Timer('rsst - get_data')
+        rsst_gd.start()
+
         check_recent = False
 
         if session.pairs_data[pair].get('ohlc_5m', None) is not None:
@@ -490,7 +492,7 @@ class Agent():
 
         if check_recent:
             last = df.timestamp.iloc[-1]
-            timespan = datetime.now().timestamp() - (last.timestamp)
+            timespan = datetime.now().timestamp() - (last.timestamp())
             if timespan > 900:
                 df = funcs.update_ohlc(pair, session.ohlc_tf, df, session)
                 source += ' and exchange'
@@ -498,7 +500,9 @@ class Agent():
 
         stop_dt = datetime.fromtimestamp(stop_time / 1000)
         df = df.loc[df.timestamp > stop_dt].reset_index(drop=True)
-        print(f'::: rsst get_data {pair} timestamp col = {df.timestamp.dtype} from {source} :::')
+        # print(f'::: rsst get_data {pair} timestamp col = {df.timestamp.dtype} from {source} :::')
+
+        rsst_gd.stop()
 
         return df
 
@@ -720,8 +724,6 @@ class Agent():
     def score_accum(self, session, direction: str, switch: str):
         '''calculates perf score from recent performance. also saves the
         instance property open_pnl_changes dictionary'''
-
-        # TODO this whole function assumes margin positions, i need to make it accommodate spot as well as long/short
 
         with open(f"{session.read_records}/{self.tf}/{self.id}/perf_log.json", "r") as file:
             bal_data = json.load(file)

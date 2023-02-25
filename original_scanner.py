@@ -79,31 +79,6 @@ def setup_scan() -> None:
     pairs = pairs_in_pos + other_pairs  # this ensures open positions will be checked first
     # pairs = pairs[:10] # for testing the loop quickly
 
-    # calculate initial open pnl for comparison with end of previous session
-    # TODO this might be ok to do inside each agent's __init__ method, unless theres some reason why the pairs list has
-    #  to come first, in which case it could still be an agent method which i just call at this point in the script
-    for agent in agents:
-        # if agent.mode == 'spot':
-        #     if agent.fixed_risk_spot:
-        #         print(f"{agent.name} fixed risk: {(agent.fixed_risk_spot * 10000):.2f}bps")
-        #     agent.real_pos['USDT'] = session.spot_usdt_bal
-        #     agent.starting_ropnl_spot = agent.open_pnl('spot', 'real')
-        #     agent.starting_sopnl_spot = agent.open_pnl('spot', 'sim')
-        # elif agent.mode == 'margin':
-        #     if agent.fixed_risk_l or agent.fixed_risk_s:
-        #         frl_bps = agent.fixed_risk_l * 10000
-        #         frs_bps = agent.fixed_risk_s * 10000
-        #         print(f"{agent.name} fr long: {(frl_bps):.2f}bps, fr short: {(frs_bps):.2f}bps")
-        #     agent.real_pos['USDT'] = session.margin_usdt_bal
-        #     agent.starting_ropnl_l = agent.open_pnl('long', 'real')
-        #     agent.starting_sopnl_l = agent.open_pnl('long', 'sim')
-        #     agent.starting_ropnl_s = agent.open_pnl('short', 'real')
-        #     agent.starting_sopnl_s = agent.open_pnl('short', 'sim')
-
-        if agent.max_positions > 10:
-            print(f'max positions: {agent.max_positions}')
-        # agent.calc_tor()
-
     # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
     # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 
@@ -326,13 +301,20 @@ def setup_scan() -> None:
     # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 
     # log all data from the session and print/push summary-------------------------
-    # TODO need this for spot as well
     before = session.margin_usdt_bal
     session.get_usdt_m()
     after = session.margin_usdt_bal
     if before != after:
         print('\n*-*-*-*-*-*-*-*-*-*-*-*-*-*-*')
-        print(f'USDT balance wrong\nbefore: {before}\nafter: {after}')
+        print(f'USDT margin balance wrong\nbefore: {before}\nafter: {after}')
+        print('*-*-*-*-*-*-*-*-*-*-*-*-*-*-*\n')
+
+    before = session.spot_usdt_bal
+    session.get_usdt_s()
+    after = session.spot_usdt_bal
+    if before != after:
+        print('\n*-*-*-*-*-*-*-*-*-*-*-*-*-*-*')
+        print(f'USDT spot balance wrong\nbefore: {before}\nafter: {after}')
         print('*-*-*-*-*-*-*-*-*-*-*-*-*-*-*\n')
 
     print('-:-' * 20)

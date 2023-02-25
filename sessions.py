@@ -135,10 +135,10 @@ class TradingSession():
                 time.sleep(window - timespan)
             if timespan > max(window, raw_window):
                 flag = 0
-                print(self.weights_count[0])
-                print(self.weights_count[n])
+                # print(self.weights_count[0])
+                # print(self.weights_count[n])
                 self.weights_count = self.weights_count[n:]
-                print(self.weights_count[0])
+                # print(self.weights_count[0])
                 break
 
         raw_limit_exceeded = len(self.weights_count) > raw_limit

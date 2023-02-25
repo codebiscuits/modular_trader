@@ -332,8 +332,6 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
 
     if session.pairs_data[pair].get('ohlc_5m', None) is not None:
         df = session.pairs_data[pair]['ohlc_5m']
-        print('got ohlc from session.pairs_data')
-        print(f"timestamp col: {df.timestamp.dtype}")
 
     else:
         filepath = Path(f'{session.ohlc_data}/{pair}.parquet')
@@ -342,8 +340,6 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
             # df = pd.read_parquet(filepath)
             pldf = pl.read_parquet(source=filepath, use_pyarrow=True)
             df = pldf.to_pandas()
-
-            print('got ohlc from file')
 
             last_timestamp = df.timestamp.iloc[-1].timestamp()
             now = datetime.now().timestamp()
