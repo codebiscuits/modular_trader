@@ -58,8 +58,6 @@ def setup_scan() -> None:
             ]
         )
 
-        pprint(agents)
-
     # session.name = ' | '.join([n.name for n in agents])
 
     # compile and sort list of pairs to loop through ------------------------------
