@@ -28,10 +28,17 @@ else:
 
 start = time.perf_counter()
 
+for sym in session.info['symbols']:
+    if sym['status'] != 'TRADING':
+        dead_symbol = sym['symbol']
+        fp = Path(f"{session.ohlc_data}/{dead_symbol}.parquet")
+        if fp.exists():
+            fp.unlink()
+
 pairs = list(session.pairs_data.keys())
 
 def iterations(n, pair, tf):
-    # print(f"{n} {pair} {tf}")
+    print(f"{n} {pair} {tf}")
     session.set_ohlc_tf(tf)
     # print(session.ohlc_data)
     filepath = Path(f'{session.ohlc_data}/{pair}.parquet')
@@ -64,7 +71,7 @@ def iterations(n, pair, tf):
 
     # df.to_parquet(filepath, compression=None)
     pldf = pl.from_pandas(df)
-    pldf.write_parquet(filepath, use_pyarrow=True)
+    pldf.write_parquet(filepath, row_group_size=10512, use_pyarrow=True)
 
     # print(f"{n} {pair} ohlc length: {len(df)}")
 

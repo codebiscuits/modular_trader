@@ -278,21 +278,13 @@ class TradingSession():
 
             if right_quote and right_market and allowed:
                 base_asset = sym.get('baseAsset')
-                # print(pair, base_asset)
-                # try:
-                #     cg_symbol = self.cg_symbols[base_asset]
-                # except KeyError:
-                #     overrides = {'IOTA': 'iota', 'BCHABC': 'bitcoin-cash', 'BCHSV': 'bitcoin-cash-sv', 'NANO': 'nano',
-                #                  'BTTC': 'bittorrent'}
-                #     if base_asset in overrides:
-                #         cg_symbol = overrides[base_asset]
-                #     else:
-                #         print(f'KeyError whilst trying to put cg_symbol for {base_asset} into pairs data')
 
                 margin = 'MARGIN' in sym.get('permissions')
                 oco_allowed = sym['ocoAllowed']
                 quote_order_qty_allowed = sym['quoteOrderQtyMarketAllowed']
-                status = sym.get('status')
+
+                if sym.get('status') != 'TRADING':
+                    continue
 
                 for filter in sym['filters']:
                     if filter['filterType'] == 'PRICE_FILTER':
@@ -304,10 +296,7 @@ class TradingSession():
                     elif filter['filterType'] == 'MAX_NUM_ALGO_ORDERS':
                         max_algo = filter['maxNumAlgoOrders']
 
-                if status == 'TRADING':
-                    spread = self.spreads[pair]
-                else:
-                    spread = 1
+                spread = self.spreads[pair]
 
                 self.pairs_data[sym.get('symbol')] = dict(
                     base_asset=base_asset,
@@ -320,7 +309,6 @@ class TradingSession():
                     max_algo_orders=max_algo,
                     oco_allowed=oco_allowed,
                     qoq_allowed=quote_order_qty_allowed,
-                    status=status,
                     spot_orders=[],
                     margin_orders=[]
                 )
@@ -369,7 +357,7 @@ class TradingSession():
         u.stop()
         return market_data, test_mkt_data
 
-    def records_path(self) -> tuple[Path, Path]:
+    def records_path(self) -> Tuple[Path, Path]:
         '''automatically sets the absolute path for the records folder'''
 
         func_name = sys._getframe().f_code.co_name

@@ -99,32 +99,37 @@ def market_benchmark(session) -> None:
         try:
             df = session.pairs_data[x]['ohlc_5m']
         except KeyError as e:
+            print(f"market benchmark: couldn't get any ohlc data for {x}")
             continue
 
-        if len(df) > 8928:  # 1 month of 5min periods is 31 * 24 * 12 = 8928
-            df = df.tail(8928).reset_index()
+        if len(df) > 8929:  # 1 month of 5min periods is 31 * 24 * 12 = 8928
+            df = df.tail(8929).reset_index()
         last_stamp = df.timestamp.iloc[-1]
         now = datetime.now()
         window = timedelta(hours=4)
         print(f"market benchmark: {x} {last_stamp > (now - window)} {len(df) = }")
         if last_stamp > (now - window):  # if there is data up to the last 4 hours
-            if len(df) >= 288:
+            if len(df) > 288:
                 df['roc_1d'] = df.close.pct_change(288)
                 all_1d.append(df.at[df.index[-1], 'roc_1d'])
-            if len(df) >= 2016:
+            else:
+                print(f"market_benchmark: {x} ohlc data not long enough to be included")
+            if len(df) > 2016:
                 df['roc_1w'] = df.close.pct_change(2016)
                 all_1w.append(df.at[df.index[-1], 'roc_1w'])
-            if len(df) >= 8928:
+            if len(df) > 8928:
                 df['roc_1m'] = df.close.pct_change(8928)
                 all_1m.append(df.at[df.index[-1], 'roc_1m'])
             if x == 'BTCUSDT':
-                btc_1d = df.at[df.index[-1], 'roc_1d']
-                btc_1w = df.at[df.index[-1], 'roc_1w']
-                btc_1m = df.at[df.index[-1], 'roc_1m']
+                btc_1d = df.roc_1d.iloc[-1]
+                btc_1w = df.roc_1w.iloc[-1]
+                btc_1m = df.roc_1m.iloc[-1]
+                print(f"btc benchmark scores: {btc_1d}, {btc_1w}, {btc_1m}")
             elif x == 'ETHUSDT':
-                eth_1d = df.at[df.index[-1], 'roc_1d']
-                eth_1w = df.at[df.index[-1], 'roc_1w']
-                eth_1m = df.at[df.index[-1], 'roc_1m']
+                eth_1d = df.roc_1d.iloc[-1]
+                eth_1w = df.roc_1w.iloc[-1]
+                eth_1m = df.roc_1m.iloc[-1]
+                print(f"eth benchmark scores: {eth_1d}, {eth_1w}, {eth_1m}")
     market_1d = stats.median(all_1d) if len(all_1d) > 3 else 0
     market_1w = stats.median(all_1w) if len(all_1w) > 3 else 0
     market_1m = stats.median(all_1m) if len(all_1m) > 3 else 0
@@ -134,12 +139,12 @@ def market_benchmark(session) -> None:
 
     print(all_1d)
 
-    all_pairs = len(list(session.pairs_data.keys()))
-    valid_pairs = len(all_1d) > 3
-    if valid_pairs:
+    all_pairs = len(set(session.pairs_data.keys()))
+    valid_pairs = len(all_1d)
+    if valid_pairs > 3:
         valid = True
-        if all_pairs / valid_pairs > 1.5:
-            print('warning (market benchmark): lots of pairs ohlc data not up to date')
+        if (all_pairs / valid_pairs) > 1.5:
+            print(f'warning (market benchmark): lots of pairs ohlc data not up to date: {all_pairs = }, {len(all_1d) = }')
     else:
         valid = False
 
@@ -236,7 +241,7 @@ def log(session, agent) -> None:
         new_record['sim_open_pnl_l'] = agent.open_pnl('long', 'sim')
         new_record['sim_open_pnl_s'] = agent.open_pnl('short', 'sim')
     else:
-        print('*** warning log function not working for this agent ***')
+        print(f'*** warning log function not working for {agent.name} ***')
 
     read_folder = Path(f"{session.read_records}/{agent.id}")
     read_path = read_folder / "perf_log.json"
@@ -366,7 +371,7 @@ def update_liability(trade_record: Dict[str, dict], size: str, operation: str) -
     return str(new_liability)
 
 
-def score_accum(log_path, state: str, direction: str) -> tuple[int, str]:
+def score_accum(log_path, state: str, direction: str) -> Tuple[int, str]:
     func_name = sys._getframe().f_code.co_name
     x12 = Timer(f'{func_name}')
     x12.start()

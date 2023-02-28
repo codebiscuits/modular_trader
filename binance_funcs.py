@@ -17,6 +17,7 @@ from typing import Union, List, Tuple, Dict, Set, Optional, Any
 from collections import Counter
 import sys
 from pycoingecko import CoinGeckoAPI
+from pyarrow import ArrowInvalid
 
 client = Client(keys.bPkey, keys.bSkey)
 cg = CoinGeckoAPI()
@@ -92,7 +93,7 @@ def calc_stop(inval: float, spread: float, price: float, min_risk: float = 0.002
 # -#-#- Market Data Functions
 
 
-def get_depth(session, pair: str) -> tuple[float, float]:
+def get_depth(session, pair: str) -> Tuple[float, float]:
     """returns the quantity (in the quote currency) that could be bought/sold
     within the % range of price set by the max_slip param"""
 
@@ -332,14 +333,21 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
 
     if session.pairs_data[pair].get('ohlc_5m', None) is not None:
         df = session.pairs_data[pair]['ohlc_5m']
+        print('got df from session.pairs_data')
 
     else:
         filepath = Path(f'{session.ohlc_data}/{pair}.parquet')
 
         if filepath.exists():
             # df = pd.read_parquet(filepath)
-            pldf = pl.read_parquet(source=filepath, use_pyarrow=True)
-            df = pldf.to_pandas()
+            try:
+                pldf = pl.read_parquet(source=filepath, use_pyarrow=True)
+                df = pldf.to_pandas()
+            except ArrowInvalid as e:
+                print(f"Problem reading {pair} parquet file, downloading from scratch.")
+                print(e)
+                filepath.unlink()
+                df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
 
             last_timestamp = df.timestamp.iloc[-1].timestamp()
             now = datetime.now().timestamp()
@@ -347,7 +355,7 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
             print(f"\n{pair} ohlc data ends: {(now - last_timestamp) / 60:.1f} minutes ago")
             if (data_age_mins < 15) and (len(df) > 2):
                 # update last close price with current price
-                print(f"{pair} ohlc data less than 15 mins old")
+                print(f"{pair} ohlc data less than 15 mins old, adjusting last close")
                 last_idx = df.index[-1]
                 df.at[last_idx, 'close'] = session.pairs_data[pair]['price']
             elif len(df) > 2:
@@ -369,6 +377,7 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
         # df.to_parquet(filepath, compression='gzip')
         pldf = pl.from_pandas(df)
         pldf.write_parquet(filepath, use_pyarrow=True)
+        session.pairs_data[pair]['ohlc_5m'] = df
 
     # now trim the ohlc data down to just what's needed for the longest timeframe in this session
     lengths = {'1w': 2016, '1d': 288, '12h': 144, '6h': 72, '4h': 48, '1h': 12}

@@ -62,9 +62,8 @@ def setup_scan() -> None:
 
     # compile and sort list of pairs to loop through ------------------------------
     all_pairs = [k for k in session.pairs_data.keys()
-                 if (session.pairs_data[k]['status'] == 'TRADING')
-                 and (session.pairs_data[k]['margin_allowed'])]
-    # all_pairs = funcs.get_pairs(market='MARGIN', session=session)
+                 # if (session.pairs_data[k]['margin_allowed'])
+                 ]
     shuffle(all_pairs)
 
     positions = []

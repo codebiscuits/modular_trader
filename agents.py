@@ -363,13 +363,9 @@ class Agent():
                     # if the free balance doesn't cover the position, notify me
                     price = session.pairs_data[pair]['price']
                     value = free_bal * price
-                    if pair == 'BNBUSDT' and value > 15:
+                    if (pair == 'BNBUSDT' and value > 15) or (pair != 'BNBUSDT' and value > 10):
                         note = f'{pair} in position with no stop-loss'
                         pb.push_note(session.now_start, note)
-                    elif pair != 'BNBUSDT' and value > 10:
-                        note = f'{pair} in position with no stop-loss'
-                        pb.push_note(session.now_start, note)
-
             else:  # if direction == 'short'
                 owed = float(session.margin_bals[pair[:-4]].get('borrowed'))
                 if session.live and not owed:
@@ -620,7 +616,7 @@ class Agent():
         n.start()
 
         check_pairs = list(self.sim_trades.items())
-        for pair, v in check_pairs:
+        for pair, v in check_pairs: # can't loop through the dictionary directly because i delete items as i go
             direction = v['position']['direction']
             base_size = float(v['position']['base_size'])
             stop = float(v['position']['hard_stop'])
@@ -786,6 +782,7 @@ class Agent():
         now = datetime.now().strftime('%d/%m/%y %H:%M')
 
         filepath = Path(f"{session.read_records}/{self.tf}/{self.id}/perf_log.json")
+        bal_data = None
         try:
             if self.live:
                 filepath.touch(exist_ok=True)
