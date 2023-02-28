@@ -8,6 +8,7 @@ from binance.client import Client
 from pushbullet import Pushbullet
 from pathlib import Path
 from sessions import LightSession
+from pyarrow import ArrowInvalid
 
 pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
@@ -46,8 +47,17 @@ def iterations(n, pair, tf):
     #-------------------- if theres already some local data -------------------------#
     if filepath.exists():
 
-        pldf = pl.read_parquet(source=filepath, use_pyarrow=True)
-        df = pldf.to_pandas()
+        try:
+            pldf = pl.read_parquet(source=filepath, use_pyarrow=True)
+            df = pldf.to_pandas()
+        except ArrowInvalid as e:
+            print(f"Problem reading {pair} parquet file, downloading from scratch.")
+            print(e)
+            filepath.unlink()
+            df = funcs.get_ohlc(pair, tf, '2 years ago UTC')
+
+
+
         # df = pd.read_parquet(filepath)
 
         if len(df) > 2:
