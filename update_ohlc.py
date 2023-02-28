@@ -38,8 +38,16 @@ for sym in session.info['symbols']:
 
 pairs = list(session.pairs_data.keys())
 
+def from_scratch(pair):
+    df_start = time.perf_counter()
+    df = funcs.get_ohlc(pair, tf, '2 years ago UTC')
+    df_end = time.perf_counter()
+    elapsed = df_end - df_start
+    print(f'downloaded {pair} from scratch, took {int(elapsed // 60)}m {elapsed % 60:.1f}s')
+    return df
+
 def iterations(n, pair, tf):
-    print(f"{n} {pair} {tf}")
+    # print(f"{n} {pair} {tf}")
     session.set_ohlc_tf(tf)
     # print(session.ohlc_data)
     filepath = Path(f'{session.ohlc_data}/{pair}.parquet')
@@ -51,10 +59,10 @@ def iterations(n, pair, tf):
             pldf = pl.read_parquet(source=filepath, use_pyarrow=True)
             df = pldf.to_pandas()
         except ArrowInvalid as e:
+            print('Error:\n', e)
             print(f"Problem reading {pair} parquet file, downloading from scratch.")
-            print(e)
             filepath.unlink()
-            df = funcs.get_ohlc(pair, tf, '2 years ago UTC')
+            df = from_scratch(pair)
 
 
 
@@ -64,11 +72,7 @@ def iterations(n, pair, tf):
             df = funcs.update_ohlc(pair, tf, df)
     # -------------------- if theres no local data yet -------------------------#
     else:
-        df_start = time.perf_counter()
-        df = funcs.get_ohlc(pair, tf, '2 years ago UTC')
-        df_end = time.perf_counter()
-        elapsed = df_end - df_start
-        print(f'downloaded {pair} from scratch, took {int(elapsed // 60)}m {elapsed % 60:.1f}s')
+        df = from_scratch(pair)
 
     # print(pair, df.timestamp.iloc[-1])
 

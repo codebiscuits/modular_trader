@@ -374,8 +374,8 @@ class TradingSession():
             read_records = Path(f'/home/ross/Documents/backtester_2021/records')
             write_records = Path(f'/home/ross/Documents/backtester_2021/records')
 
-        print(f"{read_records = }")
-        print(f"{write_records = }")
+        # print(f"{read_records = }")
+        # print(f"{write_records = }")
 
         write_records.mkdir(parents=True, exist_ok=True)
 
