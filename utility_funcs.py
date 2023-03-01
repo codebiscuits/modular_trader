@@ -107,7 +107,6 @@ def market_benchmark(session) -> None:
         last_stamp = df.timestamp.iloc[-1]
         now = datetime.now()
         window = timedelta(hours=4)
-        print(f"market benchmark: {x} {last_stamp > (now - window)} {len(df) = }")
         if last_stamp > (now - window):  # if there is data up to the last 4 hours
             if len(df) > 288:
                 df['roc_1d'] = df.close.pct_change(288)
@@ -133,11 +132,9 @@ def market_benchmark(session) -> None:
     market_1d = stats.median(all_1d) if len(all_1d) > 3 else 0
     market_1w = stats.median(all_1w) if len(all_1w) > 3 else 0
     market_1m = stats.median(all_1m) if len(all_1m) > 3 else 0
-    # print(f'1d median based on {len(all_1d)} data points')
-    # print(f'1w median based on {len(all_1w)} data points')
-    # print(f'1m median based on {len(all_1m)} data points')
-
-    print(all_1d)
+    print(f'1d median based on {len(all_1d)} data points')
+    print(f'1w median based on {len(all_1w)} data points')
+    print(f'1m median based on {len(all_1m)} data points')
 
     all_pairs = len(set(session.pairs_data.keys()))
     valid_pairs = len(all_1d)
