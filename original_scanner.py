@@ -60,6 +60,11 @@ def setup_scan() -> None:
 
     # session.name = ' | '.join([n.name for n in agents])
 
+    print("\n-*-*-*- Running record_stopped_sim_trades for all agents -*-*-*-\n")
+    for agent in agents:
+        agent.record_stopped_sim_trades(session, timeframes)
+    print("\n-*-*-*- record_stopped_sim_trades finished for all agents -*-*-*-\n")
+
     # compile and sort list of pairs to loop through ------------------------------
     all_pairs = [k for k in session.pairs_data.keys()
                  # if (session.pairs_data[k]['margin_allowed'])

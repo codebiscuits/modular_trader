@@ -333,7 +333,7 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
 
     if session.pairs_data[pair].get('ohlc_5m', None) is not None:
         df = session.pairs_data[pair]['ohlc_5m']
-        print('got df from session.pairs_data')
+        # print('got df from session.pairs_data')
 
     else:
         filepath = Path(f'{session.ohlc_data}/{pair}.parquet')
@@ -352,36 +352,34 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
             last_timestamp = df.timestamp.iloc[-1].timestamp()
             now = datetime.now().timestamp()
             data_age_mins = (now - last_timestamp) / 60
-            print(f"\n{pair} ohlc data ends: {(now - last_timestamp) / 60:.1f} minutes ago")
+            # print(f"\n{pair} ohlc data ends: {(now - last_timestamp) / 60:.1f} minutes ago")
             if (data_age_mins < 15) and (len(df) > 2):
                 # update last close price with current price
-                print(f"{pair} ohlc data less than 15 mins old, adjusting last close")
+                # print(f"{pair} ohlc data less than 15 mins old, adjusting last close")
                 last_idx = df.index[-1]
                 df.at[last_idx, 'close'] = session.pairs_data[pair]['price']
             elif len(df) > 2:
                 df = update_ohlc(pair, session.ohlc_tf, df, session)
-                print('updated ohlc')
+                # print('updated ohlc')
             else:
                 df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
-                print(f'{pair} ohlc too short to update, downloaded from scratch')
+                # print(f'{pair} ohlc too short to update, downloaded from scratch')
 
         else:
             df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
             print(f'downloaded {pair} from scratch')
 
         max_len = 210240 # 210240 is 2 years' worth of 5m periods
-
         if len(df) > max_len:
             df = df.tail(max_len).reset_index(drop=True)
-
-        # df.to_parquet(filepath, compression='gzip')
         pldf = pl.from_pandas(df)
         pldf.write_parquet(filepath, use_pyarrow=True)
-        session.pairs_data[pair]['ohlc_5m'] = df
 
     # now trim the ohlc data down to just what's needed for the longest timeframe in this session
     lengths = {'1w': 2016, '1d': 288, '12h': 144, '6h': 72, '4h': 48, '1h': 12}
     df = df.tail((session.min_length + 1) * lengths[timeframes[-1][0]]).reset_index(drop=True)
+
+    session.pairs_data[pair]['ohlc_5m'] = df
 
     df_dict = {}
     for tf, offset in timeframes:

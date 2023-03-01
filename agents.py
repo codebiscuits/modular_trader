@@ -78,7 +78,7 @@ class Agent():
         self.sim_pos = self.current_positions(session, 'sim')
         self.tracked = self.current_positions(session, 'tracked')
         self.record_stopped_trades(session)
-        self.record_stopped_sim_trades(session)
+        # self.record_stopped_sim_trades(session)
         self.open_pnl_changes = {}
         self.fixed_risk_spot = self.set_fixed_risk(session, 'spot')
         self.fixed_risk_l = self.set_fixed_risk(session, 'long')
@@ -460,7 +460,7 @@ class Agent():
 
     # record stopped sim trades ----------------------------------------------
 
-    def get_data(self, session, pair, stop_time):
+    def get_data(self, session, pair, timeframes: list, stop_time):
 
         rsst_gd = Timer('rsst - get_data')
         rsst_gd.start()
@@ -480,10 +480,14 @@ class Agent():
                 check_recent = True
 
             else:
+                print(f"{filepath} doesn't exist")
                 df = funcs.get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
                 source = 'exchange'
                 print(f'downloaded {pair} from scratch')
 
+            # now trim the ohlc data down to just what's needed for the longest timeframe in this session
+            lengths = {'1w': 2016, '1d': 288, '12h': 144, '6h': 72, '4h': 48, '1h': 12}
+            df = df.tail((session.min_length + 1) * lengths[timeframes[-1][0]]).reset_index(drop=True)
             session.pairs_data[pair]['ohlc_5m'] = df
 
         if check_recent:
@@ -608,7 +612,7 @@ class Agent():
 
         return trade_dict
 
-    def record_stopped_sim_trades(self, session) -> None:
+    def record_stopped_sim_trades(self, session, timeframes: list) -> None:
         """goes through all trades in the sim_trades file and checks their recent price action
         against their most recent hard_stop to see if any of them would have got stopped out"""
 
@@ -622,7 +626,7 @@ class Agent():
             stop = float(v['position']['hard_stop'])
             stop_time = v['position']['stop_time']
 
-            df = self.get_data(session, pair, stop_time)
+            df = self.get_data(session, pair, timeframes, stop_time)
             stopped, trade_type, overshoot_pct, stop_hit_time = self.check_stop_hit(df, direction, stop)
             if stopped:
                 trade_dict = self.create_trade_dict(pair, trade_type, stop, base_size, stop_hit_time, overshoot_pct)
