@@ -721,8 +721,15 @@ class Agent():
         '''calculates perf score from recent performance. also saves the
         instance property open_pnl_changes dictionary'''
 
-        with open(f"{session.read_records}/{self.tf}/{self.id}/perf_log.json", "r") as file:
-            bal_data = json.load(file)
+        filepath = Path(f"{session.read_records}/{self.tf}/{self.id}/perf_log.json")
+        bal_data = None
+        try:
+            if self.live:
+                filepath.touch(exist_ok=True)
+            with open(filepath, "r") as file:
+                bal_data = json.load(file)
+        except JSONDecodeError:
+            print(f"{filepath} was an empty file.")
 
         if bal_data:
             last = bal_data[-1]
