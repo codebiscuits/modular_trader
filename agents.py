@@ -1002,15 +1002,14 @@ class Agent():
         for k, v in data.items():
 
             if state == 'open':
-                # need to work out what to do with open trades on coins which have been delisted
+                # TODO need to work out what to do with open trades on coins which have been delisted
                 pass
             elif state == 'sim':
-                status = session.pairs_data[k]['status']
-                if status != 'TRADING':
+                if k not in session.pairs_data.keys():
                     drop_items.append(k)
                     continue
             elif state == 'tracked':
-                # need to work out what to do with tracked trades on coins which have been delisted
+                # TODO need to work out what to do with tracked trades on coins which have been delisted
                 pass
 
             asset = k[:-4]
