@@ -473,6 +473,12 @@ class TradingSession():
 
         return self.book_data[pair]
 
+    def store_ohlc(self, df, pair, timeframes):
+        lengths = {'1w': 2016, '1d': 288, '12h': 144, '6h': 72, '4h': 48, '1h': 12}
+        df = df.tail((self.min_length + 1) * lengths[timeframes[-1][0]]).reset_index(drop=True)
+        self.pairs_data[pair]['ohlc_5m'] = df
+        print(f"{pair} ohlc stored in session")
+
     def compute_indicators(self, df: pd.DataFrame) -> dict:
         '''takes the set of required indicators and the dataframe and applies the
         indicator functions as necessary'''

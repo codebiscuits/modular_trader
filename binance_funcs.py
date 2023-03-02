@@ -375,11 +375,7 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
         pldf = pl.from_pandas(df)
         pldf.write_parquet(filepath, use_pyarrow=True)
 
-    # now trim the ohlc data down to just what's needed for the longest timeframe in this session
-    lengths = {'1w': 2016, '1d': 288, '12h': 144, '6h': 72, '4h': 48, '1h': 12}
-    df = df.tail((session.min_length + 1) * lengths[timeframes[-1][0]]).reset_index(drop=True)
-
-    session.pairs_data[pair]['ohlc_5m'] = df
+        session.store_ohlc(df, pair, timeframes)
 
     df_dict = {}
     for tf, offset in timeframes:

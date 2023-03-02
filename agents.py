@@ -1,5 +1,6 @@
 import binance.exceptions as bx
 import pandas as pd
+import polars as pl
 from pathlib import Path
 import json
 from json.decoder import JSONDecodeError
@@ -462,9 +463,15 @@ class Agent():
 
     def get_data(self, session, pair, timeframes: list, stop_time):
 
+        # TODO trimmimng the data before ive used it to check the open sim trades will limit me to 200 periods of
+        #  history, which may not be enough. i should trim and save the ohlc data at the end of rsst
+
         rsst_gd = Timer('rsst - get_data')
         rsst_gd.start()
 
+        print(f"rsst {self.name} {pair}")
+
+        filepath = Path(f'{session.ohlc_data}/{pair}.parquet')
         check_recent = False
 
         if session.pairs_data[pair].get('ohlc_5m', None) is not None:
@@ -473,7 +480,6 @@ class Agent():
             check_recent = True
 
         else:
-            filepath = Path(f'{session.ohlc_data}/{pair}.parquet')
             if filepath.exists():
                 df = pd.read_parquet(filepath)
                 source = 'file'
@@ -484,11 +490,10 @@ class Agent():
                 df = funcs.get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
                 source = 'exchange'
                 print(f'downloaded {pair} from scratch')
+                pldf = pl.from_pandas(df)
+                pldf.write_parquet(filepath, use_pyarrow=True)
 
-            # now trim the ohlc data down to just what's needed for the longest timeframe in this session
-            lengths = {'1w': 2016, '1d': 288, '12h': 144, '6h': 72, '4h': 48, '1h': 12}
-            df = df.tail((session.min_length + 1) * lengths[timeframes[-1][0]]).reset_index(drop=True)
-            session.pairs_data[pair]['ohlc_5m'] = df
+            session.store_ohlc(df, pair, timeframes)
 
         if check_recent:
             last = df.timestamp.iloc[-1]
@@ -496,7 +501,9 @@ class Agent():
             if timespan > 900:
                 df = funcs.update_ohlc(pair, session.ohlc_tf, df, session)
                 source += ' and exchange'
-                session.pairs_data[pair]['ohlc_5m'] = df
+                session.store_ohlc(df, pair, timeframes)
+                pldf = pl.from_pandas(df)
+                pldf.write_parquet(filepath, use_pyarrow=True)
 
         stop_dt = datetime.fromtimestamp(stop_time / 1000)
         df = df.loc[df.timestamp > stop_dt].reset_index(drop=True)
