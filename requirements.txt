@@ -1,0 +1,7 @@
+pandas
+pyarrow
+polars
+pushbullet.py
+pycoingecko
+python-binance
+ccxt
