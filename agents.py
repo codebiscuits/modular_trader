@@ -463,9 +463,6 @@ class Agent():
 
     def get_data(self, session, pair, timeframes: list, stop_time):
 
-        # TODO trimmimng the data before ive used it to check the open sim trades will limit me to 200 periods of
-        #  history, which may not be enough. i should trim and save the ohlc data at the end of rsst
-
         rsst_gd = Timer('rsst - get_data')
         rsst_gd.start()
 
