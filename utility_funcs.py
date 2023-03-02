@@ -119,6 +119,8 @@ def market_benchmark(session) -> None:
             if len(df) > 8928:
                 df['roc_1m'] = df.close.pct_change(8928)
                 all_1m.append(df.at[df.index[-1], 'roc_1m'])
+
+
             if x == 'BTCUSDT':
                 btc_1d = df.roc_1d.iloc[-1]
                 btc_1w = df.roc_1w.iloc[-1]

@@ -474,10 +474,19 @@ class TradingSession():
         return self.book_data[pair]
 
     def store_ohlc(self, df, pair, timeframes):
+        """Calculates the minimum length of ohlc history needed to be stored in memory for the trading system to run.
+        calc_min is the number of 5min periods needed to calculate all the necessary indicators at the longest timeframe
+        being used in the current session
+        bench refers to the number of periods needed to calculate the longest market benchmark statistics (1 mo roc)"""
+
         lengths = {'1w': 2016, '1d': 288, '12h': 144, '6h': 72, '4h': 48, '1h': 12}
-        df = df.tail((self.min_length + 1) * lengths[timeframes[-1][0]]).reset_index(drop=True)
+        calc_min = (self.min_length + 1) * lengths[timeframes[-1][0]]
+        bench = 8928 + 1
+        enough = max(bench, calc_min)
+
+        df = df.tail(enough).reset_index(drop=True)
         self.pairs_data[pair]['ohlc_5m'] = df
-        print(f"{pair} ohlc stored in session")
+        # print(f"{pair} ohlc stored in session")
 
     def compute_indicators(self, df: pd.DataFrame) -> dict:
         '''takes the set of required indicators and the dataframe and applies the
