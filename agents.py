@@ -1016,16 +1016,16 @@ class Agent():
         drop_items = []
         for k, v in data.items():
 
-            if state == 'open':
-                # TODO need to work out what to do with open trades on coins which have been delisted
-                pass
-            elif state == 'sim':
-                if k not in session.pairs_data.keys():
+            if k not in session.pairs_data.keys():
+                if state == 'open':
+                    # TODO need to work out what to do with open trades on coins which have been delisted
+                    continue
+                elif state == 'sim':
                     drop_items.append(k)
                     continue
-            elif state == 'tracked':
-                # TODO need to work out what to do with tracked trades on coins which have been delisted
-                pass
+                elif state == 'tracked':
+                    # TODO need to work out what to do with tracked trades on coins which have been delisted
+                    continue
 
             asset = k[:-4]
             if v['position']['direction'] == 'spot':
@@ -1045,8 +1045,13 @@ class Agent():
                     print('')
 
         for i in drop_items:
-            del self.sim_trades[i]
-        self.record_trades(session, 'sim')
+            if state == 'open':
+                del self.open_trades[i]
+            if state == 'sim':
+                del self.sim_trades[i]
+            if state == 'tracked':
+                del self.tracked_trades[i]
+        self.record_trades(session, state)
 
         a.stop()
         return size_dict
