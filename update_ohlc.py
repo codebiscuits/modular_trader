@@ -38,7 +38,7 @@ for sym in session.info['symbols']:
 
 pairs = list(session.pairs_data.keys())
 
-def from_scratch(pair):
+def from_scratch(pair, tf):
     df_start = time.perf_counter()
     df = funcs.get_ohlc(pair, tf, '2 years ago UTC')
     df_end = time.perf_counter()
@@ -62,7 +62,7 @@ def iterations(n, pair, tf):
             print('Error:\n', e)
             print(f"Problem reading {pair} parquet file, downloading from scratch.")
             filepath.unlink()
-            df = from_scratch(pair)
+            df = from_scratch(pair, tf)
 
 
 
@@ -72,7 +72,7 @@ def iterations(n, pair, tf):
             df = funcs.update_ohlc(pair, tf, df)
     # -------------------- if theres no local data yet -------------------------#
     else:
-        df = from_scratch(pair)
+        df = from_scratch(pair, tf)
 
     # print(pair, df.timestamp.iloc[-1])
 
