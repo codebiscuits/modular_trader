@@ -346,9 +346,9 @@ class TradingSession():
         u.start()
 
         if self.live:  # must be running on rpi
-            market_data = Path('/coding/market_data')
-        elif Path('/mnt/pi_2/market_data').exists():  # must be running on laptop and rpi is accessible
-            market_data = Path('/mnt/pi_2/market_data')
+            market_data = Path('home/pi/coding/modular_trader/market_data')
+        elif Path('/mnt/pi_d/modular_trader/market_data').exists():  # must be running on laptop and rpi is accessible
+            market_data = Path('/mnt/pi_d/modular_trader/market_data')
         else:  # running on laptop and rpi is not available
             market_data = Path('/home/ross/Documents/backtester_2021/market_data')
 
@@ -365,10 +365,10 @@ class TradingSession():
         x1.start()
 
         if self.live:
-            read_records = Path(f'/home/pi/Documents/backtester_2021/records')
-            write_records = Path(f'/home/pi/Documents/backtester_2021/records')
-        elif Path(f'/mnt/pi_2/records').exists():
-            read_records = Path(f'/mnt/pi_2/records')
+            read_records = Path(f'/home/pi/coding/modular_trader/records')
+            write_records = Path(f'/home/pi/coding/modular_trader/records')
+        elif Path(f'/mnt/pi_d/modular_trader/records').exists():
+            read_records = Path(f'/mnt/pi_d/modular_trader/records')
             write_records = Path(f'/home/ross/Documents/backtester_2021/records')
         else:
             read_records = Path(f'/home/ross/Documents/backtester_2021/records')
@@ -392,7 +392,7 @@ class TradingSession():
         v = Timer('ohlc_path in session')
         v.start()
         ohlc_data = None
-        possible_paths = [Path(f'/home/pi/Documents/backtester_2021/bin_ohlc_{self.ohlc_tf}'),
+        possible_paths = [Path(f'/home/pi/coding/modular_trader/bin_ohlc_{self.ohlc_tf}'),
                           Path(f'/home/ross/Documents/backtester_2021/bin_ohlc_{self.ohlc_tf}'),
                           Path(f'/home/ross/PycharmProjects/backtester_2021/bin_ohlc_{self.ohlc_tf}')]
 
