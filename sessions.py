@@ -347,8 +347,8 @@ class TradingSession():
         u.start()
 
         if self.live:  # must be running on rpi
-            market_data_read = Path('home/pi/coding/modular_trader/market_data')
-            market_data_write = Path('home/pi/coding/modular_trader/market_data')
+            market_data_read = Path('/home/pi/coding/modular_trader/market_data')
+            market_data_write = Path('/home/pi/coding/modular_trader/market_data')
         elif Path('/mnt/pi_d/modular_trader/market_data').exists():  # must be running on laptop and rpi is accessible
             market_data_read = Path('/mnt/pi_d/modular_trader/market_data')
             market_data_write = Path('/home/ross/Documents/backtester_2021/market_data')
