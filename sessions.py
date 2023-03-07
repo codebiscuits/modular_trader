@@ -86,7 +86,7 @@ class TradingSession():
         self.margin_usdt_bal = self.get_usdt_m()
 
         # load local data and configure settings
-        self.market_data, self.test_mkt_data = self.mkt_data_path()
+        self.market_data_read, self.market_data_write = self.mkt_data_path()
         self.read_records, self.write_records = self.records_path()
         self.ohlc_data = self.ohlc_path()
         self.algo_order_counts = self.count_algo_orders()
@@ -347,16 +347,19 @@ class TradingSession():
         u.start()
 
         if self.live:  # must be running on rpi
-            market_data = Path('home/pi/coding/modular_trader/market_data')
+            market_data_read = Path('home/pi/coding/modular_trader/market_data')
+            market_data_write = Path('home/pi/coding/modular_trader/market_data')
         elif Path('/mnt/pi_d/modular_trader/market_data').exists():  # must be running on laptop and rpi is accessible
-            market_data = Path('/mnt/pi_d/modular_trader/market_data')
+            market_data_read = Path('/mnt/pi_d/modular_trader/market_data')
+            market_data_write = Path('/home/ross/Documents/backtester_2021/market_data')
         else:  # running on laptop and rpi is not available
-            market_data = Path('/home/ross/Documents/backtester_2021/market_data')
+            market_data_read = Path('/home/ross/Documents/backtester_2021/market_data')
+            market_data_write = Path('/home/ross/Documents/backtester_2021/market_data')
 
-        test_mkt_data = Path('/home/ross/Documents/backtester_2021/market_data')
+        market_data_write.mkdir(exist_ok=True)
 
         u.stop()
-        return market_data, test_mkt_data
+        return market_data_read, market_data_write
 
     def records_path(self) -> Tuple[Path, Path]:
         '''automatically sets the absolute path for the records folder'''
@@ -848,7 +851,7 @@ class LightSession(TradingSession):
         self.get_pairs_info()
 
         # load local data and configure settings
-        self.market_data, self.test_mkt_data = self.mkt_data_path()
+        self.market_data_read, self.market_data_write = self.mkt_data_path()
         self.read_records, self.write_records = self.records_path()
         self.ohlc_data = self.ohlc_path()
         self.indicators = None # to stop any default indicators being calculated by inheritance
@@ -863,7 +866,7 @@ class CheckRecordsSession(TradingSession):
         self.weights_count = []
 
         # load local data and configure settings
-        self.market_data, self.test_mkt_data = self.mkt_data_path()
+        self.market_data_read, self.market_data_write = self.mkt_data_path()
         self.read_records, self.write_records = self.records_path()
         self.ohlc_data = self.ohlc_path()
         self.indicators = None
