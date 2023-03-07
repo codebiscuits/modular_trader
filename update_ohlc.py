@@ -94,7 +94,7 @@ def mkt_rank(rocs_dict):
 
     rocs_df = rocs_df.drop(['1d', '1w', '1m'], axis=1)
 
-    df.to_parquet(path=session.market_data)
+    df.to_parquet(path=session.market_data/'market_ranks.parquet')
 
 
 iterations(0, 'BTCUSDT', '1m')
