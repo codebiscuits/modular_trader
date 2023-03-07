@@ -109,7 +109,7 @@ for n, pair in enumerate(pairs):
     # TODO this would be a good function to start the migration to polars
     for tf, df in df_dict.items():
         if len(df) >= session.min_length:
-            df_dict[tf] = session.compute_indicators(df)
+            df_dict[tf] = session.compute_indicators(df, tf)
         else:
             print(f"length of {pair} {tf} data: {len(df)}")
             df_dict[tf] = None

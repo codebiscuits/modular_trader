@@ -226,16 +226,15 @@ def hidden_flow(df, lookback):
     return df
 
 
-def vwma(df, lookback):
-    df['hlc3'] = df[['high', 'low', 'close']].mean(axis=1)
-    df['rolling_pricevol'] = (df.hlc3 * df.volume).rolling(lookback).sum()
-    df['rolling_vol'] = df.volume.rolling(lookback).sum()
-    df['vwma'] = df.rolling_pricevol / df.rolling_vol
+def vwma(df: pd.DataFrame, lookback: int) -> pd.Series:
+    hlc3 = df[['high', 'low', 'close']].mean(axis=1)
+    rolling_pricevol = (hlc3 * df.volume).rolling(lookback).sum()
+    rolling_vol = df.volume.rolling(lookback).sum()
 
-    return df
+    return rolling_pricevol / rolling_vol
 
 
-def williams_fractals(df: pd.DataFrame, frac_width: int, atr_spacing: int = 0) -> pd.DataFrame:
+def williams_fractals(df: pd.DataFrame, frac_width: int = 5, atr_spacing: int = 0) -> pd.DataFrame:
     """calculates williams fractals either on the highs and lows or spaced according to average true range.
     if the spacing value is left at the default 0, no atr spacing will be implemented. if spacing is set to an integer
     above 0, the atr will be calculated with a lookback length equal to the spacing value, and the resulting atr values
@@ -255,7 +254,7 @@ def williams_fractals(df: pd.DataFrame, frac_width: int, atr_spacing: int = 0) -
         df['fractal_high'] = np.where(df.high == df.high.rolling(frac_width, center=True).max(), df.high, np.nan)
         df['fractal_low'] = np.where(df.low == df.low.rolling(frac_width, center=True).min(), df.low, np.nan)
 
-    df['inval_high'] = df.fractal_high.interpolate('pad')
+    df['frac_inval_high'] = df.fractal_high.interpolate('pad')
     df['inval_low'] = df.fractal_low.interpolate('pad')
 
     return df
@@ -359,20 +358,32 @@ def ema_breakout(df, length, lookback):
     return df
 
 
-def ema_trend(df, length):
+def ema_trend(df: pd.DataFrame, length: int) -> pd.DataFrame:
     lookback = max(1, int(length / 100))
 
-    df[f"ema_{length}"] = df.close.ewm(length).mean()
+    if f"ema_{length}" not in df.columns:
+        df[f"ema_{length}"] = df.close.ewm(length).mean()
 
-    df['ema_up'] = df[f"ema_{length}"] > df[f"ema_{length}"].shift(lookback)
-    df['ema_down'] = df[f"ema_{length}"] < df[f"ema_{length}"].shift(lookback)
+    df[f'ema_{length}_rising'] = df[f"ema_{length}"] > df[f"ema_{length}"].shift(lookback)
 
     return df
 
 
-def vol_delta_div(df):
+def ema_ratio(s: pd.Series, ema_len: int) -> pd.Series:
+    ema = s.ewm(ema_len).mean()
+
+    return s / ema
+
+
+def vol_delta(df) -> pd.Series:
+    return (df.taker_buy_base_vol * 2) - df.base_vol
+
+
+def vol_delta_div(df) -> bool:
     df['roc'] = df.close.pct_change(1)
-    # df['vol_delta'] = (2 * df.)
+    df['vol_delta'] = vol_delta(df)
+
+    return (df.roc.iloc[-1] > 0 > df.vol_delta.iloc[-1]) or (df.roc.iloc[-1] < 0 < df.vol_delta.iloc[-1])
 
 
 def rsi(s: pd.Series, lookback: int = 14) -> pd.Series:
@@ -390,9 +401,37 @@ def ats_z(df: pd.DataFrame, lookback: int):
 
     return df
 
+
 def stoch_rsi(data: pd.Series, rsi_lb: int = 14, stoch_lb: int = 14) -> pd.Series:
     rsi_data = rsi(data, rsi_lb)
     return stochastic(rsi_data, stoch_lb)
+
+
+def roc_1d(s: pd.Series, tf: str) -> pd.Series:
+    len_dict = {'1h': 24, '4h': 6, '6h': 4, '8h': 3, '12h': 2, '1d': 1}
+
+    if len(s) >= len_dict[tf]:
+        return s.pct_change(periods=len_dict[tf])
+    else:
+        return s.pct_change(periods=len(s))
+
+
+def roc_1w(s: pd.Series, tf: str) -> pd.Series:
+    len_dict = {'1h': 168, '4h': 42, '6h': 28, '8h': 21, '12h': 14, '1d': 7}
+
+    if len(s) >= len_dict[tf]:
+        return s.pct_change(periods=len_dict[tf])
+    else:
+        return s.pct_change(periods=len(s))
+
+
+def roc_1m(s: pd.Series, tf: str) -> pd.Series:
+    len_dict = {'1h': 720, '4h': 180, '6h': 120, '8h': 90, '12h': 60, '1d': 30}
+
+    if len(s) >= len_dict[tf]:
+        return s.pct_change(periods=len_dict[tf])
+    else:
+        return s.pct_change(periods=len(s))
 
 # def supertrend_new(df: pd.DataFrame, lb: int, mult: float) -> None:
 #     '''calculates supertrend indicator and adds it to the input dataframe with the

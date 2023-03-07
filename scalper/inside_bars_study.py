@@ -291,8 +291,8 @@ def ib_signals(df, z, bars, source, ema_len):
 
     df = ind.trend_rate(df, z, bars, source)
 
-    df['long_signal'] = df.inside_bar & df.trend_down & df.ema_up  # & (df.inval_low < df.low)
-    df['short_signal'] = df.inside_bar & df.trend_up & df.ema_down  # & (df.inval_high > df.high)
+    df['long_signal'] = df.inside_bar & df.trend_down & df[f'ema_{ema_len}_rising']  # & (df.inval_low < df.low)
+    df['short_signal'] = df.inside_bar & df.trend_up & (not df[f'ema_{ema_len}_rising'])  # & (df.inval_high > df.high)
 
     return df
 
@@ -304,8 +304,8 @@ def doji_signals(df, z, bars, source, ema_len):
 
     df = ind.trend_rate(df, z, bars, source)
 
-    df['long_signal'] = (df.bullish_doji > 0.5) & df.trend_down & df.ema_up  # & (df.inval_low < df.low)
-    df['short_signal'] = (df.bearish_doji > 0.5) & df.trend_up & df.ema_down  # & (df.inval_high > df.high)
+    df['long_signal'] = (df.bullish_doji > 0.5) & df.trend_down & df[f'ema_{ema_len}_rising']  # & (df.inval_low < df.low)
+    df['short_signal'] = (df.bearish_doji > 0.5) & df.trend_up & (not df[f'ema_{ema_len}_rising'])  # & (df.inval_high > df.high)
 
     return df
 
@@ -317,8 +317,8 @@ def bbb_signals(df, z, bars, source, ema_len):
 
     df = ind.trend_rate(df, z, bars, source)
 
-    df['long_signal'] = df.bullish_bar & df.trend_down & df.ema_up  # & (df.inval_low < df.low)
-    df['short_signal'] = df.bearish_bar & df.trend_up & df.ema_down  # & (df.inval_high > df.high)
+    df['long_signal'] = df.bullish_bar & df.trend_down & df[f'ema_{ema_len}_rising']  # & (df.inval_low < df.low)
+    df['short_signal'] = df.bearish_bar & df.trend_up & (not df[f'ema_{ema_len}_rising'])  # & (df.inval_high > df.high)
 
     return df
 
@@ -334,8 +334,8 @@ def any_bar_signals(df, z, bars, source, ema_len):
 
     df = ind.trend_rate(df, z, bars, source)
 
-    df['long_signal'] = df.any_bullish_bar & df.trend_down & df.ema_up  # & (df.inval_low < df.low)
-    df['short_signal'] = df.any_bearish_bar & df.trend_up & df.ema_down  # & (df.inval_high > df.high)
+    df['long_signal'] = df.any_bullish_bar & df.trend_down & df[f'ema_{ema_len}_rising']  # & (df.inval_low < df.low)
+    df['short_signal'] = df.any_bearish_bar & df.trend_up & (not df[f'ema_{ema_len}_rising'])  # & (df.inval_high > df.high)
 
     return df
 
@@ -595,7 +595,7 @@ if __name__ == '__main__':
         for tf in timeframes.keys():
             data = df_orig.copy()
             # data = hidden_flow(data, 100)
-            data = ind.vwma(data, timeframes[tf])
+            data['vwma'] = ind.vwma(data, timeframes[tf])
             data = resample(data, tf)
             for source, z, bar, window, width in it.product(tr_sources, z_scores, bars, windows, wf_widths):
                 results[counter] = process(data, source, z, bar, window, width, show_plot=True)

@@ -138,9 +138,9 @@ def ib_signals(df, side, z, bars, source, ema_len):
     df = ind.trend_rate(df, z, bars, source)
 
     if side == 'long':
-        df['long_signal_ib'] = df.inside_bar & df.trend_down & df.ema_up
+        df['long_signal_ib'] = df.inside_bar & df.trend_down & df[f'ema_{ema_len}_rising']
     else:
-        df['short_signal_ib'] = df.inside_bar & df.trend_up & df.ema_down
+        df['short_signal_ib'] = df.inside_bar & df.trend_up & (not df[f'ema_{ema_len}_rising'])
 
     return df
 
@@ -153,9 +153,9 @@ def doji_signals(df, side, z, bars, source, ema_len):
     df = ind.trend_rate(df, z, bars, source)
 
     if side == 'long':
-        df['long_signal_doji'] = (df.bullish_doji > 0.5) & df.trend_down & df.ema_up
+        df['long_signal_doji'] = (df.bullish_doji > 0.5) & df.trend_down & df[f'ema_{ema_len}_rising']
     else:
-        df['short_signal_doji'] = (df.bearish_doji > 0.5) & df.trend_up & df.ema_down
+        df['short_signal_doji'] = (df.bearish_doji > 0.5) & df.trend_up & (not df[f'ema_{ema_len}_rising'])
 
     return df
 
@@ -168,9 +168,9 @@ def bbb_signals(df, side, z, bars, source, ema_len):
     df = ind.trend_rate(df, z, bars, source)
 
     if side == 'long':
-        df['long_signal_bbb'] = df.bullish_bar & df.trend_down & df.ema_up
+        df['long_signal_bbb'] = df.bullish_bar & df.trend_down & df[f'ema_{ema_len}_rising']
     else:
-        df['short_signal_bbb'] = df.bearish_bar & df.trend_up & df.ema_down
+        df['short_signal_bbb'] = df.bearish_bar & df.trend_up & (not df[f'ema_{ema_len}_rising'])
 
     return df
 
@@ -213,7 +213,7 @@ for pair in pairs:
     for tf in timeframes.keys():
         data = df_orig.copy()
         # data = hidden_flow(data, 100)
-        data = ind.vwma(data, timeframes[tf])
+        data['vwma'] = ind.vwma(data, timeframes[tf])
         data = resample(data, tf)
         for side, z_score, bar, length, method in it.product(sides, z_scores, bars, ema_lengths, methods):
             print(f"Testing {pair} {tf} {side} trades, {z_score = }, {bar = }, {length = }, {method = }")

@@ -92,7 +92,8 @@ class TradingSession():
         self.algo_order_counts = self.count_algo_orders()
         self.max_loan_amounts = {}
         self.book_data = {}
-        self.indicators = set()
+        self.indicators = {'ema-200', 'ema-100', 'ema-50', 'ema-20', 'ema_ratio-200', 'ema_ratio-20', 'vol_delta',
+                           'vol_delta_div', 'roc_1d', 'roc_1w', 'roc_1m', 'vwma-24'}
         t.stop()
 
     def track_weights(self, weight):
@@ -488,7 +489,7 @@ class TradingSession():
         self.pairs_data[pair]['ohlc_5m'] = df
         # print(f"{pair} ohlc stored in session")
 
-    def compute_indicators(self, df: pd.DataFrame) -> dict:
+    def compute_indicators(self, df: pd.DataFrame, tf: str) -> dict:
         '''takes the set of required indicators and the dataframe and applies the
         indicator functions as necessary'''
 
@@ -498,9 +499,15 @@ class TradingSession():
         for i in self.indicators:
             vals = i.split('-')
             if vals[0] == 'ema':
-                df[f"ema-{vals[1]}"] = df.close.ewm(int(vals[1])).mean()
+                df[f"ema_{vals[1]}"] = df.close.ewm(int(vals[1])).mean()
             elif vals[0] == 'hma':
-                df[f"hma-{vals[1]}"] = ind.hma(df.close, int(vals[1]))
+                df[f"hma_{vals[1]}"] = ind.hma(df.close, int(vals[1]))
+            elif vals[0] == 'ema_ratio':
+                df[f"ema_{vals[1]}_ratio"] = ind.ema_ratio(df.close, vals[1])
+            elif vals[0] == 'vol_delta':
+                df['vol_delta'] = ind.vol_delta(df)
+            elif vals[0] == 'vol_delta_div':
+                df['vol_delta_div'] = ind.vol_delta_div(df)
             elif vals[0] == 'atr':
                 df = ind.atr_bands(df, int(vals[1]), float(vals[2]))
             elif vals[0] == 'st':
@@ -517,6 +524,14 @@ class TradingSession():
                 df = ind.engulfing(df, int(vals[1]))
             elif vals[0] == 'bbb':
                 df = ind.bull_bear_bar(df)
+            elif vals[0] == 'roc_1d':
+                df['roc_1d'] = ind.roc_1d(df.close, tf)
+            elif vals[0] == 'roc_1w':
+                df['roc_1d'] = ind.roc_1w(df.close, tf)
+            elif vals[0] == 'roc_1m':
+                df['roc_1d'] = ind.roc_1m(df.close, tf)
+            elif vals[0] == 'vwma':
+                df['vwma'] = ind.vwma(df, vals[1])
 
         return df
 
@@ -836,6 +851,7 @@ class LightSession(TradingSession):
         self.market_data, self.test_mkt_data = self.mkt_data_path()
         self.read_records, self.write_records = self.records_path()
         self.ohlc_data = self.ohlc_path()
+        self.indicators = None # to stop any default indicators being calculated by inheritance
 
 
 class CheckRecordsSession(TradingSession):
@@ -850,3 +866,4 @@ class CheckRecordsSession(TradingSession):
         self.market_data, self.test_mkt_data = self.mkt_data_path()
         self.read_records, self.write_records = self.records_path()
         self.ohlc_data = self.ohlc_path()
+        self.indicators = None

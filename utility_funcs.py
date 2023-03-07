@@ -338,16 +338,6 @@ def count_trades(counts: dict) -> str:
         if cnt := counts[f"real_{t}_spot"] + counts[f"real_{t}_long"] + counts[f"real_{t}_short"]:
             count_list.append(f'{t}s: {cnt}')
 
-    # if stops := counts["real_stop_spot"] + counts["real_stop_long"] + counts["real_stop_short"]:
-    #     count_list.append(f'stopped: {stops}')
-    # if opens := counts["real_open_spot"] + ["real_open_long"] + counts["real_open_short"]:
-    #     count_list.append(f'opened: {opens}')
-    # if adds := counts["real_add_spot"] + ["real_add_long"] + counts["real_add_short"]:
-    #     count_list.append(f'added: {adds}')
-    # if tps := counts["real_tp_spot"] + counts["real_tp_long"] + counts["real_tp_short"]:
-    #     count_list.append(f'tped: {tps}')
-    # if closes := counts["real_close_spot"] + counts["real_close_long"] + counts["real_close_short"]:
-    #     count_list.append(f'closed: {closes}')
     er.stop()
     return '\n' + ', '.join(count_list) if count_list else ''
 

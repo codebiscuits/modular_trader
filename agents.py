@@ -331,7 +331,7 @@ class Agent():
         print(f"code: {e.code}")
         print(f"message: {e.message}")
 
-    def rst_iteration(self, session, pair, sid):
+    def rst_iteration_m(self, session, pair, sid):
         direction = self.open_trades[pair]['position']['direction']
         try:
             order = self.find_order(session, pair, sid)
@@ -406,7 +406,7 @@ class Agent():
             if order['status'] == 'FILLED':
                 print(f"{self.name} {pair} stop order filled")
                 try:
-                    self.rst_iteration(session, pair, sid)
+                    self.rst_iteration_m(session, pair, sid)
                 except bx.BinanceAPIException as e:
                     self.record_trades(session, 'all')
                     print(f'{self.name} problem with record_stopped_trades during {pair}')
@@ -498,9 +498,9 @@ class Agent():
             if timespan > 900:
                 df = funcs.update_ohlc(pair, session.ohlc_tf, df, session)
                 source += ' and exchange'
-                session.store_ohlc(df, pair, timeframes)
                 pldf = pl.from_pandas(df)
                 pldf.write_parquet(filepath, use_pyarrow=True)
+                session.store_ohlc(df, pair, timeframes)
 
         stop_dt = datetime.fromtimestamp(stop_time / 1000)
         df = df.loc[df.timestamp > stop_dt].reset_index(drop=True)
@@ -509,62 +509,6 @@ class Agent():
         rsst_gd.stop()
 
         return df
-
-    # def get_data(self, session, pair, stop_time):
-    #     timespan = datetime.now().timestamp() - (stop_time)
-    #
-    #     if timespan > 3600:  # 3600s = 1h
-    #         filepath = Path(f'{session.ohlc_data}/{pair}.pkl')
-    #         if filepath.exists():
-    #             zzz = Timer('rsst - read ohlc pickles')
-    #             zzz.start()
-    #             df = pd.read_pickle(filepath)
-    #             zzz.stop()
-    #         else:
-    #             zzzz = Timer('rsst - get_historical_klines_1h')
-    #             zzzz.start()
-    #             session.track_weights(1)
-    #             abc = Timer('all binance calls')
-    #             abc.start()
-    #             klines = client.get_historical_klines(pair, Client.KLINE_INTERVAL_1HOUR, stop_time)
-    #             abc.stop()
-    #             session.counts.append('get_historical_klines_1h')
-    #             cols = ['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'close_time',
-    #                     'quote_vol', 'num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol', 'ignore']
-    #             df = pd.DataFrame(klines, columns=cols)
-    #             df['timestamp'] = df['timestamp'] * 1000000
-    #             df = df.astype(float)
-    #             # df['timestamp'] = pd.to_datetime(df.timestamp)
-    #             zzzz.stop()
-    #
-    #         # trim df down to just the rows since the last stop was set
-    #         # stop_dt = datetime.fromtimestamp(stop_time)
-    #         df = df.loc[df.timestamp > stop_time]
-    #
-    #
-    #     else:
-    #         z = Timer('rsst - get_historical_klines_5m')
-    #         z.start()
-    #         session.track_weights(1)
-    #         abc = Timer('all binance calls')
-    #         abc.start()
-    #         klines = client.get_historical_klines(pair, Client.KLINE_INTERVAL_5MINUTE, stop_time)
-    #         abc.stop()
-    #         session.counts.append('get_historical_klines_5min')
-    #         z.stop()
-    #
-    #         zz = Timer('make_dataframe_5m')
-    #         zz.start()
-    #         cols = ['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'close_time',
-    #                 'quote_vol', 'num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol', 'ignore']
-    #         df = pd.DataFrame(klines, columns=cols)
-    #         df['timestamp'] = df['timestamp'] * 1000000
-    #         df = df.astype(float)
-    #         zz.stop()
-    #
-    #     df.reset_index(inplace=True)
-    #
-    #     return df
 
     def check_stop_hit(self, df, direction, stop):
         func_name = sys._getframe().f_code.co_name
@@ -2379,9 +2323,10 @@ class DoubleST(Agent):
         self.offset = offset
         self.mult1 = int(mult1)
         self.mult2 = float(mult2)
+        self.signal_age = 2
         self.name = f'{self.tf} dst {self.mult1}-{self.mult2}'
         self.id = f"double_st_{self.tf}_{self.offset}_{self.mult1}_{self.mult2}"
-        self.ohlc_length = 200
+        self.ohlc_length = 200 + self.signal_age
         Agent.__init__(self, session)
         session.indicators.update(['ema-200',
                                    f"st-10-{self.mult1}",
@@ -2391,7 +2336,7 @@ class DoubleST(Agent):
         """generates spot buy and sell signals based on 2 supertrend indicators
         and a 200 period EMA"""
 
-        bullish_ema = df.close.iloc[-1] > df['ema-200'].iloc[-1]
+        bullish_ema = df.close.iloc[-1] > df['ema_200'].iloc[-1]
         bullish_loose = df.close.iloc[-1] > df[f'st-10-{float(self.mult1)}'].iloc[-1]
         bullish_tight = df.close.iloc[-1] > df[f'st-10-{self.mult2}'].iloc[-1]
         bearish_tight = df.close.iloc[-1] < df[f'st-10-{self.mult2}'].iloc[-1]
@@ -2423,8 +2368,8 @@ class DoubleST(Agent):
         k = Timer(f'dst_margin_signals')
         k.start()
 
-        bullish_ema = df.close.iloc[-1] > df['ema-200'].iloc[-1]
-        bearish_ema = df.close.iloc[-1] < df['ema-200'].iloc[-1]
+        bullish_ema = df.close.iloc[-1] > df['ema_200'].iloc[-1]
+        bearish_ema = df.close.iloc[-1] < df['ema_200'].iloc[-1]
         bullish_loose = df.close.iloc[-1] > df[f'st-10-{float(self.mult1)}'].iloc[-1]
         bearish_loose = df.close.iloc[-1] < df[f'st-10-{float(self.mult1)}'].iloc[-1]
         bullish_tight = df.close.iloc[-1] > df[f'st-10-{self.mult2}'].iloc[-1]
@@ -2473,7 +2418,7 @@ class EMACross(Agent):
         self.mult = mult
         self.name = f'{self.tf} emacross {self.lb1}-{self.lb2}-{self.mult}'
         self.id = f"ema_cross_{self.tf}_{self.offset}_{self.lb1}_{self.lb2}_{self.mult}"
-        self.ohlc_length = max(200, self.lb1, self.lb2)
+        self.ohlc_length = max(200+2, self.lb1, self.lb2)
         Agent.__init__(self, session)
         session.indicators.update(['ema-200',
                                    f"ema-{self.lb1}",
@@ -2487,9 +2432,9 @@ class EMACross(Agent):
         k = Timer('emax_margin_signals')
         k.start()
 
-        fast_ema_str = f"ema-{self.lb1}"
-        slow_ema_str = f"ema-{self.lb2}"
-        bias_ema_str = "ema-200"
+        fast_ema_str = f"ema_{self.lb1}"
+        slow_ema_str = f"ema_{self.lb2}"
+        bias_ema_str = "ema_200"
 
         bullish_bias = df.close.iloc[-1] > df[bias_ema_str].iloc[-1]
         bearish_bias = df.close.iloc[-1] < df[bias_ema_str].iloc[-1]
@@ -2497,8 +2442,8 @@ class EMACross(Agent):
         bullish_emas = df[fast_ema_str].iloc[-1] > df[slow_ema_str].iloc[-1]
         bearish_emas = df[fast_ema_str].iloc[-1] < df[slow_ema_str].iloc[-1]
 
-        bullish_cross = (bullish_emas and df[fast_ema_str].iloc[-2] < df[slow_ema_str].iloc[-2])
-        bearish_cross = (bearish_emas and df[fast_ema_str].iloc[-2] > df[slow_ema_str].iloc[-2])
+        bullish_cross = bullish_emas and (df[fast_ema_str].iloc[-2] < df[slow_ema_str].iloc[-2])
+        bearish_cross = bearish_emas and (df[fast_ema_str].iloc[-2] > df[slow_ema_str].iloc[-2])
 
         in_long = (self.in_pos['real'] == 'long'
                    or self.in_pos['sim'] == 'long'
@@ -2558,7 +2503,7 @@ class EMACrossHMA(Agent):
         self.mult = mult
         self.name = f'{self.tf} emaxhma {self.lb1}-{self.lb2}-{self.mult}'
         self.id = f"ema_cross_hma_{self.tf}_{self.offset}_{self.lb1}_{self.lb2}_{self.mult}"
-        self.ohlc_length = max(200, self.lb1, self.lb2)
+        self.ohlc_length = max(200+2, self.lb1, self.lb2)
         Agent.__init__(self, session)
         session.indicators.update(['hma-200',
                                    f"ema-{self.lb1}",
@@ -2572,9 +2517,9 @@ class EMACrossHMA(Agent):
         k = Timer('emaxhma_margin_signals')
         k.start()
 
-        fast_ema_str = f"ema-{self.lb1}"
-        slow_ema_str = f"ema-{self.lb2}"
-        bias_hma_str = "hma-200"
+        fast_ema_str = f"ema_{self.lb1}"
+        slow_ema_str = f"ema_{self.lb2}"
+        bias_hma_str = "hma_200"
 
         bullish_bias = df.close.iloc[-1] > df[bias_hma_str].iloc[-1]
         bearish_bias = df.close.iloc[-1] < df[bias_hma_str].iloc[-1]
@@ -2582,8 +2527,8 @@ class EMACrossHMA(Agent):
         bullish_emas = df[fast_ema_str].iloc[-1] > df[slow_ema_str].iloc[-1]
         bearish_emas = df[fast_ema_str].iloc[-1] < df[slow_ema_str].iloc[-1]
 
-        bullish_cross = (bullish_emas and df[fast_ema_str].iloc[-2] < df[slow_ema_str].iloc[-2])
-        bearish_cross = (bearish_emas and df[fast_ema_str].iloc[-2] > df[slow_ema_str].iloc[-2])
+        bullish_cross = bullish_emas and (df[fast_ema_str].iloc[-2] < df[slow_ema_str].iloc[-2])
+        bearish_cross = bearish_emas and (df[fast_ema_str].iloc[-2] > df[slow_ema_str].iloc[-2])
 
         in_long = (self.in_pos['real'] == 'long'
                    or self.in_pos['sim'] == 'long'
@@ -2711,7 +2656,7 @@ class AvgTradeSize(Agent):
             record_dict['min_z'] = self.min_z
             record_dict['lookback'] = self.lookback
             record_dict['atr_mult'] = self.mult
-            record_dict['bullish_ema'] = int(df['ema-200'].iloc[-1] > df['ema-200'].iloc[-5])
+            record_dict['bullish_ema'] = int(df['ema_200'].iloc[-1] > df['ema_200'].iloc[-5])
 
             fp = Path('/home/ross/Documents/backtester_2021/trades.json')
             fp.touch(exist_ok=True)
