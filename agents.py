@@ -50,7 +50,7 @@ class Agent():
         self.live = session.live
         self.fr_max = session.fr_max
         # self.prices = session.prices
-        self.market_data = session.market_data
+        # self.market_data_read, self.market_data_write = session.market_data_read, session.market_data_write
 
         self.counts_dict = {'real_stop_spot': 0, 'real_open_spot': 0, 'real_add_spot': 0, 'real_tp_spot': 0,
                             'real_close_spot': 0,
@@ -810,40 +810,6 @@ class Agent():
         p.stop()
         return max_pos
 
-    def max_init_risk(self, fr) -> float:
-        '''n = number of open positions, target_risk is the percentage distance
-        from invalidation this function should converge on, max_pos is the maximum
-        number of open positions as set in the main script
-
-        this function takes a target max risk and adjusts that up to 2x target depending
-        on how many positions are currently open.
-        whatever the output is, the system will ignore entry signals further away
-        from invalidation than that. if there are a lot of open positions, i want
-        to be more picky about what new trades i open, but if there are few trades
-        available then i don't want to be so picky
-
-        the formula is set so that when there are no trades currently open, the
-        upper limit on initial risk will be twice as high as the main script has
-        set, and as more trades are opened, that upper limit comes down relatively
-        quickly, then gradually settles on the target limit'''
-
-        n = self.num_open_positions
-
-        if n > 20:
-            n = 20
-
-        exp = 4
-        scale = (20 - n) ** exp
-        scale_limit = 20 ** exp
-
-        # when n is 0, scale and scale_limit cancel out
-        # and the whole thing becomes (2 * target) + target
-        target_risk = fr * self.total_r_limit
-        output = (2 * target_risk * scale / scale_limit) + target_risk
-        # print(f'mir output: {round(output, 2) * 100}%')
-
-        return round(output, 2)
-
     def calc_init_opnl(self, session):
         if self.mode == 'spot':
             if self.fixed_risk_spot:
@@ -1236,13 +1202,13 @@ class Agent():
 
     # dispatch
 
-    def open_pos(self, session, pair, size, stp, inval_ratio, sim_reason, direction):
+    def open_pos(self, session, pair, size, stp, inval_ratio, mkt_state, sim_reason, direction):
         # margin
         if direction in ['long', 'short'] and self.in_pos['real'] is None and not sim_reason:
-            self.open_real_M(session, pair, size, stp, inval_ratio, direction, 0)
+            self.open_real_M(session, pair, size, stp, inval_ratio, mkt_state, direction, 0)
 
         if direction in ['long', 'short'] and self.in_pos['sim'] is None and sim_reason:
-            self.open_sim(session, pair, stp, inval_ratio, sim_reason, direction)
+            self.open_sim(session, pair, stp, inval_ratio, mkt_state, sim_reason, direction)
 
         # # spot
         # if direction == 'spot' and self.in_pos['real'] is None and not sim_reason:
@@ -1326,7 +1292,7 @@ class Agent():
 
     # real open
 
-    def create_record(self, session, pair, size, stp, inval_ratio, direction):
+    def create_record(self, session, pair, size, stp, inval_ratio, mkt_state, direction):
         price = session.pairs_data[pair]['price']
         usdt_size: str = f"{size * price:.2f}"
         now = datetime.now().strftime('%d/%m/%y %H:%M')
@@ -1344,7 +1310,7 @@ class Agent():
                        'completed': None
                        }
         self.open_trades[pair] = {}
-        self.open_trades[pair]['placeholder'] = placeholder
+        self.open_trades[pair]['placeholder'] = placeholder | mkt_state
         self.open_trades[pair]['position'] = {'pair': pair, 'direction': direction, 'state': 'real'}
 
         note = f"{self.name} real open {direction} {size:.5} {pair} ({usdt_size} usdt) @ {price}, stop @ {stp:.5}"
@@ -1454,14 +1420,14 @@ class Agent():
 
         self.counts_dict[f'real_open_{direction}'] += 1
 
-    def open_real_M(self, session, pair, size, stp, inval_ratio, direction, stage):
+    def open_real_M(self, session, pair, size, stp, inval_ratio, mkt_state, direction, stage):
         func_name = sys._getframe().f_code.co_name
         k11 = Timer(f'{func_name}')
         k11.start()
 
         if stage == 0:
             print('')
-            self.create_record(session, pair, size, stp, inval_ratio, direction)
+            self.create_record(session, pair, size, stp, inval_ratio, mkt_state, direction)
             self.omf_borrow(session, pair, size, direction)
             api_order = self.increase_position(session, pair, size, direction)
         if stage <= 1:
@@ -1871,7 +1837,7 @@ class Agent():
         k9.stop()
 
     # sim
-    def open_sim(self, session, pair, stp, inval_ratio, sim_reason, direction):
+    def open_sim(self, session, pair, stp, inval_ratio, mkt_state, sim_reason, direction):
         k8 = Timer(f'open_sim')
         k8.start()
 
@@ -1908,7 +1874,10 @@ class Agent():
                       'state': 'sim',
                       'pfrd': pfrd}
 
+        sim_order = sim_order | mkt_state
+
         self.sim_trades[pair] = {'trade': [sim_order], 'position': pos_record}
+
         self.record_trades(session, 'sim')
 
         self.in_pos['sim'] = direction

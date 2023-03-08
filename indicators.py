@@ -228,8 +228,8 @@ def hidden_flow(df, lookback):
 
 def vwma(df: pd.DataFrame, lookback: int) -> pd.Series:
     hlc3 = df[['high', 'low', 'close']].mean(axis=1)
-    rolling_pricevol = (hlc3 * df.volume).rolling(lookback).sum()
-    rolling_vol = df.volume.rolling(lookback).sum()
+    rolling_pricevol = (hlc3 * df.base_vol).rolling(lookback).sum()
+    rolling_vol = df.base_vol.rolling(lookback).sum()
 
     return rolling_pricevol / rolling_vol
 
@@ -380,10 +380,11 @@ def vol_delta(df) -> pd.Series:
 
 
 def vol_delta_div(df) -> bool:
-    df['roc'] = df.close.pct_change(1)
-    df['vol_delta'] = vol_delta(df)
+    roc: pd.Series = df.close.pct_change(1)
+    if not 'vol_delta' in df.columns:
+        df['vol_delta'] = vol_delta(df)
 
-    return (df.roc.iloc[-1] > 0 > df.vol_delta.iloc[-1]) or (df.roc.iloc[-1] < 0 < df.vol_delta.iloc[-1])
+    return (roc.iloc[-1] > 0 > df.vol_delta.iloc[-1]) or (roc.iloc[-1] < 0 < df.vol_delta.iloc[-1])
 
 
 def rsi(s: pd.Series, lookback: int = 14) -> pd.Series:

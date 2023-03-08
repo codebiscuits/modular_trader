@@ -123,6 +123,9 @@ for n, pair in enumerate(pairs):
         else:
             print(f"{pair} too new for {agent.name}")
             continue
+
+        market_state = uf.get_market_state(session, pair, df_2)
+
         signals = agent.signals(session, df_2, pair)
 
         if signals.get('inval'):
@@ -135,12 +138,6 @@ for n, pair in enumerate(pairs):
         # remove indicators to avoid errors
         df_2 = df_2[['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'quote_vol',
                      'num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol']]
-
-        # if inval == 0:
-        #     note = f'{pair} supertrend 0 error, skipping pair'
-        #     print(note)
-        #     pb.push_note(now, note)
-        #     continue
 
         # update positions dictionary with current pair's open_risk values ------------
         if agent.in_pos['real']:
@@ -169,8 +166,6 @@ for n, pair in enumerate(pairs):
                 signals['signal'] = f"close_{agent.in_pos['sim']}"
 
         # margin order execution ------------------------------------------------------
-        agent.max_init_r_l = agent.max_init_risk(agent.fixed_risk_l)
-        agent.max_init_r_s = agent.max_init_risk(agent.fixed_risk_s)
 
         if signals.get('signal') in ['open_spot', 'tp_spot', 'close_spot']:
             usdt_depth_l, _ = funcs.get_depth(session, pair)
@@ -252,11 +247,11 @@ for n, pair in enumerate(pairs):
                 sim_reason = 'algo_order_limit'
 
             try:
-                agent.open_pos(session, pair, size, stp, signals['inval_ratio'], sim_reason, direction)
+                agent.open_pos(session, pair, size, stp, signals['inval_ratio'], market_state, sim_reason, direction)
             except bx.BinanceAPIException as e:
                 if e.code == -3045:  # borrow failed because there weren't enough assets to borrow
                     del agent.open_trades[pair]
-                    agent.open_pos(session, pair, size, stp, signals['inval_ratio'], 'not_enough_borrow', direction)
+                    agent.open_pos(session, pair, size, stp, signals['inval_ratio'], market_state, 'not_enough_borrow', direction)
                 else:
                     agent.record_trades(session, 'all')
                     print(f'{agent.name} problem with open_{direction} order for {pair}')

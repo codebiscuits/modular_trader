@@ -71,6 +71,36 @@ def adjust_max_positions(max_pos: int, sizing: dict) -> int:
     pass
 
 
+def get_market_state(session, pair, data: pd.DataFrame) -> dict[str, float]:
+
+    ema_200_ratio = data.close.iloc[-1] / data.ema_200.iloc[-1]
+    ema_100_ratio = data.close.iloc[-1] / data.ema_100.iloc[-1]
+    ema_50_ratio = data.close.iloc[-1] / data.ema_50.iloc[-1]
+    ema_25_ratio = data.close.iloc[-1] / data.ema_25.iloc[-1]
+
+
+    return dict(
+        ema_200=data.ema_200.iloc[-1],
+        ema_100=data.ema_100.iloc[-1],
+        ema_50=data.ema_50.iloc[-1],
+        ema_25=data.ema_25.iloc[-1],
+        ema_200_ratio=ema_200_ratio,
+        ema_100_ratio=ema_100_ratio,
+        ema_50_ratio=ema_50_ratio,
+        ema_25_ratio=ema_25_ratio,
+        vol_delta=data.vol_delta.iloc[-1],
+        vol_delta_div=bool(data.vol_delta_div.iloc[-1]),
+        vwma_24=data.vwma_24.iloc[-1],
+        roc_1d=data.roc_1d.iloc[-1],
+        roc_1w=data.roc_1w.iloc[-1],
+        roc_1m=data.roc_1m.iloc[-1],
+        market_rank_1d=session.market_ranks.at[pair, 'rank_1d'],
+        market_rank_1w=session.market_ranks.at[pair, 'rank_1w'],
+        market_rank_1m=session.market_ranks.at[pair, 'rank_1m'],
+    )
+
+
+
 def market_benchmark(session) -> None:
     '''calculates daily, weekly and monthly returns for btc, eth and the median 
     altcoin on binance'''

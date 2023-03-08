@@ -15,6 +15,7 @@ import time
 from decimal import Decimal
 import statistics as stats
 import pandas as pd
+import polars as pl
 from pycoingecko import CoinGeckoAPI
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
@@ -89,10 +90,11 @@ class TradingSession():
         self.market_data_read, self.market_data_write = self.mkt_data_path()
         self.read_records, self.write_records = self.records_path()
         self.ohlc_data = self.ohlc_path()
+        self.market_ranks = self.load_mkt_ranks()
         self.algo_order_counts = self.count_algo_orders()
         self.max_loan_amounts = {}
         self.book_data = {}
-        self.indicators = {'ema-200', 'ema-100', 'ema-50', 'ema-20', 'ema_ratio-200', 'ema_ratio-20', 'vol_delta',
+        self.indicators = {'ema-200', 'ema-100', 'ema-50', 'ema-25', 'vol_delta',
                            'vol_delta_div', 'roc_1d', 'roc_1w', 'roc_1m', 'vwma-24'}
         t.stop()
 
@@ -492,6 +494,11 @@ class TradingSession():
         self.pairs_data[pair]['ohlc_5m'] = df
         # print(f"{pair} ohlc stored in session")
 
+    def load_mkt_ranks(self):
+        filepath = self.market_data_read / 'market_ranks.parquet'
+
+        return pd.read_parquet(filepath)
+
     def compute_indicators(self, df: pd.DataFrame, tf: str) -> dict:
         '''takes the set of required indicators and the dataframe and applies the
         indicator functions as necessary'''
@@ -506,7 +513,7 @@ class TradingSession():
             elif vals[0] == 'hma':
                 df[f"hma_{vals[1]}"] = ind.hma(df.close, int(vals[1]))
             elif vals[0] == 'ema_ratio':
-                df[f"ema_{vals[1]}_ratio"] = ind.ema_ratio(df.close, vals[1])
+                df[f"ema_{vals[1]}_ratio"] = ind.ema_ratio(df.close, int(vals[1]))
             elif vals[0] == 'vol_delta':
                 df['vol_delta'] = ind.vol_delta(df)
             elif vals[0] == 'vol_delta_div':
@@ -530,11 +537,11 @@ class TradingSession():
             elif vals[0] == 'roc_1d':
                 df['roc_1d'] = ind.roc_1d(df.close, tf)
             elif vals[0] == 'roc_1w':
-                df['roc_1d'] = ind.roc_1w(df.close, tf)
+                df['roc_1w'] = ind.roc_1w(df.close, tf)
             elif vals[0] == 'roc_1m':
-                df['roc_1d'] = ind.roc_1m(df.close, tf)
+                df['roc_1m'] = ind.roc_1m(df.close, tf)
             elif vals[0] == 'vwma':
-                df['vwma'] = ind.vwma(df, vals[1])
+                df[f'vwma_{vals[1]}'] = ind.vwma(df, int(vals[1]))
 
         return df
 
