@@ -80,7 +80,7 @@ def iterations(n, pair, tf):
     pldf = pl.from_pandas(df)
     pldf.write_parquet(filepath, row_group_size=10512, use_pyarrow=True)
 
-    print(f"{n} {pair} ohlc length: {len(df)} downloaded at {datetime.now().strftime('%H:%M')}")
+    # print(f"{n} {pair} ohlc length: {len(df)} downloaded at {datetime.now().strftime('%H:%M')}")
 
     return df
 
@@ -104,8 +104,9 @@ iterations(1, 'ETHUSDT', '1m')
 for n, pair in enumerate(pairs):
     try:
         df = iterations(n, pair, '5m')
-    except Exception:
+    except Exception as e:
         print(f"*** {pair} exception during download, data not downloaded ***")
+        print(e)
         continue
 
     rocs[pair] = {}
