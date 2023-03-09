@@ -466,7 +466,7 @@ class Agent():
         rsst_gd = Timer('rsst - get_data')
         rsst_gd.start()
 
-        print(f"rsst {self.name} {pair}")
+        # print(f"rsst {self.name} {pair}")
 
         filepath = Path(f'{session.ohlc_data}/{pair}.parquet')
         check_recent = False
@@ -504,7 +504,7 @@ class Agent():
 
         stop_dt = datetime.fromtimestamp(stop_time / 1000)
         df = df.loc[df.timestamp > stop_dt].reset_index(drop=True)
-        # print(f'::: rsst get_data {pair} timestamp col = {df.timestamp.dtype} from {source} :::')
+        print(f'::: rsst {self.name} get_data {pair} from {source} :::')
 
         rsst_gd.stop()
 
@@ -579,10 +579,12 @@ class Agent():
             stopped, trade_type, overshoot_pct, stop_hit_time = self.check_stop_hit(df, direction, stop)
             if stopped:
                 trade_dict = self.create_trade_dict(pair, trade_type, stop, base_size, stop_hit_time, overshoot_pct)
-                self.sim_to_closed_sim(session, pair, trade_dict)
-
-
+                self.sim_to_closed_sim(session, pair, trade_dict, save_file=False)
                 self.counts_dict[f'sim_stop_{direction}'] += 1
+
+        self.record_trades(session, 'closed_sim')
+        self.record_trades(session, 'sim')
+
         n.stop()
 
     # risk ----------------------------------------------------------------------
@@ -1881,7 +1883,7 @@ class Agent():
 
         self.sim_trades[pair] = {'trade': [sim_order], 'position': pos_record}
 
-        self.record_trades(session, 'sim')
+        # self.record_trades(session, 'sim') # might not be necessary to do this on every trade
 
         self.in_pos['sim'] = direction
         self.sim_pos[asset] = self.update_pos(session, asset, float(size), inval_ratio, 'sim')
@@ -1925,7 +1927,7 @@ class Agent():
         self.sim_trades[pair]['trade'][-1]['rpnl'] = rpnl
 
         # save records
-        self.record_trades(session, 'sim')
+        # self.record_trades(session, 'sim')
 
         # update sim_pos
         self.sim_pos[asset].update(self.update_non_live_tp(asset, 50, 'sim'))
@@ -1933,17 +1935,19 @@ class Agent():
 
         k7.stop()
 
-    def sim_to_closed_sim(self, session, pair, close_order):
+    def sim_to_closed_sim(self, session, pair, close_order, save_file):
         self.sim_trades[pair]['trade'].append(close_order)
         rpnl = self.realised_pnl(self.sim_trades[pair])
         self.sim_trades[pair]['trade'][-1]['rpnl'] = rpnl
 
         trade_id = int(self.sim_trades[pair]['position']['open_time'])
         self.closed_sim_trades[trade_id] = {'trade': self.sim_trades[pair]['trade']}
-        self.record_trades(session, 'closed_sim')
 
         del self.sim_trades[pair]
-        self.record_trades(session, 'sim')
+
+        if save_file:
+            self.record_trades(session, 'closed_sim')
+            self.record_trades(session, 'sim')
 
     def close_sim(self, session, pair, direction):
         k6 = Timer(f'close_sim')
@@ -1967,7 +1971,7 @@ class Agent():
                        'fee_currency': 'BNB',
                        'state': 'sim'}
 
-        self.sim_to_closed_sim(session, pair, close_order)
+        self.sim_to_closed_sim(session, pair, close_order, save_file=True)
 
         self.in_pos['sim'] = None
         del self.sim_pos[asset]

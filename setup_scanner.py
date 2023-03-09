@@ -323,6 +323,7 @@ if before != after:
 print('-:-' * 20)
 
 for agent in agents:
+    agent.record_trades(session, 'all')
     if not session.live:
         print('')
         print(agent.name.upper(), 'SUMMARY')
