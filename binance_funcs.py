@@ -369,11 +369,11 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
             df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
             print(f'downloaded {pair} from scratch')
 
-        max_len = 210240 # 210240 is 2 years' worth of 5m periods
-        if len(df) > max_len:
-            df = df.tail(max_len).reset_index(drop=True)
-        pldf = pl.from_pandas(df)
-        pldf.write_parquet(filepath, use_pyarrow=True)
+        # max_len = 210240 # 210240 is 2 years' worth of 5m periods
+        # if len(df) > max_len:
+        #     df = df.tail(max_len).reset_index(drop=True)
+        # pldf = pl.from_pandas(df)
+        # pldf.write_parquet(filepath, use_pyarrow=True)
 
         session.store_ohlc(df, pair, timeframes)
 

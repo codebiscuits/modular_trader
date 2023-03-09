@@ -66,7 +66,9 @@ class Agent():
                             'sim_close_short': 0,
                             'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 'too_much_or': 0, 'algo_order_limit': 0,
                             'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0, 'reduce_risk': 0}
-        if not self.live:
+        if self.live:
+            self.load_perf_log()
+        else:
             self.sync_test_records(session)
         self.open_trades = self.read_open_trade_records(session, 'open')
         self.sim_trades = self.read_open_trade_records(session, 'sim')
@@ -100,14 +102,27 @@ class Agent():
     def __str__(self):
         return self.id
 
+    def load_perf_log(self, session):
+        folder = Path(f"{session.read_records}/{self.id}")
+        if not folder.exists():
+            folder.mkdir(parents=True)
+        bal_path = Path(folder / 'perf_log.json')
+        bal_path.touch(exist_ok=True)
+        try:
+            with open(bal_path, "r") as file:
+                self.perf_log = json.load(file)
+        except JSONDecodeError:
+            print(f"{bal_path} was an empty file.")
+            self.perf_log = None
+
     def sync_test_records(self, session) -> None:
         '''takes the trade records from the raspberry pi and saves them over 
         the local trade records. only runs when not live'''
 
         q = Timer('sync_test_records')
         q.start()
-        real_folder = Path(f"{session.read_records}/{self.tf}/{self.id}")
-        test_folder = Path(f'{session.write_records}/{self.tf}/{self.id}')
+        real_folder = Path(f"{session.read_records}/{self.id}")
+        test_folder = Path(f'{session.write_records}/{self.id}')
         if not test_folder.exists():
             test_folder.mkdir(parents=True)
         bal_path = Path(real_folder / 'perf_log.json')
@@ -117,17 +132,18 @@ class Agent():
         if bal_path.exists():
             try:
                 with open(bal_path, "r") as file:
-                    bal_data = json.load(file)
+                    self.perf_log = json.load(file)
                 with open(test_bal, "w") as file:
-                    json.dump(bal_data, file)
+                    json.dump(self.perf_log, file)
             except JSONDecodeError:
                 print(f"{bal_path} was an empty file.")
+                self.perf_log = None
 
         def sync_trades_records(switch):
             w = Timer(f'sync_trades_records-{switch}')
             w.start()
-            trades_path = Path(f'{session.read_records}/{self.tf}/{self.id}/{switch}_trades.json')
-            test_trades = Path(f'{session.write_records}/{self.tf}/{self.id}/{switch}_trades.json')
+            trades_path = Path(f'{session.read_records}/{self.id}/{switch}_trades.json')
+            test_trades = Path(f'{session.write_records}/{self.id}/{switch}_trades.json')
             test_trades.touch(exist_ok=True)
 
             if trades_path.exists():
@@ -156,7 +172,7 @@ class Agent():
 
         w = Timer(f'read_open_trade_records-{state}')
         w.start()
-        ot_path = Path(f"{session.read_records}/{self.tf}/{self.id}")
+        ot_path = Path(f"{session.read_records}/{self.id}")
         ot_path.mkdir(parents=True, exist_ok=True)
         ot_path = ot_path / f'{state}_trades.json'
 
@@ -182,7 +198,7 @@ class Agent():
 
         e = Timer('read_closed_trade_records')
         e.start()
-        ct_path = Path(f"{session.read_records}/{self.tf}/{self.id}/closed_trades.json")
+        ct_path = Path(f"{session.read_records}/{self.id}/closed_trades.json")
         if Path(ct_path).exists():
             with open(ct_path, "r") as ct_file:
                 try:
@@ -206,7 +222,7 @@ class Agent():
 
         r = Timer('read_closed_sim_trade_records')
         r.start()
-        cs_path = Path(f"{session.read_records}/{self.tf}/{self.id}/closed_sim_trades.json")
+        cs_path = Path(f"{session.read_records}/{self.id}/closed_sim_trades.json")
         if Path(cs_path).exists():
             with open(cs_path, "r") as cs_file:
                 try:
@@ -237,23 +253,23 @@ class Agent():
         y.start()
         now = datetime.now().strftime('%d/%m/%y %H:%M')
         if self.open_trades:
-            with open(f"{session.write_records}/{self.tf}/{self.id}/ot_backup.json", "w") as ot_file:
+            with open(f"{session.write_records}/{self.id}/ot_backup.json", "w") as ot_file:
                 json.dump(self.open_trades, ot_file)
 
         if self.sim_trades:
-            with open(f"{session.write_records}/{self.tf}/{self.id}/st_backup.json", "w") as st_file:
+            with open(f"{session.write_records}/{self.id}/st_backup.json", "w") as st_file:
                 json.dump(self.sim_trades, st_file)
 
         if self.tracked_trades:
-            with open(f"{session.write_records}/{self.tf}/{self.id}/tr_backup.json", "w") as tr_file:
+            with open(f"{session.write_records}/{self.id}/tr_backup.json", "w") as tr_file:
                 json.dump(self.tracked_trades, tr_file)
 
         if self.closed_trades:
-            with open(f"{session.write_records}/{self.tf}/{self.id}/ct_backup.json", "w") as ct_file:
+            with open(f"{session.write_records}/{self.id}/ct_backup.json", "w") as ct_file:
                 json.dump(self.closed_trades, ct_file)
 
         if self.closed_sim_trades:
-            with open(f"{session.write_records}/{self.tf}/{self.id}/cs_backup.json", "w") as cs_file:
+            with open(f"{session.write_records}/{self.id}/cs_backup.json", "w") as cs_file:
                 json.dump(self.closed_sim_trades, cs_file)
 
         y.stop()
@@ -487,8 +503,8 @@ class Agent():
                 df = funcs.get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
                 source = 'exchange'
                 print(f'downloaded {pair} from scratch')
-                pldf = pl.from_pandas(df)
-                pldf.write_parquet(filepath, use_pyarrow=True)
+                # pldf = pl.from_pandas(df)
+                # pldf.write_parquet(filepath, use_pyarrow=True)
 
             session.store_ohlc(df, pair, timeframes)
 
@@ -498,8 +514,8 @@ class Agent():
             if timespan > 900:
                 df = funcs.update_ohlc(pair, session.ohlc_tf, df, session)
                 source += ' and exchange'
-                pldf = pl.from_pandas(df)
-                pldf.write_parquet(filepath, use_pyarrow=True)
+                # pldf = pl.from_pandas(df)
+                # pldf.write_parquet(filepath, use_pyarrow=True)
                 session.store_ohlc(df, pair, timeframes)
 
         stop_dt = datetime.fromtimestamp(stop_time / 1000)
@@ -652,7 +668,7 @@ class Agent():
         b = Timer(f'record_trades {state}')
         b.start()
         session.counts.append(f'record_trades {state}')
-        filepath = Path(f"{session.write_records}/{self.tf}/{self.id}/{state}_trades.json")
+        filepath = Path(f"{session.write_records}/{self.id}/{state}_trades.json")
         if not filepath.exists():
             filepath.touch()
         with open(filepath, "w") as file:
@@ -678,24 +694,24 @@ class Agent():
         '''calculates perf score from recent performance. also saves the
         instance property open_pnl_changes dictionary'''
 
-        filepath = Path(f"{session.read_records}/{self.tf}/{self.id}/perf_log.json")
-        bal_data = None
-        try:
-            if self.live:
-                filepath.touch(exist_ok=True)
-            with open(filepath, "r") as file:
-                bal_data = json.load(file)
-        except JSONDecodeError:
-            print(f"{filepath} was an empty file.")
+        # filepath = Path(f"{session.read_records}/{self.id}/perf_log.json")
+        # bal_data = None
+        # try:
+        #     if self.live:
+        #         filepath.touch(exist_ok=True)
+        #     with open(filepath, "r") as file:
+        #         bal_data = json.load(file)
+        # except JSONDecodeError:
+        #     print(f"{filepath} was an empty file.")
 
-        if bal_data:
-            last = bal_data[-1]
-        if bal_data and last.get(f'{switch}_open_pnl_{direction[0]}'):
+        if self.perf_log:
+            last = self.perf_log[-1]
+        if self.perf_log and last.get(f'{switch}_open_pnl_{direction[0]}'):
             prev_open_pnl = last.get(f'{switch}_open_pnl_{direction[0]}')
             curr_open_pnl = self.open_pnl(direction, switch)
             opnl_change_pct = 100 * (curr_open_pnl - prev_open_pnl) / prev_open_pnl
             self.open_pnl_changes[switch] = opnl_change_pct
-        elif bal_data:
+        elif self.perf_log:
             total_bal = session.spot_bal if direction == 'spot' else session.margin_bal
             prev_bal = last.get('spot_balance', total_bal) if direction == 'spot' else last.get('margin_balance', total_bal)
             opnl_change_pct = 100 * (total_bal - prev_bal) / prev_bal
@@ -705,8 +721,8 @@ class Agent():
         lookup = f'realised_pnl_{direction}' if switch == 'real' else f'sim_r_pnl_{direction}'
         pnls = {}
         for i in range(1, 5):
-            if bal_data and len(bal_data) > 5:
-                pnls[i] = bal_data[-1 * i].get(lookup, -1)
+            if self.perf_log and len(self.perf_log) > 5:
+                pnls[i] = self.perf_log[-1 * i].get(lookup, -1)
             else:
                 pnls[i] = -1  # if there's no data yet, return -1 instead
 
@@ -745,18 +761,18 @@ class Agent():
 
         now = datetime.now().strftime('%d/%m/%y %H:%M')
 
-        filepath = Path(f"{session.read_records}/{self.tf}/{self.id}/perf_log.json")
-        bal_data = None
-        try:
-            if self.live:
-                filepath.touch(exist_ok=True)
-            with open(filepath, "r") as file:
-                bal_data = json.load(file)
-        except JSONDecodeError:
-            print(f"{filepath} was an empty file.")
+        # filepath = Path(f"{session.read_records}/{self.id}/perf_log.json")
+        # bal_data = None
+        # try:
+        #     if self.live:
+        #         filepath.touch(exist_ok=True)
+        #     with open(filepath, "r") as file:
+        #         bal_data = json.load(file)
+        # except JSONDecodeError:
+        #     print(f"{filepath} was an empty file.")
 
-        if bal_data:
-            fr_prev = bal_data[-1].get(f'fr_{direction}', 0)
+        if self.perf_log:
+            fr_prev = self.perf_log[-1].get(f'fr_{direction}', 0)
         else:
             fr_prev = 0
         fr_inc = self.fr_max / 10  # increment fr in 10% steps of the range

@@ -1,9 +1,8 @@
-"""this script runs the entire setup scanning process for each timeframe, with 
-the appropriate timedelta offset"""
+import time
+script_start = time.perf_counter()
 
 import keys
 from binance.client import Client
-import time
 from datetime import datetime, timezone
 import binance_funcs as funcs
 from agents import DoubleST, EMACross, EMACrossHMA, AvgTradeSize
@@ -18,8 +17,6 @@ from collections import Counter
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
-
-script_start = time.perf_counter()
 
 print('\n-+-+-+-+-+-+-+-+-+-+-+- Running Setup Scanner -+-+-+-+-+-+-+-+-+-+-+-\n')
 
