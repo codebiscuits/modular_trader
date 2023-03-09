@@ -399,8 +399,8 @@ class TradingSession():
         v.start()
         ohlc_data = None
         possible_paths = [Path(f'/home/pi/coding/modular_trader/bin_ohlc_{self.ohlc_tf}'),
-                          Path(f'/home/ross/Documents/backtester_2021/bin_ohlc_{self.ohlc_tf}'),
-                          Path(f'/home/ross/PycharmProjects/backtester_2021/bin_ohlc_{self.ohlc_tf}')]
+                          Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}'),
+                          Path(f'/home/ross/Documents/backtester_2021/bin_ohlc_{self.ohlc_tf}')]
 
         for ohlc_path in possible_paths:
             if ohlc_path.exists():

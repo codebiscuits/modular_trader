@@ -92,7 +92,7 @@ pairs = pairs_in_pos + other_pairs  # this ensures open positions will be checke
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 
 for n, pair in enumerate(pairs):
-    print('\n', n, pair, '\n')
+    # print('\n', n, pair, '\n')
     session.update_prices()
     asset = pair[:-1 * len(session.quote_asset)]
     for agent in agents:

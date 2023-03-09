@@ -218,7 +218,7 @@ class Agent():
             cs_trades = {}
             print(f'{cs_path} not found')
 
-        limit = 5000
+        limit = 1000
         if len(cs_trades.keys()) > limit:
             print(f"{self.name} closed sim trades on record: {len(cs_trades.keys())}")
             closed_sim_tups = sorted(zip(cs_trades.keys(), cs_trades.values()), key=lambda x: int(x[0]))
@@ -566,6 +566,7 @@ class Agent():
 
         n = Timer('record_stopped_sim_trades')
         n.start()
+        session.counts.append('rsst')
 
         check_pairs = list(self.sim_trades.items())
         for pair, v in check_pairs: # can't loop through the dictionary directly because i delete items as i go
