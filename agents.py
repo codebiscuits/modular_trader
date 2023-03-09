@@ -67,7 +67,7 @@ class Agent():
                             'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 'too_much_or': 0, 'algo_order_limit': 0,
                             'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0, 'reduce_risk': 0}
         if self.live:
-            self.load_perf_log()
+            self.load_perf_log(session)
         else:
             self.sync_test_records(session)
         self.open_trades = self.read_open_trade_records(session, 'open')
