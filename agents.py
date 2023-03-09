@@ -580,6 +580,7 @@ class Agent():
                 trade_dict = self.create_trade_dict(pair, trade_type, stop, base_size, stop_hit_time, overshoot_pct)
                 self.sim_to_closed_sim(session, pair, trade_dict)
 
+
                 self.counts_dict[f'sim_stop_{direction}'] += 1
         n.stop()
 
@@ -647,6 +648,7 @@ class Agent():
 
         b = Timer(f'record_trades {state}')
         b.start()
+        session.counts.append(f'record_trades {state}')
         filepath = Path(f"{session.write_records}/{self.tf}/{self.id}/{state}_trades.json")
         if not filepath.exists():
             filepath.touch()

@@ -70,6 +70,7 @@ def iterations(n, pair, tf):
     # -------------------- if theres no local data yet -------------------------#
     else:
         df = from_scratch(pair, tf)
+        print(f'{n} downloaded {pair} from scratch')
 
     max_dict = {'1m': 1051200, '5m': 210240, '15m': 70080, '1h': 17520}
     max_len = max_dict[tf]  # returns 2 years worth of timeframe periods

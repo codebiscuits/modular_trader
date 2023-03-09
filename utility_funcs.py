@@ -100,7 +100,6 @@ def get_market_state(session, pair, data: pd.DataFrame) -> dict[str, float]:
     )
 
 
-
 def market_benchmark(session) -> None:
     '''calculates daily, weekly and monthly returns for btc, eth and the median 
     altcoin on binance'''
@@ -239,8 +238,6 @@ def strat_benchmark(session, agent) -> None:
 
 def log(session, agent) -> None:
     '''records all data from the session as a line in the perf_log.json file'''
-
-    params = {}
 
     new_record = {'timestamp': session.now_start,
                   'positions': agent.real_pos, 'trade_counts': agent.counts_dict,

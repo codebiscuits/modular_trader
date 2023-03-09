@@ -386,8 +386,9 @@ uf.interpret_benchmark(session, agents)
 
 print('\n---- Timers ----')
 for k, v in Timer.timers.items():
-    if v > 30:
-        print(k, round(v))
+    if v > 10:
+        elapsed = f"{int(v // 60)}m {v % 60:.1f}s"
+        print(k, elapsed)
 
 print('-------------------- Counts --------------------')
 print(f"pairs tested: {len(pairs)}")

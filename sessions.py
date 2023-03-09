@@ -473,7 +473,7 @@ class TradingSession():
             abc.start()
             self.book_data[pair] = self.client.get_order_book(symbol=pair, limit=500)
             abc.stop()
-            self.counts.append('get_order_book')
+            self.counts.append('session.get_book_data')
 
         x10.stop()
 
