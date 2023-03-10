@@ -585,6 +585,7 @@ class Agent():
         session.counts.append('rsst')
 
         check_pairs = list(self.sim_trades.items())
+        print(f"{self.name} check {len(check_pairs)} pairs")
         for pair, v in check_pairs: # can't loop through the dictionary directly because i delete items as i go
             direction = v['position']['direction']
             base_size = float(v['position']['base_size'])
@@ -594,9 +595,12 @@ class Agent():
             df = self.get_data(session, pair, timeframes, stop_time)
             stopped, trade_type, overshoot_pct, stop_hit_time = self.check_stop_hit(df, direction, stop)
             if stopped:
+                print(f"{pair} stopped out")
                 trade_dict = self.create_trade_dict(pair, trade_type, stop, base_size, stop_hit_time, overshoot_pct)
                 self.sim_to_closed_sim(session, pair, trade_dict, save_file=False)
                 self.counts_dict[f'sim_stop_{direction}'] += 1
+            else:
+                print(f"{pair} still open")
 
         self.record_trades(session, 'closed_sim')
         self.record_trades(session, 'sim')
@@ -619,8 +623,6 @@ class Agent():
         position = trade_record['position']
         side = position['direction']
 
-        i = Timer(f'realised_pnl {side}')
-        i.start()
         trades = trade_record['trade']
         entry = float(position['entry_price'])
         init_stop = float(position['init_hard_stop'])
@@ -656,8 +658,8 @@ class Agent():
         else:
             print(f"state in record: {position.get('state')}")
             print(f'{trade_r = }')
-        i.stop()
 
+        print(f"----- {position['pair']} realised {position['state']} {side} pnl: {realised_r}")
         k15.stop()
 
         return realised_r
@@ -668,19 +670,36 @@ class Agent():
         b = Timer(f'record_trades {state}')
         b.start()
         session.counts.append(f'record_trades {state}')
-        filepath = Path(f"{session.write_records}/{self.id}/{state}_trades.json")
-        if not filepath.exists():
-            filepath.touch()
-        with open(filepath, "w") as file:
-            if state in {'open', 'all'}:
+
+        if state in {'open', 'all'}:
+            filepath = Path(f"{session.write_records}/{self.id}/open_trades.json")
+            if not filepath.exists():
+                filepath.touch()
+            with open(filepath, "w") as file:
                 json.dump(self.open_trades, file)
-            if state in {'sim', 'all'}:
+        if state in {'sim', 'all'}:
+            filepath = Path(f"{session.write_records}/{self.id}/sim_trades.json")
+            if not filepath.exists():
+                filepath.touch()
+            with open(filepath, "w") as file:
                 json.dump(self.sim_trades, file)
-            if state in {'tracked', 'all'}:
+        if state in {'tracked', 'all'}:
+            filepath = Path(f"{session.write_records}/{self.id}/tracked_trades.json")
+            if not filepath.exists():
+                filepath.touch()
+            with open(filepath, "w") as file:
                 json.dump(self.tracked_trades, file)
-            if state in {'closed', 'all'}:
+        if state in {'closed', 'all'}:
+            filepath = Path(f"{session.write_records}/{self.id}/closed_trades.json")
+            if not filepath.exists():
+                filepath.touch()
+            with open(filepath, "w") as file:
                 json.dump(self.closed_trades, file)
-            if state in {'closed_sim', 'all'}:
+        if state in {'closed_sim', 'all'}:
+            filepath = Path(f"{session.write_records}/{self.id}/closed_sim_trades.json")
+            if not filepath.exists():
+                filepath.touch()
+            with open(filepath, "w") as file:
                 json.dump(self.closed_sim_trades, file)
         b.stop()
 

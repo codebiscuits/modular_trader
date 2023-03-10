@@ -320,9 +320,15 @@ if before != after:
 print('-:-' * 20)
 
 for agent in agents:
+    print(agent.open_trades.keys())
+    print(agent.sim_trades.keys())
     agent.record_trades(session, 'all')
 
     #################################
+
+    for pair, pos in agent.sim_pos.items():
+        print(pair)
+        pprint(pos)
 
     # if not session.live:
     print('')
