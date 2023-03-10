@@ -234,7 +234,7 @@ class Agent():
             cs_trades = {}
             print(f'{cs_path} not found')
 
-        limit = 1000
+        limit = 2000
         if len(cs_trades.keys()) > limit:
             print(f"{self.name} closed sim trades on record: {len(cs_trades.keys())}")
             closed_sim_tups = sorted(zip(cs_trades.keys(), cs_trades.values()), key=lambda x: int(x[0]))

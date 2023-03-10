@@ -118,7 +118,7 @@ for n, pair in enumerate(pairs):
         if df_dict[agent.tf] is not None:
             df_2 = df_dict[agent.tf].copy()
         else:
-            print(f"{pair} too new for {agent.name}")
+            # print(f"{pair} too new for {agent.name}")
             continue
 
         market_state = uf.get_market_state(session, pair, df_2)
@@ -321,50 +321,55 @@ print('-:-' * 20)
 
 for agent in agents:
     agent.record_trades(session, 'all')
-    if not session.live:
-        print('')
-        print(agent.name.upper(), 'SUMMARY')
-        if agent.realised_pnl_spot or agent.sim_pnl_spot:
-            print(
-                f'realised real spot pnl: {agent.realised_pnl_spot:.1f}R, realised sim spot pnl: {agent.sim_pnl_spot:.1f}R')
-        if agent.realised_pnl_long or agent.sim_pnl_long:
-            print(
-                f'realised real long pnl: {agent.realised_pnl_long:.1f}R, realised sim long pnl: {agent.sim_pnl_long:.1f}R')
-        if agent.realised_pnl_short or agent.sim_pnl_short:
-            print(
-                f'realised real short pnl: {agent.realised_pnl_short:.1f}R, realised sim short pnl: {agent.sim_pnl_short:.1f}R')
-        print(f'tor: {agent.total_open_risk:.1f}')
-        # print(f'or list: {[round(x, 2) for x in sorted(agent.or_list, reverse=True)]}')
 
-        propnl = agent.open_pnl('spot', 'real')
-        if propnl:
-            print(f"real open pnl spot: {propnl:.1f}R")
+    #################################
 
-        lropnl = agent.open_pnl('long', 'real')
-        if lropnl:
-            print(f"real open pnl long: {lropnl:.1f}R")
+    # if not session.live:
+    print('')
+    print(agent.name.upper(), 'SUMMARY')
+    if agent.realised_pnl_spot or agent.sim_pnl_spot:
+        print(
+            f'realised real spot pnl: {agent.realised_pnl_spot:.1f}R, realised sim spot pnl: {agent.sim_pnl_spot:.1f}R')
+    if agent.realised_pnl_long or agent.sim_pnl_long:
+        print(
+            f'realised real long pnl: {agent.realised_pnl_long:.1f}R, realised sim long pnl: {agent.sim_pnl_long:.1f}R')
+    if agent.realised_pnl_short or agent.sim_pnl_short:
+        print(
+            f'realised real short pnl: {agent.realised_pnl_short:.1f}R, realised sim short pnl: {agent.sim_pnl_short:.1f}R')
+    print(f'tor: {agent.total_open_risk:.1f}')
+    # print(f'or list: {[round(x, 2) for x in sorted(agent.or_list, reverse=True)]}')
 
-        sropnl = agent.open_pnl('short', 'real')
-        if sropnl:
-            print(f"real open pnl short: {sropnl:.1f}R")
+    propnl = agent.open_pnl('spot', 'real')
+    if propnl:
+        print(f"real open pnl spot: {propnl:.1f}R")
 
-        psopnl = agent.open_pnl('spot', 'sim')
-        if psopnl:
-            print(f"sim open pnl spot: {psopnl:.1f}R")
+    lropnl = agent.open_pnl('long', 'real')
+    if lropnl:
+        print(f"real open pnl long: {lropnl:.1f}R")
 
-        lsopnl = agent.open_pnl('long', 'sim')
-        if lsopnl:
-            print(f"sim open pnl long: {lsopnl:.1f}R")
+    sropnl = agent.open_pnl('short', 'real')
+    if sropnl:
+        print(f"real open pnl short: {sropnl:.1f}R")
 
-        ssopnl = agent.open_pnl('short', 'sim')
-        if ssopnl:
-            print(f"sim open pnl short: {ssopnl:.1f}R")
+    psopnl = agent.open_pnl('spot', 'sim')
+    if psopnl:
+        print(f"sim open pnl spot: {psopnl:.1f}R")
 
-        print(f'{agent.name} Counts:')
-        for k, v in agent.counts_dict.items():
-            if v:
-                print(k, v)
-        print('-:-' * 20)
+    lsopnl = agent.open_pnl('long', 'sim')
+    if lsopnl:
+        print(f"sim open pnl long: {lsopnl:.1f}R")
+
+    ssopnl = agent.open_pnl('short', 'sim')
+    if ssopnl:
+        print(f"sim open pnl short: {ssopnl:.1f}R")
+
+    print(f'{agent.name} Counts:')
+    for k, v in agent.counts_dict.items():
+        if v:
+            print(k, v)
+    print('-:-' * 20)
+
+    ################################
 
     usdt_bal = session.spot_usdt_bal if agent.mode == 'spot' else session.margin_usdt_bal
     agent.real_pos['USDT'] = usdt_bal
@@ -380,7 +385,8 @@ for agent in agents:
     agent.benchmark = uf.strat_benchmark(session, agent)
 uf.scanner_summary(session, agents)
 
-uf.interpret_benchmark(session, agents)
+# TODO maybe change interpret benchmark to save data to a log file instead of printing
+# uf.interpret_benchmark(session, agents)
 
 print('\n---- Timers ----')
 for k, v in Timer.timers.items():

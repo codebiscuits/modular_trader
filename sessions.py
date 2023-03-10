@@ -866,6 +866,14 @@ class LightSession(TradingSession):
 
 class CheckRecordsSession(TradingSession):
     def __init__(self):
+        self.fr_max = 0.0005
+        self.pairs_data = {}
+        self.counts = []
+        self.spot_bal = 1
+        self.margin_bal = 1
+        self.spot_usdt_bal = 1
+        self.margin_usdt_bal = 1
+
         self.ohlc_length = 0
         self.now_start = datetime.now().strftime('%d/%m/%y %H:%M')
         self.client = Client(keys.bPkey, keys.bSkey)
