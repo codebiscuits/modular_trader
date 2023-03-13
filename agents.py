@@ -520,7 +520,7 @@ class Agent():
 
         stop_dt = datetime.fromtimestamp(stop_time / 1000)
         df = df.loc[df.timestamp > stop_dt].reset_index(drop=True)
-        print(f'::: rsst {self.name} get_data {pair} from {source} :::')
+        # print(f'::: rsst {self.name} get_data {pair} from {source} :::')
 
         rsst_gd.stop()
 
@@ -595,7 +595,7 @@ class Agent():
             df = self.get_data(session, pair, timeframes, stop_time)
             stopped, trade_type, overshoot_pct, stop_hit_time = self.check_stop_hit(df, direction, stop)
             if stopped:
-                print(f"{pair} stopped out")
+                # print(f"{pair} stopped out")
                 trade_dict = self.create_trade_dict(pair, trade_type, stop, base_size, stop_hit_time, overshoot_pct)
                 self.sim_to_closed_sim(session, pair, trade_dict, save_file=False)
                 self.counts_dict[f'sim_stop_{direction}'] += 1
@@ -659,7 +659,7 @@ class Agent():
             print(f"state in record: {position.get('state')}")
             print(f'{trade_r = }')
 
-        print(f"----- {position['pair']} realised {position['state']} {side} pnl: {realised_r}")
+        print(f"{position['pair']} realised {position['state']} {side} pnl: {realised_r}")
         k15.stop()
 
         return realised_r
