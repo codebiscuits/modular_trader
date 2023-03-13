@@ -154,12 +154,12 @@ def market_benchmark(session) -> None:
                 btc_1d = df.roc_1d.iloc[-1]
                 btc_1w = df.roc_1w.iloc[-1]
                 btc_1m = df.roc_1m.iloc[-1]
-                print(f"btc benchmark scores: {btc_1d}, {btc_1w}, {btc_1m}")
+                print(f"btc benchmark scores: {btc_1d:.1%}, {btc_1w:.1%}, {btc_1m:.1%}")
             elif x == 'ETHUSDT':
                 eth_1d = df.roc_1d.iloc[-1]
                 eth_1w = df.roc_1w.iloc[-1]
                 eth_1m = df.roc_1m.iloc[-1]
-                print(f"eth benchmark scores: {eth_1d}, {eth_1w}, {eth_1m}")
+                print(f"eth benchmark scores: {eth_1d:.1%}, {eth_1w:.1%}, {eth_1m:.1%}")
     market_1d = stats.median(all_1d) if len(all_1d) > 3 else 0
     market_1w = stats.median(all_1w) if len(all_1w) > 3 else 0
     market_1m = stats.median(all_1m) if len(all_1m) > 3 else 0

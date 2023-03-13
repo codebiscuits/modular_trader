@@ -2108,7 +2108,6 @@ class Agent():
         # if tot adds up to the same number as signal age that shows that all loops returned True
         return tot == self.signal_age
 
-
     def check_size_against_records(self, pair, real_bal, base_size):
         k3 = Timer(f'check_size_against_records')
         k3.start()
@@ -2466,6 +2465,9 @@ class EMACross(Agent):
         bullish_emas = self.aged_condition(self.signal_age, df[fast_ema_str], df[slow_ema_str])
         bearish_emas = self.aged_condition(self.signal_age, df[slow_ema_str], df[fast_ema_str])
 
+        atr_lower_below = df.close.iloc[-1] > df[f'atr-10-{self.mult}-lower'].iloc[-1]
+        atr_upper_above = df.close.iloc[-1] < df[f'atr-10-{self.mult}-upper'].iloc[-1]
+
         x_age = 0 - (self.signal_age + 1)
         bullish_cross = bullish_emas and (df[fast_ema_str].iloc[x_age] < df[slow_ema_str].iloc[x_age])
         bearish_cross = bearish_emas and (df[fast_ema_str].iloc[x_age] > df[slow_ema_str].iloc[x_age])
@@ -2477,9 +2479,9 @@ class EMACross(Agent):
                     or self.in_pos['sim'] == 'short'
                     or self.in_pos['tracked'] == 'short')
 
-        if bullish_bias and bullish_emas and not in_long:
+        if bullish_bias and bullish_emas and atr_lower_below and not in_long:
             signal = 'open_long'
-        elif bearish_bias and bearish_emas and not in_short:
+        elif bearish_bias and bearish_emas and atr_upper_above and not in_short:
             signal = 'open_short'
         elif bearish_emas and in_long:
             signal = 'close_long'
@@ -2550,14 +2552,19 @@ class EMACrossHMA(Agent):
         bullish_bias = df.close.iloc[-1] > df[bias_hma_str].iloc[-1]
         bearish_bias = df.close.iloc[-1] < df[bias_hma_str].iloc[-1]
 
-        bullish_emas = df[fast_ema_str].iloc[-1] > df[slow_ema_str].iloc[-1]
-        bearish_emas = df[fast_ema_str].iloc[-1] < df[slow_ema_str].iloc[-1]
+        # bullish_emas = df[fast_ema_str].iloc[-1] > df[slow_ema_str].iloc[-1]
+        # bearish_emas = df[fast_ema_str].iloc[-1] < df[slow_ema_str].iloc[-1]
         bullish_emas = self.aged_condition(self.signal_age, df[fast_ema_str], df[slow_ema_str])
         bearish_emas = self.aged_condition(self.signal_age, df[slow_ema_str], df[fast_ema_str])
 
         x_age = 0 - (self.signal_age + 1)
         bullish_cross = bullish_emas and (df[fast_ema_str].iloc[x_age] < df[slow_ema_str].iloc[x_age])
         bearish_cross = bearish_emas and (df[fast_ema_str].iloc[x_age] > df[slow_ema_str].iloc[x_age])
+
+        lower = f'atr-10-{self.mult}-lower'
+        upper = f'atr-10-{self.mult}-upper'
+        atr_lower_below = df.close.iloc[-1] > df[lower].iloc[-1]
+        atr_upper_above = df.close.iloc[-1] < df[upper].iloc[-1]
 
         in_long = (self.in_pos['real'] == 'long'
                    or self.in_pos['sim'] == 'long'
@@ -2566,9 +2573,9 @@ class EMACrossHMA(Agent):
                     or self.in_pos['sim'] == 'short'
                     or self.in_pos['tracked'] == 'short')
 
-        if bullish_bias and bullish_cross:
+        if bullish_bias and bullish_cross and atr_lower_below:
             signal = 'open_long'
-        elif bearish_bias and bearish_cross:
+        elif bearish_bias and bearish_cross and atr_upper_above:
             signal = 'open_short'
         elif bearish_emas and in_long:
             signal = 'close_long'
@@ -2588,8 +2595,6 @@ class EMACrossHMA(Agent):
             if self.in_pos[state]:
                 self.move_non_real_stop(session, pair, df, state, self.in_pos[state])
 
-        lower = f'atr-10-{self.mult}-lower'
-        upper = f'atr-10-{self.mult}-upper'
         if ((signal == 'open_long') or in_long) and df[lower].iloc[-1]:
             inval = df[lower].iloc[-1]
             inval_ratio = inval / df.close.iloc[-1]
