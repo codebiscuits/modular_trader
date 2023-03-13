@@ -2099,6 +2099,16 @@ class Agent():
 
     # other
 
+    def aged_condition(self, signal_age, series_1, series_2):
+        tot = 0
+
+        for x in range(-1, -(signal_age + 1), -1):
+            tot += int(series_1.iloc[x] > series_2.iloc[x])
+
+        # if tot adds up to the same number as signal age that shows that all loops returned True
+        return tot == self.signal_age
+
+
     def check_size_against_records(self, pair, real_bal, base_size):
         k3 = Timer(f'check_size_against_records')
         k3.start()
@@ -2379,12 +2389,12 @@ class DoubleST(Agent):
         k = Timer(f'dst_margin_signals')
         k.start()
 
-        bullish_ema = df.close.iloc[-1] > df['ema_200'].iloc[-1]
-        bearish_ema = df.close.iloc[-1] < df['ema_200'].iloc[-1]
-        bullish_loose = df.close.iloc[-1] > df[f'st-10-{float(self.mult1)}'].iloc[-1]
-        bearish_loose = df.close.iloc[-1] < df[f'st-10-{float(self.mult1)}'].iloc[-1]
-        bullish_tight = df.close.iloc[-1] > df[f'st-10-{self.mult2}'].iloc[-1]
-        bearish_tight = df.close.iloc[-1] < df[f'st-10-{self.mult2}'].iloc[-1]
+        bullish_ema = df.close.iloc[-1] > df.ema_200.iloc[-1]
+        bearish_ema = df.close.iloc[-1] < df.ema_200.iloc[-1]
+        bullish_loose = self.aged_condition(self.signal_age, df.close, df[f'st-10-{float(self.mult1)}'])
+        bearish_loose = self.aged_condition(self.signal_age, df[f'st-10-{float(self.mult1)}'], df.close)
+        bullish_tight = self.aged_condition(self.signal_age, df.close, df[f'st-10-{self.mult2}'])
+        bearish_tight = self.aged_condition(self.signal_age, df[f'st-10-{self.mult2}'], df.close)
 
         if bullish_ema:
             session.above_200_ema.add(pair)
@@ -2430,6 +2440,7 @@ class EMACross(Agent):
         self.name = f'{self.tf} emacross {self.lb1}-{self.lb2}-{self.mult}'
         self.id = f"ema_cross_{self.tf}_{self.offset}_{self.lb1}_{self.lb2}_{self.mult}"
         self.ohlc_length = max(200+2, self.lb1, self.lb2)
+        self.signal_age = 2
         Agent.__init__(self, session)
         session.indicators.update(['ema-200',
                                    f"ema-{self.lb1}",
@@ -2452,9 +2463,12 @@ class EMACross(Agent):
 
         bullish_emas = df[fast_ema_str].iloc[-1] > df[slow_ema_str].iloc[-1]
         bearish_emas = df[fast_ema_str].iloc[-1] < df[slow_ema_str].iloc[-1]
+        bullish_emas = self.aged_condition(self.signal_age, df[fast_ema_str], df[slow_ema_str])
+        bearish_emas = self.aged_condition(self.signal_age, df[slow_ema_str], df[fast_ema_str])
 
-        bullish_cross = bullish_emas and (df[fast_ema_str].iloc[-2] < df[slow_ema_str].iloc[-2])
-        bearish_cross = bearish_emas and (df[fast_ema_str].iloc[-2] > df[slow_ema_str].iloc[-2])
+        x_age = 0 - (self.signal_age + 1)
+        bullish_cross = bullish_emas and (df[fast_ema_str].iloc[x_age] < df[slow_ema_str].iloc[x_age])
+        bearish_cross = bearish_emas and (df[fast_ema_str].iloc[x_age] > df[slow_ema_str].iloc[x_age])
 
         in_long = (self.in_pos['real'] == 'long'
                    or self.in_pos['sim'] == 'long'
@@ -2515,6 +2529,7 @@ class EMACrossHMA(Agent):
         self.name = f'{self.tf} emaxhma {self.lb1}-{self.lb2}-{self.mult}'
         self.id = f"ema_cross_hma_{self.tf}_{self.offset}_{self.lb1}_{self.lb2}_{self.mult}"
         self.ohlc_length = max(200+2, self.lb1, self.lb2)
+        self.signal_age = 2
         Agent.__init__(self, session)
         session.indicators.update(['hma-200',
                                    f"ema-{self.lb1}",
@@ -2537,9 +2552,12 @@ class EMACrossHMA(Agent):
 
         bullish_emas = df[fast_ema_str].iloc[-1] > df[slow_ema_str].iloc[-1]
         bearish_emas = df[fast_ema_str].iloc[-1] < df[slow_ema_str].iloc[-1]
+        bullish_emas = self.aged_condition(self.signal_age, df[fast_ema_str], df[slow_ema_str])
+        bearish_emas = self.aged_condition(self.signal_age, df[slow_ema_str], df[fast_ema_str])
 
-        bullish_cross = bullish_emas and (df[fast_ema_str].iloc[-2] < df[slow_ema_str].iloc[-2])
-        bearish_cross = bearish_emas and (df[fast_ema_str].iloc[-2] > df[slow_ema_str].iloc[-2])
+        x_age = 0 - (self.signal_age + 1)
+        bullish_cross = bullish_emas and (df[fast_ema_str].iloc[x_age] < df[slow_ema_str].iloc[x_age])
+        bearish_cross = bearish_emas and (df[fast_ema_str].iloc[x_age] > df[slow_ema_str].iloc[x_age])
 
         in_long = (self.in_pos['real'] == 'long'
                    or self.in_pos['sim'] == 'long'
