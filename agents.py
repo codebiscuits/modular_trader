@@ -95,8 +95,6 @@ class Agent():
         self.calc_tor()
         self.next_id = int(datetime.now().timestamp())
         session.min_length = min(session.min_length, self.ohlc_length)
-        if self.max_positions > 10:
-            print(f'{self.name} max positions: {self.max_positions}')
         t.stop()
 
     def __str__(self):
@@ -525,7 +523,7 @@ class Agent():
                 # pldf.write_parquet(filepath, use_pyarrow=True)
                 session.store_ohlc(df, pair, timeframes)
 
-        stop_dt = datetime.fromtimestamp(stop_time / 1000)
+        stop_dt = datetime.fromtimestamp(stop_time)# / 1000)
         df = df.loc[df.timestamp > stop_dt].reset_index(drop=True)
         # print(f'::: rsst {self.name} get_data {pair} from {source} :::')
 
@@ -602,7 +600,7 @@ class Agent():
             df = self.get_data(session, pair, timeframes, stop_time)
             stopped, trade_type, overshoot_pct, stop_hit_time = self.check_stop_hit(df, direction, stop)
             if stopped:
-                # print(f"{pair} stopped out")
+                print(f"{v['position']['open_time']}, {stop_hit_time}, {v['position']['entry_price']}")
                 trade_dict = self.create_trade_dict(pair, trade_type, stop, base_size, stop_hit_time, overshoot_pct)
                 self.sim_to_closed_sim(session, pair, trade_dict, save_file=False)
                 self.counts_dict[f'sim_stop_{direction}'] += 1
@@ -885,6 +883,67 @@ class Agent():
         self.total_open_risk = sum(self.or_list)
         self.num_open_positions = len(self.or_list)
         u.stop()
+
+    def filter_signals(self, session, pair, signals, inval_risk_score, usdt_size, usdt_depth):
+        now = datetime.now()
+        filters = []
+
+        if ((('spot' in signals.get('signal')) and (inval_risk_score < 0.5))
+                or
+                (('long' in signals.get('signal')) and (inval_risk_score < 0.5))
+                or
+                (('short' in signals.get('signal')) and (inval_risk_score < 0.5))):
+            if not self.in_pos['sim']:
+                self.counts_dict['too_risky'] += 1
+            # print(f"{self.name} {pair} open signal, risk score: {inval_risk_score}")
+            filters.append('too_risky')
+
+        if usdt_depth == 0:
+            if not self.in_pos['sim']:
+                self.counts_dict['too_much_spread'] += 1
+            filters.append('too_much_spread')
+
+        if usdt_size > usdt_depth > (usdt_size / 2):  # only trim size if books are a bit too thin
+            self.counts_dict['books_too_thin'] += 1
+            trim_size = f'{now} {pair} books too thin, reducing size from {usdt_size:.3} to {usdt_depth:.3}'
+            print(trim_size)
+            usdt_size = usdt_depth
+
+        if usdt_depth < usdt_size:
+            if not self.in_pos['sim']:
+                self.counts_dict['books_too_thin'] += 1
+            filters.append('books_too_thin')
+
+        elif usdt_size < 30:
+            if not self.in_pos['sim']:
+                self.counts_dict['too_small'] += 1
+            filters.append('too_small')
+
+        # check total open risk and close profitable positions if necessary -----------
+        self.reduce_risk_M(session)
+        usdt_bal = session.spot_usdt_bal if self.mode == 'spot' else session.margin_usdt_bal
+        self.real_pos['USDT'] = usdt_bal
+
+        # make sure there aren't too many open positions now --------------------------
+        self.calc_tor()
+        if self.num_open_positions >= self.max_pos:
+            if not self.in_pos['sim']:
+                self.counts_dict['too_many_pos'] += 1
+            print(f"{self.name} {pair} positions: {self.num_open_positions} max: {self.max_positions}")
+            filters.append('too_many_pos')
+        if self.total_open_risk > self.total_r_limit:
+            if not self.in_pos['sim']:
+                self.counts_dict['too_much_or'] += 1
+            filters.append('too_much_or')
+        if float(self.real_pos['USDT']['qty']) < usdt_size:
+            if not self.in_pos['sim']:
+                self.counts_dict['not_enough_usdt'] += 1
+            filters.append('not_enough_usdt')
+        if session.algo_limit_reached(pair):
+            self.counts_dict['algo_order_limit'] += 1
+            filters.append('algo_order_limit')
+
+        return filters
 
     # signal scores -------------------------------------------------------------
 
@@ -1466,6 +1525,7 @@ class Agent():
             self.real_pos[asset] = {'value': usdt_size, 'pf%': pf, 'or_R': '1', 'or_$': str(or_dol)}
 
         self.counts_dict[f'real_open_{direction}'] += 1
+        self.num_open_positions += 1
 
     def open_real_M(self, session, pair, size, stp, inval_ratio, mkt_state, direction, stage):
         func_name = sys._getframe().f_code.co_name

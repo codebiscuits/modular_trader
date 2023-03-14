@@ -98,8 +98,6 @@ def get_depth(session, pair: str) -> Tuple[float, float]:
     within the % range of price set by the max_slip param"""
 
     max_slip = session.max_spread
-    fv = Timer('get_depth')
-    fv.start()
 
     price = session.pairs_data[pair]['price']
     book = session.get_book_data(pair)
@@ -126,7 +124,7 @@ def get_depth(session, pair: str) -> Tuple[float, float]:
 
     usdt_depth_l = float(depth_l * price)
     usdt_depth_s = float(depth_s * price)
-    fv.stop()
+
     return usdt_depth_l, usdt_depth_s
 
 

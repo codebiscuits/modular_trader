@@ -189,62 +189,14 @@ for n, pair in enumerate(pairs):
                 continue
 
         elif signals.get('signal') in ['open_spot', 'open_long', 'open_short']:
-            if usdt_size > usdt_depth > (usdt_size / 2):  # only trim size if books are a bit too thin
-                agent.counts_dict['books_too_thin'] += 1
-                trim_size = f'{now} {pair} books too thin, reducing size from {usdt_size:.3} to {usdt_depth:.3}'
-                print(trim_size)
-                usdt_size = usdt_depth
-            sim_reason = None
+            sim_reasons = agent.filter_signals(session, pair, signals, inval_risk_score, usdt_size, usdt_depth)
 
-            if usdt_size < 30:
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['too_small'] += 1
-                sim_reason = 'too_small'
-
-            elif ((('spot' in signals.get('signal')) and (inval_risk_score < 0.5))
-                  or
-                  (('long' in signals.get('signal')) and (inval_risk_score < 0.5))
-                  or
-                  (('short' in signals.get('signal')) and (inval_risk_score < 0.5))):
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['too_risky'] += 1
-                sim_reason = 'too_risky'
-
-            elif usdt_depth == 0:
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['too_much_spread'] += 1
-                sim_reason = 'too_much_spread'
-
-            elif usdt_depth < usdt_size:
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['books_too_thin'] += 1
-                sim_reason = 'books_too_thin'
-
-            # check total open risk and close profitable positions if necessary -----------
-            agent.reduce_risk_M(session)
-            usdt_bal = session.spot_usdt_bal if agent.mode == 'spot' else session.margin_usdt_bal
-            agent.real_pos['USDT'] = usdt_bal
-
-            # make sure there aren't too many open positions now --------------------------
-            agent.calc_tor()
-            if agent.num_open_positions >= agent.max_positions:
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['too_many_pos'] += 1
-                sim_reason = 'too_many_pos'
-            elif agent.total_open_risk > agent.total_r_limit:
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['too_much_or'] += 1
-                sim_reason = 'too_much_or'
-            elif float(agent.real_pos['USDT']['qty']) < usdt_size:
-                if not agent.in_pos['sim']:
-                    agent.counts_dict['not_enough_usdt'] += 1
-                sim_reason = 'not_enough_usdt'
-            elif session.algo_limit_reached(pair):
-                agent.counts_dict['algo_order_limit'] += 1
-                sim_reason = 'algo_order_limit'
+            if 'too_risky' in sim_reasons:
+                continue
+            # print(sim_reasons)
 
             try:
-                agent.open_pos(session, pair, size, stp, signals['inval_ratio'], market_state, sim_reason, direction)
+                agent.open_pos(session, pair, size, stp, signals['inval_ratio'], market_state, sim_reasons, direction)
             except bx.BinanceAPIException as e:
                 if e.code == -3045:  # borrow failed because there weren't enough assets to borrow
                     del agent.open_trades[pair]
