@@ -78,6 +78,15 @@ def get_market_state(session, pair, data: pd.DataFrame) -> dict[str, float]:
     ema_50_ratio = data.close.iloc[-1] / data.ema_50.iloc[-1]
     ema_25_ratio = data.close.iloc[-1] / data.ema_25.iloc[-1]
 
+    try:
+        market_rank_1d = session.market_ranks.at[pair, 'rank_1d']
+        market_rank_1w = session.market_ranks.at[pair, 'rank_1w']
+        market_rank_1m = session.market_ranks.at[pair, 'rank_1m']
+    except KeyError:
+        market_rank_1d = None
+        market_rank_1w = None
+        market_rank_1m = None
+
 
     return dict(
         ema_200=data.ema_200.iloc[-1],
@@ -94,9 +103,9 @@ def get_market_state(session, pair, data: pd.DataFrame) -> dict[str, float]:
         roc_1d=data.roc_1d.iloc[-1],
         roc_1w=data.roc_1w.iloc[-1],
         roc_1m=data.roc_1m.iloc[-1],
-        market_rank_1d=session.market_ranks.at[pair, 'rank_1d'],
-        market_rank_1w=session.market_ranks.at[pair, 'rank_1w'],
-        market_rank_1m=session.market_ranks.at[pair, 'rank_1m'],
+        market_rank_1d=market_rank_1d,
+        market_rank_1w=market_rank_1w,
+        market_rank_1m=market_rank_1m,
     )
 
 
