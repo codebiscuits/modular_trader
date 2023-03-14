@@ -2640,9 +2640,9 @@ class EMACrossHMA(Agent):
                     or self.in_pos['sim'] == 'short'
                     or self.in_pos['tracked'] == 'short')
 
-        if bullish_bias and bullish_cross and atr_lower_below:
+        if bullish_bias and bullish_emas and atr_lower_below:
             signal = 'open_long'
-        elif bearish_bias and bearish_cross and atr_upper_above:
+        elif bearish_bias and bearish_emas and atr_upper_above:
             signal = 'open_short'
         elif bearish_emas and in_long:
             signal = 'close_long'
