@@ -494,10 +494,17 @@ class Agent():
 
         else:
             if filepath.exists():
-                df = pd.read_parquet(filepath)
-                source = 'file'
-                check_recent = True
-
+                try:
+                    df = pd.read_parquet(filepath)
+                    source = 'file'
+                    check_recent = True
+                except OSError as e:
+                    print(f"problem loading {pair} ohlc")
+                    print(e)
+                    filepath.unlink()
+                    df = funcs.get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
+                    source = 'exchange'
+                    print(f'downloaded {pair} from scratch')
             else:
                 print(f"{filepath} doesn't exist")
                 df = funcs.get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
