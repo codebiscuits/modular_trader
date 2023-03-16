@@ -928,7 +928,7 @@ class Agent():
         if self.num_open_positions >= self.max_positions:
             if not self.in_pos['sim']:
                 self.counts_dict['too_many_pos'] += 1
-            print(f"{self.name} {pair} positions: {self.num_open_positions} max: {self.max_positions}")
+            # print(f"{self.name} {pair} positions: {self.num_open_positions} max: {self.max_positions}")
             filters.append('too_many_pos')
         if self.total_open_risk > self.total_r_limit:
             if not self.in_pos['sim']:
@@ -2042,7 +2042,7 @@ class Agent():
         self.sim_trades[pair]['trade'][-1]['rpnl'] = rpnl
 
         trade_id = int(self.sim_trades[pair]['position']['open_time'])
-        self.closed_sim_trades[trade_id] = {'trade': self.sim_trades[pair]['trade']}
+        self.closed_sim_trades[trade_id] = self.sim_trades[pair]['trade']
 
         del self.sim_trades[pair]
 

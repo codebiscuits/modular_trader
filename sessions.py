@@ -373,8 +373,8 @@ class TradingSession():
         if self.live:
             read_records = Path(f'/home/pi/coding/modular_trader/records')
             write_records = Path(f'/home/pi/coding/modular_trader/records')
-        elif Path(f'/mnt/pi_d/modular_trader/records').exists():
-            read_records = Path(f'/mnt/pi_d/modular_trader/records')
+        elif Path(f'/home/ross/coding/pi_down/modular_trader/records').exists():
+            read_records = Path(f'/home/ross/coding/pi_down/modular_trader/records')
             write_records = Path(f'/home/ross/Documents/backtester_2021/records')
         else:
             read_records = Path(f'/home/ross/Documents/backtester_2021/records')
