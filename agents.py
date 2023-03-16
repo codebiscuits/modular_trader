@@ -40,7 +40,6 @@ class Agent():
     indiv_r_limit = 1.2
     total_r_limit = 5.5
     target_risk = 0.1
-    max_pos = 5
 
     # presets = {1: {'timeframe': '4h', 'tf_offset': None}}
 
@@ -844,14 +843,14 @@ class Agent():
 
         p = Timer('set_max_pos')
         p.start()
-        max_pos = 10
+        max_pos = 6
         if self.real_pos:
             open_pnls = [v.get('pnl') for v in self.real_pos.values() if v.get('pnl')]
             if open_pnls:
                 avg_open_pnl = stats.median(open_pnls)
             else:
                 avg_open_pnl = 0
-            max_pos = 10 if avg_open_pnl <= 0 else 20
+            max_pos = 3 if avg_open_pnl <= 0 else 6
         p.stop()
         return max_pos
 
@@ -926,7 +925,7 @@ class Agent():
 
         # make sure there aren't too many open positions now --------------------------
         self.calc_tor()
-        if self.num_open_positions >= self.max_pos:
+        if self.num_open_positions >= self.max_positions:
             if not self.in_pos['sim']:
                 self.counts_dict['too_many_pos'] += 1
             print(f"{self.name} {pair} positions: {self.num_open_positions} max: {self.max_positions}")

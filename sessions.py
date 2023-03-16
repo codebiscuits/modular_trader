@@ -558,8 +558,6 @@ class TradingSession():
                     if s2 not in df.columns:
                         df[f"ema_{vals[3]}"] = df.close.ewm(int(vals[3])).mean()
                 df[i] = ind.consec_condition(df[s1] > df[s2])
-                print('\n*-*-* sessions.compute_indicators cross_age output:\n')
-                print(df.tail())
 
         ci.stop()
         return df
