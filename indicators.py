@@ -331,8 +331,8 @@ def trend_rate(df, z, bars, source):
 
 
 def consec_condition(s: pd.Series) -> pd.Series:
-    """takes a boolean series as an input (or any expression that evaluates to a series) and returns a series of integers representing the cummulative length counts
-    of each run of Trues and Falses"""
+    """takes a boolean series as an input (or any expression that evaluates to a series) and returns a series of
+    integers representing the cummulative length counts of each run of Trues and Falses"""
 
     cum_diff = s.diff().cumsum()
     return cum_diff.groupby(cum_diff).cumcount()
