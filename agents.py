@@ -590,7 +590,7 @@ class Agent():
         session.counts.append('rsst')
 
         check_pairs = list(self.sim_trades.items())
-        print(f"{self.name} check {len(check_pairs)} pairs")
+        print(f"{self.name} rsst, checking {len(check_pairs)} pairs")
         for pair, v in check_pairs: # can't loop through the dictionary directly because i delete items as i go
             direction = v['position']['direction']
             base_size = float(v['position']['base_size'])
@@ -600,12 +600,12 @@ class Agent():
             df = self.get_data(session, pair, timeframes, stop_time)
             stopped, trade_type, overshoot_pct, stop_hit_time = self.check_stop_hit(df, direction, stop)
             if stopped:
-                print(f"{v['position']['open_time']}, {stop_hit_time}, {v['position']['entry_price']}")
+                # print(f"{v['position']['open_time']}, {stop_hit_time}, {v['position']['entry_price']}")
                 trade_dict = self.create_trade_dict(pair, trade_type, stop, base_size, stop_hit_time, overshoot_pct)
                 self.sim_to_closed_sim(session, pair, trade_dict, save_file=False)
                 self.counts_dict[f'sim_stop_{direction}'] += 1
-            else:
-                print(f"{pair} still open")
+            # else:
+            #     print(f"{pair} still open")
 
         self.record_trades(session, 'closed_sim')
         self.record_trades(session, 'sim')
@@ -2410,14 +2410,16 @@ class DoubleST(Agent):
         self.offset = offset
         self.mult1 = int(mult1)
         self.mult2 = float(mult2)
-        self.signal_age = 2
+        self.signal_age = 1
         self.name = f'{self.tf} dst {self.mult1}-{self.mult2}'
         self.id = f"double_st_{self.tf}_{self.offset}_{self.mult1}_{self.mult2}"
         self.ohlc_length = 200 + self.signal_age
+        self.cross_age_name = f"cross_age-st-10-{self.mult1}-10-{self.mult2}"
         Agent.__init__(self, session)
         session.indicators.update(['ema-200',
                                    f"st-10-{self.mult1}",
-                                   f"st-10-{self.mult2}"])
+                                   f"st-10-{self.mult2}",
+                                   self.cross_age_name])
 
     def spot_signals(self, session, df: pd.DataFrame, pair: str) -> dict:
         """generates spot buy and sell signals based on 2 supertrend indicators
@@ -2506,11 +2508,13 @@ class EMACross(Agent):
         self.name = f'{self.tf} emacross {self.lb1}-{self.lb2}-{self.mult}'
         self.id = f"ema_cross_{self.tf}_{self.offset}_{self.lb1}_{self.lb2}_{self.mult}"
         self.ohlc_length = max(200+2, self.lb1, self.lb2)
-        self.signal_age = 2
+        self.signal_age = 1
+        self.cross_age_name = f"cross_age-ema-{self.lb1}-{self.lb2}"
         Agent.__init__(self, session)
         session.indicators.update(['ema-200',
                                    f"ema-{self.lb1}",
                                    f"ema-{self.lb2}",
+                                   self.cross_age_name,
                                    f"atr-10-{self.mult}"])
 
     def signals(self, session, df: pd.DataFrame, pair: str) -> dict:
@@ -2598,11 +2602,13 @@ class EMACrossHMA(Agent):
         self.name = f'{self.tf} emaxhma {self.lb1}-{self.lb2}-{self.mult}'
         self.id = f"ema_cross_hma_{self.tf}_{self.offset}_{self.lb1}_{self.lb2}_{self.mult}"
         self.ohlc_length = max(200+2, self.lb1, self.lb2)
-        self.signal_age = 2
+        self.signal_age = 1
+        self.cross_age_name = f"cross_age-ema-{self.lb1}-{self.lb2}"
         Agent.__init__(self, session)
         session.indicators.update(['hma-200',
                                    f"ema-{self.lb1}",
                                    f"ema-{self.lb2}",
+                                   self.cross_age_name,
                                    f"atr-10-{self.mult}"])
 
     def signals(self, session, df: pd.DataFrame, pair: str) -> dict:

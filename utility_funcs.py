@@ -71,7 +71,7 @@ def adjust_max_positions(max_pos: int, sizing: dict) -> int:
     pass
 
 
-def get_market_state(session, pair, data: pd.DataFrame) -> dict[str, float]:
+def get_market_state(session, agent, pair, data: pd.DataFrame) -> dict[str, float]:
 
     ema_200_ratio = data.close.iloc[-1] / data.ema_200.iloc[-1]
     ema_100_ratio = data.close.iloc[-1] / data.ema_100.iloc[-1]
@@ -106,6 +106,7 @@ def get_market_state(session, pair, data: pd.DataFrame) -> dict[str, float]:
         market_rank_1d=market_rank_1d,
         market_rank_1w=market_rank_1w,
         market_rank_1m=market_rank_1m,
+        cross_age=int(data[agent.cross_age_name].iloc[-1])
     )
 
 

@@ -542,12 +542,30 @@ class TradingSession():
                 df['roc_1m'] = ind.roc_1m(df.close, tf)
             elif vals[0] == 'vwma':
                 df[f'vwma_{vals[1]}'] = ind.vwma(df, int(vals[1]))
-
-        return df
+            elif vals[0] == 'cross_age':
+                if vals[1] == 'st':
+                    s1 = f"st-{int(vals[2])}-{float(vals[3])}"
+                    if s1 not in df.columns:
+                        df = ind.supertrend(df, int(vals[2]), float(vals[3]))
+                    s2 = f"st-{int(vals[4])}-{float(vals[5])}"
+                    if s2 not in df.columns:
+                        df = ind.supertrend(df, int(vals[4]), float(vals[5]))
+                elif vals[1] == 'ema':
+                    s1 = f"ema_{vals[2]}"
+                    if s1 not in df.columns:
+                        df[f"ema_{vals[2]}"] = df.close.ewm(int(vals[2])).mean()
+                    s2 = f"{vals[1]}_{vals[3]}"
+                    if s2 not in df.columns:
+                        df[f"ema_{vals[3]}"] = df.close.ewm(int(vals[3])).mean()
+                df[i] = ind.consec_condition(df[s1] > df[s2])
+                print('\n*-*-* sessions.compute_indicators cross_age output:\n')
+                print(df.tail())
 
         ci.stop()
+        return df
 
     # Spot Specific Methods
+
     def top_up_bnb_s(self, usdt_size: int) -> dict:
         """checks net BNB balance and interest owed, if net is below the threshold,
         buys BNB then repays any interest"""

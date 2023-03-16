@@ -121,7 +121,7 @@ for n, pair in enumerate(pairs):
             # print(f"{pair} too new for {agent.name}")
             continue
 
-        market_state = uf.get_market_state(session, pair, df_2)
+        market_state = uf.get_market_state(session, agent, pair, df_2)
 
         signals = agent.signals(session, df_2, pair)
 

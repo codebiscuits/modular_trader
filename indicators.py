@@ -330,13 +330,17 @@ def trend_rate(df, z, bars, source):
     return df
 
 
+def consec_condition(s: pd.Series) -> pd.Series:
+    cum_diff = s.diff().cumsum()
+    return cum_diff.groupby(cum_diff).cumcount()
+
+
 def trend_consec_bars(df, bars):
     """returns True for any ohlc period which follows a strong trend as defined by a sequence of consecutive periods
     that all move in the same direction"""
 
     df['up_bar'] = df.close.pct_change() > 0
-    df['dir_diff'] = df.up_bar.diff().cumsum()
-    df['trend_consec'] = df.dir_diff.groupby(df.dir_diff).cumcount()
+    df['trend_consec'] = consec_condition(df.up_bar)
     df = df.drop(0)
     df = df.reset_index(drop=True)
     df.trend_consec = df.trend_consec.astype(int) + 1
