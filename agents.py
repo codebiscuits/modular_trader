@@ -667,7 +667,7 @@ class Agent():
         #     print(f"state in record: {position.get('state')}")
         #     print(f'{trade_r = }')
 
-        print(f"{position['pair']} realised {position['state']} {side} pnl: {realised_r}")
+        # print(f"{position['pair']} realised {position['state']} {side} pnl: {realised_r}")
         k15.stop()
 
         return realised_r

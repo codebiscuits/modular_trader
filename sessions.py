@@ -73,18 +73,18 @@ class TradingSession():
         self.update_prices()
         self.get_asset_bals_s()
         self.get_asset_bals_m()
-        self.check_open_spot_orders()
-        self.check_open_margin_orders()
-        self.check_fees()
-        self.check_margin_lvl()
-        self.top_up_bnb_s(15)
-        self.top_up_bnb_m(15)
         self.spot_bal = self.account_bal_s()
         print(f"Spot balance: {self.spot_bal}")
         self.spot_usdt_bal = self.get_usdt_s()
         self.margin_bal = self.account_bal_m()
         print(f"Margin balance: {self.margin_bal}")
         self.margin_usdt_bal = self.get_usdt_m()
+        self.check_open_spot_orders()
+        self.check_open_margin_orders()
+        self.check_fees()
+        self.check_margin_lvl()
+        self.top_up_bnb_s(15)
+        self.top_up_bnb_m(15)
 
         # load local data and configure settings
         self.market_data_read, self.market_data_write = self.mkt_data_path()
@@ -759,7 +759,7 @@ class TradingSession():
         hj = Timer('update_usdt_m')
         hj.start()
 
-        qty = (self.margin_bals['USDT'].get('qty')) + up - down
+        qty = self.margin_bals['USDT'].get('qty') + up - down
         value = self.margin_bals['USDT'].get('value') + up - down - borrow + repay
         owed = self.margin_bals['USDT'].get('owed') + borrow - repay
 
