@@ -1,4 +1,5 @@
 import time
+
 script_start = time.perf_counter()
 
 import keys
@@ -63,6 +64,9 @@ for timeframe, offset in timeframes:
     )
 
 # session.name = ' | '.join([n.name for n in agents])
+
+for agent in agents:
+    agent.print_fixed_risk()
 
 print("\n-*-*-*- Running record_stopped_sim_trades for all agents -*-*-*-\n")
 for agent in agents:
@@ -144,7 +148,8 @@ for n, pair in enumerate(pairs):
 
             real_ep = float(agent.open_trades[pair]['position']['entry_price'])
             if real_ep:
-                agent.real_pos[asset]['price_delta'] = (price - real_ep) / real_ep  # how much has price moved since entry
+                agent.real_pos[asset]['price_delta'] = (
+                                                               price - real_ep) / real_ep  # how much has price moved since entry
 
             # check if price has moved beyond reach of normal close signal
             if agent.real_pos[asset]['or_R'] < 0:
@@ -191,16 +196,15 @@ for n, pair in enumerate(pairs):
         elif signals.get('signal') in ['open_spot', 'open_long', 'open_short']:
             sim_reasons = agent.filter_signals(session, pair, signals, inval_risk_score, usdt_size, usdt_depth)
 
-            if 'too_risky' in sim_reasons:
-                continue
-            # print(sim_reasons)
-
             try:
                 agent.open_pos(session, pair, size, stp, signals['inval_ratio'], market_state, sim_reasons, direction)
             except bx.BinanceAPIException as e:
                 if e.code == -3045:  # borrow failed because there weren't enough assets to borrow
                     del agent.open_trades[pair]
-                    agent.open_pos(session, pair, size, stp, signals['inval_ratio'], market_state, 'not_enough_borrow', direction)
+                    agent.open_pos(session, pair, size, stp, signals['inval_ratio'], market_state, 'not_enough_borrow',
+                                   direction)
+                elif e.code == -2010:  # stop would trigger immediately
+                    del agent.open_trades[pair]
                 else:
                     agent.record_trades(session, 'all')
                     print(f'{agent.name} problem with open_{direction} order for {pair}')
@@ -279,41 +283,53 @@ for agent in agents:
     # if not session.live:
     print('')
     print(agent.name.upper(), 'SUMMARY')
-    if agent.realised_pnl_spot or agent.sim_pnl_spot:
-        print(
-            f'realised real spot pnl: {agent.realised_pnl_spot:.1f}R, realised sim spot pnl: {agent.sim_pnl_spot:.1f}R')
-    if agent.realised_pnl_long or agent.sim_pnl_long:
-        print(
-            f'realised real long pnl: {agent.realised_pnl_long:.1f}R, realised sim long pnl: {agent.sim_pnl_long:.1f}R')
-    if agent.realised_pnl_short or agent.sim_pnl_short:
-        print(
-            f'realised real short pnl: {agent.realised_pnl_short:.1f}R, realised sim short pnl: {agent.sim_pnl_short:.1f}R')
+    if agent.realised_pnls['real_spot'] or agent.realised_pnls['sim_spot']:
+        print(f"realised real spot pnl: {agent.realised_pnls['real_spot']:.1f}R, "
+              f"realised sim spot pnl: {agent.agent.realised_pnls['sim_spot']:.1f}R")
+
+    if agent.realised_pnls['real_long'] or agent.realised_pnls['sim_long']:
+        print(f"realised real long pnl: {agent.realised_pnls['real_long']:.1f}R, "
+              f"realised sim long pnl: {agent.realised_pnls['sim_long']:.1f}R")
+
+    if agent.realised_pnls['real_short'] or agent.realised_pnls['sim_short']:
+        print(f"realised real short pnl: {agent.realised_pnls['real_short']:.1f}R, "
+              f"realised sim short pnl: {agent.realised_pnls['sim_short']:.1f}R")
     print(f'tor: {agent.total_open_risk:.1f}')
     # print(f'or list: {[round(x, 2) for x in sorted(agent.or_list, reverse=True)]}')
 
-    propnl = agent.open_pnl('spot', 'real')
-    if propnl:
-        print(f"real open pnl spot: {propnl:.1f}R")
+    ropnl_spot = agent.open_pnl('spot', 'real')
+    wsopnl_spot, usopnl_spot = agent.open_pnl('spot', 'sim')
+    sopnl_spot = wsopnl_spot + usopnl_spot
+    wopnl_spot = ropnl_spot + wsopnl_spot
 
-    lropnl = agent.open_pnl('long', 'real')
-    if lropnl:
-        print(f"real open pnl long: {lropnl:.1f}R")
+    ropnl_long = agent.open_pnl('long', 'real')
+    wsopnl_long, usopnl_long = agent.open_pnl('long', 'sim')
+    sopnl_long = wsopnl_long + usopnl_long
+    wopnl_long = ropnl_long + wsopnl_long
 
-    sropnl = agent.open_pnl('short', 'real')
-    if sropnl:
-        print(f"real open pnl short: {sropnl:.1f}R")
+    ropnl_short = agent.open_pnl('short', 'real')
+    wsopnl_short, usopnl_short = agent.open_pnl('short', 'sim')
+    sopnl_short = wsopnl_short + usopnl_short
+    wopnl_short = ropnl_short + wsopnl_short
 
-    psopnl = agent.open_pnl('spot', 'sim')
-    if psopnl:
-        print(f"sim open pnl spot: {psopnl:.1f}R")
-
-    lsopnl = agent.open_pnl('long', 'sim')
-    if lsopnl:
-        print(f"sim open pnl long: {lsopnl:.1f}R")
-
-    ssopnl = agent.open_pnl('short', 'sim')
-    if ssopnl:
-        print(f"sim open pnl short: {ssopnl:.1f}R")
+    if ropnl_spot:
+        print(f"real open pnl spot: {ropnl_spot:.1f}R")
+    if sopnl_spot:
+        print(f"sim open pnl spot: {sopnl_spot:.1f}R")
+    if wopnl_spot:
+        print(f"wanted open pnl spot: {wopnl_spot:.1f}R")
+    if ropnl_long:
+        print(f"real open pnl long: {ropnl_long:.1f}R")
+    if sopnl_long:
+        print(f"sim open pnl long: {sopnl_long:.1f}R")
+    if wopnl_long:
+        print(f"wanted open pnl long: {wopnl_long:.1f}R")
+    if ropnl_short:
+        print(f"real open pnl short: {ropnl_short:.1f}R")
+    if sopnl_short:
+        print(f"sim open pnl short: {sopnl_short:.1f}R")
+    if wopnl_short:
+        print(f"wanted open pnl short: {wopnl_short:.1f}R")
 
     print(f'{agent.name} Counts:')
     for k, v in agent.counts_dict.items():

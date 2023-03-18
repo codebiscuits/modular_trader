@@ -398,7 +398,7 @@ def create_stop_dict(session, order: dict) -> dict:
     base_qty = order.get('executedQty')
     avg_price = round(float(quote_qty) / float(base_qty), 8)
 
-    bnb_fee = quote_qty * session.fees['margin_taker'] / session.pairs_data['BNBUSDT']['price']
+    bnb_fee = float(quote_qty) * float(session.fees['margin_taker']) / session.pairs_data['BNBUSDT']['price']
 
     trade_dict = {'timestamp': int(order.get('updateTime') / 1000),
                   'pair': pair,

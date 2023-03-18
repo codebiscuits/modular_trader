@@ -736,9 +736,9 @@ class TradingSession():
         '''fetches the balance information for USDT from binance and returns it
         as a dictionary of floats'''
 
-        print('running get_usdt_M')
+        print('running get_usdt_m')
         '''checks current usdt balance and returns a dictionary for updating the sizing dict'''
-        um = Timer('update_usdt_M')
+        um = Timer('update_usdt_m')
         um.start()
 
         bal = self.margin_bals['USDT']
@@ -756,7 +756,7 @@ class TradingSession():
         '''calculates current usdt balance without fetching from binance,
         called whenever usdt balance is changed'''
 
-        hj = Timer('update_usdt_M')
+        hj = Timer('update_usdt_m')
         hj.start()
 
         qty = (self.margin_bals['USDT'].get('qty')) + up - down

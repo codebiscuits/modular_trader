@@ -257,25 +257,53 @@ def log(session, agent) -> None:
                   'total_r_limit': agent.total_r_limit, 'target_risk': agent.target_risk,
                   'max_pos': agent.max_positions}
 
+    ropnl_spot = agent.open_pnl('spot', 'real')
+    wsopnl_spot, usopnl_spot = agent.open_pnl('spot', 'sim')
+
+    ropnl_long = agent.open_pnl('long', 'real')
+    wsopnl_long, usopnl_long = agent.open_pnl('long', 'sim')
+
+    ropnl_short = agent.open_pnl('short', 'real')
+    wsopnl_short, usopnl_short = agent.open_pnl('short', 'sim')
+
     if agent.mode == 'spot':
         new_record['balance'] = round(session.spot_bal, 2)
         new_record['fr_spot'] = agent.fixed_risk_spot
-        new_record['realised_pnl_spot'] = agent.realised_pnl_spot,
-        new_record['sim_r_pnl_spot'] = agent.sim_pnl_spot
-        new_record['real_open_pnl_spot'] = agent.open_pnl('spot', 'real')
-        new_record['sim_open_pnl_spot'] = agent.open_pnl('spot', 'sim')
+
+        new_record['real_rpnl_spot'] = agent.realised_pnls['real_spot']
+        new_record['sim_rpnl_spot'] = agent.realised_pnls['sim_spot']
+        new_record['wanted_rpnl_spot'] = agent.realised_pnls['wanted_spot']
+        new_record['unwanted_rpnl_spot'] = agent.realised_pnls['unwanted_spot']
+
+        new_record['real_open_pnl_spot'] = ropnl_spot
+        new_record['sim_open_pnl_spot'] = wsopnl_spot + usopnl_spot
+        new_record['wanted_open_pnl_spot'] = ropnl_spot + wsopnl_spot
+        new_record['unwanted_open_pnl_spot'] = usopnl_spot
+
     elif agent.mode == 'margin':
         new_record['balance'] = round(session.margin_bal, 2)
         new_record['fr_long'] = agent.fixed_risk_l
         new_record['fr_short'] = agent.fixed_risk_s
-        new_record['realised_pnl_long'] = agent.realised_pnl_long
-        new_record['sim_r_pnl_long'] = agent.sim_pnl_long
-        new_record['realised_pnl_short'] = agent.realised_pnl_short
-        new_record['sim_r_pnl_short'] = agent.sim_pnl_short
-        new_record['real_open_pnl_l'] = agent.open_pnl('long', 'real')
-        new_record['real_open_pnl_s'] = agent.open_pnl('short', 'real')
-        new_record['sim_open_pnl_l'] = agent.open_pnl('long', 'sim')
-        new_record['sim_open_pnl_s'] = agent.open_pnl('short', 'sim')
+
+        new_record['real_rpnl_long'] = agent.realised_pnls['real_long']
+        new_record['sim_rpnl_long'] = agent.realised_pnls['sim_long']
+        new_record['wanted_rpnl_long'] = agent.realised_pnls['wanted_long']
+        new_record['unwanted_rpnl_long'] = agent.realised_pnls['unwanted_long']
+
+        new_record['real_rpnl_short'] = agent.realised_pnls['real_short']
+        new_record['sim_rpnl_short'] = agent.realised_pnls['sim_short']
+        new_record['wanted_rpnl_short'] = agent.realised_pnls['wanted_short']
+        new_record['unwanted_rpnl_short'] = agent.realised_pnls['unwanted_short']
+
+        new_record['real_open_pnl_l'] = ropnl_long
+        new_record['sim_open_pnl_l'] = wsopnl_long + usopnl_long
+        new_record['wanted_open_pnl_l'] = ropnl_long + wsopnl_long
+        new_record['unwanted_open_pnl_l'] = usopnl_long
+
+        new_record['real_open_pnl_s'] = ropnl_short
+        new_record['sim_open_pnl_s'] = wsopnl_short + usopnl_short
+        new_record['wanted_open_pnl_s'] = ropnl_short + wsopnl_short
+        new_record['unwanted_open_pnl_s'] = usopnl_short
     else:
         print(f'*** warning log function not working for {agent.name} ***')
 
@@ -397,7 +425,7 @@ def update_liability(trade_record: Dict[str, dict], size: str, operation: str) -
     return str(new_liability)
 
 
-def score_accum(log_path, state: str, direction: str) -> Tuple[int, str]:
+def score_accum(log_path, direction: str) -> Tuple[int, str]:
     func_name = sys._getframe().f_code.co_name
     x12 = Timer(f'{func_name}')
     x12.start()
@@ -409,33 +437,13 @@ def score_accum(log_path, state: str, direction: str) -> Tuple[int, str]:
     except (FileNotFoundError, JSONDecodeError):
         bal_data = {}
 
-    # if bal_data:
-    #     prev_bal = json.loads(bal_data[-1]).get('balance')
-    # else:
-    #     prev_bal = session.bal
-    # bal_change_pct = 100 * (session.bal - prev_bal) / prev_bal
-
-    # other_last = json.loads(bal_data[-2])
-    # if agent.open_pnl_changes.get(state):
-    #     bal_change_pct = agent.open_pnl_changes.get(state)
-    #     print(f"{state} open pnl change: {bal_change_pct:.2f}")
-    # elif bal_data and len(bal_data) > 1:
-    #     # last = json.loads(bal_data[-2])
-    #     # prev_bal = last.get('balance')
-    #     # bal_change_pct = 100 * (agent.bal - prev_bal) / prev_bal
-    #     bal_change_pct = agent.open_pnl_changes.get(state, 0)
-    #     print(f"bal change: {bal_change_pct:.2f}")
-    # else:
-    #     bal_change_pct = 0
-    #     print(f"real open pnl change: {bal_change_pct}")
-
     d = -1  # default value
     pnls = {1: d, 2: d, 3: d, 4: d, 5: d}
     if bal_data:
-        lookup = f'realised_pnl_{direction}' if state == 'real' else f'sim_r_pnl_{direction}'
+        lookup = f'wanted_pnl_{direction}'
         max_i = min(6, len(bal_data))
         for i in range(1, max_i):
-            pnls[i] = json.load(bal_data[-1 * i]).get(lookup)
+            pnls[i] = json.load(bal_data[-1 * i]).get(lookup, -1)
 
     score = 0
     if pnls.get(1) > 0:
@@ -489,40 +497,22 @@ def recent_perf_str(session, agent) -> Tuple[str, int, int, int]:
 
     log_path = Path(f"{session.read_records}/{agent.id}")
     if agent.mode == 'spot':
-        real_score_spot, real_perf_str_spot = score_accum(log_path, 'real', 'spot')
-        sim_score_spot, sim_perf_str_spot = score_accum(log_path, 'sim', 'spot')
+        score_spot, perf_str_spot = score_accum(log_path, 'spot')
     else:
-        real_score_l, real_perf_str_l = score_accum(log_path, 'real', 'long')
-        real_score_s, real_perf_str_s = score_accum(log_path, 'real', 'short')
-        sim_score_l, sim_perf_str_l = score_accum(log_path, 'sim', 'long')
-        sim_score_s, sim_perf_str_s = score_accum(log_path, 'sim', 'short')
+        score_l, perf_str_l = score_accum(log_path, 'long')
+        score_s, perf_str_s = score_accum(log_path, 'short')
 
-    if agent.open_trades and real_score_spot:
-        perf_str_spot = real_perf_str_spot
-        perf_summ_spot = f"real: score {real_score_spot} rpnl {agent.realised_pnl_spot:.1f}"
-        score_spot = real_score_spot
-    else:
-        perf_str_spot = sim_perf_str_spot
-        perf_summ_spot = f"sim: score {sim_score_spot} rpnl {agent.sim_pnl_spot:.1f}"
-        score_spot = sim_score_spot
+    if agent.open_trades and score_spot:
+        perf_str_spot = perf_str_spot
+        perf_summ_spot = f"real: score {score_spot} rpnl {agent.realised_pnls['wanted_spot']:.1f}"
 
-    if agent.open_trades and real_score_l:
-        perf_str_l = real_perf_str_l
-        perf_summ_l = f"real: score {real_score_l} rpnl {agent.realised_pnl_long:.1f}"
-        score_l = real_score_l
-    else:
-        perf_str_l = sim_perf_str_l
-        perf_summ_l = f"sim: score {sim_score_l} rpnl {agent.sim_pnl_long:.1f}"
-        score_l = sim_score_l
+    if agent.open_trades and score_l:
+        perf_str_l = perf_str_l
+        perf_summ_l = f"real: score {score_l} rpnl {agent.realised_pnls['wanted_long']:.1f}"
 
-    if (agent.open_trades and real_score_s):
-        perf_str_s = real_perf_str_s
-        perf_summ_s = f"real: score {real_score_s} rpnl {agent.realised_pnl_short:.1f}"
-        score_s = real_score_s
-    else:
-        perf_str_s = sim_perf_str_s
-        perf_summ_s = f"sim: score {sim_score_s} rpnl {agent.sim_pnl_short:.1f}"
-        score_s = sim_score_s
+    if (agent.open_trades and score_s):
+        perf_str_s = perf_str_s
+        perf_summ_s = f"real: score {score_s} rpnl {agent.realised_pnls['wanted_short']:.1f}"
 
     full_perf_str = (f'spot: {perf_str_spot}\n{perf_summ_spot}\n'
                      f'long: {perf_str_l}\n{perf_summ_l}\n'
@@ -559,12 +549,12 @@ def scanner_summary(session, agents: list) -> None:
             print_msg = True
             agent_msg += f"\nfixed risk spot: {agent.fixed_risk_spot * 10000:.1f}Bps"
 
-        if (agent.mode == 'spot') and (agent.realised_pnl_spot > 0):
+        if (agent.mode == 'spot') and (agent.realised_pnls['real_spot'] > 0):
             print_msg = True
-            agent_msg += f"\nrealised real spot pnl: {agent.realised_pnl_spot:.1f}R"
-        elif (agent.mode == 'spot') and (agent.sim_pnl_spot > 0):
+            agent_msg += f"\nrealised real spot pnl: {agent.realised_pnls['real_spot']:.1f}R"
+        elif (agent.mode == 'spot') and (agent.realised_pnls['sim_spot'] > 0):
             print_msg = True
-            agent_msg += f"\nrealised sim spot pnl: {agent.sim_pnl_spot:.1f}R"
+            agent_msg += f"\nrealised sim spot pnl: {agent.realised_pnls['sim_spot']:.1f}R"
 
         # margin
         if (agent.mode == 'margin') and agent.fixed_risk_l:
@@ -574,19 +564,19 @@ def scanner_summary(session, agents: list) -> None:
             print_msg = True
             agent_msg += f"\nfixed risk short: {agent.fixed_risk_s * 10000:.1f}Bps"
 
-        if (agent.mode == 'margin') and (agent.realised_pnl_long > 0):
+        if (agent.mode == 'margin') and (agent.realised_pnls['real_long'] > 0):
             print_msg = True
-            agent_msg += f"\nrealised real long pnl: {agent.realised_pnl_long:.1f}R"
-        elif (agent.mode == 'margin') and (agent.sim_pnl_long > 0):
+            agent_msg += f"\nrealised real long pnl: {agent.realised_pnls['real_long']:.1f}R"
+        elif (agent.mode == 'margin') and (agent.realised_pnls['sim_long'] > 0):
             print_msg = True
-            agent_msg += f"\nrealised sim long pnl: {agent.sim_pnl_long:.1f}R"
+            agent_msg += f"\nrealised sim long pnl: {agent.realised_pnls['sim_long']:.1f}R"
 
-        if (agent.mode == 'margin') and (agent.realised_pnl_short > 0):
+        if (agent.mode == 'margin') and (agent.realised_pnls['real_short'] > 0):
             print_msg = True
-            agent_msg += f"\nrealised real short pnl: {agent.realised_pnl_short:.1f}R"
-        elif (agent.mode == 'margin') and (agent.sim_pnl_short > 0):
+            agent_msg += f"\nrealised real short pnl: {agent.realised_pnls['real_short']:.1f}R"
+        elif (agent.mode == 'margin') and (agent.realised_pnls['sim_short'] > 0):
             print_msg = True
-            agent_msg += f"\nrealised sim short pnl: {agent.sim_pnl_short:.1f}R"
+            agent_msg += f"\nrealised sim short pnl: {agent.realised_pnls['sim_short']:.1f}R"
 
         or_list = [v.get('or_$') for v in agent.real_pos.values() if v.get('or_$')]
         num_open_positions = len(or_list)
