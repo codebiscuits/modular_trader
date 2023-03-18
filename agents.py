@@ -728,9 +728,9 @@ class Agent():
             if direction == 'spot':
                 curr_open_pnl = self.starting_wopnl_spot
             elif direction == 'long':
-                curr_open_pnl = self.starting_wopnl_long
+                curr_open_pnl = self.starting_wopnl_l
             elif direction == 'short':
-                curr_open_pnl = self.starting_wopnl_short
+                curr_open_pnl = self.starting_wopnl_s
 
             opnl_change_pct = 100 * (curr_open_pnl - prev_open_pnl) / prev_open_pnl
             self.open_pnl_changes['wanted'] = opnl_change_pct
