@@ -17,6 +17,7 @@ import statistics as stats
 import pandas as pd
 import polars as pl
 from pycoingecko import CoinGeckoAPI
+from pprint import pprint
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 cg = CoinGeckoAPI()
@@ -759,14 +760,14 @@ class TradingSession():
         hj = Timer('update_usdt_m')
         hj.start()
 
-        qty = self.margin_bals['USDT'].get('qty') + up - down
-        value = self.margin_bals['USDT'].get('value') + up - down - borrow + repay
-        owed = self.margin_bals['USDT'].get('owed') + borrow - repay
+        qty = self.margin_usdt_bal.get('qty') + up - down
+        value = self.margin_usdt_bal.get('value') + up - down - borrow + repay
+        owed = self.margin_usdt_bal.get('owed') + borrow - repay
 
         pct = round(100 * value / self.bal, 5)
 
         # print(f'usdt stats: {qty = }, {owed = }, {value = }, {pct = }, {self.bal = }')
-        self.margin_bals['USDT'] = {'qty': float(qty), 'owed': float(owed), 'value': float(value), 'pf%': float(pct)}
+        self.margin_usdt_bal = {'qty': float(qty), 'owed': float(owed), 'value': float(value), 'pf%': float(pct)}
         hj.stop()
 
     def check_margin_lvl(self) -> None:

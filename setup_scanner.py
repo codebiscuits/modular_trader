@@ -199,13 +199,16 @@ for n, pair in enumerate(pairs):
             try:
                 agent.open_pos(session, pair, size, stp, signals['inval_ratio'], market_state, sim_reasons, direction)
             except bx.BinanceAPIException as e:
-                if e.code == -3045:  # borrow failed because there weren't enough assets to borrow
+                if e.code == -3045: # borrow failed because there weren't enough assets to borrow
                     del agent.open_trades[pair]
                     agent.open_pos(session, pair, size, stp, signals['inval_ratio'], market_state, 'not_enough_borrow',
                                    direction)
-                elif e.code == -2010:  # stop would trigger immediately
+                elif e.code == -3021: # trying to margin trade non-margin pair
+                    del agent.open_trades[pair]
+                elif e.code == -2010: # stop would trigger immediately
                     del agent.open_trades[pair]
                 else:
+                    del agent.open_trades[pair]
                     agent.record_trades(session, 'all')
                     print(f'{agent.name} problem with open_{direction} order for {pair}')
                     print(e.code)
