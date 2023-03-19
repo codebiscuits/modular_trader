@@ -549,7 +549,7 @@ def scanner_summary(session, agents: list) -> None:
             print_msg = True
             agent_msg += f"\nfixed risk spot: {agent.fixed_risk_spot * 10000:.1f}Bps"
 
-        if (agent.mode == 'spot') and (agent.realised_pnls['real_spot'] > 0):
+        if (agent.mode == 'spot') and agent.realised_pnls['real_spot']:
             print_msg = True
             agent_msg += f"\nrealised real spot pnl: {agent.realised_pnls['real_spot']:.1f}R"
         elif (agent.mode == 'spot') and (agent.realised_pnls['sim_spot'] > 0):
@@ -564,14 +564,14 @@ def scanner_summary(session, agents: list) -> None:
             print_msg = True
             agent_msg += f"\nfixed risk short: {agent.fixed_risk_s * 10000:.1f}Bps"
 
-        if (agent.mode == 'margin') and (agent.realised_pnls['real_long'] > 0):
+        if (agent.mode == 'margin') and agent.realised_pnls['real_long']:
             print_msg = True
             agent_msg += f"\nrealised real long pnl: {agent.realised_pnls['real_long']:.1f}R"
         elif (agent.mode == 'margin') and (agent.realised_pnls['sim_long'] > 0):
             print_msg = True
             agent_msg += f"\nrealised sim long pnl: {agent.realised_pnls['sim_long']:.1f}R"
 
-        if (agent.mode == 'margin') and (agent.realised_pnls['real_short'] > 0):
+        if (agent.mode == 'margin') and agent.realised_pnls['real_short']:
             print_msg = True
             agent_msg += f"\nrealised real short pnl: {agent.realised_pnls['real_short']:.1f}R"
         elif (agent.mode == 'margin') and (agent.realised_pnls['sim_short'] > 0):

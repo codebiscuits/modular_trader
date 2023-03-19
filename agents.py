@@ -939,6 +939,8 @@ class Agent():
 
         # make sure there aren't too many open positions now --------------------------
         self.calc_tor()
+        if not session.pairs_data[pair]['margin_allowed']:
+            filters.append('not_a_margin_pair')
         if self.num_open_positions >= self.max_positions:
             if not self.in_pos['sim']:
                 self.counts_dict['too_many_pos'] += 1

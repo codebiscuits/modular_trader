@@ -33,7 +33,6 @@ def get_timeframes():
 timeframes = get_timeframes()
 
 print(f"Running setup_scan({timeframes})")
-all_start = time.perf_counter()
 session = sessions.TradingSession(0.0005)
 print(f"\nCurrent time: {session.now_start}, {session.name}\n")
 
@@ -366,10 +365,6 @@ for k, v in Timer.timers.items():
 print('-------------------- Counts --------------------')
 print(f"pairs tested: {len(pairs)}")
 pprint(Counter(session.counts))
-
-end = time.perf_counter()
-elapsed = round(end - all_start)
-print(f'Total time taken: {elapsed // 60}m, {elapsed % 60}s')
 print('\n-------------------------------------------------------------------------------\n')
 
 # for agent in agents:
