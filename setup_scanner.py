@@ -1,7 +1,5 @@
 import time
-
 script_start = time.perf_counter()
-
 import keys
 from binance.client import Client
 from datetime import datetime, timezone
@@ -376,6 +374,8 @@ print('\n-----------------------------------------------------------------------
 
 # for agent in agents:
 #     pprint(agent.open_trades)
+
+session.save_spreads()
 
 ########################################################################################################################
 

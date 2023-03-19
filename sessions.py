@@ -18,6 +18,7 @@ import pandas as pd
 import polars as pl
 from pycoingecko import CoinGeckoAPI
 from pprint import pprint
+import json
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 cg = CoinGeckoAPI()
@@ -64,9 +65,9 @@ class TradingSession():
         self.track_weights(1)
         self.track_weights(len(self.client.get_margin_all_pairs()))  # weighting for this call = number of pairs on exchange
         self.margin_orders = self.client.get_open_margin_orders()
-        self.track_weights(2)
-        self.obt = self.client.get_orderbook_tickers()
-        self.binance_spreads()
+        # self.track_weights(2)
+        # self.obt = self.client.get_orderbook_tickers()
+        self.spreads = self.binance_spreads()
         abc.stop()
 
         # filter and organise data
@@ -244,7 +245,7 @@ class TradingSession():
             avg_spreads[k] = stats.median([s_1.get(k), s_2.get(k), s_3.get(k)])
         sx.stop()
 
-        self.spreads = avg_spreads
+        return avg_spreads
 
     def update_prices(self) -> None:
         """fetches current prices for all pairs on binance. much faster than get_price"""
@@ -495,6 +496,21 @@ class TradingSession():
         self.pairs_data[pair]['ohlc_5m'] = df
         # print(f"{pair} ohlc stored in session")
 
+    def save_spreads(self):
+        spreads_path = self.market_data_write / 'spreads.json'
+        spreads_path.touch(exist_ok=True)
+
+        with open(spreads_path, 'r') as file:
+            try:
+                spreads_data = json.load(file)
+            except json.JSONDecodeError as e:
+                spreads_data = {}
+
+        spreads_data[self.now_start] = self.spreads
+
+        with open(spreads_path, 'w') as file:
+            json.dump(spreads_data, file)
+
     def load_mkt_ranks(self):
         filepath = self.market_data_read / 'market_ranks.parquet'
 
@@ -641,7 +657,7 @@ class TradingSession():
         qty = (self.spot_bals['USDT'].get('qty')) + up - down
         value = round(self.spot_bals['USDT'].get('value') + up - down, 2)
 
-        pct = round(100 * value / self.bal, 5)
+        pct = round(100 * value / self.spot_bal, 5)
 
         self.spot_bals['USDT'] = {'qty': float(qty), 'value': float(value), 'pf%': float(pct)}
 
@@ -764,9 +780,9 @@ class TradingSession():
         value = self.margin_usdt_bal.get('value') + up - down - borrow + repay
         owed = self.margin_usdt_bal.get('owed') + borrow - repay
 
-        pct = round(100 * value / self.bal, 5)
+        pct = round(100 * value / self.margin_bal, 5)
 
-        # print(f'usdt stats: {qty = }, {owed = }, {value = }, {pct = }, {self.bal = }')
+        # print(f'usdt stats: {qty = }, {owed = }, {value = }, {pct = }, {self.margin_bal = }')
         self.margin_usdt_bal = {'qty': float(qty), 'owed': float(owed), 'value': float(value), 'pf%': float(pct)}
         hj.stop()
 
@@ -867,9 +883,9 @@ class LightSession(TradingSession):
         self.info = self.client.get_exchange_info()
         self.check_rate_limits()
         self.track_weights(10) # this should be before self.info, but would only work after check_rate_limits
-        self.track_weights(2)
-        self.obt = self.client.get_orderbook_tickers()
-        self.binance_spreads()
+        # self.track_weights(2)
+        # self.obt = self.client.get_orderbook_tickers()
+        self.spreads = self.binance_spreads()
 
         # filter and organise data
         self.get_pairs_info()

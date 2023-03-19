@@ -128,49 +128,6 @@ def get_depth(session, pair: str) -> Tuple[float, float]:
     return usdt_depth_l, usdt_depth_s
 
 
-# def get_pairs(quote: str = 'USDT', market: str = 'SPOT', session=None) -> List[str]:
-#     """returns all active pairs for a given quote currency. possible values for
-#     quote are USDT, BTC, BNB etc. possible values for market are SPOT or CROSS"""
-#
-#     sa = Timer('get_pairs')
-#     sa.start()
-#
-#     if market == 'SPOT':
-#         print('get_exchange_info')
-#         if session:
-#             session.track_weights(10)
-#         abc = Timer('all binance calls')
-#         abc.start()
-#         info = client.get_exchange_info()
-#         abc.stop()
-#         symbols = info.get('symbols')
-#         pairs = []
-#         for sym in symbols:
-#             right_quote = sym.get('quoteAsset') == quote
-#             right_market = market in sym.get('permissions')
-#             trading = sym.get('status') == 'TRADING'
-#             allowed = sym.get('symbol') not in not_pairs
-#             if right_quote and right_market and trading and allowed:
-#                 pairs.append(sym.get('symbol'))
-#     elif market == 'MARGIN':
-#         pairs = []
-#         print('get_margin_all_pairs')
-#         if session:
-#             session.track_weights(1)
-#         abc = Timer('all binance calls')
-#         abc.start()
-#         info = client.get_margin_all_pairs()
-#         abc.stop()
-#         for i in info:
-#             if i.get('quote') == quote:
-#                 pairs.append(i.get('symbol'))
-#     sa.stop()
-#     return pairs
-
-
-
-
-
 def get_current_cg_data(cg_symbol):
     data = cg.get_coins_markets(vs_currency='usd', ids=cg_symbol)
 
@@ -461,12 +418,92 @@ def create_trade_dict(order: dict, price: float, live: bool) -> Dict[str, str]:
     return trade_dict
 
 
+# -#-#- Spot Trading Functions
+
+
+def buy_asset_s(session, pair: str, size: float, live: bool) -> dict:
+    """sends a market buy order to binance in the spot account and returns the order data"""
+
+    bas = Timer('buy_asset_s')
+    bas.start()
+
+    now = int(datetime.now().timestamp() * 1000)
+    price = session.pairs_data[pair]['price']
+    base_size: str = uf.valid_size(session, pair, size)
+    if live:
+        buy_order = client.order_market_buy(symbol=pair, quantity=base_size)
+
+    else:
+        usdt_size: str = f"{base_size} * {price}:.2f"
+        buy_order = {'clientOrderId': '111111',
+                     'cummulativeQuoteQty': usdt_size,
+                     'executedQty': base_size,
+                     'fills': [{'commission': '0',
+                                'commissionAsset': 'BNB',
+                                'price': str(uf.valid_price(session, pair, price)),
+                                'qty': base_size}],
+                     'orderId': 123456,
+                     'origQty': base_size,
+                     'price': '0',
+                     'side': 'BUY',
+                     'status': 'FILLED',
+                     'symbol': pair,
+                     'timeInForce': 'GTC',
+                     'transactTime': now,
+                     'type': 'MARKET'}
+
+    bas.stop()
+    return buy_order
+
+
+def sell_asset_s(session, pair: str, size: float, live: bool) -> dict:
+    """sends a market sell order to binance in the spot account and returns the order data"""
+
+    sas = Timer('sell_asset_s')
+    sas.start()
+
+    now = int(datetime.now().timestamp() * 1000)
+    price = session.pairs_data[pair]['price']
+    base_size = uf.valid_size(session, pair, size)
+
+    if live:
+        sell_order = client.order_market_sell(symbol=pair, quantity=base_size)
+    else:
+        usdt_size: str = f"{base_size} * {price}:.2f"
+        sell_order = {'clientOrderId': '111111',
+                     'cummulativeQuoteQty': usdt_size,
+                     'executedQty': base_size,
+                     'fills': [{'commission': '0',
+                                'commissionAsset': 'BNB',
+                                'price': str(uf.valid_price(session, pair, price)),
+                                'qty': base_size}],
+                     'orderId': 123456,
+                     'origQty': base_size,
+                     'price': '0',
+                     'side': 'SELL',
+                     'status': 'FILLED',
+                     'symbol': pair,
+                     'timeInForce': 'GTC',
+                     'transactTime': now,
+                     'type': 'MARKET'}
+
+    sas.stop()
+    return sell_order
+
+
+def set_stop_s():
+    pass
+
+
+def clear_stop_s():
+    pass
+
+
 # -#-#- Margin Trading Functions
 
 
 def buy_asset_M(session, pair: str, size: float, is_base: bool, price: float, live: bool) -> dict:
-    """sends a market buy order to binance in the margin account and returns the
-    order data"""
+    """sends a market buy order to binance in the margin account and returns the order data"""
 
     fg = Timer('buy_asset_M')
     fg.start()
@@ -484,6 +521,7 @@ def buy_asset_M(session, pair: str, size: float, is_base: bool, price: float, li
                                                quoteOrderQty=size)
     else:
         now = int(datetime.now().timestamp() * 1000)
+        price = session.pairs_data[pair]['price']
         if is_base:
             base_size = size
             usdt_size = f"{float(size) * price:.2f}"
@@ -516,8 +554,7 @@ def buy_asset_M(session, pair: str, size: float, is_base: bool, price: float, li
 
 
 def sell_asset_M(session, pair: str, base_size: float, price: float, live: bool) -> dict:
-    """sends a market sell order to binance in the margin account and returns the
-    order data"""
+    """sends a market sell order to binance in the margin account and returns the order data"""
 
     df = Timer('sell_asset_M')
     df.start()
@@ -530,6 +567,7 @@ def sell_asset_M(session, pair: str, base_size: float, price: float, live: bool)
                                                 quantity=base_size)
     else:
         now = int(datetime.now().timestamp() * 1000)
+        price = session.pairs_data[pair]['price']
         usdt_size = uf.valid_size(session, pair, float(base_size) * price)
         if not usdt_size:
             usdt_size = 0
