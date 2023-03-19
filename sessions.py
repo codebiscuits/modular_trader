@@ -254,7 +254,6 @@ class TradingSession():
         now = time.perf_counter()
         last = self.last_price_update
         if now - last > 60:
-            print('get_all_tickers')
             self.track_weights(2)
             abc = Timer('all binance calls')
             abc.start()
@@ -644,7 +643,7 @@ class TradingSession():
 
         value = round((free + locked), 2)
         pct = round((100 * value / self.spot_bal), 5)
-        print(f'spot usdt stats: qty = {bal.get("free")}, {value = }, {pct = }, {self.spot_bal = }')
+        # print(f'spot usdt stats: qty = {bal.get("free")}, {value = }, {pct = }, {self.spot_bal = }')
 
         return {'qty': free, 'value': value, 'pf%': pct}
 
@@ -750,10 +749,6 @@ class TradingSession():
         return round(usdt_total_net, 2)
 
     def get_usdt_m(self) -> Dict[str, float]:
-        '''fetches the balance information for USDT from binance and returns it
-        as a dictionary of floats'''
-
-        print('running get_usdt_m')
         '''checks current usdt balance and returns a dictionary for updating the sizing dict'''
         um = Timer('update_usdt_m')
         um.start()
@@ -765,7 +760,7 @@ class TradingSession():
 
         value = round(net, 2)
         pct = round(100 * value / self.margin_bal, 5)
-        print(f'margin usdt stats: qty = {bal.get("free")}, owed = {bal.get("borrowed")}, {value = }, {pct = }, {self.margin_bal = }')
+        # print(f'margin usdt stats: qty = {bal.get("free")}, owed = {bal.get("borrowed")}, {value = }, {pct = }, {self.margin_bal = }')
         um.stop()
         return {'qty': qty, 'owed': owed, 'value': value, 'pf%': pct}
 

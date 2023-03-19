@@ -109,7 +109,7 @@ for n, pair in enumerate(pairs):
         if len(df) >= session.min_length:
             df_dict[tf] = session.compute_indicators(df, tf)
         else:
-            print(f"length of {pair} {tf} data: {len(df)}")
+            # print(f"length of {pair} {tf} data: {len(df)}")
             df_dict[tf] = None
 
     price = session.pairs_data[pair]['price']
@@ -280,56 +280,55 @@ for agent in agents:
 
     #################################
 
-    # if not session.live:
-    print('')
-    print(agent.name.upper(), 'SUMMARY')
-    if agent.realised_pnls['real_spot'] or agent.realised_pnls['sim_spot']:
-        print(f"realised real spot pnl: {agent.realised_pnls['real_spot']:.1f}R, "
-              f"realised sim spot pnl: {agent.agent.realised_pnls['sim_spot']:.1f}R")
+    if not session.live:
+        print('')
+        print(agent.name.upper(), 'SUMMARY')
+        if agent.realised_pnls['real_spot'] or agent.realised_pnls['sim_spot']:
+            print(f"realised real spot pnl: {agent.realised_pnls['real_spot']:.1f}R, "
+                  f"realised sim spot pnl: {agent.agent.realised_pnls['sim_spot']:.1f}R")
 
-    if agent.realised_pnls['real_long'] or agent.realised_pnls['sim_long']:
-        print(f"realised real long pnl: {agent.realised_pnls['real_long']:.1f}R, "
-              f"realised sim long pnl: {agent.realised_pnls['sim_long']:.1f}R")
+        if agent.realised_pnls['real_long'] or agent.realised_pnls['sim_long']:
+            print(f"realised real long pnl: {agent.realised_pnls['real_long']:.1f}R, "
+                  f"realised sim long pnl: {agent.realised_pnls['sim_long']:.1f}R")
 
-    if agent.realised_pnls['real_short'] or agent.realised_pnls['sim_short']:
-        print(f"realised real short pnl: {agent.realised_pnls['real_short']:.1f}R, "
-              f"realised sim short pnl: {agent.realised_pnls['sim_short']:.1f}R")
-    print(f'tor: {agent.total_open_risk:.1f}')
-    # print(f'or list: {[round(x, 2) for x in sorted(agent.or_list, reverse=True)]}')
+        if agent.realised_pnls['real_short'] or agent.realised_pnls['sim_short']:
+            print(f"realised real short pnl: {agent.realised_pnls['real_short']:.1f}R, "
+                  f"realised sim short pnl: {agent.realised_pnls['sim_short']:.1f}R")
+        print(f'tor: {agent.total_open_risk:.1f}')
 
-    ropnl_spot = agent.open_pnl('spot', 'real')
-    wsopnl_spot, usopnl_spot = agent.open_pnl('spot', 'sim')
-    sopnl_spot = wsopnl_spot + usopnl_spot
-    wopnl_spot = ropnl_spot + wsopnl_spot
+        ropnl_spot = agent.open_pnl('spot', 'real')
+        wsopnl_spot, usopnl_spot = agent.open_pnl('spot', 'sim')
+        sopnl_spot = wsopnl_spot + usopnl_spot
+        wopnl_spot = ropnl_spot + wsopnl_spot
 
-    ropnl_long = agent.open_pnl('long', 'real')
-    wsopnl_long, usopnl_long = agent.open_pnl('long', 'sim')
-    sopnl_long = wsopnl_long + usopnl_long
-    wopnl_long = ropnl_long + wsopnl_long
+        ropnl_long = agent.open_pnl('long', 'real')
+        wsopnl_long, usopnl_long = agent.open_pnl('long', 'sim')
+        sopnl_long = wsopnl_long + usopnl_long
+        wopnl_long = ropnl_long + wsopnl_long
 
-    ropnl_short = agent.open_pnl('short', 'real')
-    wsopnl_short, usopnl_short = agent.open_pnl('short', 'sim')
-    sopnl_short = wsopnl_short + usopnl_short
-    wopnl_short = ropnl_short + wsopnl_short
+        ropnl_short = agent.open_pnl('short', 'real')
+        wsopnl_short, usopnl_short = agent.open_pnl('short', 'sim')
+        sopnl_short = wsopnl_short + usopnl_short
+        wopnl_short = ropnl_short + wsopnl_short
 
-    if ropnl_spot:
-        print(f"real open pnl spot: {ropnl_spot:.1f}R")
-    if sopnl_spot:
-        print(f"sim open pnl spot: {sopnl_spot:.1f}R")
-    if wopnl_spot:
-        print(f"wanted open pnl spot: {wopnl_spot:.1f}R")
-    if ropnl_long:
-        print(f"real open pnl long: {ropnl_long:.1f}R")
-    if sopnl_long:
-        print(f"sim open pnl long: {sopnl_long:.1f}R")
-    if wopnl_long:
-        print(f"wanted open pnl long: {wopnl_long:.1f}R")
-    if ropnl_short:
-        print(f"real open pnl short: {ropnl_short:.1f}R")
-    if sopnl_short:
-        print(f"sim open pnl short: {sopnl_short:.1f}R")
-    if wopnl_short:
-        print(f"wanted open pnl short: {wopnl_short:.1f}R")
+        if ropnl_spot:
+            print(f"real open pnl spot: {ropnl_spot:.1f}R")
+        if sopnl_spot:
+            print(f"sim open pnl spot: {sopnl_spot:.1f}R")
+        if wopnl_spot:
+            print(f"wanted open pnl spot: {wopnl_spot:.1f}R")
+        if ropnl_long:
+            print(f"real open pnl long: {ropnl_long:.1f}R")
+        if sopnl_long:
+            print(f"sim open pnl long: {sopnl_long:.1f}R")
+        if wopnl_long:
+            print(f"wanted open pnl long: {wopnl_long:.1f}R")
+        if ropnl_short:
+            print(f"real open pnl short: {ropnl_short:.1f}R")
+        if sopnl_short:
+            print(f"sim open pnl short: {sopnl_short:.1f}R")
+        if wopnl_short:
+            print(f"wanted open pnl short: {wopnl_short:.1f}R")
 
     print(f'{agent.name} Counts:')
     for k, v in agent.counts_dict.items():

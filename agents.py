@@ -87,8 +87,8 @@ class Agent():
         self.fixed_risk_s = self.set_fixed_risk(session, 'short')
         self.test_fixed_risk(0.0002, 0.0002)
         self.max_positions = self.set_max_pos()
-        self.total_r_limit = self.max_positions * 1.1
-        self.indiv_r_limit = 1.2
+        self.total_r_limit = self.max_positions * 1.5
+        self.indiv_r_limit = 1.6
         self.fr_dol_spot = self.fixed_risk_spot * session.spot_bal
         self.fixed_risk_dol_l = self.fixed_risk_l * session.margin_bal
         self.fixed_risk_dol_s = self.fixed_risk_s * session.margin_bal
@@ -234,7 +234,7 @@ class Agent():
 
         limit = 2000
         if len(cs_trades.keys()) > limit:
-            print(f"{self.name} closed sim trades on record: {len(cs_trades.keys())}")
+            # print(f"{self.name} closed sim trades on record: {len(cs_trades.keys())}")
             closed_sim_tups = sorted(zip(cs_trades.keys(), cs_trades.values()), key=lambda x: int(x[0]))
             closed_sim_trades = dict(closed_sim_tups[-limit:])
         else:
@@ -472,7 +472,8 @@ class Agent():
                 self.open_trades[pair]['position']['base_size'] = str(old_size - exe_size)
 
             else:
-                print(f"{self.name} {pair} stop order (id {sid}) not filled, status: {order['status']}")
+                # print(f"{self.name} {pair} stop order (id {sid}) not filled, status: {order['status']}")
+                pass
 
         m.stop()
 
@@ -844,14 +845,14 @@ class Agent():
 
         p = Timer('set_max_pos')
         p.start()
-        max_pos = 6
+        max_pos = 12
         if self.real_pos:
             open_pnls = [v.get('pnl') for v in self.real_pos.values() if v.get('pnl')]
             if open_pnls:
                 avg_open_pnl = stats.median(open_pnls)
             else:
                 avg_open_pnl = 0
-            max_pos = 3 if avg_open_pnl <= 0 else 6
+            max_pos = 6 if avg_open_pnl <= 0 else 12
         p.stop()
         return max_pos
 
@@ -898,6 +899,9 @@ class Agent():
         u.stop()
 
     def filter_signals(self, session, pair, signals, inval_risk_score, usdt_size, usdt_depth):
+        fs = Timer('filter_signals')
+        fs.start()
+
         now = datetime.now()
         filters = []
 
@@ -958,6 +962,7 @@ class Agent():
             self.counts_dict['algo_order_limit'] += 1
             filters.append('algo_order_limit')
 
+        fs.stop()
         return filters
 
     # signal scores -------------------------------------------------------------
@@ -1386,7 +1391,7 @@ class Agent():
             if not (total_r > self.total_r_limit and or_R > self.indiv_r_limit and pnl_pct > 0.3):
                 continue
 
-            print(f'\n*** tor: {total_r:.1f}, reducing risk ***')
+            print(f'\n*** {self.name} tor: {total_r:.1f}, reducing risk ***')
             pair = f"{asset}USDT"
             now = datetime.now().strftime('%d/%m/%y %H:%M')
             note = f"{self.name} reduce risk {pair}, or: {or_R}R, pnl: {pnl_pct}%"
