@@ -523,6 +523,18 @@ def recent_perf_str(session, agent) -> Tuple[str, int, int, int]:
     return full_perf_str, score_spot, score_l, score_s
 
 
+def tot_rpnl(agents: list) -> str:
+    total = 0
+
+    for agent in agents:
+        total += agent.realised_pnls.get('real_spot', 0)
+        total += agent.realised_pnls.get('real_long', 0)
+        total += agent.realised_pnls.get('real_short', 0)
+        total += agent.realised_pnls.get('real_neutral', 0)
+
+    return f"{total:.1f}"
+
+
 def scanner_summary(session, agents: list) -> None:
     '''prints a summary of the agents recent performance, current exposure, 
     benchmarks, trade counts etc'''
@@ -538,7 +550,9 @@ def scanner_summary(session, agents: list) -> None:
     below_ema = len(session.below_200_ema)
     ema_str = f'above ema: {above_ema}/{above_ema + below_ema}'
     mkt_bench = session.benchmark
-    final_msg = f"{live_str} {ema_str}\nmkt perf 1w {mkt_bench.get('market_1w'):.2%}\n-"
+
+    final_msg = f"\n{live_str} {ema_str}\nmkt perf 1w {mkt_bench.get('market_1w'):.2%}" \
+                f"\nTotal real rpnl: {tot_rpnl(agents)}\n-"
 
     for agent in agents:
         print_msg = False
