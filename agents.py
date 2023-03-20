@@ -87,8 +87,8 @@ class Agent():
         self.fixed_risk_s = self.set_fixed_risk(session, 'short')
         self.test_fixed_risk(0.0002, 0.0002)
         self.max_positions = self.set_max_pos()
-        self.total_r_limit = self.max_positions * 1.5
-        self.indiv_r_limit = 1.6
+        self.total_r_limit = self.max_positions * 1.75
+        self.indiv_r_limit = 2
         self.fr_dol_spot = self.fixed_risk_spot * session.spot_bal
         self.fixed_risk_dol_l = self.fixed_risk_l * session.margin_bal
         self.fixed_risk_dol_s = self.fixed_risk_s * session.margin_bal
@@ -905,6 +905,9 @@ class Agent():
         now = datetime.now()
         filters = []
 
+        if not session.pairs_data[pair]['margin_allowed']:
+            filters.append('not_a_margin_pair')
+
         if ((('spot' in signals.get('signal')) and (inval_risk_score < 0.5))
                 or
                 (('long' in signals.get('signal')) and (inval_risk_score < 0.5))
@@ -936,6 +939,21 @@ class Agent():
                 self.counts_dict['too_small'] += 1
             filters.append('too_small')
 
+        if float(self.real_pos['USDT']['qty']) < usdt_size:
+            if not self.in_pos['sim']:
+                self.counts_dict['not_enough_usdt'] += 1
+            filters.append('not_enough_usdt')
+
+        if session.algo_limit_reached(pair):
+            if not self.in_pos['sim']:
+                self.counts_dict['algo_order_limit'] += 1
+            filters.append('algo_order_limit')
+
+        # only continue if a real trade is still possible
+        if filters:
+            fs.stop()
+            return filters
+
         # check total open risk and close profitable positions if necessary -----------
         self.reduce_risk_M(session)
         usdt_bal = session.spot_usdt_bal if self.mode == 'spot' else session.margin_usdt_bal
@@ -943,8 +961,6 @@ class Agent():
 
         # make sure there aren't too many open positions now --------------------------
         self.calc_tor()
-        if not session.pairs_data[pair]['margin_allowed']:
-            filters.append('not_a_margin_pair')
         if self.num_open_positions >= self.max_positions:
             if not self.in_pos['sim']:
                 self.counts_dict['too_many_pos'] += 1
@@ -954,13 +970,6 @@ class Agent():
             if not self.in_pos['sim']:
                 self.counts_dict['too_much_or'] += 1
             filters.append('too_much_or')
-        if float(self.real_pos['USDT']['qty']) < usdt_size:
-            if not self.in_pos['sim']:
-                self.counts_dict['not_enough_usdt'] += 1
-            filters.append('not_enough_usdt')
-        if session.algo_limit_reached(pair):
-            self.counts_dict['algo_order_limit'] += 1
-            filters.append('algo_order_limit')
 
         fs.stop()
         return filters
