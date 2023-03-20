@@ -491,12 +491,67 @@ def sell_asset_s(session, pair: str, size: float, live: bool) -> dict:
     return sell_order
 
 
-def set_stop_s():
-    pass
+def set_stop_s(session, pair, trigger, limit, size):
+    """sends a stop-loss limit order to binance spot account and returns the order data"""
+
+    func_name = sys._getframe().f_code.co_name
+    t = Timer(f'{func_name}')
+    t.start()
+
+    now = datetime.now().timestamp()
+
+    trigger = uf.valid_price(session, pair, trigger)
+    limit = uf.valid_price(session, pair, limit)
+    stop_size = uf.valid_size(session, pair, size)
+    print(f"setting {pair} stop: {stop_size = } {trigger = } {limit = }")
+    if session.live:
+        stop_sell_order = client.create_order(symbol=pair,
+                                                     side=be.SIDE_SELL,
+                                                     type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
+                                                     timeInForce=be.TIME_IN_FORCE_GTC,
+                                                     stopPrice=trigger,
+                                                     quantity=stop_size,
+                                                     price=limit)
+    else:
+        stop_sell_order = {'orderId': 'not live',
+                           'transactTime': now * 1000}
+
+    session.algo_order_counts += Counter([pair])
+
+    t.stop()
+    return stop_sell_order
 
 
-def clear_stop_s():
-    pass
+def clear_stop_s(session, pair: str, position: dict) -> Tuple[Any, Decimal]:
+    """finds the order id of the most recent stop-loss from the trade record
+    and cancels that specific order. if no such id can be found, returns null values"""
+
+    func_name = sys._getframe().f_code.co_name
+    t = Timer(f'{func_name}')
+    t.start()
+
+    stop_id = position['stop_id']
+
+    clear, base_size = {}, 0
+    if session.live:
+        if stop_id:
+            try:
+                clear = client.cancel_order(symbol=pair, orderId=str(stop_id))
+                base_size = clear.get('origQty')
+            except bx.BinanceAPIException as e:
+                print(f"Exception during clear_stop_s on {pair}. If it's 'unknown order sent' then it was probably "
+                      f"trying to cancel a stop-loss that had already been cancelled")
+                print(e.status_code)
+                print(e.message)
+        else:
+            print(f'no recorded stop id for {pair}')
+    else:
+        base_size = position['base_size']
+
+    session.algo_order_counts -= Counter([pair])
+
+    t.stop()
+    return clear, base_size
 
 
 # -#-#- Margin Trading Functions
