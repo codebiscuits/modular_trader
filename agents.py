@@ -2538,6 +2538,10 @@ class DoubleST(Agent):
         k = Timer(f'dst_margin_signals')
         k.start()
 
+        if not session.pairs_data[pair]['margin_allowed']:
+            k.stop()
+            return {'signal': None, 'inval': 0, 'inval_ratio': 100000}
+
         bullish_ema = df.close.iloc[-1] > df.ema_200.iloc[-1]
         bearish_ema = df.close.iloc[-1] < df.ema_200.iloc[-1]
         bullish_loose = self.aged_condition(self.signal_age, df.close, df[f'st-10-{float(self.mult1)}'])
@@ -2604,6 +2608,10 @@ class EMACross(Agent):
 
         k = Timer('emax_margin_signals')
         k.start()
+
+        if not session.pairs_data[pair]['margin_allowed']:
+            k.stop()
+            return {'signal': None, 'inval': 0, 'inval_ratio': 100000}
 
         fast_ema_str = f"ema_{self.lb1}"
         slow_ema_str = f"ema_{self.lb2}"
@@ -2698,6 +2706,10 @@ class EMACrossHMA(Agent):
 
         k = Timer('emaxhma_margin_signals')
         k.start()
+
+        if not session.pairs_data[pair]['margin_allowed']:
+            k.stop()
+            return {'signal': None, 'inval': 0, 'inval_ratio': 100000}
 
         fast_ema_str = f"ema_{self.lb1}"
         slow_ema_str = f"ema_{self.lb2}"
