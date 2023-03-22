@@ -655,17 +655,19 @@ def borrow_asset_M(asset: str, qty: str, live: bool) -> None:
         client.create_margin_loan(asset=asset, amount=qty)
 
 
-def repay_asset_M(asset: str, qty: str, live: bool) -> None:
+def repay_asset_M(asset: str, qty: str, live: bool) -> bool:
     """calls the binance api function to repay a margin loan"""
 
     if live and float(qty):
         try:
             client.repay_margin_loan(asset=asset, amount=qty)
+            return True
         except bx.BinanceAPIException as e:
             print(f"*** Exception whilst trying to repay {qty} {asset}. If it says 'repay amount larger than loan "
                   f"amount, it's most likely no loan to be repayed.")
-            print(e.status_code)
+            print(e.code)
             print(e.message)
+            return False
 
 
 def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit: float) -> dict:

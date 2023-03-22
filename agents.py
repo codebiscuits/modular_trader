@@ -274,7 +274,7 @@ class Agent():
 
     # record stopped trades ------------------------------------------------
 
-    def find_order(self, session, pair, sid):
+    def find_order_old(self, session, pair, sid):
         if sid == 'not live':
             return None
         print('get_all_margin_orders')
@@ -301,16 +301,41 @@ class Agent():
 
         return order
 
+    def find_order(self, session, pair, sid):
+        if sid == 'not live':
+            return None
+        print('get_margin_order')
+        session.track_weights(10)
+        abc = Timer('all binance calls')
+        abc.start()
+        order = client.get_margin_order(symbol=pair, orderId=sid)
+        abc.stop()
+        session.counts.append('get_margin_order')
+
+        if not order:
+            print(f'No orders on binance for {pair}')
+
+        # insert placeholder record
+        placeholder = {'type': f"stop_{self.open_trades[pair]['position']['direction']}",
+                       'state': 'real',
+                       'pair': pair,
+                       'order': order,
+                       'completed': 'order'
+                       }
+        self.open_trades[pair]['placeholder'] = placeholder
+
+        return order
+
     def repay_stop(self, session, pair, order):
         if (order.get('side') == 'BUY'):
             trade_type = 'stop_short'
             asset = pair[:-4]
             stop_size = Decimal(order.get('executedQty'))
-            funcs.repay_asset_M(asset, stop_size, session.live)
+            repayed = funcs.repay_asset_M(asset, stop_size, session.live)
         else:
             trade_type = 'stop_long'
             stop_size = Decimal(order.get('cummulativeQuoteQty'))
-            funcs.repay_asset_M('USDT', stop_size, session.live)
+            repayed = funcs.repay_asset_M('USDT', stop_size, session.live)
 
         self.open_trades[pair]['placeholder']['completed'] = 'repay'
 

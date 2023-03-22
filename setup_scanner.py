@@ -200,7 +200,9 @@ for n, pair in enumerate(pairs):
                     del agent.open_trades[pair]
                     agent.open_pos(session, pair, size, stp, signals['inval_ratio'], market_state, 'not_enough_borrow',
                                    direction)
-                elif e.code == -3021: # trying to margin trade non-margin pair
+                elif e.code == -3021:  # trying to margin trade non-margin pair
+                    del agent.open_trades[pair]
+                elif e.code == -3027:  # not a valid margin asset
                     del agent.open_trades[pair]
                 elif e.code == -2010: # stop would trigger immediately
                     del agent.open_trades[pair]
@@ -227,29 +229,29 @@ for n, pair in enumerate(pairs):
                 continue
 
         # calculate open risk and take profit if necessary ----------------------------
-        agent.tp_signals(asset)
-        if agent.in_pos['real']:
-            direction = agent.in_pos['real']
-            try:
-                agent.tp_pos(session, pair, stp, signals['inval_ratio'], direction)
-            except bx.BinanceAPIException as e:
-                agent.record_trades(session, 'all')
-                print(f'{agent.name} problem with tp_{direction} order for {pair}')
-                print(e.code)
-                print(e.message)
-                pb.push_note(now, f'{agent.name} exeption during {pair} tp_{direction} order')
-                continue
-        if agent.in_pos['sim']:
-            direction = agent.in_pos['sim']
-            try:
-                agent.tp_pos(session, pair, stp, signals['inval_ratio'], direction)
-            except bx.BinanceAPIException as e:
-                agent.record_trades(session, 'all')
-                print(f'problem with tp_{direction} order for {pair}')
-                print(e.code)
-                print(e.message)
-                pb.push_note(now, f'{agent.name} exeption during {pair} tp_{direction} order')
-                continue
+        # agent.tp_signals(asset)
+        # if agent.in_pos['real']:
+        #     direction = agent.in_pos['real']
+        #     try:
+        #         agent.tp_pos(session, pair, stp, signals['inval_ratio'], direction)
+        #     except bx.BinanceAPIException as e:
+        #         agent.record_trades(session, 'all')
+        #         print(f'{agent.name} problem with tp_{direction} order for {pair}')
+        #         print(e.code)
+        #         print(e.message)
+        #         pb.push_note(now, f'{agent.name} exeption during {pair} tp_{direction} order')
+        #         continue
+        # if agent.in_pos['sim']:
+        #     direction = agent.in_pos['sim']
+        #     try:
+        #         agent.tp_pos(session, pair, stp, signals['inval_ratio'], direction)
+        #     except bx.BinanceAPIException as e:
+        #         agent.record_trades(session, 'all')
+        #         print(f'problem with tp_{direction} order for {pair}')
+        #         print(e.code)
+        #         print(e.message)
+        #         pb.push_note(now, f'{agent.name} exeption during {pair} tp_{direction} order')
+        #         continue
 
         agent.calc_tor()
 
