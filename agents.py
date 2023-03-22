@@ -1001,7 +1001,7 @@ class Agent():
 
     # signal scores -------------------------------------------------------------
 
-    def calc_inval_risk_score(self, inval: float) -> float:
+    def calc_inval_risk_score(self, inval: float, mean: float=0.0, std: float=0.03) -> float:
         """i want to analyse the probability of any given value of inval_risk at trade entry producing a positive pnl.
         Once i have a set of scores (1 for each band of inval_risk range) i can normalise them to a 0-1 range and output
         that as the inval_risk_score"""
@@ -1009,27 +1009,20 @@ class Agent():
         # TODO ulitmately i want this function to work as described in the docstring but for a quick fix it can just use
         #  a normal probability density function to achieve a similar result
 
-        def normpdf(x, mean, sd):
-            var = float(sd) ** 2
-            denom = (2 * math.pi * var) ** .5
-            num = math.exp(-(float(x) - float(mean)) ** 2 / (2 * var))
-            return num / denom
+        # def normpdf(x, mean, std):
+        #     var = float(std) ** 2
+        #     denom = (2 * math.pi * var) ** .5
+        #     num = math.exp(-(float(x) - float(mean)) ** 2 / (2 * var))
+        #     return num / denom
+        #
+        # score =  normpdf(inval, mean, std)
 
-        return normpdf(inval, 0, 0.03)
+        # this is a temporary way to score inval, a linear function which scores 0% inval at 1, >=10% inval at 0
+        score = max(1 - (inval * 10), 0)
+
+        return score
 
     # positions -----------------------------------------------------------------
-
-    def inval_risk_score(self, inval: float) -> float:
-        """ultimately i want this function to be able to look up the values for its calculations from data that is
-        regularly updated from analysis of recent closed trades, but for now the values will have to be hard-coded
-
-        the function looks at the proportional distance between trade entry and invalidation price and returns a score
-        which represents the statistical likelihood that the trade will be profitable based solely on that distance
-
-        when the big refactor is done, i want to use this as part of the signal scoring system, but for now it can just
-        be used as a binary filter"""
-
-        ideal = 0.02
 
     def open_trade_stats(self, session, total_bal: float, v: dict) -> dict:
         """takes an entry from the open_trades dictionary, returns information about

@@ -129,7 +129,8 @@ for n, pair in enumerate(pairs):
         if signals.get('inval'):
             stp = funcs.calc_stop(signals.get('inval'), session.pairs_data[pair]['spread'], price)
             inval_risk = abs((price - stp) / price)
-            inval_risk_score = agent.calc_inval_risk_score(inval_risk)
+            inval_risk_score = agent.calc_inval_risk_score(inval_risk, mean=0.0, std=df.close.iloc[-30:].std())
+            print(f'inval_risk_score: {inval_risk_score:.5f}')
             bal = session.spot_bal if agent.mode == 'spot' else session.margin_bal
             size_l, usdt_size_l, size_s, usdt_size_s = funcs.get_size(agent, price, bal, inval_risk)
 
