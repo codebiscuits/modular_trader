@@ -1520,6 +1520,7 @@ class Agent():
         price = session.pairs_data[pair]['price']
 
         open_order = funcs.create_trade_dict(api_order, price, session.live)
+        open_order['pair'] = pair
         open_order['type'] = f"open_{direction}"
         open_order['state'] = 'real'
         open_order['score'] = 'signal score'
@@ -1915,6 +1916,7 @@ class Agent():
         print(f"+++ {self.name} {pair} close {direction} resulted in base qty: {new_base_size}")
         close_order = funcs.create_trade_dict(api_order, price, session.live)
 
+        close_order['pair'] = pair
         close_order['type'] = f'close_{direction}'
         close_order['state'] = 'real'
         close_order['reason'] = reason
