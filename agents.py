@@ -2612,7 +2612,7 @@ class DoubleSTnoEMA(Agent):
         self.mult2 = float(mult2)
         self.signal_age = 1
         self.name = f'{self.tf} dst no ema {self.mult1}-{self.mult2}'
-        self.id = f"double_st_no_ema{self.tf}_{self.offset}_{self.mult1}_{self.mult2}"
+        self.id = f"double_st_no_ema_{self.tf}_{self.offset}_{self.mult1}_{self.mult2}"
         self.ohlc_length = 10 + self.signal_age
         self.cross_age_name = f"cross_age-st-10-{self.mult1}-10-{self.mult2}"
         Agent.__init__(self, session)
