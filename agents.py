@@ -136,6 +136,8 @@ class Agent():
             except JSONDecodeError:
                 print(f"{bal_path} was an empty file.")
                 self.perf_log = None
+        else:
+            self.perf_log = None
 
         def sync_trades_records(switch):
             w = Timer(f'sync_trades_records-{switch}')
@@ -2582,6 +2584,97 @@ class DoubleST(Agent):
         if bullish_ema and bullish_loose and bullish_tight:  # and bullish_book
             signal = 'open_long'
         elif bearish_ema and bearish_loose and bearish_tight:  # and bearish_book
+            signal = 'open_short'
+        elif bearish_tight:
+            signal = 'close_long'
+        elif bullish_tight:
+            signal = 'close_short'
+        else:
+            signal = None
+
+        if inval := df[f'st-10-{self.mult2}'].iloc[-1]:
+            inval_ratio = inval / df.close.iloc[-1]
+        else:
+            inval = 0
+            inval_ratio = 100000
+        k.stop()
+        return {'signal': signal, 'inval': inval, 'inval_ratio': inval_ratio}
+
+
+class DoubleSTnoEMA(Agent):
+    '''regular supertrend for bias with tight supertrend for entries/exits'''
+
+    def __init__(self, session, tf, offset, mult1: int, mult2: float):
+        self.mode = 'margin'
+        self.tf = tf
+        self.offset = offset
+        self.mult1 = int(mult1)
+        self.mult2 = float(mult2)
+        self.signal_age = 1
+        self.name = f'{self.tf} dst no ema {self.mult1}-{self.mult2}'
+        self.id = f"double_st_no_ema{self.tf}_{self.offset}_{self.mult1}_{self.mult2}"
+        self.ohlc_length = 10 + self.signal_age
+        self.cross_age_name = f"cross_age-st-10-{self.mult1}-10-{self.mult2}"
+        Agent.__init__(self, session)
+        session.indicators.update(['ema-200',
+                                   f"st-10-{self.mult1}",
+                                   f"st-10-{self.mult2}",
+                                   self.cross_age_name])
+
+    def spot_signals(self, session, df: pd.DataFrame, pair: str) -> dict:
+        """generates spot buy and sell signals based on 2 supertrend indicators
+        and a 200 period EMA"""
+
+        bullish_ema = df.close.iloc[-1] > df['ema_200'].iloc[-1]
+        bullish_loose = df.close.iloc[-1] > df[f'st-10-{float(self.mult1)}'].iloc[-1]
+        bullish_tight = df.close.iloc[-1] > df[f'st-10-{self.mult2}'].iloc[-1]
+        bearish_tight = df.close.iloc[-1] < df[f'st-10-{self.mult2}'].iloc[-1]
+
+        if bullish_ema:
+            session.above_200_ema.add(pair)
+        else:
+            session.below_200_ema.add(pair)
+
+        if bullish_ema and bullish_loose and bullish_tight:
+            signal = 'spot_open'
+        elif bearish_tight:
+            signal = 'spot_close'
+        else:
+            signal = None
+
+        if inval := df[f'st-10-{self.mult2}'].iloc[-1]:
+            inval_ratio = inval / df.close.iloc[-1]
+        else:
+            inval = 0
+            inval_ratio = 100000
+
+        return {'signal': signal, 'inval': inval, 'inval_ratio': inval_ratio}
+
+    def signals(self, session, df: pd.DataFrame, pair: str) -> dict:
+        """generates open and close signals for long and short trades based on
+        two supertrend indicators and a 200 period EMA"""
+
+        k = Timer(f'dst_margin_signals')
+        k.start()
+
+        if not session.pairs_data[pair]['margin_allowed']:
+            k.stop()
+            return {'signal': None, 'inval': 0, 'inval_ratio': 100000}
+
+        bullish_loose = self.aged_condition(self.signal_age, df.close, df[f'st-10-{float(self.mult1)}'])
+        bearish_loose = self.aged_condition(self.signal_age, df[f'st-10-{float(self.mult1)}'], df.close)
+        bullish_tight = self.aged_condition(self.signal_age, df.close, df[f'st-10-{self.mult2}'])
+        bearish_tight = self.aged_condition(self.signal_age, df[f'st-10-{self.mult2}'], df.close)
+
+
+        # bullish_book = bid_ask_ratio > 1
+        # bearish_book = bid_ask_ratio < 1
+        # bullish_volume = price rising on low volume or price falling on high volume
+        # bearish_volume = price rising on high volume or price falling on low volume
+
+        if bullish_loose and bullish_tight:  # and bullish_book
+            signal = 'open_long'
+        elif bearish_loose and bearish_tight:  # and bearish_book
             signal = 'open_short'
         elif bearish_tight:
             signal = 'close_long'

@@ -336,7 +336,7 @@ class TradingSession():
 
         y = Timer('set_live')
         y.start()
-        live = Path('/pi_downstairs.txt').exists()
+        live = Path('/pi_downstairs.txt').exists() or Path('/pi_2.txt').exists()
 
         if not live:
             print('*** Warning: Not Live ***')
@@ -523,6 +523,8 @@ class TradingSession():
         ci.start()
 
         for i in self.indicators:
+            # for checking if there are enough extra rows for when the indicators all drop NaNs
+            # print(f"computing indicator: {i}, {len(df) = }")
             vals = i.split('-')
             if vals[0] == 'ema':
                 df[f"ema_{vals[1]}"] = df.close.ewm(int(vals[1])).mean()

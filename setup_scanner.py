@@ -1,10 +1,11 @@
 import time
+
 script_start = time.perf_counter()
 import keys
 from binance.client import Client
 from datetime import datetime, timezone
 import binance_funcs as funcs
-from agents import DoubleST, EMACross, EMACrossHMA, AvgTradeSize
+from agents import DoubleST, DoubleSTnoEMA, EMACross, EMACrossHMA, AvgTradeSize
 import binance.exceptions as bx
 from pprint import pprint
 import utility_funcs as uf
@@ -20,17 +21,31 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 print('\n-+-+-+-+-+-+-+-+-+-+-+- Running Setup Scanner -+-+-+-+-+-+-+-+-+-+-+-\n')
 
 
-def get_timeframes():
-    hour = datetime.now(timezone.utc).hour
-    # hour = 0 # for testing all timeframes
-    d = {1: ('1h', None), 4: ('4h', None), 12: ('12h', None), 24: ('1d', None)}
+def get_timeframes(scale):
+    if scale == 'ltf':
+        hour = datetime.now(timezone.utc).hour
+        # hour = 0 # for testing all timeframes
+        d = {1: ('1h', None), 4: ('4h', None), 12: ('12h', None), 24: ('1d', None)}
 
-    return [d[tf] for tf in d if hour % tf == 0]
+        return [d[tf] for tf in d if hour % tf == 0]
+
+    elif scale == 'htf':
+        tfs = [('1d', None)]
+
+        day_num = (datetime.now() - datetime.fromtimestamp(0)).days
+        if day_num % 3 == 1:  # start of a 3-day period in pandas
+            tfs.append(('3d, None'))
+
+        if datetime.now().weekday() == 0:
+            tfs.append(('1w', None))
+
+        return tfs
 
 
 ########################################################################################################################
 
-timeframes = get_timeframes()
+x = 'htf'
+timeframes = get_timeframes(x)
 
 print(f"Running setup_scan({timeframes})")
 session = sessions.TradingSession(0.0005)
@@ -38,27 +53,40 @@ print(f"\nCurrent time: {session.now_start}, {session.name}\n")
 
 agents = []
 
-for timeframe, offset in timeframes:
-    agents.extend(
-        [
-            DoubleST(session, timeframe, offset, 3, 1.0),
-            DoubleST(session, timeframe, offset, 3, 1.4),
-            DoubleST(session, timeframe, offset, 3, 1.8),
-            DoubleST(session, timeframe, offset, 5, 2.2),
-            DoubleST(session, timeframe, offset, 5, 2.8),
-            DoubleST(session, timeframe, offset, 5, 3.4),
-            EMACross(session, timeframe, offset, 12, 21, 1.2),
-            EMACross(session, timeframe, offset, 12, 21, 1.8),
-            EMACross(session, timeframe, offset, 12, 21, 2.4),
-            EMACrossHMA(session, timeframe, offset, 12, 21, 1.2),
-            EMACrossHMA(session, timeframe, offset, 12, 21, 1.8),
-            EMACrossHMA(session, timeframe, offset, 12, 21, 2.4),
-            # AvgTradeSize(session, timeframe, offset, 2, 1000, 1.1, 'oco'),
-            # AvgTradeSize(session, timeframe, offset, 2, 1000, 2.0, 'oco'),
-            # AvgTradeSize(session, timeframe, offset, 2, 1000, 3.0, 'oco'),
-            # AvgTradeSize(session, timeframe, offset, 2, 1000, 4.0, 'oco'),
-        ]
-    )
+if x == 'ltf':
+    for timeframe, offset in timeframes:
+        agents.extend(
+            [
+                DoubleST(session, timeframe, offset, 3, 1.0),
+                DoubleST(session, timeframe, offset, 3, 1.4),
+                DoubleST(session, timeframe, offset, 3, 1.8),
+                DoubleST(session, timeframe, offset, 5, 2.2),
+                DoubleST(session, timeframe, offset, 5, 2.8),
+                DoubleST(session, timeframe, offset, 5, 3.4),
+                EMACross(session, timeframe, offset, 12, 21, 1.2),
+                EMACross(session, timeframe, offset, 12, 21, 1.8),
+                EMACross(session, timeframe, offset, 12, 21, 2.4),
+                EMACrossHMA(session, timeframe, offset, 12, 21, 1.2),
+                EMACrossHMA(session, timeframe, offset, 12, 21, 1.8),
+                EMACrossHMA(session, timeframe, offset, 12, 21, 2.4),
+                # AvgTradeSize(session, timeframe, offset, 2, 1000, 1.1, 'oco'),
+                # AvgTradeSize(session, timeframe, offset, 2, 1000, 2.0, 'oco'),
+                # AvgTradeSize(session, timeframe, offset, 2, 1000, 3.0, 'oco'),
+                # AvgTradeSize(session, timeframe, offset, 2, 1000, 4.0, 'oco'),
+            ]
+        )
+elif x == 'htf':
+    for timeframe, offset in timeframes:
+        agents.extend(
+            [
+                DoubleSTnoEMA(session, timeframe, offset, 3, 1.0),
+                DoubleSTnoEMA(session, timeframe, offset, 3, 1.4),
+                DoubleSTnoEMA(session, timeframe, offset, 3, 1.8),
+                DoubleSTnoEMA(session, timeframe, offset, 5, 2.2),
+                DoubleSTnoEMA(session, timeframe, offset, 5, 2.8),
+                DoubleSTnoEMA(session, timeframe, offset, 5, 3.4),
+            ]
+        )
 
 # session.name = ' | '.join([n.name for n in agents])
 
@@ -89,8 +117,12 @@ pairs = pairs_in_pos + other_pairs  # this ensures open positions will be checke
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 
+session.min_length += 15 # this is a temp fix to compensate for all the NaN rows which will be dropped when indicators
+# are calculated. I really need a way for each indicator to add the correct number of rows to session.min_length as it
+# is added to the central indicator set so i can be sure there will always be enough rows once indicators have been calculated
+
 for n, pair in enumerate(pairs):
-    # print('\n', n, pair, '\n')
+    print('\n', n, pair, '\n')
     session.update_prices()
     asset = pair[:-1 * len(session.quote_asset)]
     for agent in agents:
@@ -106,6 +138,7 @@ for n, pair in enumerate(pairs):
     # if there is not enough history at a given timeframe, this function will return None instead of the df
     # TODO this would be a good function to start the migration to polars
     for tf, df in df_dict.items():
+        print(tf, f"{len(df) = }")
         if len(df) >= session.min_length:
             df_dict[tf] = session.compute_indicators(df, tf)
         else:
@@ -118,6 +151,7 @@ for n, pair in enumerate(pairs):
         # print('*****', agent.name)
         if df_dict[agent.tf] is not None:
             df_2 = df_dict[agent.tf].copy()
+            print(f"{len(df_2) = }")
         else:
             # print(f"{pair} too new for {agent.name}")
             continue
@@ -197,7 +231,7 @@ for n, pair in enumerate(pairs):
             try:
                 agent.open_pos(session, pair, size, stp, signals['inval_ratio'], market_state, sim_reasons, direction)
             except bx.BinanceAPIException as e:
-                if e.code == -3045: # borrow failed because there weren't enough assets to borrow
+                if e.code == -3045:  # borrow failed because there weren't enough assets to borrow
                     del agent.open_trades[pair]
                     agent.open_pos(session, pair, size, stp, signals['inval_ratio'], market_state, 'not_enough_borrow',
                                    direction)
@@ -205,7 +239,7 @@ for n, pair in enumerate(pairs):
                     del agent.open_trades[pair]
                 elif e.code == -3027:  # not a valid margin asset
                     del agent.open_trades[pair]
-                elif e.code == -2010: # stop would trigger immediately
+                elif e.code == -2010:  # stop would trigger immediately
                     del agent.open_trades[pair]
                 else:
                     del agent.open_trades[pair]
