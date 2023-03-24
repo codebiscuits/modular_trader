@@ -20,6 +20,9 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 print('\n-+-+-+-+-+-+-+-+-+-+-+- Running Setup Scanner -+-+-+-+-+-+-+-+-+-+-+-\n')
 
+# argparse
+
+
 
 def get_timeframes(scale):
     if scale == 'ltf':

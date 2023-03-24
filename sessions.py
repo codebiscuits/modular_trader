@@ -349,9 +349,12 @@ class TradingSession():
         u = Timer('mkt_data_path in session')
         u.start()
 
-        if self.live:  # must be running on rpi
+        if self.live and Path('/pi_downstairs.txt').exists():  # must be running on rpi 1
             market_data_read = Path('/home/pi/coding/modular_trader/market_data')
             market_data_write = Path('/home/pi/coding/modular_trader/market_data')
+        elif self.live and Path('/pi_2.txt').exists():  # must be running on rpi 2
+            market_data_read = Path('/home/ross/coding/modular_trader/market_data')
+            market_data_write = Path('/home/ross/coding/modular_trader/market_data')
         elif Path('/mnt/pi_d/modular_trader/market_data').exists():  # must be running on laptop and rpi is accessible
             market_data_read = Path('/mnt/pi_d/modular_trader/market_data')
             market_data_write = Path('/home/ross/Documents/backtester_2021/market_data')
@@ -371,9 +374,12 @@ class TradingSession():
         x1 = Timer(f'{func_name}')
         x1.start()
 
-        if self.live:
+        if self.live and Path('/pi_downstairs.txt').exists():
             read_records = Path(f'/home/pi/coding/modular_trader/records')
             write_records = Path(f'/home/pi/coding/modular_trader/records')
+        elif self.live and Path('/pi_2.txt').exists():
+            read_records = Path(f'/home/ross/coding/modular_trader/records')
+            write_records = Path(f'/home/ross/coding/modular_trader/records')
         elif Path(f'/home/ross/coding/pi_down/modular_trader/records').exists():
             read_records = Path(f'/home/ross/coding/pi_down/modular_trader/records')
             write_records = Path(f'/home/ross/Documents/backtester_2021/records')
