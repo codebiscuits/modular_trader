@@ -44,7 +44,7 @@ def get_timeframes(scale):
 
 ########################################################################################################################
 
-x = 'htf'
+x = 'ltf'
 timeframes = get_timeframes(x)
 
 print(f"Running setup_scan({timeframes})")
