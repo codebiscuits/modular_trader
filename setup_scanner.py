@@ -14,13 +14,18 @@ import sessions
 from timers import Timer
 from pushbullet import Pushbullet
 from collections import Counter
+import argparse
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
+parser = argparse.ArgumentParser()
 
 print('\n-+-+-+-+-+-+-+-+-+-+-+- Running Setup Scanner -+-+-+-+-+-+-+-+-+-+-+-\n')
 
-# argparse
+parser.add_argument('--scale', type=str, required=True)
+args = parser.parse_args()
+scale = args.scale
+print(f"{scale = }")
 
 
 
@@ -47,8 +52,8 @@ def get_timeframes(scale):
 
 ########################################################################################################################
 
-x = 'ltf'
-timeframes = get_timeframes(x)
+# x = 'ltf'
+timeframes = get_timeframes(scale)
 
 print(f"Running setup_scan({timeframes})")
 session = sessions.TradingSession(0.0005)
@@ -56,7 +61,7 @@ print(f"\nCurrent time: {session.now_start}, {session.name}\n")
 
 agents = []
 
-if x == 'ltf':
+if scale == 'ltf':
     for timeframe, offset in timeframes:
         agents.extend(
             [
@@ -78,7 +83,7 @@ if x == 'ltf':
                 # AvgTradeSize(session, timeframe, offset, 2, 1000, 4.0, 'oco'),
             ]
         )
-elif x == 'htf':
+elif scale == 'htf':
     for timeframe, offset in timeframes:
         agents.extend(
             [
@@ -141,7 +146,6 @@ for n, pair in enumerate(pairs):
     # if there is not enough history at a given timeframe, this function will return None instead of the df
     # TODO this would be a good function to start the migration to polars
     for tf, df in df_dict.items():
-        print(tf, f"{len(df) = }")
         if len(df) >= session.min_length:
             df_dict[tf] = session.compute_indicators(df, tf)
         else:
@@ -154,7 +158,8 @@ for n, pair in enumerate(pairs):
         # print('*****', agent.name)
         if df_dict[agent.tf] is not None:
             df_2 = df_dict[agent.tf].copy()
-            print(f"{len(df_2) = }")
+            if len(df_2) < session.min_length:
+                print(f"*** warning *** {session.min_length = }, {len(df_2) = }")
         else:
             # print(f"{pair} too new for {agent.name}")
             continue
