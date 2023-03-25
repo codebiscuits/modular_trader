@@ -3035,3 +3035,4 @@ class AvgTradeSize(Agent):
 
         sig.stop()
         return signal_dict
+

@@ -416,7 +416,10 @@ def stoch_rsi(data: pd.Series, rsi_lb: int = 14, stoch_lb: int = 14) -> pd.Serie
 
 
 def roc_1d(s: pd.Series, tf: str) -> pd.Series:
-    len_dict = {'1h': 24, '4h': 6, '6h': 4, '8h': 3, '12h': 2, '1d': 1}
+    len_dict = {'1h': 24, '4h': 6, '6h': 4, '8h': 3, '12h': 2, '1d': 1, '3d': 0.333, '1w': 0.142857}
+
+    if len_dict[tf] < 1:
+        return s.pct_change(periods=1) * len_dict[tf]
 
     if len(s) >= len_dict[tf]:
         return s.pct_change(periods=len_dict[tf])
@@ -425,7 +428,7 @@ def roc_1d(s: pd.Series, tf: str) -> pd.Series:
 
 
 def roc_1w(s: pd.Series, tf: str) -> pd.Series:
-    len_dict = {'1h': 168, '4h': 42, '6h': 28, '8h': 21, '12h': 14, '1d': 7}
+    len_dict = {'1h': 168, '4h': 42, '6h': 28, '8h': 21, '12h': 14, '1d': 7, '3d': 2, '1w': 1}
 
     if len(s) >= len_dict[tf]:
         return s.pct_change(periods=len_dict[tf])
@@ -434,72 +437,10 @@ def roc_1w(s: pd.Series, tf: str) -> pd.Series:
 
 
 def roc_1m(s: pd.Series, tf: str) -> pd.Series:
-    len_dict = {'1h': 720, '4h': 180, '6h': 120, '8h': 90, '12h': 60, '1d': 30}
+    len_dict = {'1h': 720, '4h': 180, '6h': 120, '8h': 90, '12h': 60, '1d': 30, '3d': 10, '1w': 4}
 
     if len(s) >= len_dict[tf]:
         return s.pct_change(periods=len_dict[tf])
     else:
         return s.pct_change(periods=len(s))
 
-# def supertrend_new(df: pd.DataFrame, lb: int, mult: float) -> None:
-#     '''calculates supertrend indicator and adds it to the input dataframe with the
-#     column names following the format: st-{lb}-{mult}, st-{lb}-{mult}-up, st-{lb}-{mult}-dn'''
-#     atr(df, lb)
-#
-#     df['hl_avg'] = (df.high + df.low) / 2
-#     df['upper_band'] = (df.hl_avg + mult * df[f'atr-{lb}'])
-#     df['lower_band'] = (df.hl_avg - mult * df[f'atr-{lb}'])
-#     df.drop(['hl_avg', f'atr-{lb}'], axis=1, inplace=True)
-#
-#     df['final_upper'] = 0.0
-#     df['final_lower'] = 0.0
-#
-#     # i have to use for loops to calculate the next columns because other methods using conditional
-#     # statements work on only 1 row at a time, and these steps base the current value on the previous one
-#     for i in df.index:
-#         if i == 0.0:
-#             df.at[i, 'final_upper'] = 0.0
-#         elif (df.at[i, 'upper_band'] < df.at[i-1, 'final_upper']) | (df.at[i-1, 'close'] > df.at[i-1, 'final_upper']):
-#             df.at[i, 'final_upper'] = df.at[i, 'upper_band']
-#         else:
-#             df.at[i, 'final_upper'] = df.at[i-1, 'final_upper']
-#
-#     for i in df.index:
-#         if i == 0.0:
-#             df.at[i, 'final_lower'] = 0.0
-#         elif (df.at[i, 'lower_band'] > df.at[i-1, 'final_lower']) | (df.at[i-1, 'close'] < df.at[i-1, 'final_lower']):
-#             df.at[i, 'final_lower'] = df.at[i, 'lower_band']
-#         else:
-#             df.at[i, 'final_lower'] = df.at[i-1, 'final_lower']
-#
-#     df.drop(['upper_band', 'lower_band'], axis=1, inplace=True)
-#
-#     st = f"st-{lb}-{mult}"
-#     stu = f"st-{lb}-{mult}-up"
-#     std = f"st-{lb}-{mult}-dn"
-#     df[st] = 0.0
-#
-#     for j in df.index:
-#         if j == 0.0:
-#             df.at[j, st] = 0.0
-#         elif df.at[j-1, st] == df.at[j-1, 'final_upper'] and df.at[j, 'close'] < df.at[j, 'final_upper']:
-#             df.at[j, st] = df.at[j, 'final_upper']
-#         elif df.at[j-1, st] == df.at[j-1, 'final_upper'] and df.at[j, 'close'] > df.at[j, 'final_upper']:
-#             df.at[j, st] = df.at[j, 'final_lower']
-#         elif df.at[j-1, st] == df.at[j-1, 'final_lower'] and df.at[j, 'close'] > df.at[j, 'final_lower']:
-#             df.at[j, st] = df.at[j, 'final_lower']
-#         elif df.at[j-1, st] == df.at[j-1, 'final_lower'] and df.at[j, 'close'] < df.at[j, 'final_lower']:
-#             df.at[j, st] = df.at[j, 'final_upper']
-#
-#     df.drop(['final_upper', 'final_lower'], axis=1, inplace=True)
-#
-#     # this next step doesn't involve data from previous row in calculating current row,
-#     # so i can use np.where which is much faster than a for loop
-#     df[stu] = np.where(df.close >= df[st], df[st], np.nan)
-#     df[std] = np.where(df.close < df[st], df[st], np.nan)
-#
-#     try:
-#         df.drop(0, inplace=True)
-#     except KeyError:
-#         print(df.head())
-#     df.reset_index(drop=True, inplace=True)

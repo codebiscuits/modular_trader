@@ -42,11 +42,12 @@ def get_timeframes(scale):
 
         day_num = (datetime.now() - datetime.fromtimestamp(0)).days
         if day_num % 3 == 1:  # start of a 3-day period in pandas
-            tfs.append(('3d, None'))
+            tfs.append(('3d', None))
 
         if datetime.now().weekday() == 0:
             tfs.append(('1w', None))
 
+        print(tfs)
         return tfs
 
 

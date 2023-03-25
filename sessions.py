@@ -492,7 +492,7 @@ class TradingSession():
         being used in the current session
         bench refers to the number of periods needed to calculate the longest market benchmark statistics (1 mo roc)"""
 
-        lengths = {'1w': 2016, '1d': 288, '12h': 144, '6h': 72, '4h': 48, '1h': 12}
+        lengths = {'1w': 2016, '3d': 864, '1d': 288, '12h': 144, '6h': 72, '4h': 48, '1h': 12}
         calc_min = (self.min_length + 1) * lengths[timeframes[-1][0]]
         bench = 8928 + 1
         enough = max(bench, calc_min)
@@ -921,3 +921,4 @@ class CheckRecordsSession(TradingSession):
         self.read_records, self.write_records = self.records_path()
         self.ohlc_data = self.ohlc_path()
         self.indicators = None
+
