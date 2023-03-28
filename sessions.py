@@ -16,12 +16,12 @@ from decimal import Decimal
 import statistics as stats
 import pandas as pd
 import polars as pl
-from pycoingecko import CoinGeckoAPI
+# from pycoingecko import CoinGeckoAPI
 from pprint import pprint
 import json
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
-cg = CoinGeckoAPI()
+# cg = CoinGeckoAPI()
 
 
 class TradingSession():
@@ -50,7 +50,7 @@ class TradingSession():
         self.live = self.set_live()
 
         # get data from exchange
-        self.get_cg_symbols()
+        # self.get_cg_symbols()
         abc = Timer('all binance calls')
         abc.start()
         self.info = self.client.get_exchange_info()
@@ -199,9 +199,9 @@ class TradingSession():
             elif limit['rateLimitType'] == 'ORDERS':
                 self.max_orders_sec = (seconds, limit['limit'])
 
-    def get_cg_symbols(self):
-        all_coins = cg.get_coins_list()
-        self.cg_symbols = {x['symbol'].upper(): x['id'] for x in all_coins}
+    # def get_cg_symbols(self):
+    #     all_coins = cg.get_coins_list()
+    #     self.cg_symbols = {x['symbol'].upper(): x['id'] for x in all_coins}
 
     def binance_spreads(self, quote: str = 'USDT') -> None:
         """returns a dictionary with pairs as keys and current average spread as values"""

@@ -1011,15 +1011,6 @@ class Agent():
         # TODO ulitmately i want this function to work as described in the docstring but for a quick fix it can just use
         #  a normal probability density function to achieve a similar result
 
-        # def normpdf(x, mean, std):
-        #     var = float(std) ** 2
-        #     denom = (2 * math.pi * var) ** .5
-        #     num = math.exp(-(float(x) - float(mean)) ** 2 / (2 * var))
-        #     return num / denom
-        #
-        # score =  normpdf(inval, mean, std)
-
-        # this is a temporary way to score inval, a linear function which scores 0% inval at 1, >=10% inval at 0
         score = max(1 - (inval * 10), 0)
 
         return score

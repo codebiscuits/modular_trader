@@ -131,7 +131,7 @@ session.min_length += 15 # this is a temp fix to compensate for all the NaN rows
 # is added to the central indicator set so i can be sure there will always be enough rows once indicators have been calculated
 
 for n, pair in enumerate(pairs):
-    print('\n', n, pair, '\n')
+    # print('\n', n, pair, '\n')
     session.update_prices()
     asset = pair[:-1 * len(session.quote_asset)]
     for agent in agents:
@@ -159,8 +159,8 @@ for n, pair in enumerate(pairs):
         # print('*****', agent.name)
         if df_dict[agent.tf] is not None:
             df_2 = df_dict[agent.tf].copy()
-            if len(df_2) < session.min_length:
-                print(f"*** warning *** {session.min_length = }, {len(df_2) = }")
+            # if len(df_2) < session.min_length:
+            #     print(f"*** warning *** {session.min_length = }, {len(df_2) = }")
         else:
             # print(f"{pair} too new for {agent.name}")
             continue
@@ -173,7 +173,6 @@ for n, pair in enumerate(pairs):
             stp = funcs.calc_stop(signals.get('inval'), session.pairs_data[pair]['spread'], price)
             inval_risk = abs((price - stp) / price)
             inval_risk_score = agent.calc_inval_risk_score(inval_risk, mean=0.0, std=df.close.iloc[-30:].std())
-            print(f'inval_risk_score: {inval_risk_score:.5f}')
             bal = session.spot_bal if agent.mode == 'spot' else session.margin_bal
             size_l, usdt_size_l, size_s, usdt_size_s = funcs.get_size(agent, price, bal, inval_risk)
 
@@ -236,6 +235,11 @@ for n, pair in enumerate(pairs):
 
         elif signals.get('signal') in ['open_spot', 'open_long', 'open_short']:
             sim_reasons = agent.filter_signals(session, pair, signals, inval_risk_score, usdt_size, usdt_depth)
+
+            if signals['signal'] in ['open_spot', 'open_long'] and signals['inval_ratio'] > 1:
+                continue
+            elif signals['signal'] == 'open_short' and signals['inval_ratio'] < 1:
+                continue
 
             try:
                 agent.open_pos(session, pair, size, stp, signals['inval_ratio'], market_state, sim_reasons, direction)
