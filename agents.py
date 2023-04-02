@@ -19,6 +19,7 @@ from decimal import Decimal, getcontext
 from pprint import pprint
 import sys
 import math
+from pyarrow import ArrowInvalid
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
