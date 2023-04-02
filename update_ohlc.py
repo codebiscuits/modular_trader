@@ -57,7 +57,7 @@ def iterations(n, pair, tf):
         try:
             pldf = pl.read_parquet(source=filepath, use_pyarrow=True)
             df = pldf.to_pandas()
-        except ArrowInvalid as e:
+        except (ArrowInvalid, OSError) as e:
             print('Error:\n', e)
             print(f"Problem reading {pair} parquet file, downloading from scratch.")
             filepath.unlink()
