@@ -298,7 +298,7 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
             try:
                 pldf = pl.read_parquet(source=filepath, use_pyarrow=True)
                 df = pldf.to_pandas()
-            except ArrowInvalid as e:
+            except (ArrowInvalid, OSError) as e:
                 print(f"Problem reading {pair} parquet file, downloading from scratch.")
                 print(e)
                 filepath.unlink()
