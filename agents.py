@@ -87,8 +87,8 @@ class Agent():
         self.fixed_risk_s = self.set_fixed_risk(session, 'short')
         self.test_fixed_risk(0.0002, 0.0002)
         self.max_positions = self.set_max_pos()
-        self.total_r_limit = self.max_positions * 1.75
-        self.indiv_r_limit = 2
+        self.total_r_limit = self.max_positions * 1.3
+        self.indiv_r_limit = 1.5
         self.fr_dol_spot = self.fixed_risk_spot * session.spot_bal
         self.fixed_risk_dol_l = self.fixed_risk_l * session.margin_bal
         self.fixed_risk_dol_s = self.fixed_risk_s * session.margin_bal
