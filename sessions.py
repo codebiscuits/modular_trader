@@ -882,7 +882,7 @@ class LightSession(TradingSession):
         self.weights_count = []
 
         # get data from exchange
-        self.get_cg_symbols()
+        # self.get_cg_symbols()
         self.info = self.client.get_exchange_info()
         self.check_rate_limits()
         self.track_weights(10) # this should be before self.info, but would only work after check_rate_limits
