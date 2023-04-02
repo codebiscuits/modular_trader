@@ -527,7 +527,7 @@ class Agent():
                     df = pd.read_parquet(filepath)
                     source = 'file'
                     check_recent = True
-                except OSError as e:
+                except (ArrowInvalid, OSError) as e:
                     print(f"problem loading {pair} ohlc")
                     print(e)
                     filepath.unlink()
