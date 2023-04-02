@@ -103,7 +103,7 @@ iterations(0, 'BTCUSDT', '1m')
 iterations(1, 'ETHUSDT', '1m')
 
 for n, pair in enumerate(pairs):
-    print(n, pair)
+    # print(n, pair)
     try:
         df = iterations(n, pair, '5m')
     except Exception as e:
