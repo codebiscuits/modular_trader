@@ -57,7 +57,7 @@ def get_timeframes(scale):
 timeframes = get_timeframes(scale)
 
 print(f"Running setup_scan({timeframes})")
-session = sessions.TradingSession(0.0005)
+session = sessions.TradingSession(0.0003)
 print(f"\nCurrent time: {session.now_start}, {session.name}\n")
 
 agents = []
