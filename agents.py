@@ -2286,9 +2286,14 @@ class Agent():
         asset = pair[:-4]
         real_bal = Decimal(self.open_trades[pair]['position']['base_size'])
 
-        session.margin_account_info()
-        session.get_asset_bals()
-        free_bal = session.margin_bals[asset]['free']
+        if self.mode == 'spot':
+            session.acct = session.client.get_account()
+            session.get_asset_bals_s()
+            free_bal = session.spot_bals[asset]['free']
+        elif self.mode == 'margin':
+            session.m_acct = session.client.get_margin_account()
+            session.get_asset_bals_m()
+            free_bal = session.margin_bals[asset]['free']
 
         k2.stop()
 
