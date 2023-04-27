@@ -5,3 +5,4 @@ pushbullet.py
 pycoingecko
 python-binance
 ccxt
+scikit-learn
