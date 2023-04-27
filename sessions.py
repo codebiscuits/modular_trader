@@ -26,6 +26,7 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 class TradingSession():
     min_length = 10000
+    max_length = 0
     quote_asset = 'USDT'
     max_spread = 0.5
     ohlc_tf = '5m'
@@ -33,21 +34,23 @@ class TradingSession():
     below_200_ema = set()
     prices = {}
     symbol_info = {}
+    counts = []
+    weights_count = []
+    all_weights = []
 
     def __init__(self, fr_max):
         t = Timer('session init')
         t.start()
 
-        # configure settings
+        # configure settings and constants
         self.now_start = datetime.now().strftime('%d/%m/%y %H:%M')
         self.client = Client(keys.bPkey, keys.bSkey, testnet=False)
         self.last_price_update = 0
         self.fr_max = fr_max  # at 0.0025, one agent makes good use of total balance
         self.name = 'agent names here'
-        self.counts = []
-        self.weights_count = []
         self.last_price_update = 0
         self.live = self.set_live()
+        self.min_size = 30
 
         # get data from exchange
         # self.get_cg_symbols()
@@ -93,7 +96,7 @@ class TradingSession():
         self.read_records, self.write_records = self.records_path()
         self.ohlc_data = self.ohlc_path()
         self.market_ranks = self.load_mkt_ranks()
-        self.algo_order_counts = self.count_algo_orders()
+        self.count_algo_orders()
         self.max_loan_amounts = {}
         self.book_data = {}
         self.indicators = {'ema-200', 'ema-100', 'ema-50', 'ema-25', 'vol_delta',
@@ -113,6 +116,7 @@ class TradingSession():
         now = datetime.now().timestamp()
         new_weight = (now, weight)
         self.weights_count.append(new_weight)
+        self.all_weights.append(new_weight)
         window = self.request_weight[0]
         weight_limit = self.request_weight[1]
         raw_window = self.raw_requests[0]
@@ -295,7 +299,7 @@ class TradingSession():
                         tick_size = Decimal(filter['tickSize'])
                     elif filter['filterType'] == 'LOT_SIZE':
                         step_size = Decimal(filter['stepSize'])
-                    elif filter['filterType'] == 'MIN_NOTIONAL':
+                    elif filter['filterType'] == 'NOTIONAL':
                         min_size = filter['minNotional']
                     elif filter['filterType'] == 'MAX_NUM_ALGO_ORDERS':
                         max_algo = filter['maxNumAlgoOrders']
@@ -449,9 +453,11 @@ class TradingSession():
         algo_types = ['STOP_LOSS', 'STOP_LOSS_LIMIT', 'TAKE_PROFIT', 'TAKE_PROFIT_LIMIT']
         order_symbols = [d['symbol'] for d in self.margin_orders if d['type'] in algo_types]
 
-        x7.stop()
+        counted = Counter(order_symbols)
+        for p, v in self.pairs_data.items():
+            v['algo_orders'] = 0 if p not in counted else counted[p]
 
-        return Counter(order_symbols)
+        x7.stop()
 
     def algo_limit_reached(self, pair: str) -> bool:
         """compares the number of 'algo orders' (stop-loss and take-profit orders) currently open to the maximum allowed.
@@ -460,7 +466,7 @@ class TradingSession():
         x8 = Timer(f'{func_name}')
         x8.start()
 
-        count = self.algo_order_counts.get(pair, 0)
+        count = self.pairs_data[pair].get('algo_orders', 0)
 
         limit = self.pairs_data[pair]['max_algo_orders']
 
@@ -493,7 +499,7 @@ class TradingSession():
         bench refers to the number of periods needed to calculate the longest market benchmark statistics (1 mo roc)"""
 
         lengths = {'1w': 2016, '3d': 864, '1d': 288, '12h': 144, '6h': 72, '4h': 48, '1h': 12}
-        calc_min = (self.min_length + 1) * lengths[timeframes[-1][0]]
+        calc_min = (self.max_length + 1) * lengths[timeframes[-1][0]]
         bench = 8928 + 1
         enough = max(bench, calc_min)
 
@@ -560,6 +566,7 @@ class TradingSession():
                 df = ind.bull_bear_bar(df)
             elif vals[0] == 'roc_1d':
                 df['roc_1d'] = ind.roc_1d(df.close, tf)
+                # print(df.tail())
             elif vals[0] == 'roc_1w':
                 df['roc_1w'] = ind.roc_1w(df.close, tf)
             elif vals[0] == 'roc_1m':
@@ -797,12 +804,12 @@ class TradingSession():
         x4 = Timer(f'{func_name}')
         x4.start()
 
-        margin_lvl = float(self.m_acct.get('marginLevel'))
-        print(f"Margin level: {margin_lvl:.2f}")
+        self.margin_lvl = float(self.m_acct.get('marginLevel'))
+        print(f"Margin level: {self.margin_lvl:.2f}")
 
-        if margin_lvl <= 2:
+        if self.margin_lvl <= 2:
             pb.push_note('*** Warning ***', 'Margin level <= 2, reduce risk')
-        elif margin_lvl <= 3:
+        elif self.margin_lvl <= 3:
             pb.push_note('Warning', 'Margin level <= 3, keep an eye on it')
 
         x4.stop()
@@ -882,7 +889,7 @@ class LightSession(TradingSession):
         self.weights_count = []
 
         # get data from exchange
-        self.get_cg_symbols()
+        # self.get_cg_symbols()
         self.info = self.client.get_exchange_info()
         self.check_rate_limits()
         self.track_weights(10) # this should be before self.info, but would only work after check_rate_limits

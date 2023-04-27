@@ -24,6 +24,42 @@ ctx.prec = 12
 # now = datetime.now().strftime('%d/%m/%y %H:%M')
 
 
+def transform_signal(signal: dict, type: str, state: str, direction: str) -> dict:
+    """takes a raw signal as input, returns a 'processed' signal ready to be scored and passed to an omf"""
+
+    if type == 'close':
+        return {'agent': signal['agent'],
+                'pair': signal['pair'],
+                'action': 'close',
+                'direction': direction,
+                'state': state,
+                'mode': signal['mode']}
+
+    elif type == 'open':
+        signal['action'] = 'open'
+        signal['direction'] = direction
+        signal['state'] = state
+        return signal
+
+    elif type == 'oco':
+        signal['action'] = 'oco'
+        signal['direction'] = direction
+        signal['state'] = state
+        return signal
+
+    elif type == 'tp':
+        signal['action'] = 'tp'
+        signal['direction'] = direction
+        signal['state'] = state
+        return signal
+
+    elif type == 'add':
+        signal['action'] = 'add'
+        signal['direction'] = direction
+        signal['state'] = state
+        return signal
+
+
 def step_round(num: float, step: str) -> str:
     """rounds down to any step size"""
     gv = Timer('step_round')
@@ -87,6 +123,11 @@ def get_market_state(session, agent, pair, data: pd.DataFrame) -> dict[str, floa
         market_rank_1w = None
         market_rank_1m = None
 
+    if hasattr(agent, 'cross_age_name'):
+        cross_age = int(data[agent.cross_age_name].iloc[-1])
+    else:
+        cross_age = None
+
 
     return dict(
         ema_200=data.ema_200.iloc[-1],
@@ -106,7 +147,7 @@ def get_market_state(session, agent, pair, data: pd.DataFrame) -> dict[str, floa
         market_rank_1d=market_rank_1d,
         market_rank_1w=market_rank_1w,
         market_rank_1m=market_rank_1m,
-        cross_age=int(data[agent.cross_age_name].iloc[-1])
+        cross_age=cross_age
     )
 
 
@@ -255,35 +296,22 @@ def log(session, agent) -> None:
                   'quote_asset': session.quote_asset, 'fr_max': session.fr_max,
                   'max_spread': session.max_spread, 'indiv_r_limit': agent.indiv_r_limit,
                   'total_r_limit': agent.total_r_limit, 'target_risk': agent.target_risk,
-                  'max_pos': agent.max_positions}
-
-    ropnl_spot = agent.open_pnl('spot', 'real')
-    wsopnl_spot, usopnl_spot = agent.open_pnl('spot', 'sim')
-
-    ropnl_long = agent.open_pnl('long', 'real')
-    wsopnl_long, usopnl_long = agent.open_pnl('long', 'sim')
-
-    ropnl_short = agent.open_pnl('short', 'real')
-    wsopnl_short, usopnl_short = agent.open_pnl('short', 'sim')
+                  'max_pos': agent.max_positions, 'market_bias': session.market_bias
+    }
 
     if agent.mode == 'spot':
         new_record['balance'] = round(session.spot_bal, 2)
-        new_record['fr_spot'] = agent.fixed_risk_spot
+        new_record['fr_spot'] = agent.fr_score_spot
 
         new_record['real_rpnl_spot'] = agent.realised_pnls['real_spot']
         new_record['sim_rpnl_spot'] = agent.realised_pnls['sim_spot']
         new_record['wanted_rpnl_spot'] = agent.realised_pnls['wanted_spot']
         new_record['unwanted_rpnl_spot'] = agent.realised_pnls['unwanted_spot']
 
-        new_record['real_open_pnl_spot'] = ropnl_spot
-        new_record['sim_open_pnl_spot'] = wsopnl_spot + usopnl_spot
-        new_record['wanted_open_pnl_spot'] = ropnl_spot + wsopnl_spot
-        new_record['unwanted_open_pnl_spot'] = usopnl_spot
-
     elif agent.mode == 'margin':
         new_record['balance'] = round(session.margin_bal, 2)
-        new_record['fr_long'] = agent.fixed_risk_l
-        new_record['fr_short'] = agent.fixed_risk_s
+        new_record['fr_long'] = agent.fr_score_l
+        new_record['fr_short'] = agent.fr_score_s
 
         new_record['real_rpnl_long'] = agent.realised_pnls['real_long']
         new_record['sim_rpnl_long'] = agent.realised_pnls['sim_long']
@@ -294,16 +322,6 @@ def log(session, agent) -> None:
         new_record['sim_rpnl_short'] = agent.realised_pnls['sim_short']
         new_record['wanted_rpnl_short'] = agent.realised_pnls['wanted_short']
         new_record['unwanted_rpnl_short'] = agent.realised_pnls['unwanted_short']
-
-        new_record['real_open_pnl_l'] = ropnl_long
-        new_record['sim_open_pnl_l'] = wsopnl_long + usopnl_long
-        new_record['wanted_open_pnl_l'] = ropnl_long + wsopnl_long
-        new_record['unwanted_open_pnl_l'] = usopnl_long
-
-        new_record['real_open_pnl_s'] = ropnl_short
-        new_record['sim_open_pnl_s'] = wsopnl_short + usopnl_short
-        new_record['wanted_open_pnl_s'] = ropnl_short + wsopnl_short
-        new_record['unwanted_open_pnl_s'] = usopnl_short
     else:
         print(f'*** warning log function not working for {agent.name} ***')
 
@@ -408,7 +426,8 @@ def count_trades(counts: dict) -> str:
 
 
 def update_liability(trade_record: Dict[str, dict], size: str, operation: str) -> str:
-    """this function finds the previous value for liability and returns the new value as a string"""
+    """this function finds the previous value for liability and returns the new value as a string. the size argument
+    should be denominated in the asset being borrowed/repayed"""
 
     ty = Timer('update_liability')
     ty.start()

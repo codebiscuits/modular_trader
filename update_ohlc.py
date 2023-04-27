@@ -57,7 +57,7 @@ def iterations(n, pair, tf):
         try:
             pldf = pl.read_parquet(source=filepath, use_pyarrow=True)
             df = pldf.to_pandas()
-        except ArrowInvalid as e:
+        except (ArrowInvalid, OSError) as e:
             print('Error:\n', e)
             print(f"Problem reading {pair} parquet file, downloading from scratch.")
             filepath.unlink()
@@ -70,18 +70,17 @@ def iterations(n, pair, tf):
     # -------------------- if theres no local data yet -------------------------#
     else:
         df = from_scratch(pair, tf)
-        print(f'{n} downloaded {pair} from scratch')
+        # print(f'{n} downloaded {pair} from scratch')
 
     max_dict = {'1m': 1051200, '5m': 210240, '15m': 70080, '1h': 17520}
     max_len = max_dict[tf]  # returns 2 years worth of timeframe periods
     if len(df) > max_len:
+        # print(f"trimming ohlc from {len(df)} to {max_len}")
         df = df.tail(max_len).reset_index(drop=True)
 
     # df.to_parquet(filepath, compression=None)
     pldf = pl.from_pandas(df)
     pldf.write_parquet(filepath, row_group_size=10512, use_pyarrow=True)
-
-    # print(f"{n} {pair} ohlc length: {len(df)} downloaded at {datetime.now().strftime('%H:%M')}")
 
     return df
 
@@ -103,7 +102,7 @@ iterations(0, 'BTCUSDT', '1m')
 iterations(1, 'ETHUSDT', '1m')
 
 for n, pair in enumerate(pairs):
-    print(n, pair)
+    # print(n, pair)
     try:
         df = iterations(n, pair, '5m')
     except Exception as e:
@@ -122,4 +121,5 @@ end = time.perf_counter()
 all_time = end - start
 elapsed_str = f'Time taken: {round(all_time // 60)}m {round(all_time % 60)}s'
 
+print(f"used-weight-1m: {client.response.headers['x-mbx-used-weight-1m']}")
 print(f'update_ohlc complete, {elapsed_str}')

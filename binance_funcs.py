@@ -18,6 +18,7 @@ from collections import Counter
 import sys
 from pycoingecko import CoinGeckoAPI
 from pyarrow import ArrowInvalid
+import indicators as ind
 
 client = Client(keys.bPkey, keys.bSkey)
 cg = CoinGeckoAPI()
@@ -38,56 +39,6 @@ tf_dict = {'1m': Client.KLINE_INTERVAL_1MINUTE,
            '3d': Client.KLINE_INTERVAL_3DAY,
            '1w': Client.KLINE_INTERVAL_1WEEK,
            }
-
-
-# -#-#- Utility Functions
-
-
-def resample(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
-    """resamples a dataframe and resets the datetime index"""
-
-    hb = Timer('resample')
-    hb.start()
-    df = df.resample(timeframe, on='timestamp').agg({'open': 'first',
-                                                     'high': 'max',
-                                                     'low': 'min',
-                                                     'close': 'last',
-                                                     'volume': 'sum'})
-    df.reset_index(inplace=True)  # don't use drop=True because i want the
-    # timestamp index back as a column
-    hb.stop()
-    return df
-
-
-def get_size(agent, price: float, balance: float, risk: float) -> Tuple[float]:
-    """calculates the desired position size in base or quote denominations
-    using the total account balance, current fixed-risk setting, and the distance
-    from current price to stop-loss"""
-
-    jn = Timer('get_size')
-    jn.start()
-    usdt_size_l = balance * agent.fixed_risk_l / risk
-    asset_size_l = float(usdt_size_l / price)
-
-    usdt_size_s = balance * agent.fixed_risk_s / risk
-    asset_size_s = float(usdt_size_s / price)
-    jn.stop()
-    return asset_size_l, usdt_size_l, asset_size_s, usdt_size_s
-
-
-def calc_stop(inval: float, spread: float, price: float, min_risk: float = 0.002) -> float:
-    """calculates what the stop-loss trigger price should be based on the current
-    value of the supertrend line and the current spread (slippage proxy).
-    if this is too close to the entry price, the stop will be set at the minimum
-    allowable distance."""
-    buffer = max(spread * 2, min_risk)
-
-    if price > inval:
-        stop_price = float(inval) * (1 - buffer)
-    else:
-        stop_price = float(inval) * (1 + buffer)
-
-    return stop_price
 
 
 # -#-#- Market Data Functions
@@ -138,28 +89,28 @@ def get_current_cg_data(cg_symbol):
     )
 
 
-def get_cg_data(cg_symbol, days):
-    data = cg.get_coin_market_chart_by_id(id=cg_symbol, vs_currency='usd', days=days)
-    data_dict = {
-        'timestamp': [d[0] for d in data['prices']],
-        'mcap': [d[1] for d in data['market_caps']],
-        'tot_vol': [d[1] for d in data['total_volumes']]
-    }
-    df = pd.DataFrame(data_dict)
-    df['date'] = pd.to_datetime(df.timestamp, unit='ms')
-
-    df = df[['date', 'tot_vol', 'mcap']].set_index('date', drop=True)
-
-    if days == 1:
-        df = df.resample('15T').agg('mean')
-    elif 1 < days <=90:
-        df = df.resample('4H').agg('mean')
-    else:
-        df = df.resample('3D').agg('mean')
-
-    df = df.resample('5T').interpolate()
-
-    return df
+# def get_cg_data(cg_symbol, days):
+#     data = cg.get_coin_market_chart_by_id(id=cg_symbol, vs_currency='usd', days=days)
+#     data_dict = {
+#         'timestamp': [d[0] for d in data['prices']],
+#         'mcap': [d[1] for d in data['market_caps']],
+#         'tot_vol': [d[1] for d in data['total_volumes']]
+#     }
+#     df = pd.DataFrame(data_dict)
+#     df['date'] = pd.to_datetime(df.timestamp, unit='ms')
+#
+#     df = df[['date', 'tot_vol', 'mcap']].set_index('date', drop=True)
+#
+#     if days == 1:
+#         df = df.resample('15T').agg('mean')
+#     elif 1 < days <= 90:
+#         df = df.resample('4H').agg('mean')
+#     else:
+#         df = df.resample('3D').agg('mean')
+#
+#     df = df.resample('5T').interpolate()
+#
+#     return df
 
 
 def get_bin_ohlc(pair: str, timeframe: str, span: str = "2 years ago UTC", session=None) -> pd.DataFrame:
@@ -184,39 +135,39 @@ def get_bin_ohlc(pair: str, timeframe: str, span: str = "2 years ago UTC", sessi
     return df
 
 
-def get_all_cg_data(session, pair, tf, df_first, df_last):
-    timespan = df_last - df_first
-
-    cg_data = get_cg_data(session.pairs_data[pair]['cg_symbol'], 1)
-    print(cg_data)
-
-    if timespan.days > 1:
-        short_start = cg_data.indexc[0]
-        med_cg_data = get_cg_data(session.pairs_data[pair]['cg_symbol'], min(timespan.days + 1, 90))
-        med_cg_data = med_cg_data.loc[med_cg_data.index < short_start]
-        cg_data = pd.concat([cg_data, med_cg_data]).sort_index()
-
-    if timespan.days > 90:
-        med_start = cg_data.index[0]
-        long_cg_data = get_cg_data(session.pairs_data[pair]['cg_symbol'], timespan.days + 1)
-        long_cg_data = long_cg_data.loc[long_cg_data.index < med_start]
-        cg_data = pd.concat([cg_data, long_cg_data]).sort_index()
-
-    if tf == '5m':
-        pass
-    elif tf == '1m':
-        cg_data = cg_data.resample('1T').interpolate()
-    else:
-        cg_data = resample(cg_data, tf)
-
-    if cg_data.index[0] < df_first:
-        cg_data = cg_data.loc[cg_data.index >= df_first]
-
-    if cg_data.index[-1] > df_last:
-        print('cg data was actually longer than binance data')
-        cg_data = cg_data.loc[cg_data.index <= df_last]
-
-    return cg_data.reset_index(drop=True)
+# def get_all_cg_data(session, pair, tf, df_first, df_last):
+#     timespan = df_last - df_first
+#
+#     cg_data = get_cg_data(session.pairs_data[pair]['cg_symbol'], 1)
+#     print(cg_data)
+#
+#     if timespan.days > 1:
+#         short_start = cg_data.indexc[0]
+#         med_cg_data = get_cg_data(session.pairs_data[pair]['cg_symbol'], min(timespan.days + 1, 90))
+#         med_cg_data = med_cg_data.loc[med_cg_data.index < short_start]
+#         cg_data = pd.concat([cg_data, med_cg_data]).sort_index()
+#
+#     if timespan.days > 90:
+#         med_start = cg_data.index[0]
+#         long_cg_data = get_cg_data(session.pairs_data[pair]['cg_symbol'], timespan.days + 1)
+#         long_cg_data = long_cg_data.loc[long_cg_data.index < med_start]
+#         cg_data = pd.concat([cg_data, long_cg_data]).sort_index()
+#
+#     if tf == '5m':
+#         pass
+#     elif tf == '1m':
+#         cg_data = cg_data.resample('1T').interpolate()
+#     else:
+#         cg_data = resample(cg_data, tf)
+#
+#     if cg_data.index[0] < df_first:
+#         cg_data = cg_data.loc[cg_data.index >= df_first]
+#
+#     if cg_data.index[-1] > df_last:
+#         print('cg data was actually longer than binance data')
+#         cg_data = cg_data.loc[cg_data.index <= df_last]
+#
+#     return cg_data.reset_index(drop=True)
 
 
 def get_ohlc(pair: str, timeframe: str, span: str = "2 years ago UTC", session=None) -> pd.DataFrame:
@@ -235,14 +186,26 @@ def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame, session=None) -
     """takes an ohlc dataframe, works out when the data ends, then requests from
     binance all data from the end to the current moment. It then joins the new
     data onto the old data and returns the updated dataframe"""
-    old_end = int(old_df.timestamp.iloc[-1].timestamp()) * 1000
 
     # print('get_klines')
     if session:
         session.track_weights(1)
     abc = Timer('all binance calls')
     abc.start()
-    klines = client.get_klines(symbol=pair, interval=tf_dict.get(timeframe), startTime=old_end)
+
+    # get_klines is quicker than get_historical_klines but will only download 500 periods, calculate which to use
+    deltas = {'1m': timedelta(minutes=1), '5m': timedelta(minutes=5), '15m': timedelta(minutes=15)}
+    span_periods = (datetime.now() - old_df.timestamp.iloc[-1]) / deltas[timeframe]
+    # print(f"{span_periods = }")
+    if span_periods >= 500:
+        # print('used get_historical_klines')
+        old_end = str(old_df.timestamp.iloc[-1])
+        klines = client.get_historical_klines(symbol=pair, interval=tf_dict.get(timeframe), start_str=old_end)
+    else:
+        # print('used get_klines')
+        old_end = int(old_df.timestamp.iloc[-1].timestamp()) * 1000
+        klines = client.get_klines(symbol=pair, interval=tf_dict.get(timeframe), startTime=old_end)
+
     abc.stop()
     cols = ['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'close_time',
             'quote_vol', 'num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol', 'ignore']
@@ -263,17 +226,20 @@ def resample_ohlc(tf, offset, df):
               '8h': '8H', '12h': '12H', '1d': '1D', '3d': '3D', '1w': '1W'}
 
     df = df.resample(tf_map[tf], on='timestamp',
-                     offset=offset).agg({'open': 'first',
-                                                 'high': 'max',
-                                                 'low': 'min',
-                                                 'close': 'last',
-                                                 'base_vol': 'sum',
-                                                 'quote_vol': 'sum',
-                                                 'num_trades': 'sum',
-                                                 'taker_buy_base_vol': 'sum',
-                                                 'taker_buy_quote_vol': 'sum'})
+                     offset=offset).agg(
+        {'open': 'first',
+         'high': 'max',
+         'low': 'min',
+         'close': 'last',
+         'base_vol': 'sum',
+         'quote_vol': 'sum',
+         'num_trades': 'sum',
+         'taker_buy_base_vol': 'sum',
+         'taker_buy_quote_vol': 'sum',
+         }
+    )
 
-    df = df.reset_index() # drop=False because we want to keep the timestamp column
+    df = df.reset_index()  # drop=False because we want to keep the timestamp column
 
     return df
 
@@ -298,11 +264,12 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
             try:
                 pldf = pl.read_parquet(source=filepath, use_pyarrow=True)
                 df = pldf.to_pandas()
-            except ArrowInvalid as e:
+            except (ArrowInvalid, OSError) as e:
                 print(f"Problem reading {pair} parquet file, downloading from scratch.")
                 print(e)
                 filepath.unlink()
                 df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
+
 
             last_timestamp = df.timestamp.iloc[-1].timestamp()
             now = datetime.now().timestamp()
@@ -324,17 +291,11 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
             df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
             print(f'downloaded {pair} from scratch')
 
-        # max_len = 210240 # 210240 is 2 years' worth of 5m periods
-        # if len(df) > max_len:
-        #     df = df.tail(max_len).reset_index(drop=True)
-        # pldf = pl.from_pandas(df)
-        # pldf.write_parquet(filepath, use_pyarrow=True)
-
         session.store_ohlc(df, pair, timeframes)
 
     df_dict = {}
     for tf, offset in timeframes:
-        df_dict[tf] = resample_ohlc(tf, offset, df.copy()).tail(session.min_length).reset_index(drop=True)
+        df_dict[tf] = resample_ohlc(tf, offset, df.copy()).tail(session.max_length).reset_index(drop=True)
 
     ds.stop()
     return df_dict
@@ -427,7 +388,7 @@ def buy_asset_s(session, pair: str, size: float, live: bool) -> dict:
     bas = Timer('buy_asset_s')
     bas.start()
 
-    now = int(datetime.now().timestamp() * 1000)
+    now = int(datetime.now().timestamp())
     price = session.pairs_data[pair]['price']
     base_size: str = uf.valid_size(session, pair, size)
     if live:
@@ -462,7 +423,7 @@ def sell_asset_s(session, pair: str, size: float, live: bool) -> dict:
     sas = Timer('sell_asset_s')
     sas.start()
 
-    now = int(datetime.now().timestamp() * 1000)
+    now = int(datetime.now().timestamp())
     price = session.pairs_data[pair]['price']
     base_size = uf.valid_size(session, pair, size)
 
@@ -471,21 +432,21 @@ def sell_asset_s(session, pair: str, size: float, live: bool) -> dict:
     else:
         usdt_size: str = f"{base_size} * {price}:.2f"
         sell_order = {'clientOrderId': '111111',
-                     'cummulativeQuoteQty': usdt_size,
-                     'executedQty': base_size,
-                     'fills': [{'commission': '0',
-                                'commissionAsset': 'BNB',
-                                'price': str(uf.valid_price(session, pair, price)),
-                                'qty': base_size}],
-                     'orderId': 123456,
-                     'origQty': base_size,
-                     'price': '0',
-                     'side': 'SELL',
-                     'status': 'FILLED',
-                     'symbol': pair,
-                     'timeInForce': 'GTC',
-                     'transactTime': now,
-                     'type': 'MARKET'}
+                      'cummulativeQuoteQty': usdt_size,
+                      'executedQty': base_size,
+                      'fills': [{'commission': '0',
+                                 'commissionAsset': 'BNB',
+                                 'price': str(uf.valid_price(session, pair, price)),
+                                 'qty': base_size}],
+                      'orderId': 123456,
+                      'origQty': base_size,
+                      'price': '0',
+                      'side': 'SELL',
+                      'status': 'FILLED',
+                      'symbol': pair,
+                      'timeInForce': 'GTC',
+                      'transactTime': now,
+                      'type': 'MARKET'}
 
     sas.stop()
     return sell_order
@@ -506,17 +467,17 @@ def set_stop_s(session, pair, trigger, limit, size):
     print(f"setting {pair} stop: {stop_size = } {trigger = } {limit = }")
     if session.live:
         stop_sell_order = client.create_order(symbol=pair,
-                                                     side=be.SIDE_SELL,
-                                                     type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
-                                                     timeInForce=be.TIME_IN_FORCE_GTC,
-                                                     stopPrice=trigger,
-                                                     quantity=stop_size,
-                                                     price=limit)
+                                              side=be.SIDE_SELL,
+                                              type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
+                                              timeInForce=be.TIME_IN_FORCE_GTC,
+                                              stopPrice=trigger,
+                                              quantity=stop_size,
+                                              price=limit)
     else:
         stop_sell_order = {'orderId': 'not live',
-                           'transactTime': now * 1000}
+                           'transactTime': now}
 
-    session.algo_order_counts += Counter([pair])
+    session.pairs_data[pair]['algo_orders'] += 1
 
     t.stop()
     return stop_sell_order
@@ -548,7 +509,7 @@ def clear_stop_s(session, pair: str, position: dict) -> Tuple[Any, Decimal]:
     else:
         base_size = position['base_size']
 
-    session.algo_order_counts -= Counter([pair])
+    session.pairs_data[pair]['algo_orders'] -= 1
 
     t.stop()
     return clear, base_size
@@ -575,7 +536,7 @@ def buy_asset_M(session, pair: str, size: float, is_base: bool, price: float, li
                                                type=be.ORDER_TYPE_MARKET,
                                                quoteOrderQty=size)
     else:
-        now = int(datetime.now().timestamp() * 1000)
+        now = int(datetime.now().timestamp())
         price = session.pairs_data[pair]['price']
         if is_base:
             base_size = size
@@ -621,7 +582,7 @@ def sell_asset_M(session, pair: str, base_size: float, price: float, live: bool)
         sell_order = client.create_margin_order(symbol=pair, side=be.SIDE_SELL, type=be.ORDER_TYPE_MARKET,
                                                 quantity=base_size)
     else:
-        now = int(datetime.now().timestamp() * 1000)
+        now = int(datetime.now().timestamp())
         price = session.pairs_data[pair]['price']
         usdt_size = uf.valid_size(session, pair, float(base_size) * price)
         if not usdt_size:
@@ -692,9 +653,9 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit
                                                      price=limit)
     else:
         stop_sell_order = {'orderId': 'not live',
-                           'transactTime': now * 1000}
+                           'transactTime': now}
 
-    session.algo_order_counts += Counter([pair])
+    session.pairs_data[pair]['algo_orders'] += 1
 
     sd.stop()
     return stop_sell_order
@@ -725,7 +686,7 @@ def clear_stop_M(session, pair: str, position: dict) -> Tuple[Any, Decimal]:
     else:
         base_size = position['base_size']
 
-    session.algo_order_counts -= Counter([pair])
+    session.pairs_data[pair]['algo_orders'] -= 1
 
     fc.stop()
     return clear, base_size
