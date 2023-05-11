@@ -5,16 +5,13 @@ import keys
 from binance.client import Client
 from datetime import datetime, timezone
 import binance_funcs as funcs
-from agents import DoubleST, DoubleSTnoEMA, EMACross, EMACrossHMA, AvgTradeSize
-import binance.exceptions as bx
+from agents import DoubleST, DoubleSTnoEMA, EMACross, EMACrossHMA
 from pprint import pprint
 import utility_funcs as uf
 import sessions
 from timers import Timer
 from pushbullet import Pushbullet
 from collections import Counter
-import plotly.express as px
-import traceback
 
 # TODO current (02/04/23) roadmap should be:
 #  1: get setup scanner back up and running with the new architecture in place
@@ -22,7 +19,7 @@ import traceback
 #  so it creates a new file for each session, named by the date and time they took place
 #  3: start integrating polars and doing anything else i can to speed things up enough to run 3day and 1week timeframes
 #  in the same session as everything else
-#  4: get spot trading and oco entries working so i can use other strats
+#  4: get spot trading and oco entries and trade adds working so i can use other strats
 #  5: ML analysis for better performing strats
 
 client = Client(keys.bPkey, keys.bSkey)
@@ -41,8 +38,8 @@ def get_timeframes():
 
 ########################################################################################################################
 
-# timeframes = get_timeframes()
-timeframes = [('1h', None)]
+timeframes = get_timeframes()
+# timeframes = [('1h', None)]
 
 print(f"Running setup_scan({timeframes})")
 session = sessions.TradingSession(0.0003)
@@ -94,11 +91,6 @@ print("\n-*-*-*- rst and rsst finished for all agents -*-*-*-\n")
 pairs = [k for k in session.pairs_data.keys()]
 # pairs = pairs[:10] # for testing the loop quickly
 
-session.min_length += 15 # TODO this is a temp fix to compensate for all the NaN rows which will be dropped when
-session.max_length += 15 #  indicators are calculated. I really need a way for each indicator to add the correct number
-# of rows to session.min_length as it is added to the central indicator set so i can be sure there will always be enough
-# rows once indicators have been calculated
-
 init_end = time.perf_counter()
 init_elapsed = init_end - script_start
 
@@ -111,7 +103,9 @@ tech_start = time.perf_counter()
 raw_signals = []
 
 for n, pair in enumerate(pairs):
+    # print('-' * 100)
     # print('\n', n, pair, '\n')
+    # print(n, pair)
     session.update_prices()
 
     now = datetime.now().strftime('%d/%m/%y %H:%M')
@@ -121,24 +115,24 @@ for n, pair in enumerate(pairs):
 
     # if there is not enough history at a given timeframe, this function will return None instead of the df
     # TODO this would be a good function to start the migration to polars
+    if not df_dict:
+        continue
+
     for tf, df in df_dict.items():
-        # print(f"\n{pair} {tf} {len(df)}")
-        if len(df) >= session.min_length:
-            df_dict[tf] = session.compute_indicators(df, tf)
-        else:
-            # print(f"length of {pair} {tf} data: {len(df)}")
-            df_dict[tf] = None
+        df_dict[tf] = session.compute_indicators(df, tf)
 
     for agent in agents.values():
-        if df_dict[agent.tf] is not None:
-            df_2 = df_dict[agent.tf].copy()
-        else:
+        if agent.tf not in df_dict: # some pairs will not have all required timeframes for the session
             continue
+        # print(f"{agent.name}")
+        df_2 = df_dict[agent.tf].copy()
+        # print(f"\n{pair} {tf} {len(df_2)}")
 
         market_state = uf.get_market_state(session, agent, pair, df_2)
 
         signal = agent.signals(session, df_2, pair)
         if signal and signal['bias']:
+
             signal.update(market_state)
             raw_signals.append(signal)
 
@@ -154,22 +148,24 @@ for n, pair in enumerate(pairs):
             if not sim_match:
                 print(f"{pair} sim pos doesn't match sim trades")
 
-            if pair in agent.open_trades.keys():
+            if pair in agent.open_trades:
                 real_qty = float(agent.open_trades[pair]['position']['base_size'])
                 agent.real_pos[asset].update(
-                    agent.update_pos(session, asset, real_qty, signal['inval_ratio'], 'real'))
+                    agent.update_pos(session, pair, real_qty, signal['inval_ratio'], 'real'))
                 real_ep = float(agent.open_trades[pair]['position']['entry_price'])
                 agent.real_pos[asset]['price_delta'] = (price - real_ep) / real_ep
 
-            if pair in agent.sim_trades.keys():
+            if pair in agent.sim_trades:
                 sim_qty = float(agent.sim_trades[pair]['position']['base_size'])
-                new_stats = agent.update_pos(session, asset, sim_qty, signal['inval_ratio'], 'sim')
+                new_stats = agent.update_pos(session, pair, sim_qty, signal['inval_ratio'], 'sim')
                 agent.sim_pos[asset].update(new_stats)
                 sim_ep = float(agent.sim_trades[pair]['position']['entry_price'])
                 agent.sim_pos[asset]['price_delta'] = (price - sim_ep) / sim_ep
 
-signal_counts = Counter([signal['bias'] for signal in raw_signals])
-session.market_bias = (signal_counts.get('bullish', 0) - signal_counts.get('bearish', 0)) / len(raw_signals)
+signal_counts = Counter([f"{signal['tf']}_{signal['bias']}" for signal in raw_signals])
+for tf in timeframes:
+    tf_signals = [sig for sig in raw_signals if sig['tf'] == tf[0]]
+    session.market_bias[tf[0]] = (signal_counts.get(f'{tf[0]}_bullish', 0) - signal_counts.get(f'{tf[0]}_bearish', 0)) / len(raw_signals)
 
 tech_end = time.perf_counter()
 tech_took = tech_end - tech_start
@@ -194,7 +190,16 @@ while raw_signals:
     sig_bias = signal['bias']
     sig_agent = agents[signal['agent']]
     sig_pair = signal['pair']
-    sig_score = signal['inval_score']  # TODO i need to add other scores here and create a way of combining them
+
+    # TODO i need to add other scores here
+    inval_score = signal['inval_score']
+    if signal['tf'] == '1h':
+        rank_score = signal.get('market_rank_1d', 1) if sig_bias == 'bullish' else (1 - signal.get('market_rank_1d', 1))
+    elif signal['tf'] in {'4h', '12h'}:
+        rank_score = signal.get('market_rank_1w', 1) if sig_bias == 'bullish' else (1 - signal.get('market_rank_1w', 1))
+    elif signal['tf'] == '1d':
+        rank_score = signal.get('market_rank_1m', 1) if sig_bias == 'bullish' else (1 - signal.get('market_rank_1m', 1))
+    sig_score = ((2 * inval_score) + (1 * rank_score)) / 3
 
     # find whether i am currently long, short or flat on the agent and pair in this signal
     asset = sig_pair[:-len(session.quote_asset)]
@@ -204,8 +209,6 @@ while raw_signals:
 
     bullish_pos = 'spot' if (sig_agent.mode == 'spot') else 'long'
 
-    # TODO every raw signal that goes through here must end up as at least 1 processed signal. i need to check this
-    #  logic to make sure that there is a concrete outcome for every possible input.
     # TODO 'oco' signals are an alternative to 'open', so they should be treated as such in this section, maybe as a
     #  condition which requires that position is flat and signal['exit'] is oco and bias is either bullish or bearish
 
@@ -214,31 +217,23 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_real_stop(session, signal)
             # check if tp is necessary
-            try: # this try/except bloack can be removed when the problem is solved
-                if sig_agent.real_pos[asset]['or_R'] > sig_agent.indiv_r_limit:
-                    processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'real', 'long'))
-            except KeyError as e:
-                print(f"KeyError for {asset}: {e.args}")
-                traceback.print_stack()
-                print('signal:')
-                pprint(signal)
-                print('pos record:')
-                pprint(sig_agent.real_pos[asset])
+            if sig_agent.real_pos[asset]['or_R'] > sig_agent.indiv_r_limit:
+                print(f"{sig_agent} Real {sig_pair} or_R: {sig_agent.real_pos[asset]['or_R']}")
+                processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'real', 'long'))
 
             # check if add is necessary
             # TODO check for low or and make add signals if so
 
         elif real_position == 'short':
-            print(f"{sig_agent.real_pos[asset]['or_R'] = } {sig_agent.indiv_r_limit = }")
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', 'short'))
-            if sig_score >= 0.5:
+            if sig_score >= 0.8:
                 processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', 'long'))
             else:
                 signal['sim_reasons'] = ['low_score']
                 processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', 'long'))
 
         elif real_position == 'flat':
-            if sig_score >= 0.5:
+            if sig_score >= 0.8:
                 processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', bullish_pos))
             else:
                 signal['sim_reasons'] = ['low_score']
@@ -250,17 +245,9 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'sim')
             # check if tp is necessary
-            try: # this try/except block can be removed when the problem is solved
-                if sig_agent.sim_pos[asset]['or_R'] > sig_agent.indiv_r_limit:
-                    print(f"{sig_agent.sim_pos[asset]['or_R'] = }")
-                    processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'sim', 'long'))
-            except KeyError as e:
-                print(f"KeyError for {asset}: {e.args}")
-                traceback.print_stack()
-                print('signal:')
-                pprint(signal)
-                print('pos record:')
-                pprint(sig_agent.sim_pos[asset])
+            if sig_agent.sim_pos[asset]['or_R'] > sig_agent.indiv_r_limit:
+                print(f"{sig_agent} Sim {sig_pair} or_R: {sig_agent.sim_pos[asset]['or_R']}")
+                processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'sim', 'long'))
 
             # check if add is necessary
             # TODO check for low or and make add signals if so
@@ -276,15 +263,9 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'tracked')
             # check if tp is necessary
-            try: # this try/except bloack can be removed when the problem is solved
-                if sig_agent.tracked[asset]['or_R'] > sig_agent.indiv_r_limit:
-                    processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'tracked', 'long'))
-            except KeyError as e:
-                print(f"KeyError for {asset}: {e.args}")
-                print('signal:')
-                pprint(signal)
-                print('pos record:')
-                pprint(sig_agent.tracked[asset])
+            if sig_agent.tracked[asset]['or_R'] > sig_agent.indiv_r_limit:
+                print(f"{sig_agent} Tracked {sig_pair} or_R: {sig_agent.tracked[asset]['or_R']}")
+                processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'tracked', 'long'))
 
         elif tracked_position == 'short':
             processed_signals['tracked_close'].append(uf.transform_signal(signal, 'close', 'tracked', 'short'))
@@ -300,7 +281,7 @@ while raw_signals:
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', 'spot'))
         elif real_position == 'long':
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', 'long'))
-            if sig_score >= 0.5:
+            if sig_score >= 0.8:
                 processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', 'short'))
             else:
                 signal['sim_reasons'] = ['low_score']
@@ -309,23 +290,15 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_real_stop(session, signal)
             # check if tp is necessary
-            try: # this try/except bloack can be removed when the problem is solved
-                print(f"{sig_agent.real_pos[asset]['or_R'] = } {sig_agent.indiv_r_limit = }")
-                if sig_agent.real_pos[asset]['or_R'] > sig_agent.indiv_r_limit:
-                    processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'real', 'short'))
-            except KeyError as e:
-                print(f"KeyError for {asset}: {e.args}")
-                traceback.print_stack()
-                print('signal:')
-                pprint(signal)
-                print('pos record:')
-                pprint(sig_agent.real_pos[asset])
+            if sig_agent.real_pos[asset]['or_R'] > sig_agent.indiv_r_limit:
+                print(f"{sig_agent} Real {sig_pair} or_R: {sig_agent.real_pos[asset]['or_R']}")
+                processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'real', 'short'))
 
             # check if add is necessary
             # TODO check for low or and make add signals if so
 
         elif real_position == 'flat':
-            if sig_score >= 0.5:
+            if sig_score >= 0.8:
                 processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', 'short'))
             else:
                 signal['sim_reasons'] = ['low_score']
@@ -339,17 +312,9 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'sim')
             # check if tp is necessary
-            try: # this try/except bloack can be removed when the problem is solved
-                if sig_agent.sim_pos[asset]['or_R'] > sig_agent.indiv_r_limit:
-                    print(f"{sig_agent.sim_pos[asset]['or_R'] = }")
-                    processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'sim', 'short'))
-            except KeyError as e:
-                print(f"KeyError for {asset}: {e.args}")
-                traceback.print_stack()
-                print('signal:')
-                pprint(signal)
-                print('pos record:')
-                pprint(sig_agent.sim_pos[asset])
+            if sig_agent.sim_pos[asset]['or_R'] > sig_agent.indiv_r_limit:
+                print(f"{sig_agent} Sim {sig_pair} or_R: {sig_agent.sim_pos[asset]['or_R']}")
+                processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'sim', 'short'))
 
             # check if add is necessary
             # TODO check for low or and make add signals if so
@@ -365,16 +330,9 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'tracked')
             # check if tp is necessary
-            try: # this try/except bloack can be removed when the problem is solved
-                if sig_agent.tracked[asset]['or_R'] > sig_agent.indiv_r_limit:
-                    processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'tracked', 'short'))
-            except KeyError as e:
-                print(f"KeyError for {asset}: {e.args}")
-                traceback.print_stack()
-                print('signal:')
-                pprint(signal)
-                print('pos record:')
-                pprint(sig_agent.tracked[asset])
+            if sig_agent.tracked[asset]['or_R'] > sig_agent.indiv_r_limit:
+                print(f"{sig_agent} Tracked {sig_pair} or_R: {sig_agent.tracked[asset]['or_R']}")
+                processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'tracked', 'short'))
 
 
         elif tracked_position == 'flat':
@@ -426,15 +384,10 @@ tp_close_start = time.perf_counter()
 # execute any real and sim technical close and tp signals
 print(f"\n-+-+-+-+-+-+-+- Processing {len(processed_signals['real_sim_tp_close'])} Real/Sim TPs/Closes -+-+-+-+-+-+-+-")
 
-# TODO start by checking the tp/close list for any tp signals with the same agent, pair and direction and state as close
-#  signals, and discard the tp if found
+checked_signals = uf.remove_duplicates(processed_signals['real_sim_tp_close'])
+print(f"{len(checked_signals) = }")
 
-wanted_spot = round(agent.realised_pnls['wanted_spot'], 1)
-wanted_long = round(agent.realised_pnls['wanted_long'], 1)
-wanted_short = round(agent.realised_pnls['wanted_short'], 1)
-print(f"\n{agent.name} Realised PnLs: {wanted_spot = }R, {wanted_long = }R, {wanted_short = }R\n")
-
-for signal in processed_signals['real_sim_tp_close']:
+for signal in checked_signals:
     print(f"\nProcessing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
     if signal['action'] == 'close':
         agents[signal['agent']].close_pos(session, signal)
@@ -453,20 +406,34 @@ tp_close_took = tp_close_end - tp_close_start
 # calculate fixed risk for each agent using wanted rpnl
 print(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Fixed Risk -+-+-+-+-+-+-+-+-+-+-+-+-+-+-")
 for agent in agents.values():
-    # TODO i need to make sure the fr values that get recorded in the log are the fr score (integers from 0 to 10) not
-    #  the actual fixed risk amount
     agent.set_fixed_risk(session)
-    # agent.test_fixed_risk(0.0002, 0.0002) # TODO i will need to do some tests with this disabled to make sure fr works
+    agent.test_fixed_risk(0.0002, 0.0002)
     agent.print_fixed_risk()
     agent.calc_tor()
 
     wanted_spot = round(agent.realised_pnls['wanted_spot'], 1)
     wanted_long = round(agent.realised_pnls['wanted_long'], 1)
     wanted_short = round(agent.realised_pnls['wanted_short'], 1)
-    print(f"\n{agent.name} Realised PnLs: {wanted_spot = }R, {wanted_long = }R, {wanted_short = }R\n")
+    # print(f"\n{agent.name} Realised PnLs: {wanted_spot = }R, {wanted_long = }R, {wanted_short = }R\n")
+    session.wrpnl_totals['spot'] += wanted_spot
+    session.wrpnl_totals['long'] += wanted_long
+    session.wrpnl_totals['short'] += wanted_short
+
+    unwanted_spot = round(agent.realised_pnls['unwanted_spot'], 1)
+    unwanted_long = round(agent.realised_pnls['unwanted_long'], 1)
+    unwanted_short = round(agent.realised_pnls['unwanted_short'], 1)
+    # print(f"\n{agent.name} Realised PnLs: {unwanted_spot = }R, {unwanted_long = }R, {unwanted_short = }R\n")
+    session.urpnl_totals['spot'] += unwanted_spot
+    session.urpnl_totals['long'] += unwanted_long
+    session.urpnl_totals['short'] += unwanted_short
 
     # TODO make sure algo_order counts are up to date after tps and closes
     # print(f"{agent.name} {agent.fixed_risk_spot} {agent.fixed_risk_l} {agent.fixed_risk_s}")
+
+print('\n\nwanted rpnl totals:')
+pprint(session.wrpnl_totals)
+print('\n\nunwanted rpnl totals:')
+pprint(session.urpnl_totals)
 
 for signal in processed_signals['unassigned']:
     signal['base_size'], signal['quote_size'] = agents[signal['agent']].get_size(session, signal)
@@ -475,6 +442,16 @@ for signal in processed_signals['unassigned']:
 # Sort and Filter Signals
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 sort_start = time.perf_counter()
+
+# gather data on current algo orders
+session.track_weights(40)
+session.spot_orders = session.client.get_open_orders()
+session.track_weights(len(session.client.get_margin_all_pairs()))  # weighting for this call = number of pairs on exchange
+session.margin_orders = session.client.get_open_margin_orders()
+session.check_open_spot_orders()
+session.check_open_margin_orders()
+session.count_algo_orders() # kind of redundant since the above two methods create lists which could be counted
+
 # next sort the unassigned list by scores. items are popped from the end of the list so i want the best signals to be
 # last so that they get processed first, so i don't use the 'reverse=True' option
 unassigned = sorted(processed_signals['unassigned'], key=lambda x: x['inval_score'])
@@ -498,11 +475,11 @@ while unassigned:
     r = 1
 
     if s['direction'] in {'spot', 'long'}:
-        usdt_depth, _ = funcs.get_depth(session, pair)
+        usdt_depth, _ = funcs.get_depth(session, s['pair'])
     elif s['direction'] == 'short':
-        _, usdt_depth = funcs.get_depth(session, pair)
+        _, usdt_depth = funcs.get_depth(session, s['pair'])
 
-    if s['mode'] == 'margin' and not session.pairs_data[pair]['margin_allowed']:
+    if s['mode'] == 'margin' and not session.pairs_data[s['pair']]['margin_allowed']:
         sim_reasons.append('not_a_margin_pair')
 
     if usdt_depth == 0:
@@ -510,23 +487,23 @@ while unassigned:
     elif usdt_depth < (quote_size / 2):
         sim_reasons.append('books_too_thin')
     elif quote_size > usdt_depth >= (quote_size / 2):  # only trim size if books are a bit too thin
-        r = quote_size / usdt_depth
+        r = usdt_depth / quote_size
         quote_size = usdt_depth
-        print(f'{now} {pair} books too thin, reducing size from {quote_size:.3} to {usdt_depth:.3}')
+        print(f"{now} {s['pair']} books too thin, reducing size from {quote_size:.3} to {usdt_depth:.3}")
 
     if quote_size > (balance * 0.1):
-        r = quote_size / (balance * 0.1)
+        r = (balance * 0.1) / quote_size
         quote_size = balance * 0.1
 
     if or_limits[agent.name] >= agent.total_r_limit:
         sim_reasons.append('too_much_or')
     if pos_limits[agent.name] >= agent.max_positions:
         sim_reasons.append('too_many_pos')
-    if (algo_limits[pair] < 2 and s['action'] == 'oco') or (algo_limits[pair] < 1 and s['action'] == 'open'):
+    if (algo_limits[s['pair']] < 2 and s['action'] == 'oco') or (algo_limits[s['pair']] < 1 and s['action'] == 'open'):
         sim_reasons.append('algo_order_limit')
 
     if s['mode'] == 'spot' and quote_size > usdt_bal_s > (quote_size / 2):
-        r = quote_size / (usdt_bal_s - 1)
+        r = (usdt_bal_s - 1) / quote_size
         quote_size = usdt_bal_s - 1
     elif s['mode'] == 'spot' and quote_size > usdt_bal_s:
         sim_reasons.append('not_enough_usdt')
@@ -546,17 +523,19 @@ while unassigned:
     if sim_reasons:
         s['sim_reasons'] = sim_reasons
         s['state'] = 'sim'
-        s['pct_of_full_pos'] = r
+        s['pct_of_full_pos'] *= r
         processed_signals['sim_open'].append(s)
     else:
         or_limits[agent.name] += r
         pos_limits[agent.name] += 1
         algo_limits[s['pair']] -= 2 if s['action'] == 'oco' else 1
 
-        print(f"orig sizes: {s['quote_size']:.2f}, {s['base_size']}. new sizes: {quote_size:.2f}, {s['base_size'] * r}")
+        if r != 1:
+            print(f"{s['agent']} {s['pair']} {r = }, size adjusted:")
+            print(f"orig: {s['quote_size']:.2f}, {s['base_size']}. new: {quote_size:.2f}, {s['base_size'] * r}")
         s['quote_size'] = quote_size
         s['base_size'] = s['base_size'] * r # the value of r is equivalent to the change in size, if any.
-        s['pct_of_full_pos'] = r
+        s['pct_of_full_pos'] *= r
 
         processed_signals['real_open'].append(s)
 
@@ -571,6 +550,7 @@ real_open_start = time.perf_counter()
 
 print(f"\n-+-+-+-+-+-+-+-+-+-+-+- Processing {len(processed_signals['real_open'])} Real Opens -+-+-+-+-+-+-+-+-+-+-+-")
 for signal in processed_signals['real_open']:
+
     # print(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
     if signal['mode'] == 'margin':
         agents[signal['agent']].open_real_M(session, signal, 0)
@@ -587,15 +567,13 @@ real_open_took = real_open_end - real_open_start
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 sim_open_start = time.perf_counter()
 
-# unlike the real open signals, i should use every trick i can to make this quick. either pass the list of signals and
-# the sim_open omf to apply() or try to use parallelism in some way.
-
 sim_opens = [sig for sig in processed_signals['sim_open'] # discard signals for existing sim positions
              if signal['pair'] not in agents[signal['agent']].sim_pos.keys()]
 print(f"\n-+-+-+-+-+-+-+-+-+-+-+- Processing {len(sim_opens)} Sim Opens -+-+-+-+-+-+-+-+-+-+-+-")
 for signal in sim_opens:
-        # print(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
-        agents[signal['agent']].open_sim(session, signal)
+
+    # print(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
+    agents[signal['agent']].open_sim(session, signal)
 
 # when they are all finished, update records once
 
@@ -658,7 +636,9 @@ for agent in agents.values():
 if not session.live:
     print('warning: logging directed to test_records')
 
-print(f"\n\nbias_indicator: {session.market_bias:.2f} range from 1 (bullish) to -1 (bearish) {signal_counts = }\n\n")
+for tf in timeframes:
+    print(f"\n\n{tf[0]} market bias: {session.market_bias[tf[0]]:.2f} range from 1 (bullish) to -1 (bearish)\n\n")
+pprint(signal_counts)
 
 uf.market_benchmark(session)
 for agent in agents.values():

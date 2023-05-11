@@ -295,7 +295,10 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
 
     df_dict = {}
     for tf, offset in timeframes:
-        df_dict[tf] = resample_ohlc(tf, offset, df.copy()).tail(session.max_length).reset_index(drop=True)
+        res_df = resample_ohlc(tf, offset, df.copy()).tail(session.max_length).reset_index(drop=True)
+
+        if len(res_df) >= session.min_length:
+            df_dict[tf] = res_df
 
     ds.stop()
     return df_dict
@@ -651,11 +654,11 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit
                                                      stopPrice=trigger,
                                                      quantity=stop_size,
                                                      price=limit)
+        session.pairs_data[pair]['algo_orders'] += 1
     else:
         stop_sell_order = {'orderId': 'not live',
                            'transactTime': now}
 
-    session.pairs_data[pair]['algo_orders'] += 1
 
     sd.stop()
     return stop_sell_order
@@ -676,6 +679,7 @@ def clear_stop_M(session, pair: str, position: dict) -> Tuple[Any, Decimal]:
             try:
                 clear = client.cancel_margin_order(symbol=pair, orderId=str(stop_id))
                 base_size = clear.get('origQty')
+                session.pairs_data[pair]['algo_orders'] -= 1
             except bx.BinanceAPIException as e:
                 print(f"Exception during clear_stop_M on {pair}. If it's 'unknown order sent' then it was probably "
                       f"trying to cancel a stop-loss that had already been cancelled")
@@ -686,7 +690,6 @@ def clear_stop_M(session, pair: str, position: dict) -> Tuple[Any, Decimal]:
     else:
         base_size = position['base_size']
 
-    session.pairs_data[pair]['algo_orders'] -= 1
 
     fc.stop()
     return clear, base_size
