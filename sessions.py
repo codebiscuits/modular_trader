@@ -22,6 +22,7 @@ import json
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 # cg = CoinGeckoAPI()
+client = Client(keys.bPkey, keys.bSkey)
 
 
 class TradingSession():
@@ -37,6 +38,7 @@ class TradingSession():
     counts = []
     weights_count = []
     all_weights = []
+    market_bias = {}
 
     def __init__(self, fr_max):
         t = Timer('session init')
@@ -63,13 +65,6 @@ class TradingSession():
         self.acct = self.client.get_account()
         self.track_weights(10)
         self.m_acct = self.client.get_margin_account()
-        self.track_weights(40)
-        self.spot_orders = self.client.get_open_orders()
-        self.track_weights(1)
-        self.track_weights(len(self.client.get_margin_all_pairs()))  # weighting for this call = number of pairs on exchange
-        self.margin_orders = self.client.get_open_margin_orders()
-        # self.track_weights(2)
-        # self.obt = self.client.get_orderbook_tickers()
         self.spreads = self.binance_spreads()
         abc.stop()
 
@@ -84,8 +79,6 @@ class TradingSession():
         self.margin_bal = self.account_bal_m()
         print(f"Margin balance: {self.margin_bal}")
         self.margin_usdt_bal = self.get_usdt_m()
-        self.check_open_spot_orders()
-        self.check_open_margin_orders()
         self.check_fees()
         self.check_margin_lvl()
         self.top_up_bnb_s(15)
@@ -96,11 +89,12 @@ class TradingSession():
         self.read_records, self.write_records = self.records_path()
         self.ohlc_data = self.ohlc_path()
         self.market_ranks = self.load_mkt_ranks()
-        self.count_algo_orders()
         self.max_loan_amounts = {}
         self.book_data = {}
         self.indicators = {'ema-200', 'ema-100', 'ema-50', 'ema-25', 'vol_delta',
                            'vol_delta_div', 'roc_1d', 'roc_1w', 'roc_1m', 'vwma-24'}
+        self.wrpnl_totals = {'spot': 0, 'long': 0, 'short': 0, 'count': 0}
+        self.urpnl_totals = {'spot': 0, 'long': 0, 'short': 0, 'count': 0}
         t.stop()
 
     def track_weights(self, weight):
@@ -141,6 +135,7 @@ class TradingSession():
                 flag = 0
                 print(f"request weight limit: {weight_limit} per {window}s. currently: {total} in the last {timespan:.1f}s")
                 print(f"track_weights needs {window - timespan:.1f}s of sleep")
+                print(f"used-weight-1m: {client.response.headers['x-mbx-used-weight-1m']}")
                 time.sleep(window - timespan)
             if timespan > max(window, raw_window):
                 flag = 0
@@ -158,6 +153,7 @@ class TradingSession():
             print(
                 f"raw request limit: {raw_limit} per {raw_window}s. currently: {total} in the last {timespan:.1f}s")
             print(f"track_weights needs {raw_window - timespan:.1f}s of sleep")
+            print(f"used-weight-1m: {client.response.headers['x-mbx-used-weight-1m']}")
             time.sleep(raw_window - timespan)
 
         # if flag and rolling_weight:
@@ -347,6 +343,11 @@ class TradingSession():
         y.stop()
         return live
 
+    def set_local_path(self) -> Path:
+        if Path('/pi_downstairs.txt').exists():
+            local_path = Path('/home/pi/coding/modular_trader')
+
+
     def mkt_data_path(self) -> Path:
         '''automatically sets the absolute path for the market_data folder'''
 
@@ -451,28 +452,33 @@ class TradingSession():
         x7.start()
 
         algo_types = ['STOP_LOSS', 'STOP_LOSS_LIMIT', 'TAKE_PROFIT', 'TAKE_PROFIT_LIMIT']
-        order_symbols = [d['symbol'] for d in self.margin_orders if d['type'] in algo_types]
+        spot_symbols = [d['symbol'] for d in self.spot_orders if d['type'] in algo_types]
+        margin_symbols = [d['symbol'] for d in self.margin_orders if d['type'] in algo_types]
+        order_symbols = spot_symbols + margin_symbols
 
         counted = Counter(order_symbols)
         for p, v in self.pairs_data.items():
             v['algo_orders'] = 0 if p not in counted else counted[p]
 
+            if counted[p]:
+                print(p, counted[p])
+
         x7.stop()
 
-    def algo_limit_reached(self, pair: str) -> bool:
-        """compares the number of 'algo orders' (stop-loss and take-profit orders) currently open to the maximum allowed.
-        returns True if more orders are allowed to be set, and False if the limit has been reached"""
-        func_name = sys._getframe().f_code.co_name
-        x8 = Timer(f'{func_name}')
-        x8.start()
-
-        count = self.pairs_data[pair].get('algo_orders', 0)
-
-        limit = self.pairs_data[pair]['max_algo_orders']
-
-        x8.stop()
-
-        return limit == count
+    # def algo_limit_reached(self, pair: str) -> bool:
+    #     """compares the number of 'algo orders' (stop-loss and take-profit orders) currently open to the maximum allowed.
+    #     returns True if more orders are allowed to be set, and False if the limit has been reached"""
+    #     func_name = sys._getframe().f_code.co_name
+    #     x8 = Timer(f'{func_name}')
+    #     x8.start()
+    #
+    #     count = self.pairs_data[pair].get('algo_orders', 0)
+    #
+    #     limit = self.pairs_data[pair]['max_algo_orders']
+    #
+    #     x8.stop()
+    #
+    #     return limit == count
 
     def get_book_data(self, pair):
 
@@ -534,9 +540,28 @@ class TradingSession():
         ci = Timer('compute_indicators')
         ci.start()
 
+        # indicator specs:
+        # {'indicator': 'ema', 'length': lb, 'nans': 0}
+        # {'indicator': 'hma', 'length': lb, 'nans': 0}
+        # {'indicator': 'ema_ratio', 'length': lb, 'nans': 0}
+        # {'indicator': 'vol_delta', 'length': 1, 'nans': 0}
+        # {'indicator': 'vol_delta_div', 'length': 2, 'nans': 1}
+        # {'indicator': 'atr', 'length': lb, 'lookback': lb, 'multiplier': 3, 'nans': 0}
+        # {'indicator': 'supertrend', 'lookback': lb, 'multiplier': mult, 'length': lb*mult, 'nans': 1}
+        # {'indicator': 'atsz', 'length': lb, 'nans': 1}
+        # {'indicator': 'rsi', 'length': lb+1, 'nans': lb}
+        # {'indicator': 'stoch_rsi', 'lookback': lb1, 'stoch_lookback': lb2, 'length': lb1+lb2+1, 'nans': lb1+lb2}
+        # {'indicator': 'inside', 'length': 2, 'nans': 1}
+        # {'indicator': 'doji', 'length': 1, 'nans': 0}
+        # {'indicator': 'engulfing', 'length': lb+1, 'nans': lb}
+        # {'indicator': 'bull_bear_bar', 'length': 1, 'nans': 0}
+        # {'indicator': 'roc_1d', 'length': 2, 'nans': 1}
+        # {'indicator': 'roc_1w', 'length': 2, 'nans': 1}
+        # {'indicator': 'roc_1m', 'length': 2, 'nans': 1}
+        # {'indicator': 'vwma', 'length': lb+1, 'nans': lb}
+        # {'indicator': 'cross_age', 'series_1': s1, 'series_2': s2, 'length': lb, 'nans': 0}
+
         for i in self.indicators:
-            # for checking if there are enough extra rows for when the indicators all drop NaNs
-            # print(f"computing indicator: {i}, {len(df) = }")
             vals = i.split('-')
             if vals[0] == 'ema':
                 df[f"ema_{vals[1]}"] = df.close.ewm(int(vals[1])).mean()
@@ -550,10 +575,12 @@ class TradingSession():
                 df['vol_delta_div'] = ind.vol_delta_div(df)
             elif vals[0] == 'atr':
                 df = ind.atr_bands(df, int(vals[1]), float(vals[2]))
-            elif vals[0] == 'st':
+            elif vals[0] == 'supertrend':
                 df = ind.supertrend(df, int(vals[1]), float(vals[2]))
             elif vals[0] == 'atsz':
                 df = ind.ats_z(df, int(vals[1]))
+            elif vals[0] == 'rsi':
+                df['rsi'] = ind.rsi(df.close, int(vals[1]))
             elif vals[0] == 'stoch_rsi':
                 df['stoch_rsi'] = ind.stoch_rsi(df.close, int(vals[1]), int(vals[2]))
             elif vals[0] == 'inside':
@@ -566,7 +593,6 @@ class TradingSession():
                 df = ind.bull_bear_bar(df)
             elif vals[0] == 'roc_1d':
                 df['roc_1d'] = ind.roc_1d(df.close, tf)
-                # print(df.tail())
             elif vals[0] == 'roc_1w':
                 df['roc_1w'] = ind.roc_1w(df.close, tf)
             elif vals[0] == 'roc_1m':

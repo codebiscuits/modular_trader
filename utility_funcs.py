@@ -346,8 +346,11 @@ def log(session, agent) -> None:
     else:
         all_records = [new_record]
 
-    with open(write_path, 'w') as rec_file:
-        json.dump(all_records, rec_file)
+    try:
+        with open(write_path, 'w') as rec_file:
+            json.dump(all_records, rec_file)
+    except TypeError:
+        pprint(new_record)
 
 
 def interpret_benchmark(session, agents: list) -> None:
@@ -632,3 +635,30 @@ def scanner_summary(session, agents: list) -> None:
         print(f'-\n{title}\n{final_msg}')
 
     x14.stop()
+
+def remove_duplicates(signals: list[dict]) -> list[dict]:
+    close_sigs = [sig for sig in signals if sig['action'] == 'close']
+    tp_sigs = [sig for sig in signals if sig['action'] == 'tp']
+    checked_signals = []
+
+    # check if any two dictionaries share the same age and city values
+    key1, key2, key3, key4 = 'agent', 'pair', 'direction', 'state'
+    seen = {}
+    while close_sigs:
+        d = close_sigs.pop()
+        k = (d[key1], d[key2], d[key3], d[key4])
+        if k in seen:
+            continue
+        seen[k] = d
+        checked_signals.append(d)
+
+    while tp_sigs:
+        d = tp_sigs.pop()
+        k = (d[key1], d[key2], d[key3], d[key4])
+        if k in seen:
+            continue
+        seen[k] = d
+        checked_signals.append(d)
+
+    return checked_signals
+

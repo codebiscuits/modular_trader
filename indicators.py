@@ -109,13 +109,6 @@ def supertrend(df: pd.DataFrame, lb: int, mult: float) -> pd.DataFrame:
     df[stu] = np.where(df.close >= df[st], df[st], np.nan)
     df[std] = np.where(df.close < df[st], df[st], np.nan)
 
-    try:
-        df = df.drop(0)
-        df = df.reset_index(drop=True)
-    except KeyError as e:
-        print(e)
-        print(df.head())
-
     return df
 
 
@@ -126,9 +119,6 @@ def heikin_ashi(df: pd.DataFrame) -> pd.DataFrame:
     df['ha_high'] = df.loc[:, ['high', 'ha_close', 'ha_open']].max(axis=1)
     df['ha_low'] = df.loc[:, ['low', 'ha_close', 'ha_open']].min(axis=1)
 
-    df.drop(0, inplace=True)
-    df.reset_index(drop=True, inplace=True)
-
     return df
 
 
@@ -137,9 +127,6 @@ def k_candles(df: pd.DataFrame) -> pd.DataFrame:
     df['k_high'] = (df.high + df.high.shift(1)) / 2
     df['k_low'] = (df.low + df.low.shift(1)) / 2
     df['k_close'] = (df.close + df.close.shift(1)) / 2
-
-    df.drop(0, inplace=True)
-    df.reset_index(drop=True, inplace=True)
 
     return df
 
@@ -283,17 +270,14 @@ def engulfing(df: pd.DataFrame, lookback: int = 1) -> pd.DataFrame:
     """compares the current bar to the previous number of bars as specified by the lookback param.
     if the body of the current bar fully retraces the bodies of the previous bars, the function returns True"""
 
-    bars_dict = df.to_dict(orient='records')
-    current_bar = bars_dict[-1]
-    prev_bars = bars_dict[(0 - (lookback + 1)):-1]
+    df['row_min'] = df[['open', 'close']].min(axis=1)
+    df['row_max'] = df[['open', 'close']].max(axis=1)
 
-    current_open = current_bar['open']
-    current_close = current_bar['close']
-    prev_max = max(max(x['open'], x['close']) for x in prev_bars)
-    prev_min = min(min(x['open'], x['close']) for x in prev_bars)
+    df['window_min'] = df.row_min.rolling(lookback).min().shift(1)
+    df['window_max'] = df.row_max.rolling(lookback).max().shift(1)
 
-    df['bullish_engulf'] = current_open <= prev_min and current_close > prev_max
-    df['bearish_engulf'] = current_open >= prev_max and current_close < prev_min
+    df['bullish_engulf'] = (df.open <= df.window_min) & (df.close > df.window_max)
+    df['bearish_engulf'] = (df.open >= df.window_max) & (df.close < df.window_min)
 
     return df
 
@@ -344,8 +328,6 @@ def trend_consec_bars(df, bars):
 
     df['up_bar'] = df.close.pct_change() > 0
     df['trend_consec'] = consec_condition(df.up_bar)
-    df = df.drop(0)
-    df = df.reset_index(drop=True)
     df.trend_consec = df.trend_consec.astype(int) + 1
 
     df['trend_up'] = df.up_bar & (df.trend_consec >= bars)
