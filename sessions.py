@@ -1,11 +1,9 @@
-import binance_funcs as funcs
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from pushbullet import Pushbullet
 from timers import Timer
 from binance.client import Client
 import binance.enums as be
-import binance.exceptions as bx
 import keys
 import indicators as ind
 from typing import Union, List, Tuple, Dict, Set, Optional, Any
@@ -15,13 +13,9 @@ import time
 from decimal import Decimal
 import statistics as stats
 import pandas as pd
-import polars as pl
-# from pycoingecko import CoinGeckoAPI
-from pprint import pprint
 import json
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
-# cg = CoinGeckoAPI()
 client = Client(keys.bPkey, keys.bSkey)
 
 
@@ -45,7 +39,7 @@ class TradingSession():
         t.start()
 
         # configure settings and constants
-        self.now_start = datetime.now().strftime('%d/%m/%y %H:%M')
+        self.now_start = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
         self.client = Client(keys.bPkey, keys.bSkey, testnet=False)
         self.last_price_update = 0
         self.fr_max = fr_max  # at 0.0025, one agent makes good use of total balance
@@ -107,7 +101,7 @@ class TradingSession():
         tw = Timer('track_weights')
         tw.start()
 
-        now = datetime.now().timestamp()
+        now = datetime.now(timezone.utc).timestamp()
         new_weight = (now, weight)
         self.weights_count.append(new_weight)
         self.all_weights.append(new_weight)
@@ -153,6 +147,7 @@ class TradingSession():
             print(
                 f"raw request limit: {raw_limit} per {raw_window}s. currently: {total} in the last {timespan:.1f}s")
             print(f"track_weights needs {raw_window - timespan:.1f}s of sleep")
+            print(f"used-weight: {client.response.headers['x-mbx-used-weight']}")
             print(f"used-weight-1m: {client.response.headers['x-mbx-used-weight-1m']}")
             time.sleep(raw_window - timespan)
 
@@ -628,7 +623,7 @@ class TradingSession():
         gh = Timer('top_up_bnb_M')
         gh.start()
 
-        now = datetime.now().strftime('%d/%m/%y %H:%M')
+        now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
 
         # check balances
         free_bnb = self.spot_bals['BNB']['free']
@@ -732,7 +727,7 @@ class TradingSession():
         gh = Timer('top_up_bnb_M')
         gh.start()
 
-        now = datetime.now().strftime('%d/%m/%y %H:%M')
+        now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
 
         # check balances
         free_bnb = self.margin_bals['BNB']['free']
@@ -909,7 +904,7 @@ class TradingSession():
 
 class LightSession(TradingSession):
     def __init__(self):
-        self.now_start = datetime.now().strftime('%d/%m/%y %H:%M')
+        self.now_start = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
         self.client = Client(keys.bPkey, keys.bSkey)
         self.live = self.set_live()
         self.weights_count = []
@@ -944,7 +939,7 @@ class CheckRecordsSession(TradingSession):
         self.margin_usdt_bal = 1
 
         self.ohlc_length = 0
-        self.now_start = datetime.now().strftime('%d/%m/%y %H:%M')
+        self.now_start = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
         self.client = Client(keys.bPkey, keys.bSkey)
         self.live = self.set_live()
         self.weights_count = []

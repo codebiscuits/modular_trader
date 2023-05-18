@@ -10,7 +10,7 @@ from pushbullet import Pushbullet
 from decimal import Decimal, getcontext
 from pprint import pprint
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import utility_funcs as uf
 from timers import Timer
 from typing import Union, List, Tuple, Dict, Set, Optional, Any
@@ -130,6 +130,14 @@ def get_bin_ohlc(pair: str, timeframe: str, span: str = "2 years ago UTC", sessi
     df['timestamp'] = df['timestamp'] * 1000000
     df = df.astype(float)
     df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+    # check df is localised to UTC
+    try:
+        df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
+        print(f"funcs get_bin_ohlc - {pair} ohlc data wasn't timezone aware, fixing now.")
+    except TypeError:
+        pass
+
     df = df.drop(['close_time', 'ignore'], axis=1)
 
     return df
@@ -195,7 +203,7 @@ def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame, session=None) -
 
     # get_klines is quicker than get_historical_klines but will only download 500 periods, calculate which to use
     deltas = {'1m': timedelta(minutes=1), '5m': timedelta(minutes=5), '15m': timedelta(minutes=15)}
-    span_periods = (datetime.now() - old_df.timestamp.iloc[-1]) / deltas[timeframe]
+    span_periods = (datetime.now(timezone.utc) - old_df.timestamp.iloc[-1]) / deltas[timeframe]
     # print(f"{span_periods = }")
     if span_periods >= 500:
         # print('used get_historical_klines')
@@ -213,6 +221,14 @@ def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame, session=None) -
     df['timestamp'] = df['timestamp'] * 1000000
     df = df.astype(float)
     df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+    # check df is localised to UTC
+    try:
+        df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
+        print(f"funcs update_ohlc - {pair} ohlc data wasn't timezone aware, fixing now.")
+    except TypeError:
+        pass
+
     df = df.drop(['close_time', 'ignore'], axis=1)
 
     return pd.concat([old_df.drop(old_df.index[-1]), df], copy=True, ignore_index=True)
@@ -270,9 +286,10 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
                 filepath.unlink()
                 df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
 
+            # TODO check df for timezone awareness
 
             last_timestamp = df.timestamp.iloc[-1].timestamp()
-            now = datetime.now().timestamp()
+            now = datetime.now(timezone.utc).timestamp()
             data_age_mins = (now - last_timestamp) / 60
             # print(f"\n{pair} ohlc data ends: {(now - last_timestamp) / 60:.1f} minutes ago")
             if (data_age_mins < 15) and (len(df) > 2):
@@ -290,6 +307,13 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
         else:
             df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
             print(f'downloaded {pair} from scratch')
+
+        # check df is localised to UTC
+        try:
+            df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
+            print(f"funcs prepare_ohlc - {pair} ohlc data wasn't timezone aware, fixing now.")
+        except TypeError:
+            pass
 
         session.store_ohlc(df, pair, timeframes)
 
@@ -321,6 +345,7 @@ def create_stop_dict(session, order: dict) -> dict:
 
     bnb_fee = float(quote_qty) * float(session.fees['margin_taker']) / session.pairs_data['BNBUSDT']['price']
 
+    # TODO when i'm getting real responses from binance, i must check if this / 1000 is still appropriate
     trade_dict = {'timestamp': int(order.get('updateTime') / 1000),
                   'pair': pair,
                   'trig_price': order.get('stopPrice'),
@@ -391,7 +416,7 @@ def buy_asset_s(session, pair: str, size: float, live: bool) -> dict:
     bas = Timer('buy_asset_s')
     bas.start()
 
-    now = int(datetime.now().timestamp())
+    now = int(datetime.now(timezone.utc).timestamp())
     price = session.pairs_data[pair]['price']
     base_size: str = uf.valid_size(session, pair, size)
     if live:
@@ -426,7 +451,7 @@ def sell_asset_s(session, pair: str, size: float, live: bool) -> dict:
     sas = Timer('sell_asset_s')
     sas.start()
 
-    now = int(datetime.now().timestamp())
+    now = int(datetime.now(timezone.utc).timestamp())
     price = session.pairs_data[pair]['price']
     base_size = uf.valid_size(session, pair, size)
 
@@ -462,7 +487,7 @@ def set_stop_s(session, pair, trigger, limit, size):
     t = Timer(f'{func_name}')
     t.start()
 
-    now = datetime.now().timestamp()
+    now = datetime.now(timezone.utc).timestamp()
 
     trigger = uf.valid_price(session, pair, trigger)
     limit = uf.valid_price(session, pair, limit)
@@ -539,7 +564,7 @@ def buy_asset_M(session, pair: str, size: float, is_base: bool, price: float, li
                                                type=be.ORDER_TYPE_MARKET,
                                                quoteOrderQty=size)
     else:
-        now = int(datetime.now().timestamp())
+        now = int(datetime.now(timezone.utc).timestamp())
         price = session.pairs_data[pair]['price']
         if is_base:
             base_size = size
@@ -585,7 +610,7 @@ def sell_asset_M(session, pair: str, base_size: float, price: float, live: bool)
         sell_order = client.create_margin_order(symbol=pair, side=be.SIDE_SELL, type=be.ORDER_TYPE_MARKET,
                                                 quantity=base_size)
     else:
-        now = int(datetime.now().timestamp())
+        now = int(datetime.now(timezone.utc).timestamp())
         price = session.pairs_data[pair]['price']
         usdt_size = uf.valid_size(session, pair, float(base_size) * price)
         if not usdt_size:
@@ -640,7 +665,7 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit
     sd = Timer('set_stop_M')
     sd.start()
 
-    now = datetime.now().timestamp()
+    now = datetime.now(timezone.utc).timestamp()
 
     trigger = uf.valid_price(session, pair, trigger)
     limit = uf.valid_price(session, pair, limit)

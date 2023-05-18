@@ -13,7 +13,7 @@ plt.style.use('fivethirtyeight')
 plt.rcParams['figure.figsize'] = (20,10)
 pd.set_option('display.max_rows', None) 
 pd.set_option('display.expand_frame_repr', False)
-now = datetime.now().strftime('%d/%m/%y %H:%M')
+now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
 start = time.perf_counter()
 
 all_pairs = funcs.get_pairs()

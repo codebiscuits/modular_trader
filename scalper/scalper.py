@@ -43,7 +43,7 @@ def on_close(ws, close_status_code, close_msg):
     if close_status_code or close_msg:
         print("close status code: " + str(close_status_code))
         print("close message: " + str(close_msg))
-        now = datetime.datetime.now().strftime('%d/%m/%y %H:%M')
+        now = datetime.datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
         pb.push_note(title=now, body='connection closed')
 
 
@@ -178,7 +178,7 @@ agent_params = [
 live = False
 
 # Run Program
-print(f"Started at {datetime.datetime.now().strftime('%d/%m/%y %H:%M')}\n")
+print(f"Started at {datetime.datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')}\n")
 agents = {f"{params['pair'].lower()}@kline_{params['tf']}_{x:02}": Agent(params, x, live) for x, params in enumerate(agent_params)}
 # print('agents:')
 # pprint(agents)

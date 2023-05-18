@@ -8,7 +8,7 @@ import datetime
 import time
 from itertools import product
 
-print(f"{datetime.datetime.now().strftime('%d/%m/%y %H:%M')} - Running ATS_Z Backtesting")
+print(f"{datetime.datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')} - Running ATS_Z Backtesting")
 
 all_start = time.perf_counter()
 
@@ -155,7 +155,7 @@ for n, pair in enumerate(pairs):
     remaining_mins = f"{(projected // 60) % 60}m"# if ((projected // 60) % 60) else ''
     remaining_secs = f"{projected % 60}s" if (projected % 60) else ''
     remaining = ' '.join([remaining_hours, remaining_mins, remaining_secs])
-    print(f"{datetime.datetime.now().strftime('%d/%m/%y %H:%M')} - Backtesting, {completed:.1%} complete, {remaining} remaining")
+    print(f"{datetime.datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')} - Backtesting, {completed:.1%} complete, {remaining} remaining")
     signals = []
 
     # get 1min data

@@ -108,7 +108,7 @@ for n, pair in enumerate(pairs):
     # print(n, pair)
     session.update_prices()
 
-    now = datetime.now().strftime('%d/%m/%y %H:%M')
+    now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
 
     # df_dict contains ohlc dataframes for each active timeframe for the current pair
     df_dict = funcs.prepare_ohlc(session, timeframes, pair)
@@ -508,10 +508,11 @@ while unassigned:
     elif s['mode'] == 'spot' and quote_size > usdt_bal_s:
         sim_reasons.append('not_enough_usdt')
 
-    if s['mode'] == 'margin' and 3 <= session.margin_lvl < 4:
-        r = 0.5
-        quote_size = quote_size / 2
-    elif s['mode'] == 'margin' and session.margin_lvl < 3:
+    if s['mode'] == 'margin' and session.margin_lvl < 3:
+        r = session.margin_lvl / 3
+        quote_size *= r
+
+    if s['mode'] == 'margin' and session.margin_lvl < 2:
         sim_reasons.append('margin_acct_too_levered')
 
     if quote_size < session.min_size: # this condition must come after all the conditions which could reduce size
@@ -688,6 +689,7 @@ def section_times():
     print(f"Total time taken: {int(total_time // 60)}m {int(total_time % 60)}s")
 section_times()
 
+print(f"used-weight: {client.response.headers['x-mbx-used-weight']}")
 print(f"used-weight-1m: {client.response.headers['x-mbx-used-weight-1m']}")
 
 # start_dt = datetime.fromtimestamp(session.all_weights[0][0])

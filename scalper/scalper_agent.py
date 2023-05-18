@@ -60,7 +60,7 @@ class Agent():
         self.df['inside_bar'] = (self.df.high < self.df.high.shift(1)) & (self.df.low > self.df.low.shift(1))
         last_idx = self.df.index[-1]
         # if self.df.at[last_idx, 'inside_bar']:
-        #     print(f"{self.stream} inside bar detected. {datetime.datetime.now().strftime('%d/%m/%y %H:%M')}")
+        #     print(f"{self.stream} inside bar detected. {datetime.datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')}")
 
     def bar_direction(self):
         self.df['up_bar'] = self.df.close > self.df.open
@@ -125,8 +125,8 @@ class Agent():
 
         vol_delta = 'positive vol delta' if last['vol_delta'] > 0 else 'negative vol delta'
         price = last['close']
-        now = datetime.datetime.now().strftime('%d/%m/%y %H:%M')
-        now_stamp = datetime.datetime.now()
+        now = datetime.datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
+        now_stamp = datetime.datetime.now(timezone.utc)
 
         if last['long_signal']:
             self.position = 1
@@ -218,8 +218,8 @@ class Agent():
                 pnl = (self.entry - last['close']) / self.entry
 
             if self.stopped(last):
-                now = datetime.datetime.now().strftime('%d/%m/%y %H:%M')
-                now_stamp = datetime.datetime.now()
+                now = datetime.datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
+                now_stamp = datetime.datetime.now(timezone.utc)
                 duration = f"{(now_stamp - self.open_time).seconds//60} minutes"
                 # print(f"run calcs if stopped: {self.r = }")
                 note = (f"{self.short_name} {pos} stopped out @ {pnl:.3%} PnL ({pnl/self.r:.1f}R), "
