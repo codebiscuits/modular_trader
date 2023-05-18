@@ -11,7 +11,6 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
 from sklearn.preprocessing import StandardScaler, QuantileTransformer
 from sklearn.pipeline import Pipeline
-from typing import Union, List, Tuple, Dict, Set, Optional, Any
 import itertools as it
 import binance_funcs as funcs
 import numpy as np
@@ -32,18 +31,30 @@ exit_method = {'type': 'trail_fractal', 'width': 9, 'atr_spacing': 3}
 
 ohlc_folder = Path('../bin_ohlc_5m')
 pairs = [p.stem for p in ohlc_folder.glob('*.parquet')]
-pairs = ['BTCUSDT']
+pairs = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
 trim_ohlc = 1000
 
 
 def get_data(pair):
+    start = time.perf_counter()
     ohlc_path = ohlc_folder / f"{pair}.parquet"
-    df = pd.read_parquet(ohlc_path)
+
+    if ohlc_path.exists():
+        df = pd.read_parquet(ohlc_path)
+        print("Loaded OHLC from file")
+    else:
+        df = funcs.get_ohlc(pair, '5m', '2 years ago UTC')
+        ohlc_folder.mkdir(parents=True, exist_ok=True)
+        df.to_parquet(ohlc_path)
+        print("Downloaded OHLC from internet")
 
     vwma = ind.vwma(df, vwma_lengths[timeframe] * vwma_periods)
     vwma = vwma[int(vwma_lengths[timeframe] / 2)::vwma_lengths[timeframe]].reset_index(drop=True)
     df = funcs.resample_ohlc(timeframe, None, df).tail(len(vwma)).reset_index(drop=True)
     df['vwma'] = vwma
+
+    elapsed = time.perf_counter() - start
+    print(f"get_data took {int(elapsed // 60)}m {elapsed % 60:.1f}s")
 
     return df
 
@@ -100,9 +111,7 @@ def trail_fractal(df_0, width, spacing, side):
         if lifespan / trim_ohlc > 0.5:
             print("warning: trade lifespans getting close to trimmed ohlc length, increase trim ohlc")
 
-    res_df = pd.DataFrame(results)
-
-    return res_df
+    return results
 
 
 def oco(df, r_mult, inval_lb, side):
@@ -135,27 +144,23 @@ def add_features(df):
     return df
 
 
-def project_pnl(df, side, method, inval_lb):
-    # fetch fees for pair
-    fees = 0.0015
+def project_pnl(df, side, method, inval_lb) -> list[dict]:
+    start = time.perf_counter()
 
     if method['type'] == 'trail_atr':
         df = trail_atr(df, method['len'], method['mult'])
     if method['type'] == 'trail_fractal':
-        df = trail_fractal(df, method['width'], method['atr_spacing'], side)
+        res_list = trail_fractal(df, method['width'], method['atr_spacing'], side)
     if method['type'] == 'oco':
         df = oco(df, method['r_multiple'], inval_lb, side)
 
-    return df
+    elapsed = time.perf_counter() - start
+    print(f"project_pnl took {int(elapsed // 60)}m {elapsed % 60:.1f}s")
+
+    return res_list
 
 
-for pair in pairs:
-    df = get_data(pair)
-    df = add_features(df)
-    df = project_pnl(df, side, exit_method, inval_lookback)
-    df = df.dropna(axis=0).reset_index(drop=True)
-    # print(df.tail(100))
-
+def train_ml(df):
     # split data into features and labels
     X = df.drop(['timestamp', 'open', 'high', 'low', 'close', 'pnl_pct', 'pnl_r', 'ema_200', 'lifespan'], axis=1)
     y = df.pnl_r
@@ -168,7 +173,7 @@ for pair in pairs:
         ('model', RandomForestRegressor())
     ])
     print('')
-    pprint(pipe.get_params())
+    # pprint(pipe.get_params())
 
     param_dict = dict(
         model__n_estimators = [int(x) for x in np.linspace(start=60, stop=100, num=5)],
@@ -178,18 +183,31 @@ for pair in pairs:
         model__min_samples_leaf = [1, 2, 3],
         model__bootstrap = [True, False]
     )
-    rf_grid = GridSearchCV(estimator=pipe, param_grid=param_dict, cv=5, n_jobs=4)
+    rf_grid = GridSearchCV(estimator=pipe, param_grid=param_dict, cv=5, n_jobs=-1)
     rf_grid.fit(X_train, y_train)
 
     print('Best Params:')
     print(rf_grid.best_params_)
 
-    print(f"Train Accuracy - : {rf_grid.score(X_train, y_train):.3f}")
-    print(f"Test Accuracy - : {rf_grid.score(X_test, y_test):.3f}")
+    print(f"\nTrain Accuracy - : {rf_grid.score(X_train, y_train):.3f}")
+    print(f"Test Accuracy - : {rf_grid.score(X_test, y_test):.3f}\n")
 
-    results = pd.DataFrame(rf_grid.cv_results_).sort_values('')
-    print(results)
+    # results = pd.DataFrame(rf_grid.cv_results_).sort_values('rank_test_score')
+    # print(results.head())
 
+all_results = []
+for pair in pairs:
+    df = get_data(pair)
+    df = add_features(df)
+    results = project_pnl(df, side, exit_method, inval_lookback)
+    all_results.extend(results)
+    print(f"{pair} {len(results) = } {len(all_results) = }")
+
+    # print(df.tail(100))
+
+res_df = pd.DataFrame(all_results)
+res_df = res_df.dropna(axis=0).reset_index(drop=True)
+train_ml(res_df)
 
 # # import and prepare data
 # for pair in pairs:
