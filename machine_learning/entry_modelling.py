@@ -1,19 +1,22 @@
 import time
-all_start = time.perf_counter()
 import pandas as pd
-import numpy as np
 from pprint import pprint
 import keys
 from binance import Client
 from pathlib import Path
 import indicators as ind
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+import binance_funcs as funcs
+import numpy as np
+import json
+
+from sklearnex import get_patch_names, patch_sklearn
+patch_sklearn()
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
 from sklearn.preprocessing import StandardScaler, QuantileTransformer
 from sklearn.pipeline import Pipeline
-import itertools as it
-import binance_funcs as funcs
-import numpy as np
+
+all_start = time.perf_counter()
 
 pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
@@ -22,17 +25,26 @@ client = Client(keys.bPkey, keys.bSkey)
 
 timeframe = '4h'
 vwma_lengths = {'1h': 12, '4h': 48, '6h': 70, '8h': 96, '12h': 140, '1d': 280}
-vwma_periods = 24 # vwma_lengths just accounts for timeframe resampling, vwma_periods is a multiplier on that
+vwma_periods = 24  # vwma_lengths just accounts for timeframe resampling, vwma_periods is a multiplier on that
 side = 'long'
-inval_lookback = 2 # lowest low / highest high for last 2 bars
+inval_lookback = 2  # lowest low / the highest high for last 2 bars
 # exit_method = {'type': 'trail_atr', 'len': 2, 'mult': 2}
 exit_method = {'type': 'trail_fractal', 'width': 9, 'atr_spacing': 3}
 # exit_method = {'type': 'oco', 'r_multiple': 2}
 
 ohlc_folder = Path('../bin_ohlc_5m')
-pairs = [p.stem for p in ohlc_folder.glob('*.parquet')]
-pairs = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
+# pairs = [p.stem for p in ohlc_folder.glob('*.parquet')]
+# pairs = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
 trim_ohlc = 1000
+
+
+def rank_pairs(n):
+    with open('/home/ross/coding/modular_trader/recent_1d_volumes.json', 'r') as file:
+        vols = json.load(file)
+
+    vol_sorted_pairs = sorted(vols, key=lambda x: vols[x], reverse=True)
+
+    return vol_sorted_pairs[:n]
 
 
 def get_data(pair):
@@ -74,7 +86,7 @@ def trail_fractal(df_0, width, spacing, side):
 
     # loop through potential entries
     for row in rows:
-        df = df_0[row:row+trim_ohlc].copy().reset_index(drop=True)
+        df = df_0[row:row + trim_ohlc].copy().reset_index(drop=True)
         entry_price = df.open.iloc[0]
 
         if side == 'long':
@@ -93,7 +105,7 @@ def trail_fractal(df_0, width, spacing, side):
         exit_price = df.inval.iloc[exit_row]
         trade_diff = exit_price / entry_price
 
-        pnl_pct = (trade_diff - 1.0015) if side == 'long' else (0.9985 - trade_diff) # accounting for 15bps fees
+        pnl_pct = (trade_diff - 1.0015) if side == 'long' else (0.9985 - trade_diff)  # accounting for 15bps fees
         pnl_r = pnl_pct / r_pct
 
         row_data = df.iloc[0].to_dict()
@@ -115,14 +127,13 @@ def trail_fractal(df_0, width, spacing, side):
 
 
 def oco(df, r_mult, inval_lb, side):
-
     # method 1
-    # i want to ask how many rows from current_row till row.high / row.low exceeds current_row.stop / current_row.profit
-    # then i can compare those umber to find which will be hit first
+    # I want to ask how many rows from current_row till row.high / row.low exceeds current_row.stop / current_row.profit
+    # then I can compare those umber to find which will be hit first
 
     # method 2
-    # i want to find the index of the first high / low to exceed the profit value and the index of the first low / high
-    # to exceed the stop value, then i can see which is first. i can use idxmax and idxmin for this but i first need to
+    # I want to find the index of the first high / low to exceed the profit value and the index of the first low / high
+    # to exceed the stop value, then I can see which is first. I can use idxmax and idxmin for this, but I first need to
     # use clip to make sure that the first values to exceed my limits will be considered the first min/max value
 
     # calculate r by setting init stop based on last 2 bars ll/hh
@@ -134,12 +145,13 @@ def oco(df, r_mult, inval_lb, side):
 
 
 def add_features(df):
-
     df['stoch_vwma_ratio'] = ind.stochastic(df.close / df.vwma, 50)
     df['ema_200'] = df.close.ewm(200).mean()
     df['ema_200_roc'] = df.ema_200.pct_change()
     df['ema_ratio'] = df.close / df.ema_200
     df = ind.ema_breakout(df, 50, 50)
+    df
+    ind.atr(df, 5)
 
     return df
 
@@ -147,12 +159,13 @@ def add_features(df):
 def project_pnl(df, side, method, inval_lb) -> list[dict]:
     start = time.perf_counter()
 
+    res_list = []
     if method['type'] == 'trail_atr':
-        df = trail_atr(df, method['len'], method['mult'])
+        res_list = trail_atr(df, method['len'], method['mult'])
     if method['type'] == 'trail_fractal':
         res_list = trail_fractal(df, method['width'], method['atr_spacing'], side)
     if method['type'] == 'oco':
-        df = oco(df, method['r_multiple'], inval_lb, side)
+        res_list = oco(df, method['r_multiple'], inval_lb, side)
 
     elapsed = time.perf_counter() - start
     print(f"project_pnl took {int(elapsed // 60)}m {elapsed % 60:.1f}s")
@@ -165,7 +178,9 @@ def train_ml(df):
     X = df.drop(['timestamp', 'open', 'high', 'low', 'close', 'pnl_pct', 'pnl_r', 'ema_200', 'lifespan'], axis=1)
     y = df.pnl_r
 
-    # split into train and test sets
+    print(X.describe())
+
+    # split into train and test sets for hold-out validation
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=101)
 
     pipe = Pipeline([
@@ -176,12 +191,12 @@ def train_ml(df):
     # pprint(pipe.get_params())
 
     param_dict = dict(
-        model__n_estimators = [int(x) for x in np.linspace(start=60, stop=100, num=5)],
-        model__max_features = ['sqrt'],
-        model__max_depth = [5, 6, 7, 8, 9],
-        model__min_samples_split = [2, 3],
-        model__min_samples_leaf = [1, 2, 3],
-        model__bootstrap = [True, False]
+        model__n_estimators=[int(x) for x in np.linspace(start=60, stop=100, num=5)],
+        model__max_features=['sqrt'],
+        model__max_depth=[5, 6, 7, 8, 9],
+        model__min_samples_split=[2, 3],
+        model__min_samples_leaf=[1, 2, 3],
+        model__bootstrap=[True, False]
     )
     rf_grid = GridSearchCV(estimator=pipe, param_grid=param_dict, cv=5, n_jobs=-1)
     rf_grid.fit(X_train, y_train)
@@ -192,9 +207,28 @@ def train_ml(df):
     print(f"\nTrain Accuracy - : {rf_grid.score(X_train, y_train):.3f}")
     print(f"Test Accuracy - : {rf_grid.score(X_test, y_test):.3f}\n")
 
+    best_features(rf_grid, X_train)
+
     # results = pd.DataFrame(rf_grid.cv_results_).sort_values('rank_test_score')
     # print(results.head())
 
+
+def best_features(grid, X_train):
+    # Get the best estimator from the grid search
+    best_estimator = grid.best_estimator_
+
+    # Get feature importances from the best estimator
+    importances = best_estimator.named_steps['model'].feature_importances_
+    imp_df = pd.DataFrame(importances, index=X_train.columns).sort_values(0, ascending=False)
+    print(imp_df)
+
+    # # Print the top K features
+    # print(f"\nTop {top_k} features:")
+    # for f in selected_features:
+    #     print(f"{X_train.columns[f]}: {importances[f]:.2%}")
+
+
+pairs = rank_pairs(50)
 all_results = []
 for pair in pairs:
     df = get_data(pair)
@@ -207,6 +241,7 @@ for pair in pairs:
 
 res_df = pd.DataFrame(all_results)
 res_df = res_df.dropna(axis=0).reset_index(drop=True)
+
 train_ml(res_df)
 
 # # import and prepare data

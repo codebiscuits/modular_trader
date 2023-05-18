@@ -9,6 +9,7 @@ from pushbullet import Pushbullet
 from pathlib import Path
 from sessions import LightSession
 from pyarrow import ArrowInvalid
+import json
 
 pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
@@ -34,6 +35,7 @@ for sym in session.info['symbols']:
 
 pairs = list(session.pairs_data.keys())
 rocs = {}
+volumes = {}
 
 def from_scratch(pair, tf):
     df_start = time.perf_counter()
@@ -98,6 +100,14 @@ def mkt_rank(rocs_dict):
     rocs_df.to_parquet(path=filepath)
 
 
+def save_vols(vols):
+    vol_path = Path('recent_1d_volumes.json')
+    vol_path.touch(exist_ok=True)
+
+    with open(vol_path, 'w') as file:
+        json.dump(vols, file)
+
+
 iterations(0, 'BTCUSDT', '1m')
 iterations(1, 'ETHUSDT', '1m')
 
@@ -115,7 +125,10 @@ for n, pair in enumerate(pairs):
     rocs[pair]['1w'] = df.close.rolling(84).mean().pct_change(2016).iloc[-1]
     rocs[pair]['1m'] = df.close.rolling(360).mean().pct_change(8640).iloc[-1]
 
+    volumes[pair] = df.quote_vol.sum()
+
 mkt_rank(rocs)
+save_vols(volumes)
 
 end = time.perf_counter()
 all_time = end - start
