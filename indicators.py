@@ -241,8 +241,8 @@ def williams_fractals(df: pd.DataFrame, frac_width: int = 5, atr_spacing: int = 
         df['fractal_high'] = np.where(df.high == df.high.rolling(frac_width, center=True).max(), df.high, np.nan)
         df['fractal_low'] = np.where(df.low == df.low.rolling(frac_width, center=True).min(), df.low, np.nan)
 
-    df['frac_inval_high'] = df.fractal_high.interpolate('pad')
-    df['inval_low'] = df.fractal_low.interpolate('pad')
+    df['frac_high'] = df.fractal_high.interpolate('pad').shift(1)
+    df['frac_low'] = df.fractal_low.interpolate('pad').shift(1)
 
     return df
 
@@ -336,15 +336,19 @@ def trend_consec_bars(df, bars):
     return df
 
 
-def ema_breakout(df, length, lookback):
-    df[f"ema_{length}"] = df.close.ewm(length).mean()
+def ema_breakout(df: pd.DataFrame, length: int, lookback: int) -> pd.DataFrame:
+    """creates two columns 'ema_up' and 'ema_down' which represent whether the ema of close prices is above or below the
+    range it occupied over the lookback period. if both are false, it is within the range."""
+
+    if f"ema_{length}" not in df.columns:
+        df[f"ema_{length}"] = df.close.ewm(length).mean()
     df['ema_high'] = df[f"ema_{length}"].shift(1).rolling(lookback).max()
     df['ema_low'] = df[f"ema_{length}"].shift(1).rolling(lookback).min()
 
     df['ema_up'] = df[f"ema_{length}"] > df.ema_high
     df['ema_down'] = df[f"ema_{length}"] < df.ema_low
 
-    return df
+    return df.drop(['ema_high', 'ema_low'], axis=1)
 
 
 def ema_trend(df: pd.DataFrame, length: int) -> pd.DataFrame:

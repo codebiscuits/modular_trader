@@ -9,7 +9,7 @@ from timers import Timer
 from typing import Union, List, Tuple, Dict, Set, Optional, Any
 import binance_funcs as funcs
 import utility_funcs as uf
-from datetime import datetime
+from datetime import datetime, timezone
 from binance.exceptions import BinanceAPIException
 from pushbullet import Pushbullet
 from binance.client import Client
@@ -28,6 +28,7 @@ client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 ctx = getcontext()
 ctx.prec = 12
+timestring = '%d/%m/%y %H:%M'
 
 class Agent():
     '''generic agent class for each strategy to inherit from'''
@@ -85,7 +86,7 @@ class Agent():
         self.total_r_limit = self.max_positions * 1.7 # TODO need to update reduce_risk and run it before/after set_fixed_risk
         self.indiv_r_limit = 1.8
         self.fr_div = 10
-        self.next_id = int(datetime.now().timestamp())
+        self.next_id = int(datetime.now(timezone.utc).timestamp())
         session.min_length = min(session.min_length, self.ohlc_length)
         session.max_length = max(session.min_length, self.ohlc_length)
         t.stop()
@@ -244,7 +245,7 @@ class Agent():
 
         y = Timer('backup_trade_records')
         y.start()
-        now = datetime.now().strftime('%d/%m/%y %H:%M')
+        now = datetime.now(timezone.utc).strftime(timestring)
         if self.open_trades:
             with open(f"{session.write_records}/{self.id}/ot_backup.json", "w") as ot_file:
                 json.dump(self.open_trades, ot_file)
@@ -324,7 +325,7 @@ class Agent():
     def save_records(self, session, pair, stop_dict):
         self.open_trades[pair]['trade'].append(stop_dict)
         self.open_trades[pair]['trade'][-1]['liability'] = str(Decimal(0) - Decimal(stop_dict['executedQty']))
-        rpnl = self.realised_pnl(self.open_trades[pair])
+        rpnl = self.realised_pnl(session, self.open_trades[pair])
         self.open_trades[pair]['trade'][-1]['rpnl'] = rpnl
         direction = self.open_trades[pair]['position']['direction']
         self.realised_pnls[f"real_{direction}"] += rpnl
@@ -415,9 +416,9 @@ class Agent():
                 stop = float(v['position']['hard_stop'])
                 stopped, overshoot_pct, stop_hit_time = self.check_stop_hit(pair, df, direction, stop)
                 if stopped:
-                    open_dt = datetime.fromtimestamp(v['position']['open_time'])
-                    stop_dt = datetime.fromtimestamp(stop_time)
-                    hit_dt = datetime.fromtimestamp(stop_hit_time)
+                    open_dt = datetime.fromtimestamp(v['position']['open_time']).astimezone(timezone.utc)
+                    stop_dt = datetime.fromtimestamp(stop_time).astimezone(timezone.utc)
+                    hit_dt = datetime.fromtimestamp(stop_hit_time).astimezone(timezone.utc)
                     entry_price = v['position']['entry_price']
                     # print(f"{pair} {direction} {open_dt = }, {stop_dt = } {hit_dt = }, {entry_price = } {stop = }")
                     base_size = float(v['position']['base_size'])
@@ -554,16 +555,23 @@ class Agent():
 
             session.store_ohlc(df, pair, timeframes)
 
+        # check df is localised to UTC
+        try:
+            df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
+            print(f"rsst get_data - {pair} ohlc data wasn't timezone aware, fixing now.")
+        except TypeError:
+            pass
+
         if check_recent:
             last = df.timestamp.iloc[-1]
-            timespan = datetime.now().timestamp() - (last.timestamp())
+            timespan = datetime.now(timezone.utc).timestamp() - (last.timestamp())
             if timespan > 900:
                 df = funcs.update_ohlc(pair, session.ohlc_tf, df, session)
                 source += ' and exchange'
                 session.store_ohlc(df, pair, timeframes)
 
         try: # this try/except block can be removed when the problem is solved
-            stop_dt = datetime.fromtimestamp(stop_time)
+            stop_dt = datetime.fromtimestamp(stop_time).astimezone(timezone.utc)
         except ValueError as e:
             print(f"ValueError for {pair} sim stop time: {e.args}")
             traceback.print_stack()
@@ -575,35 +583,37 @@ class Agent():
 
         return df
 
-    def plot_trade(self, pair, df, stop, stop_hit_dt):
-        fig = go.Figure(data=go.Ohlc(x=df['timestamp'],
-                                     open=df['open'],
-                                     high=df['high'],
-                                     low=df['low'],
-                                     close=df['close']))
-
-        # fig.add_trace(go.Scatter(x=df['timestamp'], y=df[f"st-{lb}-{mult}-up"], mode='lines', name='Supertrend Up'))
-        # fig.add_trace(go.Scatter(x=df['timestamp'], y=df[f"st-{lb}-{mult}-dn"], mode='lines', name='Supertrend Down'))
-
-        fig.add_trace(go.Scatter(x=[stop_hit_dt], y=[stop], mode='markers', marker=dict(color='red', size=10), name='Stop Hit'))
-        fig.add_shape(type='line', x0=df.timestamp.iloc[0], x1=df.timestamp.iloc[-1],
-                      y0=stop, y1=stop, line=dict(color='blue', width=2), name='Hard Stop')
-
-        fig.update(layout_xaxis_rangeslider_visible=False)
-        fig.update_layout(
-            width=1920, height=1080,
-            title=f"{pair}",
-            xaxis=dict(
-              title='Date and Time',
-              timezone='UTC',
-            ),
-            yaxis=dict(
-              title='Price',
-            ),
-        )
-        plot_folder = Path(f"/home/ross/Documents/backtester_2021/trade_plots/{self.name}")
-        plot_folder.mkdir(parents=True, exist_ok=True)
-        fig.write_image(f"{plot_folder}/{pair}.png")
+    # def plot_trade(self, pair, df, stop, exit_dt=None):
+    #     fig = go.Figure(data=go.Ohlc(x=df['timestamp'],
+    #                                  open=df['open'],
+    #                                  high=df['high'],
+    #                                  low=df['low'],
+    #                                  close=df['close']))
+    #
+    #     # fig.add_trace(go.Scatter(x=df['timestamp'], y=df[f"st-{lb}-{mult}-up"], mode='lines', name='Supertrend Up'))
+    #     # fig.add_trace(go.Scatter(x=df['timestamp'], y=df[f"st-{lb}-{mult}-dn"], mode='lines', name='Supertrend Down'))
+    #
+    #     if exit_dt:
+    #         fig.add_trace(go.Scatter(x=[exit_dt], y=[stop], mode='markers', marker=dict(color='red', size=10), name='Pnl Realised'))
+    #
+    #     fig.add_shape(type='line', x0=df.timestamp.iloc[0], x1=df.timestamp.iloc[-1],
+    #                   y0=stop, y1=stop, line=dict(color='blue', width=2), name='Hard Stop')
+    #
+    #     fig.update(layout_xaxis_rangeslider_visible=False)
+    #     fig.update_layout(
+    #         width=1920, height=1080,
+    #         title=f"{pair}",
+    #         autotypenumbers='convert types',
+    #         # xaxis=dict(
+    #         #   title='Date and Time',
+    #         # ),
+    #         # yaxis=dict(
+    #         #   title='Price',
+    #         # ),
+    #     )
+    #     plot_folder = Path(f"/home/ross/Documents/backtester_2021/trade_plots/{self.name}")
+    #     plot_folder.mkdir(parents=True, exist_ok=True)
+    #     fig.write_image(f"{plot_folder}/{pair}.png")
 
     def check_stop_hit(self, pair, df, direction, stop):
         func_name = sys._getframe().f_code.co_name
@@ -631,11 +641,6 @@ class Agent():
 
         if stop_hit_time:
             stop_hit_time = int(stop_hit_time)
-
-        # save plot
-        if stopped:
-            self.plot_trade(pair, df, stop, stop_hit_dt)
-            # TODO fix the timezone issue, then do these plots on closes with < -1R pnl to see what the f is happening with them
 
         k16.stop()
 
@@ -693,7 +698,7 @@ class Agent():
 
     # risk ----------------------------------------------------------------------
 
-    def realised_pnl(self, trade_record: dict) -> float:
+    def realised_pnl(self, session, trade_record: dict) -> float:
         '''calculates realised pnl of a tp or close denominated in the trade's
         own R value'''
 
@@ -841,7 +846,7 @@ class Agent():
         else:
             fr = 0
 
-        now = datetime.now().strftime('%d/%m/%y %H:%M')
+        now = datetime.now(timezone.utc).strftime(timestring)
         if fr != fr_prev:
             title = f'{now}'
             note = f'{self.name} {direction} fixed risk score adjusted from {fr_prev} to {fr}'
@@ -986,7 +991,7 @@ class Agent():
         entry_price = float(v['position']['entry_price'])
 
         open_time = int(v['position']['open_time'])
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         duration = round((now.timestamp() - open_time) / 3600, 1)
 
         direction = v['position']['direction']
@@ -1108,9 +1113,9 @@ class Agent():
         # if open_risk_r > self.indiv_r_limit:
         #     print(f"{state} {pair} update_pos - {value = } inval_ratio: {inval_ratio:.4f} open_risk: ${open_risk:.2f}, "
         #           f"open_risk_r: {open_risk_r:.2f}R")
-        if open_risk_r > 5:
-            print(f"excessive open risk on {pair}. current price: ${price}, current inval: ${price / inval_ratio}")
-            pprint(trade_record)
+        # if open_risk_r > 5:
+        #     print(f"excessive open risk on {pair}. current price: ${price}, current inval: ${price / inval_ratio}")
+        #     pprint(trade_record)
 
         jk.stop()
 
@@ -1177,13 +1182,13 @@ class Agent():
 
     # move_stop
     def create_placeholder(self, pair, direction, atr):
-        now = datetime.now().strftime('%d/%m/%y %H:%M')
+        now = datetime.now(timezone.utc).strftime(timestring)
         placeholder = {'action': 'move_stop',
                        'direction': direction,
                        'state': 'real',
                        'pair': pair,
                        'stop_price': atr,
-                       'timestamp': now,
+                       'utc_datetime': now,
                        'completed': None
                        }
         self.open_trades[pair]['placeholder'] = placeholder
@@ -1327,9 +1332,9 @@ class Agent():
     def create_record(self, signal):
         pair = signal['pair']
         direction = signal['direction']
-        now = datetime.now().strftime('%d/%m/%y %H:%M')
+        now = datetime.now(timezone.utc).strftime(timestring)
 
-        placeholder = {'timestamp': now,
+        placeholder = {'utc_datetime': now,
                        'completed': None
                        }
         self.open_trades[pair] = {}
@@ -1497,7 +1502,7 @@ class Agent():
 
     def create_tp_placeholder(self, session, pair, stp, inval_ratio, direction):
         price = session.pairs_data[pair]['price']
-        now = datetime.now().strftime('%d/%m/%y %H:%M')
+        now = datetime.now(timezone.utc).strftime(timestring)
 
         # insert placeholder record
         placeholder = {'action': 'tp',
@@ -1507,7 +1512,7 @@ class Agent():
                        'trig_price': price,
                        'stop_price': stp,
                        'inval': inval_ratio,
-                       'timestamp': now,
+                       'utc_datetime': now,
                        'completed': None
                        }
         self.open_trades[pair]['placeholder'] = placeholder
@@ -1587,8 +1592,9 @@ class Agent():
     def open_to_tracked(self, session, pair, close_order, direction):
         asset = pair[:-4]
         self.open_trades[pair]['trade'].append(close_order)
+        self.open_trades[pair]['trade'][-1]['utc_datetime'] = self.open_trades[pair]['placeholder']['utc_datetime']
 
-        rpnl = self.realised_pnl(self.open_trades[pair])
+        rpnl = self.realised_pnl(session, self.open_trades[pair])
         self.open_trades[pair]['trade'][-1]['rpnl'] = rpnl
         self.realised_pnls[f"real_{direction}"] += rpnl
         self.realised_pnls[f"wanted_{direction}"] += rpnl
@@ -1673,7 +1679,9 @@ class Agent():
 
     def open_to_open(self, session, pair, tp_order):
         self.open_trades[pair]['trade'].append(tp_order)
-        rpnl = self.realised_pnl(self.open_trades[pair])
+        self.open_trades[pair]['trade'][-1]['utc_datetime'] = self.open_trades[pair]['placeholder']['utc_datetime']
+
+        rpnl = self.realised_pnl(session, self.open_trades[pair])
         self.open_trades[pair]['trade'][-1]['rpnl'] = rpnl
         direction = self.open_trades[pair]['position']['direction']
         self.realised_pnls[f"real_{direction}"] += rpnl
@@ -1709,7 +1717,7 @@ class Agent():
         k10.start()
 
         price = session.pairs_data[pair]['price']
-        now = datetime.now().strftime('%d/%m/%y %H:%M')
+        now = datetime.now(timezone.utc).strftime(timestring)
 
         self.create_tp_placeholder(session, pair, stp, inval_ratio, direction)
         pct = self.tp_set_pct(pair)
@@ -1749,7 +1757,7 @@ class Agent():
 
     def create_close_placeholder(self, session, pair, direction):
         price = session.pairs_data[pair]['price']
-        now = datetime.now().strftime('%d/%m/%y %H:%M')
+        now = datetime.now(timezone.utc).strftime(timestring)
 
         # temporary check to catch a possible bug, can delete after ive had a few reduce_risk calls with no bugs
         if direction not in ['long', 'short']:
@@ -1762,7 +1770,7 @@ class Agent():
                        'state': 'real',
                        'pair': pair,
                        'trig_price': price,
-                       'timestamp': now,
+                       'utc_datetime': now,
                        'completed': None
                        }
         self.open_trades[pair]['placeholder'] = placeholder
@@ -1805,6 +1813,7 @@ class Agent():
         close_order['direction'] = direction
         close_order['state'] = 'real'
         close_order['reason'] = reason
+        close_order['utc_datetime'] = datetime.now(timezone.utc).strftime(timestring)
         self.open_trades[pair]['placeholder'].update(close_order)
         self.open_trades[pair]['placeholder']['completed'] = 'execute'
 
@@ -1830,13 +1839,15 @@ class Agent():
     def open_to_closed(self, session, pair, close_order, repay_size):
         self.open_trades[pair]['trade'].append(close_order)
         self.open_trades[pair]['trade'][-1]['liability'] = str(Decimal(0) - Decimal(repay_size))
-        rpnl = self.realised_pnl(self.open_trades[pair])
+        self.open_trades[pair]['trade'][-1]['utc_datetime'] = self.open_trades[pair]['placeholder']['utc_datetime']
+
+        rpnl = self.realised_pnl(session, self.open_trades[pair])
         self.open_trades[pair]['trade'][-1]['rpnl'] = rpnl
         direction = self.open_trades[pair]['position']['direction']
         self.realised_pnls[f"real_{direction}"] += rpnl
         self.realised_pnls[f"wanted_{direction}"] += rpnl
 
-        if rpnl < -1.01:
+        if rpnl <= -1:
             print(f"*.*.* problem with real trade rpnl ({rpnl:.2f})")
             print(self.name)
             pprint(self.open_trades[pair])
@@ -1875,7 +1886,7 @@ class Agent():
         k9.start()
 
         price = session.pairs_data[pair]['price']
-        now = datetime.now().strftime('%d/%m/%y %H:%M')
+        now = datetime.now(timezone.utc).strftime(timestring)
 
         note = f"{self.name} real close {direction} {pair} @ {price}"
         print(now, note)
@@ -1937,6 +1948,8 @@ class Agent():
 
         wanted = 'low_score' not in signal['sim_reasons']
 
+        now = datetime.now(timezone.utc)
+
         sim_order = {
             'pair': pair,
             'direction': direction,
@@ -1946,8 +1959,9 @@ class Agent():
             'base_size': size,
             'quote_size': usdt_size,
             'hard_stop': str(signal['inval']),
-            'stop_time': int(datetime.utcnow().timestamp()),
-            'timestamp': int(datetime.utcnow().timestamp()),
+            'stop_time': int(now.timestamp()),
+            'timestamp': int(now.timestamp()),
+            'utc_datetime': now.strftime(timestring),
             'state': 'sim',
             'fee': '0',
             'fee_currency': 'BNB',
@@ -1962,11 +1976,11 @@ class Agent():
             'entry_price': str(price),
             'hard_stop': str(signal['inval']),
             'init_hard_stop': str(signal['inval']),
-            'open_time': int(datetime.utcnow().timestamp()),
+            'open_time': int(now.timestamp()),
             'pair': pair,
             'liability': '0',
             'stop_id': 'not live',
-            'stop_time': int(datetime.utcnow().timestamp()),
+            'stop_time': int(now.timestamp()),
             'state': 'sim',
             'pfrd': pfrd,
             'pct_of_full_pos': signal['pct_of_full_pos']}
@@ -1987,14 +2001,13 @@ class Agent():
 
         price = session.pairs_data[pair]['price']
         asset = pair[:-4]
-        bin_ts = round(datetime.utcnow().timestamp())
         sim_bal = float(self.sim_trades[pair]['position']['base_size'])
         order_size = sim_bal / 2
         usdt_size = f"{order_size * price:.2f}"
 
-        now = datetime.now().strftime('%d/%m/%y %H:%M')
+        now = datetime.now(timezone.utc)
         note = f"{self.name} sim take-profit {pair} {direction} @ {price}"
-        print(now, note)
+        print(now.strftime(timestring), note)
 
         # execute order
         tp_order = {'pair': pair,
@@ -2003,9 +2016,10 @@ class Agent():
                     'base_size': str(order_size),
                     'quote_size': usdt_size,
                     'hard_stop': str(stp),
-                    'stop_time': bin_ts,
+                    'stop_time': int(now.timestamp()),
                     'reason': 'trade over-extended',
-                    'timestamp': bin_ts,
+                    'timestamp': int(now.timestamp()),
+                    'utc_datetime': now.strftime(timestring),
                     'action': 'tp',
                     'direction': direction,
                     'fee': '0',
@@ -2015,10 +2029,10 @@ class Agent():
 
         self.sim_trades[pair]['position']['base_size'] = str(order_size)
         self.sim_trades[pair]['position']['hard_stop'] = str(stp)
-        self.sim_trades[pair]['position']['stop_time'] = bin_ts
+        self.sim_trades[pair]['position']['stop_time'] = now.timestamp()
         self.sim_trades[pair]['position']['pct_of_full_pos'] /= 2
 
-        rpnl = self.realised_pnl(self.sim_trades[pair])
+        rpnl = self.realised_pnl(session, self.sim_trades[pair])
         self.sim_trades[pair]['trade'][-1]['rpnl'] = rpnl
         self.realised_pnls[f"sim_{direction}"] += rpnl
         if 'too_risky' in self.sim_trades[pair]['signal']['sim_reasons']:
@@ -2034,7 +2048,8 @@ class Agent():
 
     def sim_to_closed_sim(self, session, pair, close_order, save_file):
         self.sim_trades[pair]['trade'].append(close_order)
-        rpnl = self.realised_pnl(self.sim_trades[pair])
+
+        rpnl = self.realised_pnl(session, self.sim_trades[pair])
         self.sim_trades[pair]['trade'][-1]['rpnl'] = rpnl
         direction = self.sim_trades[pair]['position']['direction']
         self.realised_pnls[f"sim_{direction}"] += rpnl
@@ -2042,7 +2057,7 @@ class Agent():
         # TODO use logging to create a dedicated file for each agent's printouts of trades closed at init inval. that
         #  will make them much much easier to see and compare
 
-        if rpnl < -1.01:
+        if rpnl <= -1:
             print(f"*.*.* problem with sim trade rpnl ({rpnl:.2f})")
             print(self.name)
             pprint(self.sim_trades[pair])
@@ -2067,12 +2082,11 @@ class Agent():
         k6.start()
 
         price = session.pairs_data[pair]['price']
-        bin_ts = round(datetime.utcnow().timestamp())
         sim_bal = float(self.sim_trades[pair]['position']['base_size'])
 
-        now = datetime.now().strftime('%d/%m/%y %H:%M')
+        now = datetime.now(timezone.utc)
         note = f"{self.name} sim close {pair} {direction} @ {price}"
-        print(now, note)
+        print(now.strftime(timestring), note)
 
         # execute order
         close_order = {'pair': pair,
@@ -2081,7 +2095,8 @@ class Agent():
                        'base_size': str(sim_bal),
                        'quote_size': f"{sim_bal * price:.2f}",
                        'reason': 'close_signal',
-                       'timestamp': bin_ts,
+                       'timestamp': int(now.timestamp()),
+                       'utc_datetime': now.strftime(timestring),
                        'action': 'close',
                        'direction': direction,
                        'fee': '0',
@@ -2101,13 +2116,13 @@ class Agent():
         k5.start()
         print('')
         price = session.pairs_data[pair]['price']
-        now = datetime.now().strftime('%d/%m/%y %H:%M')
+        now = datetime.now(timezone.utc).strftime(timestring)
 
         note = f"{self.name} tracked take-profit {pair} {direction} 50% @ {price}"
         print(now, note)
 
         trade_record = self.tracked_trades[pair]['trade']
-        timestamp = round(datetime.utcnow().timestamp())
+        timestamp = round(datetime.now(timezone.utc).timestamp())
 
         # execute order
         tp_order = {'pair': pair,
@@ -2152,8 +2167,7 @@ class Agent():
 
         print('')
         price = session.pairs_data[pair]['price']
-        now = datetime.now().strftime('%d/%m/%y %H:%M')
-        timestamp = round(datetime.utcnow().timestamp())
+        now = datetime.now(timezone.utc)
         note = f"{self.name} tracked close {direction} {pair} @ {price}"
         print(now, note)
 
@@ -2163,7 +2177,8 @@ class Agent():
                        'base_size': '0',
                        'quote_size': '0',
                        'reason': 'close_signal',
-                       'timestamp': timestamp,
+                       'timestamp': int(now.timestamp()),
+                       'utc_datetime': now.strftime(timestring),
                        'action': 'close',
                        'direction': direction,
                        'fee': '0',

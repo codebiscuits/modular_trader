@@ -4,7 +4,7 @@ import binance_funcs as funcs
 from binance.client import Client
 from pathlib import Path
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import statistics as stats
 from pushbullet import Pushbullet
 import time
@@ -14,6 +14,7 @@ from timers import Timer
 from typing import Union, List, Tuple, Dict, Set, Optional, Any
 import sys
 import math
+import pytz
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
@@ -21,7 +22,7 @@ ctx = getcontext()
 ctx.prec = 12
 
 
-# now = datetime.now().strftime('%d/%m/%y %H:%M')
+# now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
 
 
 def transform_signal(signal: dict, type: str, state: str, direction: str) -> dict:
@@ -185,7 +186,7 @@ def market_benchmark(session) -> None:
         if len(df) > 8929:  # 1 month of 5min periods is 31 * 24 * 12 = 8928
             df = df.tail(8929).reset_index()
         last_stamp = df.timestamp.iloc[-1]
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         window = timedelta(hours=4)
         if last_stamp > (now - window):  # if there is data up to the last 4 hours
             if len(df) > 288:
@@ -255,9 +256,9 @@ def strat_benchmark(session, agent) -> None:
     if not bal_data:
         return benchmark
 
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     for row in bal_data[::-1]:
-        row_dt = datetime.strptime(row.get('timestamp'), '%d/%m/%y %H:%M')
+        row_dt = pytz.timezone('UTC').localize(datetime.strptime(row.get('timestamp'), '%d/%m/%y %H:%M'))
         if row_dt > (now - timedelta(days=30)):  # and not bal_1m:
             try:
                 bal_1m = row.get('balance')
@@ -565,7 +566,7 @@ def scanner_summary(session, agents: list) -> None:
     x14 = Timer(f'{func_name}')
     x14.start()
 
-    now = datetime.now().strftime('%d/%m/%y %H:%M')
+    now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
     title = f'{now} Spot: ${session.spot_bal:.2f}, Margin: ${session.margin_bal:.2f}'
     live_str = '' if session.live else '*not live* '
     above_ema = len(session.above_200_ema)

@@ -2,7 +2,7 @@ import pandas as pd
 import polars as pl
 import keys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 import binance_funcs as funcs
 from binance.client import Client
 from pushbullet import Pushbullet
@@ -17,12 +17,11 @@ client = Client(keys.bPkey, keys.bSkey)
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
-now = datetime.now().strftime('%d/%m/%y %H:%M')
+now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
 
 session = LightSession()
 
-if session.live:
-    print('-:-' * 10, f' {now} running update_ohlc ', '-:-' * 10)
+print('-:-' * 10, f' {now} running update_ohlc ', '-:-' * 10)
 
 start = time.perf_counter()
 
@@ -57,6 +56,14 @@ def iterations(n, pair, tf):
         try:
             pldf = pl.read_parquet(source=filepath, use_pyarrow=True)
             df = pldf.to_pandas()
+
+            # check df is localised to UTC
+            try:
+                df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
+                print(f"update_ohlc iterations - {pair} ohlc data wasn't timezone aware, fixing now.")
+            except TypeError:
+                pass
+
         except (ArrowInvalid, OSError) as e:
             print('Error:\n', e)
             print(f"Problem reading {pair} parquet file, downloading from scratch.")
