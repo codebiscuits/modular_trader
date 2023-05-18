@@ -57,13 +57,6 @@ def iterations(n, pair, tf):
             pldf = pl.read_parquet(source=filepath, use_pyarrow=True)
             df = pldf.to_pandas()
 
-            # check df is localised to UTC
-            try:
-                df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
-                print(f"update_ohlc iterations - {pair} ohlc data wasn't timezone aware, fixing now.")
-            except TypeError:
-                pass
-
         except (ArrowInvalid, OSError) as e:
             print('Error:\n', e)
             print(f"Problem reading {pair} parquet file, downloading from scratch.")
