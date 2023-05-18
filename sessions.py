@@ -362,7 +362,7 @@ class TradingSession():
             market_data_read = Path('/home/ross/Documents/backtester_2021/market_data')
             market_data_write = Path('/home/ross/Documents/backtester_2021/market_data')
 
-        market_data_write.mkdir(exist_ok=True)
+        market_data_write.mkdir(parents=True, exist_ok=True)
 
         u.stop()
         return market_data_read, market_data_write
@@ -383,6 +383,9 @@ class TradingSession():
         elif Path(f'/home/ross/coding/pi_down/modular_trader/records').exists():
             read_records = Path(f'/home/ross/coding/pi_down/modular_trader/records')
             write_records = Path(f'/home/ross/Documents/backtester_2021/records')
+        elif Path("/home/ross/coding/modular_trader").exists():
+            read_records = Path(f'/home/ross/coding/modular_trader/records')
+            write_records = Path(f'/home/ross/coding/modular_trader/records')
         else:
             read_records = Path(f'/home/ross/Documents/backtester_2021/records')
             write_records = Path(f'/home/ross/Documents/backtester_2021/records')
@@ -390,7 +393,7 @@ class TradingSession():
         # print(f"{read_records = }")
         # print(f"{write_records = }")
 
-        write_records.mkdir(parents=True, exist_ok=True)
+        write_records.mkdir(exist_ok=True)
 
         x1.stop()
         return read_records, write_records

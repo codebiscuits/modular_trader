@@ -6,3 +6,4 @@ pycoingecko
 python-binance
 ccxt
 scikit-learn
+scikit-learn-intelex

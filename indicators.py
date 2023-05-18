@@ -6,13 +6,14 @@ pd.set_option('display.expand_frame_repr', False)
 pd.set_option('display.precision', 4)
 
 
-def atr(df: pd.DataFrame, lb: int) -> None:
+def atr(df: pd.DataFrame, lb: int) -> pd.DataFrame:
     '''calculates the average true range on an ohlc dataframe'''
     df['tr1'] = df.high - df.low
     df['tr2'] = abs(df.high - df.close.shift(1))
     df['tr3'] = abs(df.low - df.close.shift(1))
     df['tr'] = df[['tr1', 'tr2', 'tr3']].max(axis=1)
     df[f'atr-{lb}'] = df['tr'].ewm(lb).mean()
+    df[f'atr_{lb}_pct'] = df[f"atr-{lb}"] / df.close.ewm(lb).mean()
     df = df.drop(['tr1', 'tr2', 'tr3', 'tr'], axis=1)
 
     return df
@@ -345,8 +346,8 @@ def ema_breakout(df: pd.DataFrame, length: int, lookback: int) -> pd.DataFrame:
     df['ema_high'] = df[f"ema_{length}"].shift(1).rolling(lookback).max()
     df['ema_low'] = df[f"ema_{length}"].shift(1).rolling(lookback).min()
 
-    df['ema_up'] = df[f"ema_{length}"] > df.ema_high
-    df['ema_down'] = df[f"ema_{length}"] < df.ema_low
+    df['ema_break_up'] = df[f"ema_{length}"] > df.ema_high
+    df['ema_break_down'] = df[f"ema_{length}"] < df.ema_low
 
     return df.drop(['ema_high', 'ema_low'], axis=1)
 
