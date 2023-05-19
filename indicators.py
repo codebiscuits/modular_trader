@@ -262,9 +262,7 @@ def fractal_density(df: pd.DataFrame, lookback: int, frac_width: int) -> pd.Data
 
 
 def inside_bars(df):
-    df['inside_bar'] = (df.high < df.high.shift(1)) & (df.low > df.low.shift(1))
-
-    return df
+    return (df.high < df.high.shift(1)) & (df.low > df.low.shift(1))
 
 
 def engulfing(df: pd.DataFrame, lookback: int = 1) -> pd.DataFrame:
@@ -279,6 +277,8 @@ def engulfing(df: pd.DataFrame, lookback: int = 1) -> pd.DataFrame:
 
     df['bullish_engulf'] = (df.open <= df.window_min) & (df.close > df.window_max)
     df['bearish_engulf'] = (df.open >= df.window_max) & (df.close < df.window_min)
+
+    df = df.drop(['row_min', 'row_max', 'window_min', 'window_max'], axis=1)
 
     return df
 
