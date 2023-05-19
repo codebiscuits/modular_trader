@@ -101,7 +101,7 @@ for fp in folder_path.glob('*'):
         for k, v in records.items():
             info = extract_info(v)
 
-            if info:# and (info['rpnl'] < -0.99) and (info['close_action'] == 'close'):
+            if info and (info['rpnl'] < -0.99) and (info['close_action'] == 'close'):
                 print('')
                 # pprint(info)
                 df = get_ohlc(info['pair'], info['open_time'], info['close_time'])

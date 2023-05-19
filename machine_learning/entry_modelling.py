@@ -5,6 +5,7 @@ import keys
 from binance import Client
 from pathlib import Path
 import indicators as ind
+import features
 import binance_funcs as funcs
 import numpy as np
 import json
@@ -23,10 +24,10 @@ pd.set_option('display.expand_frame_repr', False)
 pd.set_option('display.precision', 4)
 client = Client(keys.bPkey, keys.bSkey)
 
-timeframe = '4h'
+timeframe = '1h'
 vwma_lengths = {'1h': 12, '4h': 48, '6h': 70, '8h': 96, '12h': 140, '1d': 280}
 vwma_periods = 24  # vwma_lengths just accounts for timeframe resampling, vwma_periods is a multiplier on that
-side = 'long'
+# side = 'long'
 inval_lookback = 2  # lowest low / the highest high for last 2 bars
 # exit_method = {'type': 'trail_atr', 'len': 2, 'mult': 2}
 exit_method = {'type': 'trail_fractal', 'width': 9, 'atr_spacing': 3}
@@ -37,14 +38,15 @@ ohlc_folder = Path('../bin_ohlc_5m')
 # pairs = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
 trim_ohlc = 1000
 
+# TODO i still have to deal with the unbalanced labels
 
-def rank_pairs(n):
-    with open('/home/ross/coding/modular_trader/recent_1d_volumes.json', 'r') as file:
+def rank_pairs(n, start=0):
+    with open('/home/ross/Documents/backtester_2021/recent_1d_volumes.json', 'r') as file:
         vols = json.load(file)
 
     vol_sorted_pairs = sorted(vols, key=lambda x: vols[x], reverse=True)
 
-    return vol_sorted_pairs[:n]
+    return vol_sorted_pairs[start:n]
 
 
 def get_data(pair):
@@ -53,12 +55,12 @@ def get_data(pair):
 
     if ohlc_path.exists():
         df = pd.read_parquet(ohlc_path)
-        print("Loaded OHLC from file")
+        # print("Loaded OHLC from file")
     else:
         df = funcs.get_ohlc(pair, '5m', '2 years ago UTC')
         ohlc_folder.mkdir(parents=True, exist_ok=True)
         df.to_parquet(ohlc_path)
-        print("Downloaded OHLC from internet")
+        # print("Downloaded OHLC from internet")
 
     vwma = ind.vwma(df, vwma_lengths[timeframe] * vwma_periods)
     vwma = vwma[int(vwma_lengths[timeframe] / 2)::vwma_lengths[timeframe]].reset_index(drop=True)
@@ -66,7 +68,7 @@ def get_data(pair):
     df['vwma'] = vwma
 
     elapsed = time.perf_counter() - start
-    print(f"get_data took {int(elapsed // 60)}m {elapsed % 60:.1f}s")
+    # print(f"get_data took {int(elapsed // 60)}m {elapsed % 60:.1f}s")
 
     return df
 
@@ -145,13 +147,32 @@ def oco(df, r_mult, inval_lb, side):
 
 
 def add_features(df):
-    df['stoch_vwma_ratio'] = ind.stochastic(df.close / df.vwma, 50)
-    df['ema_200'] = df.close.ewm(200).mean()
-    df['ema_200_roc'] = df.ema_200.pct_change()
-    df['ema_ratio'] = df.close / df.ema_200
+    df['vol_delta_div'] = ind.vol_delta_div(df)
+    df['stoch_vwma_ratio_20'] = features.stoch_vwma_ratio(df, 20)
+    df['stoch_vwma_ratio_50'] = features.stoch_vwma_ratio(df, 50)
+    df['stoch_vwma_ratio_100'] = features.stoch_vwma_ratio(df, 100)
+    df['ema_20_roc'] = features.ema_roc(df, 20)
+    df['ema_50_roc'] = features.ema_roc(df, 50)
+    df['ema_100_roc'] = features.ema_roc(df, 100)
+    df['ema_200_roc'] = features.ema_roc(df, 200)
+    df['ema_200_ratio'] = features.ema_ratio(df, 200)
     df = ind.ema_breakout(df, 50, 50)
-    df
-    ind.atr(df, 5)
+    df = ind.atr(df, 5)
+    df = ind.atr(df, 10)
+    df = ind.atr(df, 20)
+    df = ind.atr(df, 50)
+    df['stoch_base_vol_20'] = ind.stochastic(df.base_vol, 20)
+    df['stoch_base_vol_50'] = ind.stochastic(df.base_vol, 50)
+    df['stoch_base_vol_100'] = ind.stochastic(df.base_vol, 100)
+    df['stoch_base_vol_200'] = ind.stochastic(df.base_vol, 200)
+    df['stoch_num_trades_20'] = ind.stochastic(df.num_trades, 20)
+    df['stoch_num_trades_50'] = ind.stochastic(df.num_trades, 50)
+    df['stoch_num_trades_100'] = ind.stochastic(df.num_trades, 100)
+    df['stoch_num_trades_200'] = ind.stochastic(df.num_trades, 200)
+    df['inside_bar'] = ind.inside_bars(df).shift(1)
+    df = features.engulfing(df, 1)
+    df = features.doji(df)
+    df = features.bull_bear_bar(df)
 
     return df
 
@@ -168,7 +189,7 @@ def project_pnl(df, side, method, inval_lb) -> list[dict]:
         res_list = oco(df, method['r_multiple'], inval_lb, side)
 
     elapsed = time.perf_counter() - start
-    print(f"project_pnl took {int(elapsed // 60)}m {elapsed % 60:.1f}s")
+    # print(f"project_pnl took {int(elapsed // 60)}m {elapsed % 60:.1f}s")
 
     return res_list
 
@@ -191,10 +212,10 @@ def train_ml(df):
     # pprint(pipe.get_params())
 
     param_dict = dict(
-        model__n_estimators=[int(x) for x in np.linspace(start=60, stop=100, num=5)],
+        model__n_estimators=[int(x) for x in np.linspace(start=50, stop=300, num=11)],
         model__max_features=['sqrt'],
-        model__max_depth=[5, 6, 7, 8, 9],
-        model__min_samples_split=[2, 3],
+        model__max_depth=[5, 7, 9, 11, 13],
+        model__min_samples_split=[1, 2, 3],
         model__min_samples_leaf=[1, 2, 3],
         model__bootstrap=[True, False]
     )
@@ -227,22 +248,19 @@ def best_features(grid, X_train):
     # for f in selected_features:
     #     print(f"{X_train.columns[f]}: {importances[f]:.2%}")
 
+for side in ['long', 'short']:
+    pairs = rank_pairs(100)
+    all_results = []
+    for pair in pairs:
+        df = get_data(pair)
+        df = add_features(df)
+        results = project_pnl(df, side, exit_method, inval_lookback)
+        all_results.extend(results)
 
-pairs = rank_pairs(50)
-all_results = []
-for pair in pairs:
-    df = get_data(pair)
-    df = add_features(df)
-    results = project_pnl(df, side, exit_method, inval_lookback)
-    all_results.extend(results)
-    print(f"{pair} {len(results) = } {len(all_results) = }")
+    res_df = pd.DataFrame(all_results)
+    res_df = res_df.dropna(axis=0).reset_index(drop=True)
 
-    # print(df.tail(100))
-
-res_df = pd.DataFrame(all_results)
-res_df = res_df.dropna(axis=0).reset_index(drop=True)
-
-train_ml(res_df)
+    train_ml(res_df)
 
 # # import and prepare data
 # for pair in pairs:
