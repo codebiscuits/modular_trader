@@ -27,7 +27,6 @@ client = Client(keys.bPkey, keys.bSkey)
 timeframe = '1h'
 vwma_lengths = {'1h': 12, '4h': 48, '6h': 70, '8h': 96, '12h': 140, '1d': 280}
 vwma_periods = 24  # vwma_lengths just accounts for timeframe resampling, vwma_periods is a multiplier on that
-# side = 'long'
 inval_lookback = 2  # lowest low / the highest high for last 2 bars
 # exit_method = {'type': 'trail_atr', 'len': 2, 'mult': 2}
 exit_method = {'type': 'trail_fractal', 'width': 9, 'atr_spacing': 3}
@@ -39,9 +38,10 @@ ohlc_folder = Path('../bin_ohlc_5m')
 trim_ohlc = 1000
 
 # TODO i still have to deal with the unbalanced labels
+# TODO also need to investigate scoring algorithms inside the estimator
 
 def rank_pairs(n, start=0):
-    with open('/home/ross/Documents/backtester_2021/recent_1d_volumes.json', 'r') as file:
+    with open('../recent_1d_volumes.json', 'r') as file:
         vols = json.load(file)
 
     vol_sorted_pairs = sorted(vols, key=lambda x: vols[x], reverse=True)
@@ -196,10 +196,12 @@ def project_pnl(df, side, method, inval_lb) -> list[dict]:
 
 def train_ml(df):
     # split data into features and labels
-    X = df.drop(['timestamp', 'open', 'high', 'low', 'close', 'pnl_pct', 'pnl_r', 'ema_200', 'lifespan'], axis=1)
+    X = df.drop(['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'quote_vol', 'num_trades',
+                 'taker_buy_base_vol', 'taker_buy_quote_vol', 'vwma', 'pnl_pct', 'pnl_r', 'ema_20',
+                 'ema_50', 'ema_100', 'ema_200', 'lifespan'], axis=1)
     y = df.pnl_r
 
-    print(X.describe())
+    # print(X.describe())
 
     # split into train and test sets for hold-out validation
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=101)
@@ -208,30 +210,26 @@ def train_ml(df):
         ('scale', QuantileTransformer()),
         ('model', RandomForestRegressor())
     ])
-    print('')
     # pprint(pipe.get_params())
 
     param_dict = dict(
-        model__n_estimators=[int(x) for x in np.linspace(start=50, stop=300, num=11)],
+        model__n_estimators=[int(x) for x in np.linspace(start=50, stop=200, num=7)],
         model__max_features=['sqrt'],
-        model__max_depth=[5, 7, 9, 11, 13],
-        model__min_samples_split=[1, 2, 3],
+        model__max_depth=[5, 7, 9, 11],
+        model__min_samples_split=[2, 3], # never less than 2
         model__min_samples_leaf=[1, 2, 3],
         model__bootstrap=[True, False]
     )
     rf_grid = GridSearchCV(estimator=pipe, param_grid=param_dict, cv=5, n_jobs=-1)
     rf_grid.fit(X_train, y_train)
 
-    print('Best Params:')
-    print(rf_grid.best_params_)
+    # print('Best Params:')
+    # print(rf_grid.best_params_)
 
-    print(f"\nTrain Accuracy - : {rf_grid.score(X_train, y_train):.3f}")
-    print(f"Test Accuracy - : {rf_grid.score(X_test, y_test):.3f}\n")
+    print(f"Train Accuracy - : {rf_grid.score(X_train, y_train):.3f}")
+    print(f"Test Accuracy - : {rf_grid.score(X_test, y_test):.3f}")
 
     best_features(rf_grid, X_train)
-
-    # results = pd.DataFrame(rf_grid.cv_results_).sort_values('rank_test_score')
-    # print(results.head())
 
 
 def best_features(grid, X_train):
@@ -241,17 +239,21 @@ def best_features(grid, X_train):
     # Get feature importances from the best estimator
     importances = best_estimator.named_steps['model'].feature_importances_
     imp_df = pd.DataFrame(importances, index=X_train.columns).sort_values(0, ascending=False)
-    print(imp_df)
+    print(f'Best Features: 1 {imp_df.index[0]}, 2 {imp_df.index[1]}, 3 {imp_df.index[2]}')
 
     # # Print the top K features
     # print(f"\nTop {top_k} features:")
     # for f in selected_features:
     #     print(f"{X_train.columns[f]}: {importances[f]:.2%}")
 
-for side in ['long', 'short']:
+side = 'long'
+# for side in ['long', 'short']:
+group_size = 1
+for i in range(0, 100, group_size):
     pairs = rank_pairs(100)
+    print(f"\nTesting {side} setups on pairs {pairs[i:i+group_size]}\n")
     all_results = []
-    for pair in pairs:
+    for pair in pairs[i:i+group_size]:
         df = get_data(pair)
         df = add_features(df)
         results = project_pnl(df, side, exit_method, inval_lookback)
@@ -259,7 +261,7 @@ for side in ['long', 'short']:
 
     res_df = pd.DataFrame(all_results)
     res_df = res_df.dropna(axis=0).reset_index(drop=True)
-
+    # print(f'Fitting Model on pairs {pairs[i:i+group_size]}')
     train_ml(res_df)
 
 # # import and prepare data
