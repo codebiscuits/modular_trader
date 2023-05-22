@@ -12,7 +12,7 @@ import json
 
 from sklearnex import get_patch_names, patch_sklearn
 patch_sklearn()
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
 from sklearn.preprocessing import StandardScaler, QuantileTransformer
 from sklearn.pipeline import Pipeline
@@ -38,7 +38,10 @@ ohlc_folder = Path('../bin_ohlc_5m')
 trim_ohlc = 1000
 
 # TODO i still have to deal with the unbalanced labels
-# TODO also need to investigate scoring algorithms inside the estimator
+# TODO also need to investigate scoring algorithms inside the estimator - i need to penalise false positives much more
+#  than false negatives
+# TODO Using R-denominated pnl might be making prediction more dificult. i might find i get better results with % pnl and
+#  then i can use R as a strategy filter further down the line
 
 def rank_pairs(n, start=0):
     with open('../recent_1d_volumes.json', 'r') as file:
@@ -109,6 +112,7 @@ def trail_fractal(df_0, width, spacing, side):
 
         pnl_pct = (trade_diff - 1.0015) if side == 'long' else (0.9985 - trade_diff)  # accounting for 15bps fees
         pnl_r = pnl_pct / r_pct
+        pnl_cat = 0 if (pnl_r <= 0) else 1
 
         row_data = df.iloc[0].to_dict()
 
@@ -117,7 +121,8 @@ def trail_fractal(df_0, width, spacing, side):
             r_pct=r_pct,
             lifespan=lifespan,
             pnl_pct=pnl_pct,
-            pnl_r=pnl_r
+            pnl_r=pnl_r,
+            pnl_cat=pnl_cat
         )
 
         results.append(row_data | row_res)
@@ -197,9 +202,9 @@ def project_pnl(df, side, method, inval_lb) -> list[dict]:
 def train_ml(df):
     # split data into features and labels
     X = df.drop(['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'quote_vol', 'num_trades',
-                 'taker_buy_base_vol', 'taker_buy_quote_vol', 'vwma', 'pnl_pct', 'pnl_r', 'ema_20',
+                 'taker_buy_base_vol', 'taker_buy_quote_vol', 'vwma', 'pnl_pct', 'pnl_r', 'pnl_cat', 'ema_20',
                  'ema_50', 'ema_100', 'ema_200', 'lifespan'], axis=1)
-    y = df.pnl_r
+    y = df.pnl_cat
 
     # print(X.describe())
 
@@ -208,7 +213,7 @@ def train_ml(df):
 
     pipe = Pipeline([
         ('scale', QuantileTransformer()),
-        ('model', RandomForestRegressor())
+        ('model', RandomForestClassifier())
     ])
     # pprint(pipe.get_params())
 
@@ -249,7 +254,7 @@ def best_features(grid, X_train):
 side = 'long'
 # for side in ['long', 'short']:
 group_size = 1
-for i in range(0, 100, group_size):
+for i in range(0, 3, group_size):
     pairs = rank_pairs(100)
     print(f"\nTesting {side} setups on pairs {pairs[i:i+group_size]}\n")
     all_results = []
@@ -308,17 +313,6 @@ for i in range(0, 100, group_size):
 #
 #             print(f"Train Accuracy - : {rf_grid.score(X_train, y_train):.3f}")
 #             print(f"Test Accuracy - : {rf_grid.score(X_test, y_test):.3f}")
-#
-#             # rf_model_2 = RandomForestClassifier(bootstrap=True,
-#             #                                     max_depth=2,
-#             #                                     max_features='sqrt',
-#             #                                     min_samples_leaf=1,
-#             #                                     min_samples_split=2,
-#             #                                     n_estimators=10)
-#             # rf_model_2.fit(X_train, y_train)
-#             #
-#             # print(f"Train Accuracy - : {rf_model_2.score(X_train, y_train):.3f}")
-#             # print(f"Test Accuracy - : {rf_model_2.score(X_test, y_test):.3f}")
 
 all_end = time.perf_counter()
 elapsed = all_end - all_start
