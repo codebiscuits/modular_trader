@@ -206,7 +206,7 @@ def train_ml(df):
                  'ema_50', 'ema_100', 'ema_200', 'lifespan'], axis=1)
     y = df.pnl_cat
 
-    # print(X.describe())
+    print(X.describe())
 
     # split into train and test sets for hold-out validation
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=101)
@@ -228,9 +228,8 @@ def train_ml(df):
     rf_grid = GridSearchCV(estimator=pipe, param_grid=param_dict, cv=5, n_jobs=-1)
     rf_grid.fit(X_train, y_train)
 
-    # print('Best Params:')
-    # print(rf_grid.best_params_)
-
+    print('Best Params:')
+    print(rf_grid.best_params_)
     print(f"Train Accuracy - : {rf_grid.score(X_train, y_train):.3f}")
     print(f"Test Accuracy - : {rf_grid.score(X_test, y_test):.3f}")
 
