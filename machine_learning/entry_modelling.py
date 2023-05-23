@@ -9,6 +9,7 @@ import features
 import binance_funcs as funcs
 import numpy as np
 import json
+from collections import Counter
 
 from sklearnex import get_patch_names, patch_sklearn
 patch_sklearn()
@@ -16,6 +17,8 @@ from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
 from sklearn.preprocessing import StandardScaler, QuantileTransformer
 from sklearn.pipeline import Pipeline
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import confusion_matrix, roc_auc_score, roc_curve
 
 all_start = time.perf_counter()
 
@@ -203,35 +206,41 @@ def train_ml(df):
     # split data into features and labels
     X = df.drop(['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'quote_vol', 'num_trades',
                  'taker_buy_base_vol', 'taker_buy_quote_vol', 'vwma', 'pnl_pct', 'pnl_r', 'pnl_cat', 'ema_20',
-                 'ema_50', 'ema_100', 'ema_200', 'lifespan'], axis=1)
+                 'ema_50', 'ema_100', 'ema_200', 'lifespan', 'atr-5', 'atr-10', 'atr-20', 'atr-50', 'atr-3',
+                 'frac_high', 'frac_low', 'inval'], axis=1)
     y = df.pnl_cat
 
-    print(X.describe())
+    print(f"{len(y)} setups to test")
 
     # split into train and test sets for hold-out validation
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=101)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=101)
 
     pipe = Pipeline([
-        ('scale', QuantileTransformer()),
-        ('model', RandomForestClassifier())
+        ('scale', StandardScaler()),
+        ('model', RandomForestClassifier(class_weight='balanced', bootstrap=True, n_estimators=300, min_samples_leaf=2))
     ])
     # pprint(pipe.get_params())
 
     param_dict = dict(
-        model__n_estimators=[int(x) for x in np.linspace(start=50, stop=200, num=7)],
-        model__max_features=['sqrt'],
-        model__max_depth=[5, 7, 9, 11],
-        model__min_samples_split=[2, 3], # never less than 2
-        model__min_samples_leaf=[1, 2, 3],
-        model__bootstrap=[True, False]
+        # model__n_estimators=[100, 200, 300],#[int(x) for x in np.linspace(start=10, stop=200, num=7)],
+        model__max_features=[4, 6, 8, 10],
+        model__max_depth=[int(x) for x in np.linspace(start=10, stop=20, num=5)],
+        model__min_samples_split=[2, 3, 4], # must be 2 or more
     )
-    rf_grid = GridSearchCV(estimator=pipe, param_grid=param_dict, cv=5, n_jobs=-1)
+    rf_grid = GridSearchCV(estimator=pipe, param_grid=param_dict, scoring='precision', cv=3, n_jobs=-1)
     rf_grid.fit(X_train, y_train)
 
     print('Best Params:')
     print(rf_grid.best_params_)
-    print(f"Train Accuracy - : {rf_grid.score(X_train, y_train):.3f}")
-    print(f"Test Accuracy - : {rf_grid.score(X_test, y_test):.3f}")
+    # print(f"Train Score - : {rf_grid.score(X_train, y_train):.1%}")
+    # print(f"Test Score - : {rf_grid.score(X_test, y_test):.1%}")
+
+    y_pred = rf_grid.predict(X_test)
+    cm = confusion_matrix(y_test, y_pred)
+    print(f"Confusion Matrix: TP: {cm[1, 1]}, TN: {cm[0, 0]}, FP: {cm[0, 1]}, FN: {cm[1, 0]}")
+    print(f"Test Precision: {precision_score(y_test, y_pred):.1%} (what % of trades taken would have been good)")
+    print(f"Test Recall: {recall_score(y_test, y_pred):.1%} (what % of good trades were taken)")
+    # print(f"F1 Score: {f1_score(y_test, y_pred):.1%} (harmonic mean of precision and recall)")
 
     best_features(rf_grid, X_train)
 
@@ -243,30 +252,43 @@ def best_features(grid, X_train):
     # Get feature importances from the best estimator
     importances = best_estimator.named_steps['model'].feature_importances_
     imp_df = pd.DataFrame(importances, index=X_train.columns).sort_values(0, ascending=False)
-    print(f'Best Features: 1 {imp_df.index[0]}, 2 {imp_df.index[1]}, 3 {imp_df.index[2]}')
+    print(f'Best Features: '
+          f'1 {imp_df.index[0]}: {imp_df.iat[0, 0]:.2%}, '
+          f'2 {imp_df.index[1]}: {imp_df.iat[1, 0]:.2%}, '
+          f'3 {imp_df.index[2]}: {imp_df.iat[2, 0]:.2%}, '
+          f'4 {imp_df.index[3]}: {imp_df.iat[3, 0]:.2%}, '
+          f'5 {imp_df.index[4]}: {imp_df.iat[4, 0]:.2%}')
 
     # # Print the top K features
     # print(f"\nTop {top_k} features:")
     # for f in selected_features:
     #     print(f"{X_train.columns[f]}: {importances[f]:.2%}")
 
-side = 'long'
-# for side in ['long', 'short']:
-group_size = 1
-for i in range(0, 3, group_size):
-    pairs = rank_pairs(100)
-    print(f"\nTesting {side} setups on pairs {pairs[i:i+group_size]}\n")
-    all_results = []
-    for pair in pairs[i:i+group_size]:
-        df = get_data(pair)
-        df = add_features(df)
-        results = project_pnl(df, side, exit_method, inval_lookback)
-        all_results.extend(results)
+# side = 'long'
+group_size = 5
+total_size = 15
+pair_group_index = range(0, 1+total_size-group_size, group_size)
+frac_widths = [7, 9, 11, 13]
+atr_spacings = [2, 3, 4, 5, 7, 9]
+for i in pair_group_index:
+    for frac_width in frac_widths:
+        exit_method['width'] = frac_width
+        for side in ['long', 'short']:
+            pairs = rank_pairs(total_size)
+            print(f"\nTesting {side} setups on pairs {pairs[i:i+group_size]}, fractal width {frac_width}")
+            all_results = []
+            for pair in pairs[i:i+group_size]:
+                df = get_data(pair)
+                df = add_features(df)
+                results = project_pnl(df, side, exit_method, inval_lookback)
+                all_results.extend(results)
 
-    res_df = pd.DataFrame(all_results)
-    res_df = res_df.dropna(axis=0).reset_index(drop=True)
-    # print(f'Fitting Model on pairs {pairs[i:i+group_size]}')
-    train_ml(res_df)
+            res_df = pd.DataFrame(all_results)
+            res_df = res_df.dropna(axis=0).reset_index(drop=True)
+
+            # print(Counter(res_df.pnl_cat))
+
+            train_ml(res_df)
 
 # # import and prepare data
 # for pair in pairs:
@@ -315,4 +337,4 @@ for i in range(0, 3, group_size):
 
 all_end = time.perf_counter()
 elapsed = all_end - all_start
-print(f"Total time taken: {int(elapsed // 60)}m {elapsed % 60:.1f}s")
+print(f"\n\nTotal time taken: {int(elapsed // 60)}m {elapsed % 60:.1f}s")
