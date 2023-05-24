@@ -11,14 +11,17 @@ import numpy as np
 import json
 from collections import Counter
 
-from sklearnex import get_patch_names, patch_sklearn
+from sklearnex import get_patch_names, patch_sklearn, unpatch_sklearn
 patch_sklearn()
+# unpatch_sklearn('roc_auc_score')
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
 from sklearn.preprocessing import StandardScaler, QuantileTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from sklearn.metrics import confusion_matrix, roc_auc_score, roc_curve
+
+# print(get_patch_names())
 
 all_start = time.perf_counter()
 
@@ -27,7 +30,7 @@ pd.set_option('display.expand_frame_repr', False)
 pd.set_option('display.precision', 4)
 client = Client(keys.bPkey, keys.bSkey)
 
-timeframe = '1h'
+timeframe = '1d'
 vwma_lengths = {'1h': 12, '4h': 48, '6h': 70, '8h': 96, '12h': 140, '1d': 280}
 vwma_periods = 24  # vwma_lengths just accounts for timeframe resampling, vwma_periods is a multiplier on that
 inval_lookback = 2  # lowest low / the highest high for last 2 bars
@@ -181,6 +184,9 @@ def add_features(df):
     df = features.engulfing(df, 1)
     df = features.doji(df)
     df = features.bull_bear_bar(df)
+    # hour of day
+    # day of week
+    # month
 
     return df
 
@@ -236,11 +242,14 @@ def train_ml(df):
     # print(f"Test Score - : {rf_grid.score(X_test, y_test):.1%}")
 
     y_pred = rf_grid.predict(X_test)
-    cm = confusion_matrix(y_test, y_pred)
-    print(f"Confusion Matrix: TP: {cm[1, 1]}, TN: {cm[0, 0]}, FP: {cm[0, 1]}, FN: {cm[1, 0]}")
-    print(f"Test Precision: {precision_score(y_test, y_pred):.1%} (what % of trades taken would have been good)")
+    y_proba = rf_grid.predict_proba(X_test)
+    y_proba = [p[1] for p in y_proba]
+    # cm = confusion_matrix(y_test, y_pred)
+    # print(f"Confusion Matrix: TP: {cm[1, 1]}, TN: {cm[0, 0]}, FP: {cm[0, 1]}, FN: {cm[1, 0]}")
+    print(f"Test Precision: -: {precision_score(y_test, y_pred):.1%} :- (what % of trades taken would have been good)")
     print(f"Test Recall: {recall_score(y_test, y_pred):.1%} (what % of good trades were taken)")
     # print(f"F1 Score: {f1_score(y_test, y_pred):.1%} (harmonic mean of precision and recall)")
+    print(f"AUROC Score: {roc_auc_score(y_test, y_proba)}")
 
     best_features(rf_grid, X_train)
 
@@ -266,16 +275,16 @@ def best_features(grid, X_train):
 
 # side = 'long'
 group_size = 5
-total_size = 15
+total_size = 150
 pair_group_index = range(0, 1+total_size-group_size, group_size)
 frac_widths = [7, 9, 11, 13]
-atr_spacings = [2, 3, 4, 5, 7, 9]
+atr_spacings = [1, 2, 4, 8, 16]
 for i in pair_group_index:
     for frac_width in frac_widths:
         exit_method['width'] = frac_width
         for side in ['long', 'short']:
             pairs = rank_pairs(total_size)
-            print(f"\nTesting {side} setups on pairs {pairs[i:i+group_size]}, fractal width {frac_width}")
+            print(f"\nTesting {side} setups on pairs {i} to {i+group_size}, fractal width {frac_width}")
             all_results = []
             for pair in pairs[i:i+group_size]:
                 df = get_data(pair)
