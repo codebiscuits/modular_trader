@@ -9,6 +9,7 @@ import features
 import binance_funcs as funcs
 import numpy as np
 import json
+from itertools import product
 from collections import Counter
 
 from sklearnex import get_patch_names, patch_sklearn, unpatch_sklearn
@@ -30,32 +31,11 @@ pd.set_option('display.expand_frame_repr', False)
 pd.set_option('display.precision', 4)
 client = Client(keys.bPkey, keys.bSkey)
 
-timeframe = '1d'
-vwma_lengths = {'1h': 12, '4h': 48, '6h': 70, '8h': 96, '12h': 140, '1d': 280}
-vwma_periods = 24  # vwma_lengths just accounts for timeframe resampling, vwma_periods is a multiplier on that
-inval_lookback = 2  # lowest low / the highest high for last 2 bars
-# exit_method = {'type': 'trail_atr', 'len': 2, 'mult': 2}
-exit_method = {'type': 'trail_fractal', 'width': 9, 'atr_spacing': 3}
-# exit_method = {'type': 'oco', 'r_multiple': 2}
-
-ohlc_folder = Path('../bin_ohlc_5m')
-# pairs = [p.stem for p in ohlc_folder.glob('*.parquet')]
-# pairs = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
-trim_ohlc = 1000
-
-# TODO i still have to deal with the unbalanced labels
-# TODO also need to investigate scoring algorithms inside the estimator - i need to penalise false positives much more
-#  than false negatives
-# TODO Using R-denominated pnl might be making prediction more dificult. i might find i get better results with % pnl and
-#  then i can use R as a strategy filter further down the line
-
-def rank_pairs(n, start=0):
+def rank_pairs():
     with open('../recent_1d_volumes.json', 'r') as file:
         vols = json.load(file)
 
-    vol_sorted_pairs = sorted(vols, key=lambda x: vols[x], reverse=True)
-
-    return vol_sorted_pairs[start:n]
+    return sorted(vols, key=lambda x: vols[x], reverse=True)
 
 
 def get_data(pair):
@@ -88,7 +68,7 @@ def trail_atr(df, atr_len, atr_mult):
 
 def trail_fractal(df_0, width, spacing, side):
     df_0 = ind.williams_fractals(df_0, width, spacing)
-    df_0 = df_0.drop(['fractal_high', 'fractal_low'], axis=1).dropna(axis=0).reset_index(drop=True)
+    df_0 = df_0.drop(['fractal_high', 'fractal_low', f"atr-{spacing}"], axis=1).dropna(axis=0).reset_index(drop=True)
 
     condition = (df_0.open > df_0.frac_low) if side == 'long' else (df_0.open < df_0.frac_high)
     rows = list(df_0.loc[condition].index)
@@ -168,10 +148,10 @@ def add_features(df):
     df['ema_200_roc'] = features.ema_roc(df, 200)
     df['ema_200_ratio'] = features.ema_ratio(df, 200)
     df = ind.ema_breakout(df, 50, 50)
-    df = ind.atr(df, 5)
-    df = ind.atr(df, 10)
-    df = ind.atr(df, 20)
-    df = ind.atr(df, 50)
+    df = features.atr_pct(df, 5)
+    df = features.atr_pct(df, 10)
+    df = features.atr_pct(df, 20)
+    df = features.atr_pct(df, 50)
     df['stoch_base_vol_20'] = ind.stochastic(df.base_vol, 20)
     df['stoch_base_vol_50'] = ind.stochastic(df.base_vol, 50)
     df['stoch_base_vol_100'] = ind.stochastic(df.base_vol, 100)
@@ -184,9 +164,10 @@ def add_features(df):
     df = features.engulfing(df, 1)
     df = features.doji(df)
     df = features.bull_bear_bar(df)
-    # hour of day
-    # day of week
-    # month
+    df = features.hour_dummies(df)
+    df = features.day_of_week_dummies(df)
+    df['vol_denom_roc_2'] = features.vol_denom_roc(df, 2, 20)
+    df['vol_denom_roc_5'] = features.vol_denom_roc(df, 5, 50)
 
     return df
 
@@ -212,11 +193,10 @@ def train_ml(df):
     # split data into features and labels
     X = df.drop(['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'quote_vol', 'num_trades',
                  'taker_buy_base_vol', 'taker_buy_quote_vol', 'vwma', 'pnl_pct', 'pnl_r', 'pnl_cat', 'ema_20',
-                 'ema_50', 'ema_100', 'ema_200', 'lifespan', 'atr-5', 'atr-10', 'atr-20', 'atr-50', 'atr-3',
-                 'frac_high', 'frac_low', 'inval'], axis=1)
+                 'ema_50', 'ema_100', 'ema_200', 'lifespan', 'frac_high', 'frac_low', 'inval'], axis=1)
     y = df.pnl_cat
 
-    print(f"{len(y)} setups to test")
+    # print(f"{len(y)} setups to test")
 
     # split into train and test sets for hold-out validation
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=101)
@@ -236,68 +216,93 @@ def train_ml(df):
     rf_grid = GridSearchCV(estimator=pipe, param_grid=param_dict, scoring='precision', cv=3, n_jobs=-1)
     rf_grid.fit(X_train, y_train)
 
-    print('Best Params:')
-    print(rf_grid.best_params_)
-    # print(f"Train Score - : {rf_grid.score(X_train, y_train):.1%}")
-    # print(f"Test Score - : {rf_grid.score(X_test, y_test):.1%}")
+    return rf_grid, X_test, y_test
 
-    y_pred = rf_grid.predict(X_test)
-    y_proba = rf_grid.predict_proba(X_test)
-    y_proba = [p[1] for p in y_proba]
+
+def analyse_results(model, X_test, y_test, guess=False):
+    y_pred = model.predict(X_test)
+    y_proba = model.predict_proba(X_test)[:, 1]
+    y_guess = np.zeros_like(y_pred)
+    accuracy = accuracy_score(y_test, y_pred)
+    acc_guess = accuracy_score(y_test, y_guess)
     # cm = confusion_matrix(y_test, y_pred)
     # print(f"Confusion Matrix: TP: {cm[1, 1]}, TN: {cm[0, 0]}, FP: {cm[0, 1]}, FN: {cm[1, 0]}")
-    print(f"Test Precision: -: {precision_score(y_test, y_pred):.1%} :- (what % of trades taken would have been good)")
-    print(f"Test Recall: {recall_score(y_test, y_pred):.1%} (what % of good trades were taken)")
-    # print(f"F1 Score: {f1_score(y_test, y_pred):.1%} (harmonic mean of precision and recall)")
-    print(f"AUROC Score: {roc_auc_score(y_test, y_proba)}")
 
-    best_features(rf_grid, X_train)
+    return {
+        'precision': precision_score(y_test, y_guess if guess else y_pred), # what % of trades taken would have been good
+        'recall': recall_score(y_test, y_guess if guess else y_pred), # what % of good trades were taken
+        'f1': f1_score(y_test, y_guess if guess else y_pred), # harmonic mean of precision and recall
+        'auroc': roc_auc_score(y_test, y_guess if guess else y_proba),
+        'accuracy_better_than_guess': accuracy > acc_guess
+    }
 
 
-def best_features(grid, X_train):
+def best_features(grid, cols):
     # Get the best estimator from the grid search
     best_estimator = grid.best_estimator_
 
     # Get feature importances from the best estimator
     importances = best_estimator.named_steps['model'].feature_importances_
-    imp_df = pd.DataFrame(importances, index=X_train.columns).sort_values(0, ascending=False)
-    print(f'Best Features: '
-          f'1 {imp_df.index[0]}: {imp_df.iat[0, 0]:.2%}, '
-          f'2 {imp_df.index[1]}: {imp_df.iat[1, 0]:.2%}, '
-          f'3 {imp_df.index[2]}: {imp_df.iat[2, 0]:.2%}, '
-          f'4 {imp_df.index[3]}: {imp_df.iat[3, 0]:.2%}, '
-          f'5 {imp_df.index[4]}: {imp_df.iat[4, 0]:.2%}')
+    imp_df = pd.DataFrame(importances, index=cols).sort_values(0, ascending=False)
+    # print(f'Best Features: '
+    #       f'1 {imp_df.index[0]}: {imp_df.iat[0, 0]:.2%}, '
+    #       f'2 {imp_df.index[1]}: {imp_df.iat[1, 0]:.2%}, '
+    #       f'3 {imp_df.index[2]}: {imp_df.iat[2, 0]:.2%}, '
+    #       f'4 {imp_df.index[3]}: {imp_df.iat[3, 0]:.2%}, '
+    #       f'5 {imp_df.index[4]}: {imp_df.iat[4, 0]:.2%}')
 
-    # # Print the top K features
-    # print(f"\nTop {top_k} features:")
-    # for f in selected_features:
-    #     print(f"{X_train.columns[f]}: {importances[f]:.2%}")
+    return imp_df
 
-# side = 'long'
-group_size = 5
-total_size = 150
-pair_group_index = range(0, 1+total_size-group_size, group_size)
-frac_widths = [7, 9, 11, 13]
-atr_spacings = [1, 2, 4, 8, 16]
-for i in pair_group_index:
-    for frac_width in frac_widths:
+pairs = rank_pairs()
+timeframe = '4h'
+vwma_lengths = {'1h': 12, '4h': 48, '6h': 70, '8h': 96, '12h': 140, '1d': 280}
+vwma_periods = 24  # vwma_lengths just accounts for timeframe resampling, vwma_periods is a multiplier on that
+inval_lookback = 2  # lowest low / the highest high for last 2 bars
+# exit_method = {'type': 'trail_atr', 'len': 2, 'mult': 2}
+exit_method = {'type': 'trail_fractal', 'width': 9, 'atr_spacing': 3}
+# exit_method = {'type': 'oco', 'r_multiple': 2}
+
+ohlc_folder = Path('../bin_ohlc_5m')
+# pairs = [p.stem for p in ohlc_folder.glob('*.parquet')]
+# pairs = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
+trim_ohlc = 1000
+
+frac_widths = [5, 7, 9, 11, 13, 15]
+atr_spacings = [4]
+sides = ['long', 'short']
+for side, frac_width, spacing in product(sides, frac_widths, atr_spacings):
+    group_size, total_size, start_pair = 1, 300, 0
+    pair_group_index = range(start_pair, 1+total_size-group_size, group_size)
+    for i in pair_group_index:
         exit_method['width'] = frac_width
-        for side in ['long', 'short']:
-            pairs = rank_pairs(total_size)
-            print(f"\nTesting {side} setups on pairs {i} to {i+group_size}, fractal width {frac_width}")
-            all_results = []
-            for pair in pairs[i:i+group_size]:
-                df = get_data(pair)
-                df = add_features(df)
-                results = project_pnl(df, side, exit_method, inval_lookback)
-                all_results.extend(results)
+        exit_method['atr_spacing'] = spacing
+        # print(f"\nTesting {side} setups on {pairs[i:i+group_size]}, fractal width {frac_width}")
 
-            res_df = pd.DataFrame(all_results)
-            res_df = res_df.dropna(axis=0).reset_index(drop=True)
+        # loop through pairs in group to create trading dataset for model training
+        all_results = []
+        for pair in pairs[i:i+group_size]:
+            df = get_data(pair)
+            df = add_features(df)
+            results = project_pnl(df, side, exit_method, inval_lookback)
+            all_results.extend(results)
+        res_df = pd.DataFrame(all_results)
+        res_df = res_df.dropna(axis=0).reset_index(drop=True)
+        # print(Counter(res_df.pnl_cat))
 
-            # print(Counter(res_df.pnl_cat))
 
-            train_ml(res_df)
+        model, X_test, y_test = train_ml(res_df)
+
+        best_params = model.best_params_
+        scores = analyse_results(model, X_test, y_test)
+        # guess_scores = analyse_results(model, X_test, y_test, guess=True)
+        imp_df = best_features(model, X_test.columns)
+
+        print(f"{pairs[i:i+group_size]}, {frac_width}, {spacing}, {side}, precision: {scores['precision']:.1%}, "
+              f"AUC: {scores['auroc']:.1%}, abtg: {scores['accuracy_better_than_guess']}"
+              f"Feature 1: {imp_df.index[0]}: {imp_df.iat[0, 0]:.2%}, "
+              f"Feature 2: {imp_df.index[1]}: {imp_df.iat[1, 0]:.2%}, "
+              f"Feature 3: {imp_df.index[2]}: {imp_df.iat[2, 0]:.2%}")
+    print('')
 
 # # import and prepare data
 # for pair in pairs:
