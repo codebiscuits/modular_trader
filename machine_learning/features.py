@@ -2,6 +2,11 @@ import indicators as ind
 import pandas as pd
 import numpy as np
 
+def atr_pct(df, lb):
+    df = ind.atr(df, lb)
+    return df.drop(f'atr-{lb}', axis=1)
+
+
 def stoch_vwma_ratio(df, lookback: int) -> pd.Series:
     return ind.stochastic(df.close / df.vwma, lookback)
 
@@ -58,4 +63,26 @@ def htf_fractals_proximity(df: pd.DataFrame, orig_tf: str, htf: str='W', frac_wi
     # how far those prices are from the open price or vwma
 
     return df
+
+
+def hour_dummies(df: pd.DataFrame) -> pd.DataFrame:
+    df_hours = pd.get_dummies(df.timestamp.dt.hour, prefix='hour')
+    return pd.concat([df, df_hours], axis=1)
+
+
+def day_of_week_dummies(df: pd.DataFrame) -> pd.DataFrame:
+    df_dow = pd.get_dummies(df.timestamp.dt.dayofweek, prefix='dow')
+    return pd.concat([df, df_dow], axis=1)
+
+
+def week_of_year_dummies(df: pd.DataFrame) -> pd.DataFrame:
+    df_week = pd.get_dummies((df.timestamp.dt.dayofyear // 7).astype(int), prefix='week')
+    return pd.concat([df, df_week], axis=1)
+
+
+def vol_denom_roc(df: pd.DataFrame, roc_lb, atr_lb):
+    if f'atr_{atr_lb}_pct' not in df.columns:
+        df = atr_pct(df, atr_lb)
+
+    return (df.close.pct_change(roc_lb) / df[f'atr_{atr_lb}_pct']).shift(1)
 
