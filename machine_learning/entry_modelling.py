@@ -16,10 +16,10 @@ from sklearnex import get_patch_names, patch_sklearn, unpatch_sklearn
 patch_sklearn()
 # unpatch_sklearn('roc_auc_score')
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV, RandomizedSearchCV
 from sklearn.preprocessing import StandardScaler, QuantileTransformer
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, fbeta_score
 from sklearn.metrics import confusion_matrix, roc_auc_score, roc_curve
 
 # print(get_patch_names())
@@ -137,8 +137,14 @@ def oco(df, r_mult, inval_lb, side):
     pass
 
 
-def add_features(df):
-    df['vol_delta_div'] = ind.vol_delta_div(df)
+def add_features(df, tf):
+    periods_1d = {'1h': 24, '4h': 6, '12h': 2, '1d': 1}
+    periods_1w = {'1h': 168, '4h': 42, '12h': 14, '1d': 7}
+    df['vol_delta_pct'] = ind.vol_delta_pct(df)
+    df = features.vol_delta_div(df, 1)
+    df = features.vol_delta_div(df, 2)
+    df = features.vol_delta_div(df, 3)
+    df = features.vol_delta_div(df, 4)
     df['stoch_vwma_ratio_20'] = features.stoch_vwma_ratio(df, 20)
     df['stoch_vwma_ratio_50'] = features.stoch_vwma_ratio(df, 50)
     df['stoch_vwma_ratio_100'] = features.stoch_vwma_ratio(df, 100)
@@ -146,7 +152,13 @@ def add_features(df):
     df['ema_50_roc'] = features.ema_roc(df, 50)
     df['ema_100_roc'] = features.ema_roc(df, 100)
     df['ema_200_roc'] = features.ema_roc(df, 200)
+    df['ema_20_ratio'] = features.ema_ratio(df, 20)
+    df['ema_50_ratio'] = features.ema_ratio(df, 50)
+    df['ema_100_ratio'] = features.ema_ratio(df, 100)
     df['ema_200_ratio'] = features.ema_ratio(df, 200)
+    df = ind.ema_breakout(df, 50, 50)
+    df = ind.ema_breakout(df, 50, 50)
+    df = ind.ema_breakout(df, 50, 50)
     df = ind.ema_breakout(df, 50, 50)
     df = features.atr_pct(df, 5)
     df = features.atr_pct(df, 10)
@@ -162,12 +174,25 @@ def add_features(df):
     df['stoch_num_trades_200'] = ind.stochastic(df.num_trades, 200)
     df['inside_bar'] = ind.inside_bars(df).shift(1)
     df = features.engulfing(df, 1)
-    df = features.doji(df)
+    df = features.engulfing(df, 2)
+    df = features.engulfing(df, 3)
+    df = features.doji(df, 0.5, 2)
     df = features.bull_bear_bar(df)
-    df = features.hour_dummies(df)
-    df = features.day_of_week_dummies(df)
+    df['hour'] = features.hour(df)
+    df['hour_180'] = features.hour_180(df)
+    df['day_of_week'] = features.day_of_week(df)
+    df['day_of_week_180'] = features.day_of_week_180(df)
+    df['week_of_year'] = features.week_of_year(df)
+    df['week_of_year_180'] = features.week_of_year_180(df)
     df['vol_denom_roc_2'] = features.vol_denom_roc(df, 2, 20)
     df['vol_denom_roc_5'] = features.vol_denom_roc(df, 5, 50)
+    df['rsi'] = ind.rsi(df.close).shift(1)
+    df = features.ats_z(df, 20)
+    df = features.ats_z(df, 50)
+    df = features.ats_z(df, 100)
+    df = features.ats_z(df, 200)
+    df['roc_1d'] = df.close.pct_change(periods_1d[tf])
+    df['roc_1w'] = df.close.pct_change(periods_1w[tf])
 
     return df
 
@@ -192,14 +217,15 @@ def project_pnl(df, side, method, inval_lb) -> list[dict]:
 def train_ml(df):
     # split data into features and labels
     X = df.drop(['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'quote_vol', 'num_trades',
-                 'taker_buy_base_vol', 'taker_buy_quote_vol', 'vwma', 'pnl_pct', 'pnl_r', 'pnl_cat', 'ema_20',
-                 'ema_50', 'ema_100', 'ema_200', 'lifespan', 'frac_high', 'frac_low', 'inval'], axis=1)
+                 'taker_buy_base_vol', 'taker_buy_quote_vol', 'vwma', 'pnl_pct', 'pnl_r', 'pnl_cat',
+                 'atr-20', 'atr-50', 'atr-100', 'atr-200', 'ema_20', 'ema_50', 'ema_100', 'ema_200',
+                 'lifespan', 'frac_high', 'frac_low', 'inval'], axis=1, errors='ignore')
     y = df.pnl_cat
 
     # print(f"{len(y)} setups to test")
 
     # split into train and test sets for hold-out validation
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=101)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=11)
 
     pipe = Pipeline([
         ('scale', StandardScaler()),
@@ -213,7 +239,12 @@ def train_ml(df):
         model__max_depth=[int(x) for x in np.linspace(start=10, stop=20, num=5)],
         model__min_samples_split=[2, 3, 4], # must be 2 or more
     )
-    rf_grid = GridSearchCV(estimator=pipe, param_grid=param_dict, scoring='precision', cv=3, n_jobs=-1)
+    # rf_grid = GridSearchCV(estimator=pipe, param_grid=param_dict, scoring='precision', cv=3, n_jobs=-1)
+    rf_grid = RandomizedSearchCV(estimator=pipe,
+                                 param_distributions=param_dict,
+                                 n_iter=60,
+                                 scoring='precision',
+                                 cv=3, n_jobs=-1)
     rf_grid.fit(X_train, y_train)
 
     return rf_grid, X_test, y_test
@@ -229,9 +260,10 @@ def analyse_results(model, X_test, y_test, guess=False):
     # print(f"Confusion Matrix: TP: {cm[1, 1]}, TN: {cm[0, 0]}, FP: {cm[0, 1]}, FN: {cm[1, 0]}")
 
     return {
-        'precision': precision_score(y_test, y_guess if guess else y_pred), # what % of trades taken would have been good
+        'precision': precision_score(y_test, y_guess if guess else y_pred), # what % of trades taken were good
         'recall': recall_score(y_test, y_guess if guess else y_pred), # what % of good trades were taken
         'f1': f1_score(y_test, y_guess if guess else y_pred), # harmonic mean of precision and recall
+        'f_beta': fbeta_score(y_test, y_guess if guess else y_pred, beta=0.5),
         'auroc': roc_auc_score(y_test, y_guess if guess else y_proba),
         'accuracy_better_than_guess': accuracy > acc_guess
     }
@@ -240,6 +272,7 @@ def analyse_results(model, X_test, y_test, guess=False):
 def best_features(grid, cols):
     # Get the best estimator from the grid search
     best_estimator = grid.best_estimator_
+
 
     # Get feature importances from the best estimator
     importances = best_estimator.named_steps['model'].feature_importances_
@@ -254,7 +287,7 @@ def best_features(grid, cols):
     return imp_df
 
 pairs = rank_pairs()
-timeframe = '4h'
+timeframe = '1h'
 vwma_lengths = {'1h': 12, '4h': 48, '6h': 70, '8h': 96, '12h': 140, '1d': 280}
 vwma_periods = 24  # vwma_lengths just accounts for timeframe resampling, vwma_periods is a multiplier on that
 inval_lookback = 2  # lowest low / the highest high for last 2 bars
@@ -267,11 +300,17 @@ ohlc_folder = Path('../bin_ohlc_5m')
 # pairs = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
 trim_ohlc = 1000
 
-frac_widths = [5, 7, 9, 11, 13, 15]
-atr_spacings = [4]
+res_list = []
+
+frac_widths = [11, 13, 15, 17, 19]
+atr_spacings = [2, 4, 6]
+# frac_widths = [11]
+# atr_spacings = [2]
+
 sides = ['long', 'short']
 for side, frac_width, spacing in product(sides, frac_widths, atr_spacings):
-    group_size, total_size, start_pair = 1, 300, 0
+    loop_start = time.perf_counter()
+    group_size, total_size, start_pair = 1, 10, 0
     pair_group_index = range(start_pair, 1+total_size-group_size, group_size)
     for i in pair_group_index:
         exit_method['width'] = frac_width
@@ -282,7 +321,7 @@ for side, frac_width, spacing in product(sides, frac_widths, atr_spacings):
         all_results = []
         for pair in pairs[i:i+group_size]:
             df = get_data(pair)
-            df = add_features(df)
+            df = add_features(df, timeframe)
             results = project_pnl(df, side, exit_method, inval_lookback)
             all_results.extend(results)
         res_df = pd.DataFrame(all_results)
@@ -293,61 +332,47 @@ for side, frac_width, spacing in product(sides, frac_widths, atr_spacings):
         model, X_test, y_test = train_ml(res_df)
 
         best_params = model.best_params_
-        scores = analyse_results(model, X_test, y_test)
+        try:
+            scores = analyse_results(model, X_test, y_test)
+        except ValueError as e:
+            print(f'ValueError while calculating scores on {pair}, skipping to next test.')
+            continue
         # guess_scores = analyse_results(model, X_test, y_test, guess=True)
         imp_df = best_features(model, X_test.columns)
 
-        print(f"{pairs[i:i+group_size]}, {frac_width}, {spacing}, {side}, precision: {scores['precision']:.1%}, "
-              f"AUC: {scores['auroc']:.1%}, abtg: {scores['accuracy_better_than_guess']}"
+        print(f"{pairs[i:i+group_size]}, {frac_width}, {spacing}, {side}, "
+              f"precision: {scores['precision']:.1%}, "
+              f"AUC: {scores['auroc']:.1%}, "
+              f"f beta: {scores['f_beta']:.1%}, "
+              f"abtg: {scores['accuracy_better_than_guess']}, "
               f"Feature 1: {imp_df.index[0]}: {imp_df.iat[0, 0]:.2%}, "
               f"Feature 2: {imp_df.index[1]}: {imp_df.iat[1, 0]:.2%}, "
               f"Feature 3: {imp_df.index[2]}: {imp_df.iat[2, 0]:.2%}")
-    print('')
 
-# # import and prepare data
-# for pair in pairs:
-#     df_orig = ohlc_1yr(pair)
-#     print(df_orig.head())
-#     for tf in timeframes.keys():
-#         data = df_orig.copy()
-#         # data = hidden_flow(data, 100)
-#         data['vwma'] = ind.vwma(data, timeframes[tf])
-#         data = resample(data, tf)
-#         for side, z_score, bar, length, method in it.product(sides, z_scores, bars, ema_lengths, methods):
-#             print(f"Testing {pair} {tf} {side} trades, {z_score = }, {bar = }, {length = }, {method = }")
-#             # create features
-#             data = ib_signals(data, side, z_score, bar, 'vwma', length)
-#             data = doji_signals(data, side, z_score, bar, 'vwma', length)
-#             data = bbb_signals(data, side, z_score, bar, 'vwma', length)
-#
-#             # create dependent variable (pnl)
-#             data = project_pnl(data, side, method)
-#
-#             # split data into features and labels
-#             X = data.drop('pnl', axis=1)
-#             y = data.pnl
-#
-#             # split into train and test sets
-#             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=101)
-#
-#             # instantiate and train model
-#             rf_model = RandomForestClassifier()
-#
-#             param_dict = dict(
-#                 n_estimators = [int(x) for x in np.linspace(start=10, stop=80, num=10)],
-#                 max_features = ['auto', 'sqrt'],
-#                 max_depth = [2, 4],
-#                 min_samples_split = [2, 5],
-#                 min_samples_leaf = [1, 2],
-#                 bootstrap = [True, False]
-#                 )
-#             rf_grid = GridSearchCV(estimator=rf_model, param_grid=param_dict, cv=3, verbose=2, n_jobs=4)
-#             rf_grid.fit(X_train, y_train)
-#
-#             print(rf_grid.best_params_)
-#
-#             print(f"Train Accuracy - : {rf_grid.score(X_train, y_train):.3f}")
-#             print(f"Test Accuracy - : {rf_grid.score(X_test, y_test):.3f}")
+        res_dict = dict(
+            pairs=pairs[i],
+            frac_width=frac_width,
+            spacing=spacing,
+            side=side,
+            feature_1=imp_df.index[0],
+            feature_2=imp_df.index[1],
+            feature_3=imp_df.index[2],
+            feature_4=imp_df.index[3],
+            feature_5=imp_df.index[4],
+            feature_6=imp_df.index[5],
+            feature_7=imp_df.index[6],
+            feature_8=imp_df.index[7],
+        ) | scores | model.best_params_
+
+        res_list.append(res_dict)
+
+    loop_end = time.perf_counter()
+    loop_elapsed = loop_end - loop_start
+    # print(f"Loop took {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
+
+final_results = pd.DataFrame(res_list)
+final_results.to_parquet('ml_results.parquet')
+print(final_results)
 
 all_end = time.perf_counter()
 elapsed = all_end - all_start

@@ -25,16 +25,24 @@ def ema_ratio(df, length):
 
 def engulfing(df, lookback: int = 1) -> pd.DataFrame:
     df = ind.engulfing(df, lookback)
-    df['bullish_engulf'] = df.bullish_engulf.shift(1)
-    df['bearish_engulf'] = df.bearish_engulf.shift(1)
+    df[f'bullish_engulf_{lookback}'] = df[f'bullish_engulf_{lookback}'].shift(1)
+    df[f'bearish_engulf_{lookback}'] = df[f'bearish_engulf_{lookback}'].shift(1)
 
     return df
 
 
-def doji(df) -> pd.DataFrame:
+def doji(df: pd.DataFrame, thresh: float, lookback: int) -> pd.DataFrame:
+    """returns booleans which represent whether or not there was an upper or lower wick which met the threshold
+    requirement in the lookback window"""
+
     df = ind.doji(df)
-    df['bullish_doji'] = df.bullish_doji.shift(1)
-    df['bearish_doji'] = df.bearish_doji.shift(1)
+    bull_doji_bool = df.bullish_doji >= thresh
+    bear_doji_bool = df.bearish_doji >= thresh
+    bull_bool_window = bull_doji_bool.rolling(lookback).sum() > 0
+    bear_bool_window = bear_doji_bool.rolling(lookback).sum() > 0
+
+    df['recent_bull_doji'] = bull_bool_window.shift(1)
+    df['recent_bear_doji'] = bear_bool_window.shift(1)
 
     return df
 
@@ -70,9 +78,25 @@ def hour_dummies(df: pd.DataFrame) -> pd.DataFrame:
     return pd.concat([df, df_hours], axis=1)
 
 
+def hour(df:pd.DataFrame) -> pd.Series:
+    return df.timestamp.dt.hour
+
+
+def hour_180(df: pd.DataFrame) -> pd.Series:
+    return (df.timestamp.dt.hour + 12) % 24
+
+
 def day_of_week_dummies(df: pd.DataFrame) -> pd.DataFrame:
     df_dow = pd.get_dummies(df.timestamp.dt.dayofweek, prefix='dow')
     return pd.concat([df, df_dow], axis=1)
+
+
+def day_of_week(df: pd.DataFrame) -> pd.Series:
+    return df.timestamp.dt.dayofweek
+
+
+def day_of_week_180(df: pd.DataFrame) -> pd.Series:
+    return (df.timestamp.dt.dayofweek + 3) % 7
 
 
 def week_of_year_dummies(df: pd.DataFrame) -> pd.DataFrame:
@@ -80,9 +104,44 @@ def week_of_year_dummies(df: pd.DataFrame) -> pd.DataFrame:
     return pd.concat([df, df_week], axis=1)
 
 
-def vol_denom_roc(df: pd.DataFrame, roc_lb, atr_lb):
+def week_of_year(df: pd.DataFrame) -> pd.Series:
+    return (df.timestamp.dt.dayofyear // 7).astype(int)
+
+
+def week_of_year_180(df: pd.DataFrame) -> pd.Series:
+    return ((df.timestamp.dt.dayofyear // 7).astype(int) + 26) % 52
+
+
+def vol_denom_roc(df: pd.DataFrame, roc_lb: int, atr_lb: int) -> pd.Series:
+    """returns the roc of price over the specified lookback period divided by the percentage denominated atr"""
     if f'atr_{atr_lb}_pct' not in df.columns:
         df = atr_pct(df, atr_lb)
 
     return (df.close.pct_change(roc_lb) / df[f'atr_{atr_lb}_pct']).shift(1)
+
+
+def vol_delta_div(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
+    """adds a boolean series to the dataframe representing whether there was a volume delta divergence at any time
+    during the lookback period"""
+    roc: pd.Series = df.close.pct_change(1)
+    if not 'vol_delta' in df.columns:
+        df['vol_delta'] = ind.vol_delta(df)
+
+    vd_div_a = (roc > 0) & (0 > df.vol_delta)
+    vd_div_b = (roc < 0) & (0 < df.vol_delta)
+    vd_div = vd_div_a | vd_div_b
+
+    df[f'recent_vd_div_{lookback}'] = vd_div.shift(1).rolling(lookback).sum() > 0
+
+    return df
+
+
+def ats_z(df: pd.DataFrame, lookback: int):
+    avg_trade_size_sm = (df.base_vol / df.num_trades).ewm(5).mean()
+    ats_long_mean = avg_trade_size_sm.ewm(lookback).mean()
+    ats_std = avg_trade_size_sm.ewm(lookback).std()
+    df[f'ats_z_{lookback}'] = ((avg_trade_size_sm - ats_long_mean) / ats_std).shift(1)
+
+    return df
+
 
