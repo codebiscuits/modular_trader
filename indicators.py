@@ -275,8 +275,8 @@ def engulfing(df: pd.DataFrame, lookback: int = 1) -> pd.DataFrame:
     df['window_min'] = df.row_min.rolling(lookback).min().shift(1)
     df['window_max'] = df.row_max.rolling(lookback).max().shift(1)
 
-    df['bullish_engulf'] = (df.open <= df.window_min) & (df.close > df.window_max)
-    df['bearish_engulf'] = (df.open >= df.window_max) & (df.close < df.window_min)
+    df[f'bullish_engulf_{lookback}'] = (df.open <= df.window_min) & (df.close > df.window_max)
+    df[f'bearish_engulf_{lookback}'] = (df.open >= df.window_max) & (df.close < df.window_min)
 
     df = df.drop(['row_min', 'row_max', 'window_min', 'window_max'], axis=1)
 
@@ -338,7 +338,7 @@ def trend_consec_bars(df, bars):
 
 
 def ema_breakout(df: pd.DataFrame, length: int, lookback: int) -> pd.DataFrame:
-    """creates two columns 'ema_up' and 'ema_down' which represent whether the ema of close prices is above or below the
+    """creates two columns 'ema_break_up' and 'ema_break_down' which represent whether the ema of close prices is above or below the
     range it occupied over the lookback period. if both are false, it is within the range."""
 
     if f"ema_{length}" not in df.columns:
@@ -346,8 +346,8 @@ def ema_breakout(df: pd.DataFrame, length: int, lookback: int) -> pd.DataFrame:
     df['ema_high'] = df[f"ema_{length}"].shift(1).rolling(lookback).max()
     df['ema_low'] = df[f"ema_{length}"].shift(1).rolling(lookback).min()
 
-    df['ema_break_up'] = df[f"ema_{length}"] > df.ema_high
-    df['ema_break_down'] = df[f"ema_{length}"] < df.ema_low
+    df[f'ema_{length}_break_up'] = df[f"ema_{length}"] > df.ema_high
+    df[f'ema_{length}_break_down'] = df[f"ema_{length}"] < df.ema_low
 
     return df.drop(['ema_high', 'ema_low'], axis=1)
 
@@ -369,11 +369,23 @@ def ema_ratio(s: pd.Series, ema_len: int) -> pd.Series:
     return s / ema
 
 
-def vol_delta(df) -> pd.Series:
+def vol_delta(df: pd.DataFrame) -> pd.Series:
+    """returns the absolute difference between taker buy base volume and taker sell base volume
+    (how much more was market buying vs market selling in that period)"""
+
     return (df.taker_buy_base_vol * 2) - df.base_vol
 
 
-def vol_delta_div(df) -> bool:
+def vol_delta_pct(df: pd.DataFrame) -> pd.Series:
+    """returns the proportional difference between taker buy base volume and taker sell base volume
+    (how much more was market buying vs market selling in that period)"""
+    taker_sell_base_vol = df.base_vol - df.taker_buy_base_vol
+    delta = df.taker_buy_base_vol - taker_sell_base_vol
+
+    return delta / df.base_vol
+
+
+def vol_delta_div(df: pd.DataFrame) -> bool:
     roc: pd.Series = df.close.pct_change(1)
     if not 'vol_delta' in df.columns:
         df['vol_delta'] = vol_delta(df)
