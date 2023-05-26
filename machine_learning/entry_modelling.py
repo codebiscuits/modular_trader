@@ -267,10 +267,10 @@ def calc_scores(model, X_test, y_test, guess=False):
     # print(f"Confusion Matrix: TP: {cm[1, 1]}, TN: {cm[0, 0]}, FP: {cm[0, 1]}, FN: {cm[1, 0]}")
 
     return {
-        'precision': precision_score(y_test, y_guess if guess else y_pred), # what % of trades taken were good
-        'recall': recall_score(y_test, y_guess if guess else y_pred), # what % of good trades were taken
-        'f1': f1_score(y_test, y_guess if guess else y_pred), # harmonic mean of precision and recall
-        'f_beta': fbeta_score(y_test, y_guess if guess else y_pred, beta=0.5),
+        'precision': precision_score(y_test, y_guess if guess else y_pred, zero_division=0), # what % of trades taken were good
+        'recall': recall_score(y_test, y_guess if guess else y_pred, zero_division=0), # what % of good trades were taken
+        'f1': f1_score(y_test, y_guess if guess else y_pred, zero_division=0), # harmonic mean of precision and recall
+        'f_beta': fbeta_score(y_test, y_guess if guess else y_pred, beta=0.5, zero_division=0),
         'auroc': roc_auc_score(y_test, y_guess if guess else y_proba),
         'accuracy_better_than_guess': accuracy > acc_guess,
         'true_pos': cm[1, 1],
@@ -298,7 +298,7 @@ def best_features(grid, cols):
     return imp_df
 
 pairs = rank_pairs()
-timeframe = '4h'
+# timeframe = '4h'
 vwma_lengths = {'1h': 12, '4h': 48, '6h': 70, '8h': 96, '12h': 140, '1d': 280}
 vwma_periods = 24  # vwma_lengths just accounts for timeframe resampling, vwma_periods is a multiplier on that
 inval_lookback = 2  # lowest low / the highest high for last 2 bars
@@ -313,20 +313,20 @@ trim_ohlc = 1000
 
 res_list = []
 
-frac_widths = [11, 13, 15, 17, 19]
-atr_spacings = [2, 4, 6]
+frac_widths = [3, 5, 7, 9, 11, 13, 15, 17, 19]
+atr_spacings = [1, 2, 4, 8, 16]
+timeframes = ['1h', '4h', '12h', '1d']
 # frac_widths = [11]
 # atr_spacings = [2]
 
 sides = ['long', 'short']
-for side, frac_width, spacing in product(sides, frac_widths, atr_spacings):
+for side, frac_width, spacing, timeframe in product(sides, frac_widths, atr_spacings, timeframes):
     loop_start = time.perf_counter()
-    group_size, total_size, start_pair = 1, 10, 0
+    group_size, total_size, start_pair = 1, 1, 0
     pair_group_index = range(start_pair, 1+total_size-group_size, group_size)
     for i in pair_group_index:
         exit_method['width'] = frac_width
         exit_method['atr_spacing'] = spacing
-        # print(f"\nTesting {side} setups on {pairs[i:i+group_size]}, fractal width {frac_width}")
 
         # loop through pairs in group to create trading dataset for model training
         all_results = []
@@ -337,7 +337,8 @@ for side, frac_width, spacing in product(sides, frac_widths, atr_spacings):
             all_results.extend(results)
         res_df = pd.DataFrame(all_results)
         res_df = res_df.dropna(axis=0).reset_index(drop=True)
-        # print(Counter(res_df.pnl_cat))
+        train_balance = Counter(res_df.pnl_cat)
+        train_balance = {f"train_{k}": v for k, v in train_balance.items()}
 
 
         model, X_test, y_test = train_ml(res_df)
@@ -351,17 +352,20 @@ for side, frac_width, spacing in product(sides, frac_widths, atr_spacings):
         # guess_scores = analyse_results(model, X_test, y_test, guess=True)
         imp_df = best_features(model, X_test.columns)
 
-        print(f"{pairs[i:i+group_size]}, {frac_width}, {spacing}, {side}, "
+        print(f"{pairs[i:i+group_size]}, {timeframe}, {frac_width = }, {spacing = }, {side}, "
               f"precision: {scores['precision']:.1%}, "
               f"AUC: {scores['auroc']:.1%}, "
               f"f beta: {scores['f_beta']:.1%}, "
               f"abtg: {scores['accuracy_better_than_guess']}, "
+              f"pos predictions: {scores['true_pos']+scores['false_pos']}, "
+              f"neg predictions: {scores['true_neg']+scores['false_neg']}, "
               f"Feature 1: {imp_df.index[0]}: {imp_df.iat[0, 0]:.2%}, "
               f"Feature 2: {imp_df.index[1]}: {imp_df.iat[1, 0]:.2%}, "
               f"Feature 3: {imp_df.index[2]}: {imp_df.iat[2, 0]:.2%}")
 
         res_dict = dict(
             pairs=pairs[i],
+            timeframe=timeframe,
             frac_width=frac_width,
             spacing=spacing,
             side=side,
@@ -373,7 +377,7 @@ for side, frac_width, spacing in product(sides, frac_widths, atr_spacings):
             feature_6=imp_df.index[5],
             feature_7=imp_df.index[6],
             feature_8=imp_df.index[7],
-        ) | scores | model.best_params_
+        ) | scores | model.best_params_ | train_balance
 
         res_list.append(res_dict)
 
