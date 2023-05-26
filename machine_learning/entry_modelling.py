@@ -146,22 +146,22 @@ def add_features(df, tf):
     df = features.vol_delta_div(df, 2)
     df = features.vol_delta_div(df, 3)
     df = features.vol_delta_div(df, 4)
-    df['stoch_vwma_ratio_20'] = features.stoch_vwma_ratio(df, 20)
+    df['stoch_vwma_ratio_25'] = features.stoch_vwma_ratio(df, 25)
     df['stoch_vwma_ratio_50'] = features.stoch_vwma_ratio(df, 50)
     df['stoch_vwma_ratio_100'] = features.stoch_vwma_ratio(df, 100)
-    df['ema_20_roc'] = features.ema_roc(df, 20)
+    df['ema_25_roc'] = features.ema_roc(df, 25)
     df['ema_50_roc'] = features.ema_roc(df, 50)
     df['ema_100_roc'] = features.ema_roc(df, 100)
     df['ema_200_roc'] = features.ema_roc(df, 200)
-    df['ema_20_ratio'] = features.ema_ratio(df, 20)
+    df['ema_25_ratio'] = features.ema_ratio(df, 25)
     df['ema_50_ratio'] = features.ema_ratio(df, 50)
     df['ema_100_ratio'] = features.ema_ratio(df, 100)
     df['ema_200_ratio'] = features.ema_ratio(df, 200)
-    df['hma_20_roc'] = features.hma_roc(df, 20)
+    df['hma_25_roc'] = features.hma_roc(df, 25)
     df['hma_50_roc'] = features.hma_roc(df, 50)
     df['hma_100_roc'] = features.hma_roc(df, 100)
     df['hma_200_roc'] = features.hma_roc(df, 200)
-    df['hma_20_ratio'] = features.hma_ratio(df, 20)
+    df['hma_25_ratio'] = features.hma_ratio(df, 25)
     df['hma_50_ratio'] = features.hma_ratio(df, 50)
     df['hma_100_ratio'] = features.hma_ratio(df, 100)
     df['hma_200_ratio'] = features.hma_ratio(df, 200)
@@ -171,13 +171,13 @@ def add_features(df, tf):
     df = ind.ema_breakout(df, 50, 50).shift(1)
     df = features.atr_pct(df, 5)
     df = features.atr_pct(df, 10)
-    df = features.atr_pct(df, 20)
+    df = features.atr_pct(df, 25)
     df = features.atr_pct(df, 50)
-    df['stoch_base_vol_20'] = ind.stochastic(df.base_vol, 20).shift(1)
+    df['stoch_base_vol_25'] = ind.stochastic(df.base_vol, 25).shift(1)
     df['stoch_base_vol_50'] = ind.stochastic(df.base_vol, 50).shift(1)
     df['stoch_base_vol_100'] = ind.stochastic(df.base_vol, 100).shift(1)
     df['stoch_base_vol_200'] = ind.stochastic(df.base_vol, 200).shift(1)
-    df['stoch_num_trades_20'] = ind.stochastic(df.num_trades, 20).shift(1)
+    df['stoch_num_trades_25'] = ind.stochastic(df.num_trades, 25).shift(1)
     df['stoch_num_trades_50'] = ind.stochastic(df.num_trades, 50).shift(1)
     df['stoch_num_trades_100'] = ind.stochastic(df.num_trades, 100).shift(1)
     df['stoch_num_trades_200'] = ind.stochastic(df.num_trades, 200).shift(1)
@@ -196,7 +196,7 @@ def add_features(df, tf):
     df['vol_denom_roc_2'] = features.vol_denom_roc(df, 2, 20)
     df['vol_denom_roc_5'] = features.vol_denom_roc(df, 5, 50)
     df['rsi'] = ind.rsi(df.close).shift(1)
-    df = features.ats_z(df, 20)
+    df = features.ats_z(df, 25)
     df = features.ats_z(df, 50)
     df = features.ats_z(df, 100)
     df = features.ats_z(df, 200)
@@ -206,7 +206,7 @@ def add_features(df, tf):
     return df
 
 
-def project_pnl(df, side, method, inval_lb) -> list[dict]:
+def project_pnl(df, side, method, inval_lb) -> pd.DataFrame:
     start = time.perf_counter()
 
     res_list = []
@@ -220,16 +220,18 @@ def project_pnl(df, side, method, inval_lb) -> list[dict]:
     elapsed = time.perf_counter() - start
     # print(f"project_pnl took {int(elapsed // 60)}m {elapsed % 60:.1f}s")
 
-    return res_list
+    return pd.DataFrame(res_list).dropna(axis=0).reset_index(drop=True)
 
 
 def train_ml(df):
     # split data into features and labels
     X = df.drop(['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'quote_vol', 'num_trades',
                  'taker_buy_base_vol', 'taker_buy_quote_vol', 'vwma', 'pnl_pct', 'pnl_r', 'pnl_cat',
-                 'atr-20', 'atr-50', 'atr-100', 'atr-200', 'ema_20', 'ema_50', 'ema_100', 'ema_200',
-                 'lifespan', 'frac_high', 'frac_low', 'inval'], axis=1, errors='ignore')
+                 'atr-25', 'atr-50', 'atr-100', 'atr-200', 'ema_25', 'ema_50', 'ema_100', 'ema_200',
+                 'hma_25', 'hma_50', 'hma_100', 'hma_200', 'lifespan', 'frac_high', 'frac_low', 'inval'],
+                axis=1, errors='ignore')
     y = df.pnl_cat
+    z = df.pnl_r
 
     # print(f"{len(y)} setups to test")
 
@@ -239,6 +241,7 @@ def train_ml(df):
     y_train = y[:train_size]
     X_test = X[train_size:]
     y_test = y[train_size:]
+    z_test = z[train_size:]
 
     # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=11)
 
@@ -262,7 +265,7 @@ def train_ml(df):
                                  cv=3, n_jobs=-1)
     rf_grid.fit(X_train, y_train)
 
-    return rf_grid, X_test, y_test
+    return rf_grid, X_test, y_test, z_test
 
 
 def calc_scores(model, X_test, y_test, guess=False):
@@ -306,6 +309,15 @@ def best_features(grid, cols):
 
     return imp_df
 
+
+def backtest(y, z):
+    """i want to compare the y_probability series to the actual pnl_r of the test set to see what the pnl curve would
+    have been like if those trades had been taken. i'm not sure it's something i could optimise for but it will at least
+    give me some perspective on whether eg 30% precision is enough to be profitable."""
+
+    pass
+
+
 pairs = rank_pairs()
 # timeframe = '4h'
 vwma_lengths = {'1h': 12, '4h': 48, '6h': 70, '8h': 96, '12h': 140, '1d': 280}
@@ -320,8 +332,6 @@ ohlc_folder = Path('../bin_ohlc_5m')
 # pairs = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
 trim_ohlc = 1000
 
-res_list = []
-
 frac_widths = [3, 5, 7, 9, 11, 13, 15, 17, 19]
 atr_spacings = [1, 2, 4, 8, 16]
 timeframes = ['1h', '4h', '12h', '1d']
@@ -333,24 +343,20 @@ group_size, total_size, start_pair = 1, 10, 0
 pair_group_index = range(start_pair, 1+total_size-group_size, group_size)
 sides = ['long', 'short']
 for pair, side, timeframe in product(pairs, sides, timeframes):
-    for side, frac_width, spacing in product(sides, frac_widths, atr_spacings):
+    res_list = []
+    print(f"Testing {pair} {side} {timeframe}")
+    for frac_width, spacing in product(frac_widths, atr_spacings):
         exit_method['width'] = frac_width
         exit_method['atr_spacing'] = spacing
 
-        # loop through pairs in group to create trading dataset for model training
-        all_results = []
-        # for pair in pairs[i:i+group_size]:
         df = get_data(pair)
         df = add_features(df, timeframe)
-        results = project_pnl(df, side, exit_method, inval_lookback)
-        all_results.extend(results)
-        res_df = pd.DataFrame(all_results)
-        res_df = res_df.dropna(axis=0).reset_index(drop=True)
-        train_balance = Counter(res_df.pnl_cat)
-        train_balance = {f"train_{k}": v for k, v in train_balance.items()}
+        res_df = project_pnl(df, side, exit_method, inval_lookback)
 
+        model, X_test, y_test, z_test = train_ml(res_df)
 
-        model, X_test, y_test = train_ml(res_df)
+        test_balance = Counter(y_test)
+        test_balance = {f"test_{k}": v for k, v in test_balance.items()}
 
         best_params = model.best_params_
         try:
@@ -360,6 +366,7 @@ for pair, side, timeframe in product(pairs, sides, timeframes):
             continue
         # guess_scores = analyse_results(model, X_test, y_test, guess=True)
         imp_df = best_features(model, X_test.columns)
+        test_pnl = backtest(y_test, z_test)
 
         print(f"{pair}, {side}, {timeframe}, {frac_width = }, {spacing = }, "
               f"precision: {scores['precision']:.1%}, "
@@ -386,17 +393,17 @@ for pair, side, timeframe in product(pairs, sides, timeframes):
             feature_6=imp_df.index[5],
             feature_7=imp_df.index[6],
             feature_8=imp_df.index[7],
-        ) | scores | model.best_params_ | train_balance
+        ) | scores | model.best_params_ | test_balance
 
         res_list.append(res_dict)
 
     final_results = pd.DataFrame(res_list)
-    final_results.to_parquet(f'results/{pair}_{side}_{timeframe}.parquet')
+    final_results.to_parquet(path=f'results/{pair}_{side}_{timeframe}.parquet')
     print(final_results)
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
-    # print(f"Loop took {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
+    print(f"Loop took {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s\n")
 
 all_end = time.perf_counter()
 elapsed = all_end - all_start
