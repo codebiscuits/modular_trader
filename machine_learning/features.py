@@ -4,23 +4,24 @@ import numpy as np
 
 def atr_pct(df, lb):
     df = ind.atr(df, lb)
+    df[f"atr_{lb}_pct"] = df[f"atr_{lb}_pct"].shift(1)
     return df.drop(f'atr-{lb}', axis=1)
 
 
 def stoch_vwma_ratio(df, lookback: int) -> pd.Series:
-    return ind.stochastic(df.close / df.vwma, lookback)
+    return ind.stochastic(df.close / df.vwma, lookback).shift(1)
 
 def ema_roc(df, length) -> pd.Series:
     if f"ema_{length}" not in df.columns:
         df[f"ema_{length}"] = df.close.ewm(length).mean()
 
-    return df[f"ema_{length}"].pct_change()
+    return (df[f"ema_{length}"].pct_change()).shift(1)
 
 def ema_ratio(df, length):
     if f"ema_{length}" not in df.columns:
         df[f"ema_{length}"] = df.close.ewm(length).mean()
 
-    return df.close / df[f"ema_{length}"]
+    return (df.close / df[f"ema_{length}"]).shift(1)
 
 
 def engulfing(df, lookback: int = 1) -> pd.DataFrame:
@@ -129,4 +130,16 @@ def ats_z(df: pd.DataFrame, lookback: int):
 
     return df
 
+
+def hma_roc(df, length) -> pd.Series:
+    if f"hma_{length}" not in df.columns:
+        df[f"hma_{length}"] = ind.hma(df.close, length)
+
+    return (df[f"hma_{length}"].pct_change()).shift(1)
+
+def hma_ratio(df, length):
+    if f"hma_{length}" not in df.columns:
+        df[f"hma_{length}"] = ind.hma(df.close, length)
+
+    return (df.close / df[f"hma_{length}"]).shift(1)
 

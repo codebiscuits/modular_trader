@@ -11,6 +11,7 @@ import numpy as np
 import json
 from itertools import product
 from collections import Counter
+import joblib
 
 from sklearnex import get_patch_names, patch_sklearn, unpatch_sklearn
 patch_sklearn()
@@ -156,6 +157,14 @@ def add_features(df, tf):
     df['ema_50_ratio'] = features.ema_ratio(df, 50)
     df['ema_100_ratio'] = features.ema_ratio(df, 100)
     df['ema_200_ratio'] = features.ema_ratio(df, 200)
+    df['hma_20_roc'] = features.hma_roc(df, 20)
+    df['hma_50_roc'] = features.hma_roc(df, 50)
+    df['hma_100_roc'] = features.hma_roc(df, 100)
+    df['hma_200_roc'] = features.hma_roc(df, 200)
+    df['hma_20_ratio'] = features.hma_ratio(df, 20)
+    df['hma_50_ratio'] = features.hma_ratio(df, 50)
+    df['hma_100_ratio'] = features.hma_ratio(df, 100)
+    df['hma_200_ratio'] = features.hma_ratio(df, 200)
     df = ind.ema_breakout(df, 50, 50).shift(1)
     df = ind.ema_breakout(df, 50, 50).shift(1)
     df = ind.ema_breakout(df, 50, 50).shift(1)
@@ -319,22 +328,22 @@ timeframes = ['1h', '4h', '12h', '1d']
 # frac_widths = [11]
 # atr_spacings = [2]
 
+loop_start = time.perf_counter()
+group_size, total_size, start_pair = 1, 10, 0
+pair_group_index = range(start_pair, 1+total_size-group_size, group_size)
 sides = ['long', 'short']
-for side, frac_width, spacing, timeframe in product(sides, frac_widths, atr_spacings, timeframes):
-    loop_start = time.perf_counter()
-    group_size, total_size, start_pair = 1, 1, 0
-    pair_group_index = range(start_pair, 1+total_size-group_size, group_size)
-    for i in pair_group_index:
+for pair, side, timeframe in product(pairs, sides, timeframes):
+    for side, frac_width, spacing in product(sides, frac_widths, atr_spacings):
         exit_method['width'] = frac_width
         exit_method['atr_spacing'] = spacing
 
         # loop through pairs in group to create trading dataset for model training
         all_results = []
-        for pair in pairs[i:i+group_size]:
-            df = get_data(pair)
-            df = add_features(df, timeframe)
-            results = project_pnl(df, side, exit_method, inval_lookback)
-            all_results.extend(results)
+        # for pair in pairs[i:i+group_size]:
+        df = get_data(pair)
+        df = add_features(df, timeframe)
+        results = project_pnl(df, side, exit_method, inval_lookback)
+        all_results.extend(results)
         res_df = pd.DataFrame(all_results)
         res_df = res_df.dropna(axis=0).reset_index(drop=True)
         train_balance = Counter(res_df.pnl_cat)
@@ -352,7 +361,7 @@ for side, frac_width, spacing, timeframe in product(sides, frac_widths, atr_spac
         # guess_scores = analyse_results(model, X_test, y_test, guess=True)
         imp_df = best_features(model, X_test.columns)
 
-        print(f"{pairs[i:i+group_size]}, {timeframe}, {frac_width = }, {spacing = }, {side}, "
+        print(f"{pair}, {side}, {timeframe}, {frac_width = }, {spacing = }, "
               f"precision: {scores['precision']:.1%}, "
               f"AUC: {scores['auroc']:.1%}, "
               f"f beta: {scores['f_beta']:.1%}, "
@@ -364,7 +373,7 @@ for side, frac_width, spacing, timeframe in product(sides, frac_widths, atr_spac
               f"Feature 3: {imp_df.index[2]}: {imp_df.iat[2, 0]:.2%}")
 
         res_dict = dict(
-            pairs=pairs[i],
+            pair=pair,
             timeframe=timeframe,
             frac_width=frac_width,
             spacing=spacing,
@@ -381,13 +390,13 @@ for side, frac_width, spacing, timeframe in product(sides, frac_widths, atr_spac
 
         res_list.append(res_dict)
 
+    final_results = pd.DataFrame(res_list)
+    final_results.to_parquet(f'results/{pair}_{side}_{timeframe}.parquet')
+    print(final_results)
+
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
     # print(f"Loop took {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
-
-final_results = pd.DataFrame(res_list)
-final_results.to_parquet('ml_results.parquet')
-print(final_results)
 
 all_end = time.perf_counter()
 elapsed = all_end - all_start
