@@ -74,7 +74,7 @@ class TradingSession():
         print(f"Margin balance: {self.margin_bal}")
         self.margin_usdt_bal = self.get_usdt_m()
         self.check_fees()
-        self.check_margin_lvl()
+        # self.check_margin_lvl()
         self.top_up_bnb_s(15)
         self.top_up_bnb_m(15)
 

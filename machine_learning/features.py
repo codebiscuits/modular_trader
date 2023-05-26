@@ -73,22 +73,12 @@ def htf_fractals_proximity(df: pd.DataFrame, orig_tf: str, htf: str='W', frac_wi
     return df
 
 
-def hour_dummies(df: pd.DataFrame) -> pd.DataFrame:
-    df_hours = pd.get_dummies(df.timestamp.dt.hour, prefix='hour')
-    return pd.concat([df, df_hours], axis=1)
-
-
 def hour(df:pd.DataFrame) -> pd.Series:
     return df.timestamp.dt.hour
 
 
 def hour_180(df: pd.DataFrame) -> pd.Series:
     return (df.timestamp.dt.hour + 12) % 24
-
-
-def day_of_week_dummies(df: pd.DataFrame) -> pd.DataFrame:
-    df_dow = pd.get_dummies(df.timestamp.dt.dayofweek, prefix='dow')
-    return pd.concat([df, df_dow], axis=1)
 
 
 def day_of_week(df: pd.DataFrame) -> pd.Series:
@@ -99,17 +89,12 @@ def day_of_week_180(df: pd.DataFrame) -> pd.Series:
     return (df.timestamp.dt.dayofweek + 3) % 7
 
 
-def week_of_year_dummies(df: pd.DataFrame) -> pd.DataFrame:
-    df_week = pd.get_dummies((df.timestamp.dt.dayofyear // 7).astype(int), prefix='week')
-    return pd.concat([df, df_week], axis=1)
-
-
 def week_of_year(df: pd.DataFrame) -> pd.Series:
-    return (df.timestamp.dt.dayofyear // 7).astype(int)
+    return df.timestamp.dt.dayofyear // 7
 
 
 def week_of_year_180(df: pd.DataFrame) -> pd.Series:
-    return ((df.timestamp.dt.dayofyear // 7).astype(int) + 26) % 52
+    return ((df.timestamp.dt.dayofyear // 7) + 26) % 52
 
 
 def vol_denom_roc(df: pd.DataFrame, roc_lb: int, atr_lb: int) -> pd.Series:

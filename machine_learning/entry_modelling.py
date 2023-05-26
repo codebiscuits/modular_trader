@@ -14,7 +14,6 @@ from collections import Counter
 
 from sklearnex import get_patch_names, patch_sklearn, unpatch_sklearn
 patch_sklearn()
-# unpatch_sklearn('roc_auc_score')
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV, RandomizedSearchCV
 from sklearn.preprocessing import StandardScaler, QuantileTransformer
@@ -140,7 +139,8 @@ def oco(df, r_mult, inval_lb, side):
 def add_features(df, tf):
     periods_1d = {'1h': 24, '4h': 6, '12h': 2, '1d': 1}
     periods_1w = {'1h': 168, '4h': 42, '12h': 14, '1d': 7}
-    df['vol_delta_pct'] = ind.vol_delta_pct(df)
+
+    df['vol_delta_pct'] = ind.vol_delta_pct(df).shift(1)
     df = features.vol_delta_div(df, 1)
     df = features.vol_delta_div(df, 2)
     df = features.vol_delta_div(df, 3)
@@ -156,22 +156,22 @@ def add_features(df, tf):
     df['ema_50_ratio'] = features.ema_ratio(df, 50)
     df['ema_100_ratio'] = features.ema_ratio(df, 100)
     df['ema_200_ratio'] = features.ema_ratio(df, 200)
-    df = ind.ema_breakout(df, 50, 50)
-    df = ind.ema_breakout(df, 50, 50)
-    df = ind.ema_breakout(df, 50, 50)
-    df = ind.ema_breakout(df, 50, 50)
+    df = ind.ema_breakout(df, 50, 50).shift(1)
+    df = ind.ema_breakout(df, 50, 50).shift(1)
+    df = ind.ema_breakout(df, 50, 50).shift(1)
+    df = ind.ema_breakout(df, 50, 50).shift(1)
     df = features.atr_pct(df, 5)
     df = features.atr_pct(df, 10)
     df = features.atr_pct(df, 20)
     df = features.atr_pct(df, 50)
-    df['stoch_base_vol_20'] = ind.stochastic(df.base_vol, 20)
-    df['stoch_base_vol_50'] = ind.stochastic(df.base_vol, 50)
-    df['stoch_base_vol_100'] = ind.stochastic(df.base_vol, 100)
-    df['stoch_base_vol_200'] = ind.stochastic(df.base_vol, 200)
-    df['stoch_num_trades_20'] = ind.stochastic(df.num_trades, 20)
-    df['stoch_num_trades_50'] = ind.stochastic(df.num_trades, 50)
-    df['stoch_num_trades_100'] = ind.stochastic(df.num_trades, 100)
-    df['stoch_num_trades_200'] = ind.stochastic(df.num_trades, 200)
+    df['stoch_base_vol_20'] = ind.stochastic(df.base_vol, 20).shift(1)
+    df['stoch_base_vol_50'] = ind.stochastic(df.base_vol, 50).shift(1)
+    df['stoch_base_vol_100'] = ind.stochastic(df.base_vol, 100).shift(1)
+    df['stoch_base_vol_200'] = ind.stochastic(df.base_vol, 200).shift(1)
+    df['stoch_num_trades_20'] = ind.stochastic(df.num_trades, 20).shift(1)
+    df['stoch_num_trades_50'] = ind.stochastic(df.num_trades, 50).shift(1)
+    df['stoch_num_trades_100'] = ind.stochastic(df.num_trades, 100).shift(1)
+    df['stoch_num_trades_200'] = ind.stochastic(df.num_trades, 200).shift(1)
     df['inside_bar'] = ind.inside_bars(df).shift(1)
     df = features.engulfing(df, 1)
     df = features.engulfing(df, 2)
@@ -182,8 +182,8 @@ def add_features(df, tf):
     df['hour_180'] = features.hour_180(df)
     df['day_of_week'] = features.day_of_week(df)
     df['day_of_week_180'] = features.day_of_week_180(df)
-    df['week_of_year'] = features.week_of_year(df)
-    df['week_of_year_180'] = features.week_of_year_180(df)
+    # df['week_of_year'] = features.week_of_year(df)
+    # df['week_of_year_180'] = features.week_of_year_180(df)
     df['vol_denom_roc_2'] = features.vol_denom_roc(df, 2, 20)
     df['vol_denom_roc_5'] = features.vol_denom_roc(df, 5, 50)
     df['rsi'] = ind.rsi(df.close).shift(1)
@@ -191,8 +191,8 @@ def add_features(df, tf):
     df = features.ats_z(df, 50)
     df = features.ats_z(df, 100)
     df = features.ats_z(df, 200)
-    df['roc_1d'] = df.close.pct_change(periods_1d[tf])
-    df['roc_1w'] = df.close.pct_change(periods_1w[tf])
+    df['roc_1d'] = df.close.pct_change(periods_1d[tf]).shift(1)
+    df['roc_1w'] = df.close.pct_change(periods_1w[tf]).shift(1)
 
     return df
 
@@ -225,7 +225,13 @@ def train_ml(df):
     # print(f"{len(y)} setups to test")
 
     # split into train and test sets for hold-out validation
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=11)
+    train_size = int(0.75*len(X))
+    X_train = X[:train_size]
+    y_train = y[:train_size]
+    X_test = X[train_size:]
+    y_test = y[train_size:]
+
+    # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=11)
 
     pipe = Pipeline([
         ('scale', StandardScaler()),
@@ -250,13 +256,14 @@ def train_ml(df):
     return rf_grid, X_test, y_test
 
 
-def analyse_results(model, X_test, y_test, guess=False):
+def calc_scores(model, X_test, y_test, guess=False):
     y_pred = model.predict(X_test)
     y_proba = model.predict_proba(X_test)[:, 1]
     y_guess = np.zeros_like(y_pred)
     accuracy = accuracy_score(y_test, y_pred)
     acc_guess = accuracy_score(y_test, y_guess)
-    # cm = confusion_matrix(y_test, y_pred)
+    cm = confusion_matrix(y_test, y_pred)
+
     # print(f"Confusion Matrix: TP: {cm[1, 1]}, TN: {cm[0, 0]}, FP: {cm[0, 1]}, FN: {cm[1, 0]}")
 
     return {
@@ -265,7 +272,11 @@ def analyse_results(model, X_test, y_test, guess=False):
         'f1': f1_score(y_test, y_guess if guess else y_pred), # harmonic mean of precision and recall
         'f_beta': fbeta_score(y_test, y_guess if guess else y_pred, beta=0.5),
         'auroc': roc_auc_score(y_test, y_guess if guess else y_proba),
-        'accuracy_better_than_guess': accuracy > acc_guess
+        'accuracy_better_than_guess': accuracy > acc_guess,
+        'true_pos': cm[1, 1],
+        'false_pos': cm[0, 1],
+        'true_neg': cm[0, 0],
+        'false_neg': cm[1, 0],
     }
 
 
@@ -287,7 +298,7 @@ def best_features(grid, cols):
     return imp_df
 
 pairs = rank_pairs()
-timeframe = '1h'
+timeframe = '4h'
 vwma_lengths = {'1h': 12, '4h': 48, '6h': 70, '8h': 96, '12h': 140, '1d': 280}
 vwma_periods = 24  # vwma_lengths just accounts for timeframe resampling, vwma_periods is a multiplier on that
 inval_lookback = 2  # lowest low / the highest high for last 2 bars
@@ -333,7 +344,7 @@ for side, frac_width, spacing in product(sides, frac_widths, atr_spacings):
 
         best_params = model.best_params_
         try:
-            scores = analyse_results(model, X_test, y_test)
+            scores = calc_scores(model, X_test, y_test)
         except ValueError as e:
             print(f'ValueError while calculating scores on {pair}, skipping to next test.')
             continue
