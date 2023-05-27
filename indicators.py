@@ -443,3 +443,11 @@ def roc_1m(s: pd.Series, tf: str) -> pd.Series:
     else:
         return s.pct_change(periods=len(s))
 
+
+def straddle_bar(df: pd.DataFrame, col: str):
+    """returns two boolean series which have true values whenever the low or high of a bar extend beyond the values of
+    the specified column of the dataframe, but the bar then closes back on the other side. So for example a bullish
+    straddle bar would open above the specified series, dip below, then close above"""
+
+    pass
+

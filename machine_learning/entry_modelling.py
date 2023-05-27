@@ -40,8 +40,13 @@ def rank_pairs():
     return sorted(vols, key=lambda x: vols[x], reverse=True)
 
 
-def get_data(pair):
+def get_data(pair, timeframe, vwma_periods=24):
+    """loads the ohlc data from file or downloads it from binance if necessary, then calculates vwma at the correct
+    scale before resampling to the desired timeframe.
+    vwma_lengths just accounts for timeframe resampling, vwma_periods is a multiplier on that"""
     start = time.perf_counter()
+
+    ohlc_folder = Path('../bin_ohlc_5m')
     ohlc_path = ohlc_folder / f"{pair}.parquet"
 
     if ohlc_path.exists():
@@ -53,8 +58,10 @@ def get_data(pair):
         df.to_parquet(ohlc_path)
         # print("Downloaded OHLC from internet")
 
+    vwma_lengths = {'1h': 12, '4h': 48, '6h': 70, '8h': 96, '12h': 140, '1d': 280}
     vwma = ind.vwma(df, vwma_lengths[timeframe] * vwma_periods)
     vwma = vwma[int(vwma_lengths[timeframe] / 2)::vwma_lengths[timeframe]].reset_index(drop=True)
+
     df = funcs.resample_ohlc(timeframe, None, df).tail(len(vwma)).reset_index(drop=True)
     df['vwma'] = vwma
 
@@ -68,7 +75,7 @@ def trail_atr(df, atr_len, atr_mult):
     pass
 
 
-def trail_fractal(df_0, width, spacing, side):
+def trail_fractal(df_0, width, spacing, side, trim_ohlc=1000):
     df_0 = ind.williams_fractals(df_0, width, spacing)
     df_0 = df_0.drop(['fractal_high', 'fractal_low', f"atr-{spacing}"], axis=1).dropna(axis=0).reset_index(drop=True)
 
@@ -319,95 +326,89 @@ def backtest(y, z):
 
     pass
 
+if __name__ == '__main__':
+    pairs = rank_pairs()
+    # timeframe = '4h'
 
-pairs = rank_pairs()
-# timeframe = '4h'
-vwma_lengths = {'1h': 12, '4h': 48, '6h': 70, '8h': 96, '12h': 140, '1d': 280}
-vwma_periods = 24  # vwma_lengths just accounts for timeframe resampling, vwma_periods is a multiplier on that
-inval_lookback = 2  # lowest low / the highest high for last 2 bars
-# exit_method = {'type': 'trail_atr', 'len': 2, 'mult': 2}
-exit_method = {'type': 'trail_fractal', 'width': 9, 'atr_spacing': 3}
-# exit_method = {'type': 'oco', 'r_multiple': 2}
+    inval_lookback = 2  # lowest low / the highest high for last 2 bars
+    # exit_method = {'type': 'trail_atr', 'len': 2, 'mult': 2}
+    exit_method = {'type': 'trail_fractal', 'width': 9, 'atr_spacing': 3}
+    # exit_method = {'type': 'oco', 'r_multiple': 2}
 
-ohlc_folder = Path('../bin_ohlc_5m')
-# pairs = [p.stem for p in ohlc_folder.glob('*.parquet')]
-# pairs = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
-trim_ohlc = 1000
+    frac_widths = [3, 5, 7, 9, 11, 13, 15, 17, 19]
+    atr_spacings = [1, 2, 4, 8, 16]
+    timeframes = ['1h', '4h', '12h', '1d']
+    # frac_widths = [11]
+    # atr_spacings = [2]
 
-frac_widths = [3, 5, 7, 9, 11, 13, 15, 17, 19]
-atr_spacings = [1, 2, 4, 8, 16]
-timeframes = ['1h', '4h', '12h', '1d']
-# frac_widths = [11]
-# atr_spacings = [2]
-
-sides = ['long', 'short']
-for pair, side, timeframe in product(pairs, sides, timeframes):
-    res_path = Path(f'results/{pair}_{side}_{timeframe}.parquet')
-    if res_path.exists():
-        continue
-    print(f"Testing {pair} {side} {timeframe}")
-    loop_start = time.perf_counter()
-    res_list = []
-    for frac_width, spacing in product(frac_widths, atr_spacings):
-        exit_method['width'] = frac_width
-        exit_method['atr_spacing'] = spacing
-
-        df = get_data(pair)
-        df = add_features(df, timeframe)
-        res_df = project_pnl(df, side, exit_method, inval_lookback)
-
-        model, X_test, y_test, z_test = train_ml(res_df)
-
-        test_balance = Counter(y_test)
-        test_balance = {f"test_{k}": v for k, v in test_balance.items()}
-
-        best_params = model.best_params_
-        try:
-            scores = calc_scores(model, X_test, y_test)
-        except ValueError as e:
-            # print(f'ValueError while calculating scores on {pair}, skipping to next test.')
+    sides = ['long', 'short']
+    for pair, side, timeframe in product(pairs, sides, timeframes):
+        res_path = Path(f'results/{pair}_{side}_{timeframe}.parquet')
+        if res_path.exists():
             continue
-        # guess_scores = analyse_results(model, X_test, y_test, guess=True)
-        imp_df = best_features(model, X_test.columns)
-        test_pnl = backtest(y_test, z_test)
+        print(f"Testing {pair} {side} {timeframe}")
+        loop_start = time.perf_counter()
+        res_list = []
+        for frac_width, spacing in product(frac_widths, atr_spacings):
+            exit_method['width'] = frac_width
+            exit_method['atr_spacing'] = spacing
 
-        # print(f"{pair}, {side}, {timeframe}, {frac_width = }, {spacing = }, "
-        #       f"precision: {scores['precision']:.1%}, "
-        #       f"AUC: {scores['auroc']:.1%}, "
-        #       f"f beta: {scores['f_beta']:.1%}, "
-        #       f"abtg: {scores['accuracy_better_than_guess']}, "
-        #       f"pos predictions: {scores['true_pos']+scores['false_pos']}, "
-        #       f"neg predictions: {scores['true_neg']+scores['false_neg']}, "
-        #       f"Feature 1: {imp_df.index[0]}: {imp_df.iat[0, 0]:.2%}, "
-        #       f"Feature 2: {imp_df.index[1]}: {imp_df.iat[1, 0]:.2%}, "
-        #       f"Feature 3: {imp_df.index[2]}: {imp_df.iat[2, 0]:.2%}")
+            df = get_data(pair, timeframe)
+            df = add_features(df, timeframe)
+            res_df = project_pnl(df, side, exit_method, inval_lookback)
 
-        res_dict = dict(
-            pair=pair,
-            timeframe=timeframe,
-            frac_width=frac_width,
-            spacing=spacing,
-            side=side,
-            feature_1=imp_df.index[0],
-            feature_2=imp_df.index[1],
-            feature_3=imp_df.index[2],
-            feature_4=imp_df.index[3],
-            feature_5=imp_df.index[4],
-            feature_6=imp_df.index[5],
-            feature_7=imp_df.index[6],
-            feature_8=imp_df.index[7],
-        ) | scores | model.best_params_ | test_balance
+            model, X_test, y_test, z_test = train_ml(res_df)
 
-        res_list.append(res_dict)
+            test_balance = Counter(y_test)
+            test_balance = {f"test_{k}": v for k, v in test_balance.items()}
 
-    final_results = pd.DataFrame(res_list)
-    final_results.to_parquet(path=res_path)
-    # print(final_results)
+            best_params = model.best_params_
+            try:
+                scores = calc_scores(model, X_test, y_test)
+            except ValueError as e:
+                # print(f'ValueError while calculating scores on {pair}, skipping to next test.')
+                continue
+            # guess_scores = analyse_results(model, X_test, y_test, guess=True)
+            imp_df = best_features(model, X_test.columns)
+            test_pnl = backtest(y_test, z_test)
 
-    loop_end = time.perf_counter()
-    loop_elapsed = loop_end - loop_start
-    print(f"Loop took {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s\n")
+            # print(f"{pair}, {side}, {timeframe}, {frac_width = }, {spacing = }, "
+            #       f"precision: {scores['precision']:.1%}, "
+            #       f"AUC: {scores['auroc']:.1%}, "
+            #       f"f beta: {scores['f_beta']:.1%}, "
+            #       f"abtg: {scores['accuracy_better_than_guess']}, "
+            #       f"pos predictions: {scores['true_pos']+scores['false_pos']}, "
+            #       f"neg predictions: {scores['true_neg']+scores['false_neg']}, "
+            #       f"Feature 1: {imp_df.index[0]}: {imp_df.iat[0, 0]:.2%}, "
+            #       f"Feature 2: {imp_df.index[1]}: {imp_df.iat[1, 0]:.2%}, "
+            #       f"Feature 3: {imp_df.index[2]}: {imp_df.iat[2, 0]:.2%}")
 
-all_end = time.perf_counter()
-elapsed = all_end - all_start
-print(f"\n\nTotal time taken: {int(elapsed // 60)}m {elapsed % 60:.1f}s")
+            res_dict = dict(
+                pair=pair,
+                timeframe=timeframe,
+                frac_width=frac_width,
+                spacing=spacing,
+                side=side,
+                feature_1=imp_df.index[0],
+                feature_2=imp_df.index[1],
+                feature_3=imp_df.index[2],
+                feature_4=imp_df.index[3],
+                feature_5=imp_df.index[4],
+                feature_6=imp_df.index[5],
+                feature_7=imp_df.index[6],
+                feature_8=imp_df.index[7],
+            ) | scores | model.best_params_ | test_balance
+
+            res_list.append(res_dict)
+
+        final_results = pd.DataFrame(res_list)
+        final_results.to_parquet(path=res_path)
+        # print(final_results)
+
+        loop_end = time.perf_counter()
+        loop_elapsed = loop_end - loop_start
+        print(f"Loop took {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s\n")
+
+    all_end = time.perf_counter()
+    elapsed = all_end - all_start
+    print(f"\n\nTotal time taken: {int(elapsed // 60)}m {elapsed % 60:.1f}s")
