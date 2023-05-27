@@ -12,6 +12,7 @@ import json
 from itertools import product
 from collections import Counter
 import joblib
+from datetime import datetime
 
 from sklearnex import get_patch_names, patch_sklearn, unpatch_sklearn
 patch_sklearn()
@@ -24,6 +25,7 @@ from sklearn.metrics import confusion_matrix, roc_auc_score, roc_curve
 
 # print(get_patch_names())
 
+print(f"Starting at {datetime.now().strftime('%d/%m/%y %H:%M')}")
 all_start = time.perf_counter()
 
 pd.set_option('display.max_rows', None)
@@ -114,7 +116,7 @@ def trail_fractal(df_0, width, spacing, side):
         results.append(row_data | row_res)
 
         if lifespan / trim_ohlc > 0.5:
-            print("warning: trade lifespans getting close to trimmed ohlc length, increase trim ohlc")
+            print(f"warning: trade lifespans getting close to trimmed ohlc length ({lifespan/trim_ohlc:.1%}), increase trim ohlc")
 
     return results
 
@@ -338,13 +340,14 @@ timeframes = ['1h', '4h', '12h', '1d']
 # frac_widths = [11]
 # atr_spacings = [2]
 
-loop_start = time.perf_counter()
-group_size, total_size, start_pair = 1, 10, 0
-pair_group_index = range(start_pair, 1+total_size-group_size, group_size)
 sides = ['long', 'short']
 for pair, side, timeframe in product(pairs, sides, timeframes):
-    res_list = []
+    res_path = Path(f'results/{pair}_{side}_{timeframe}.parquet')
+    if res_path.exists():
+        continue
     print(f"Testing {pair} {side} {timeframe}")
+    loop_start = time.perf_counter()
+    res_list = []
     for frac_width, spacing in product(frac_widths, atr_spacings):
         exit_method['width'] = frac_width
         exit_method['atr_spacing'] = spacing
@@ -362,22 +365,22 @@ for pair, side, timeframe in product(pairs, sides, timeframes):
         try:
             scores = calc_scores(model, X_test, y_test)
         except ValueError as e:
-            print(f'ValueError while calculating scores on {pair}, skipping to next test.')
+            # print(f'ValueError while calculating scores on {pair}, skipping to next test.')
             continue
         # guess_scores = analyse_results(model, X_test, y_test, guess=True)
         imp_df = best_features(model, X_test.columns)
         test_pnl = backtest(y_test, z_test)
 
-        print(f"{pair}, {side}, {timeframe}, {frac_width = }, {spacing = }, "
-              f"precision: {scores['precision']:.1%}, "
-              f"AUC: {scores['auroc']:.1%}, "
-              f"f beta: {scores['f_beta']:.1%}, "
-              f"abtg: {scores['accuracy_better_than_guess']}, "
-              f"pos predictions: {scores['true_pos']+scores['false_pos']}, "
-              f"neg predictions: {scores['true_neg']+scores['false_neg']}, "
-              f"Feature 1: {imp_df.index[0]}: {imp_df.iat[0, 0]:.2%}, "
-              f"Feature 2: {imp_df.index[1]}: {imp_df.iat[1, 0]:.2%}, "
-              f"Feature 3: {imp_df.index[2]}: {imp_df.iat[2, 0]:.2%}")
+        # print(f"{pair}, {side}, {timeframe}, {frac_width = }, {spacing = }, "
+        #       f"precision: {scores['precision']:.1%}, "
+        #       f"AUC: {scores['auroc']:.1%}, "
+        #       f"f beta: {scores['f_beta']:.1%}, "
+        #       f"abtg: {scores['accuracy_better_than_guess']}, "
+        #       f"pos predictions: {scores['true_pos']+scores['false_pos']}, "
+        #       f"neg predictions: {scores['true_neg']+scores['false_neg']}, "
+        #       f"Feature 1: {imp_df.index[0]}: {imp_df.iat[0, 0]:.2%}, "
+        #       f"Feature 2: {imp_df.index[1]}: {imp_df.iat[1, 0]:.2%}, "
+        #       f"Feature 3: {imp_df.index[2]}: {imp_df.iat[2, 0]:.2%}")
 
         res_dict = dict(
             pair=pair,
@@ -398,8 +401,8 @@ for pair, side, timeframe in product(pairs, sides, timeframes):
         res_list.append(res_dict)
 
     final_results = pd.DataFrame(res_list)
-    final_results.to_parquet(path=f'results/{pair}_{side}_{timeframe}.parquet')
-    print(final_results)
+    final_results.to_parquet(path=res_path)
+    # print(final_results)
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
