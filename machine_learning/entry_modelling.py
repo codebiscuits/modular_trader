@@ -65,6 +65,9 @@ def get_data(pair, timeframe, vwma_periods=24):
     df = funcs.resample_ohlc(timeframe, None, df).tail(len(vwma)).reset_index(drop=True)
     df['vwma'] = vwma
 
+    if timeframe == '1h':
+        df = df.tail(8760).reset_index(drop=True)
+
     elapsed = time.perf_counter() - start
     # print(f"get_data took {int(elapsed // 60)}m {elapsed % 60:.1f}s")
 
@@ -348,13 +351,14 @@ if __name__ == '__main__':
             continue
         print(f"Testing {pair} {side} {timeframe}")
         loop_start = time.perf_counter()
+
+        df = get_data(pair, timeframe)
+        df = add_features(df, timeframe)
+
         res_list = []
         for frac_width, spacing in product(frac_widths, atr_spacings):
             exit_method['width'] = frac_width
             exit_method['atr_spacing'] = spacing
-
-            df = get_data(pair, timeframe)
-            df = add_features(df, timeframe)
             res_df = project_pnl(df, side, exit_method, inval_lookback)
 
             model, X_test, y_test, z_test = train_ml(res_df)

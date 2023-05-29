@@ -10,7 +10,7 @@ res_path = Path("/home/ross/Documents/backtester_2021/machine_learning/results/"
 for p in res_path.glob('*'):
     pair = p.parts[7].split('_')[0]
     tf = p.parts[7].split('_')[2].split('.')[0]
-    if tf == '12h':
+    if tf == '1h':
         print('')
-        df = pd.read_parquet(p).sort_values('precision', ascending=False)
-        print(df.head(1))
+        df = pd.read_parquet(p).sort_values('f_beta', ascending=False)
+        print(df.head(10))
