@@ -13,19 +13,27 @@ from itertools import product
 from collections import Counter
 import joblib
 from datetime import datetime
+import plotly.express as px
 
 from sklearnex import get_patch_names, patch_sklearn, unpatch_sklearn
 patch_sklearn()
-from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV, RandomizedSearchCV
-from sklearn.preprocessing import StandardScaler, QuantileTransformer
+from sklearn.preprocessing import StandardScaler, QuantileTransformer, RobustScaler, MinMaxScaler, KBinsDiscretizer
+from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, fbeta_score
 from sklearn.metrics import confusion_matrix, roc_auc_score, roc_curve
 
 # print(get_patch_names())
 
-print(f"Starting at {datetime.now().strftime('%d/%m/%y %H:%M')}")
+# TODO i want to try ensembling different models together, either by voting or by stacking
+# TODO i also want to try bagging on models that don't normally support bagging like knn or svc
+#  so the architecture i would like to work towards would be something like: bagged logistic regression and knn and
+#  svc all stacked into a random forest, or maybe those four or others all going into a voting classifier
+# TODO to speed everything up, i should try to use nvidia RAPIDS
+
 all_start = time.perf_counter()
 
 pd.set_option('display.max_rows', None)
@@ -80,11 +88,11 @@ def trail_atr(df, atr_len, atr_mult):
 
 def trail_fractal(df_0, width, spacing, side, trim_ohlc=1000):
     df_0 = ind.williams_fractals(df_0, width, spacing)
-    df_0 = df_0.drop(['fractal_high', 'fractal_low', f"atr-{spacing}"], axis=1).dropna(axis=0).reset_index(drop=True)
+    df_0 = df_0.drop(['fractal_high', 'fractal_low', f"atr-{spacing}", f"atr_{spacing}_pct"], axis=1).dropna(axis=0).reset_index(drop=True)
 
     condition = (df_0.open > df_0.frac_low) if side == 'long' else (df_0.open < df_0.frac_high)
     rows = list(df_0.loc[condition].index)
-    # print(rows[-5:])
+    df_0['trend_age'] = ind.consec_condition(condition)
     results = []
 
     # loop through potential entries
@@ -154,10 +162,6 @@ def add_features(df, tf):
     periods_1w = {'1h': 168, '4h': 42, '12h': 14, '1d': 7}
 
     df['vol_delta_pct'] = ind.vol_delta_pct(df).shift(1)
-    df = features.vol_delta_div(df, 1)
-    df = features.vol_delta_div(df, 2)
-    df = features.vol_delta_div(df, 3)
-    df = features.vol_delta_div(df, 4)
     df['stoch_vwma_ratio_25'] = features.stoch_vwma_ratio(df, 25)
     df['stoch_vwma_ratio_50'] = features.stoch_vwma_ratio(df, 50)
     df['stoch_vwma_ratio_100'] = features.stoch_vwma_ratio(df, 100)
@@ -177,14 +181,9 @@ def add_features(df, tf):
     df['hma_50_ratio'] = features.hma_ratio(df, 50)
     df['hma_100_ratio'] = features.hma_ratio(df, 100)
     df['hma_200_ratio'] = features.hma_ratio(df, 200)
-    df = ind.ema_breakout(df, 50, 50).shift(1)
-    df = ind.ema_breakout(df, 50, 50).shift(1)
-    df = ind.ema_breakout(df, 50, 50).shift(1)
-    df = ind.ema_breakout(df, 50, 50).shift(1)
-    df = features.atr_pct(df, 5)
-    df = features.atr_pct(df, 10)
-    df = features.atr_pct(df, 25)
-    df = features.atr_pct(df, 50)
+
+    df = df.copy()
+
     df['stoch_base_vol_25'] = ind.stochastic(df.base_vol, 25).shift(1)
     df['stoch_base_vol_50'] = ind.stochastic(df.base_vol, 50).shift(1)
     df['stoch_base_vol_100'] = ind.stochastic(df.base_vol, 100).shift(1)
@@ -194,26 +193,66 @@ def add_features(df, tf):
     df['stoch_num_trades_100'] = ind.stochastic(df.num_trades, 100).shift(1)
     df['stoch_num_trades_200'] = ind.stochastic(df.num_trades, 200).shift(1)
     df['inside_bar'] = ind.inside_bars(df).shift(1)
-    df = features.engulfing(df, 1)
-    df = features.engulfing(df, 2)
-    df = features.engulfing(df, 3)
-    df = features.doji(df, 0.5, 2)
-    df = features.bull_bear_bar(df)
+
+    df = df.copy()
+
     df['hour'] = features.hour(df)
     df['hour_180'] = features.hour_180(df)
     df['day_of_week'] = features.day_of_week(df)
     df['day_of_week_180'] = features.day_of_week_180(df)
     # df['week_of_year'] = features.week_of_year(df)
     # df['week_of_year_180'] = features.week_of_year_180(df)
-    df['vol_denom_roc_2'] = features.vol_denom_roc(df, 2, 20)
+    df['vol_denom_roc_2'] = features.vol_denom_roc(df, 2, 25)
     df['vol_denom_roc_5'] = features.vol_denom_roc(df, 5, 50)
-    df['rsi'] = ind.rsi(df.close).shift(1)
+    df['rsi_14'] = ind.rsi(df.close).shift(1)
+    df['rsi_25'] = ind.rsi(df.close, 25).shift(1)
+    df['rsi_50'] = ind.rsi(df.close, 50).shift(1)
+    df['rsi_100'] = ind.rsi(df.close, 100).shift(1)
+    df['rsi_200'] = ind.rsi(df.close, 200).shift(1)
+
+    df = df.copy()
+
+    df['roc_1d'] = df.close.pct_change(periods_1d[tf]).shift(1)
+    df['roc_1w'] = df.close.pct_change(periods_1w[tf]).shift(1)
+    df['log_returns'] = np.log(df.close.pct_change() + 1).shift(1)
+    df['kurtosis_6'] = df.log_returns.rolling(6).kurt()
+    df['kurtosis_12'] = df.log_returns.rolling(12).kurt()
+    df['kurtosis_25'] = df.log_returns.rolling(25).kurt()
+    df['kurtosis_50'] = df.log_returns.rolling(50).kurt()
+    df['kurtosis_100'] = df.log_returns.rolling(100).kurt()
+    df['kurtosis_200'] = df.log_returns.rolling(200).kurt()
+    df['skew_6'] = df.log_returns.rolling(6).skew()
+    df['skew_12'] = df.log_returns.rolling(12).skew()
+    df['skew_25'] = df.log_returns.rolling(25).skew()
+    df['skew_50'] = df.log_returns.rolling(50).skew()
+    df['skew_100'] = df.log_returns.rolling(100).skew()
+    df['skew_200'] = df.log_returns.rolling(200).skew()
+
+    df = df.copy()
+
+    df = features.vol_delta_div(df, 1)
+    df = features.vol_delta_div(df, 2)
+    df = features.vol_delta_div(df, 3)
+    df = features.vol_delta_div(df, 4)
     df = features.ats_z(df, 25)
     df = features.ats_z(df, 50)
     df = features.ats_z(df, 100)
     df = features.ats_z(df, 200)
-    df['roc_1d'] = df.close.pct_change(periods_1d[tf]).shift(1)
-    df['roc_1w'] = df.close.pct_change(periods_1w[tf]).shift(1)
+    df = features.engulfing(df, 1)
+    df = features.engulfing(df, 2)
+    df = features.engulfing(df, 3)
+    df = features.doji(df, 0.5, 2)
+    df = features.bull_bear_bar(df)
+    df = ind.ema_breakout(df, 12, 25)
+    df = ind.ema_breakout(df, 25, 50)
+    df = ind.ema_breakout(df, 50, 100)
+    df = ind.ema_breakout(df, 100, 200)
+    df = features.atr_pct(df, 5)
+    df = features.atr_pct(df, 10)
+    df = features.atr_pct(df, 25)
+    df = features.atr_pct(df, 50)
+
+    df = df.copy()
 
     return df
 
@@ -235,49 +274,112 @@ def project_pnl(df, side, method, inval_lb) -> pd.DataFrame:
     return pd.DataFrame(res_list).dropna(axis=0).reset_index(drop=True)
 
 
-def train_ml(df):
+def prepare_data(df, split_pct):
     # split data into features and labels
+    # df = df.dropna(axis=0).reset_index(drop=True)
     X = df.drop(['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'quote_vol', 'num_trades',
                  'taker_buy_base_vol', 'taker_buy_quote_vol', 'vwma', 'pnl_pct', 'pnl_r', 'pnl_cat',
-                 'atr-25', 'atr-50', 'atr-100', 'atr-200', 'ema_25', 'ema_50', 'ema_100', 'ema_200',
+                 'atr-25', 'atr-50', 'atr-100', 'atr-200', 'ema_12', 'ema_25', 'ema_50', 'ema_100', 'ema_200',
                  'hma_25', 'hma_50', 'hma_100', 'hma_200', 'lifespan', 'frac_high', 'frac_low', 'inval'],
                 axis=1, errors='ignore')
     y = df.pnl_cat
     z = df.pnl_r
+    # print(X.describe())
 
     # print(f"{len(y)} setups to test")
 
     # split into train and test sets for hold-out validation
-    train_size = int(0.75*len(X))
-    X_train = X[:train_size]
-    y_train = y[:train_size]
-    X_test = X[train_size:]
-    y_test = y[train_size:]
-    z_test = z[train_size:]
+    # train_size = int(split_pct*len(X))
+    # X_train = X[:train_size, :]
+    # X_test = X[train_size:, :]
+    # y_train = y[:train_size]
+    # y_test = y[train_size:]
+    # z_test = z[train_size:]
 
-    # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=11)
+    cols = X.columns
 
-    pipe = Pipeline([
-        ('scale', StandardScaler()),
-        ('model', RandomForestClassifier(class_weight='balanced', bootstrap=True, n_estimators=300, min_samples_leaf=2))
-    ])
-    # pprint(pipe.get_params())
+    X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=split_pct, random_state=11)
+    _, _, _, z_test = train_test_split(X, z, train_size=split_pct, random_state=11)
 
+    transformers = [
+        ('minmax', MinMaxScaler(),
+         ['vol_delta_pct', 'ema_25_roc', 'ema_50_roc', 'ema_100_roc', 'ema_200_roc', 'hma_25_roc', 'hma_50_roc',
+          'hma_100_roc', 'hma_200_roc', 'hour', 'hour_180', 'day_of_week', 'day_of_week_180']),
+        ('quantile', QuantileTransformer(),
+         ['r_pct', 'ema_25_ratio', 'ema_50_ratio', 'ema_100_ratio', 'ema_200_ratio', 'hma_25_ratio', 'hma_50_ratio',
+          'hma_100_ratio', 'hma_200_ratio', 'atr_5_pct', 'atr_10_pct', 'atr_25_pct', 'atr_50_pct'])
+    ]
+    ct = ColumnTransformer(transformers=transformers, remainder='passthrough')
+    X_train = ct.fit_transform(X_train)
+    X_test = ct.transform(X_test)
+
+
+
+    return X_train, X_test, y_train, y_test, z_test, cols
+
+
+def train_knn(X_train, y_train):
     param_dict = dict(
         # model__n_estimators=[100, 200, 300],#[int(x) for x in np.linspace(start=10, stop=200, num=7)],
-        model__max_features=[4, 6, 8, 10],
-        model__max_depth=[int(x) for x in np.linspace(start=10, stop=20, num=5)],
-        model__min_samples_split=[2, 3, 4], # must be 2 or more
+        n_neighbors=[2, 4, 6, 8, 10],
+        weights=['uniform', 'distance']
     )
     # rf_grid = GridSearchCV(estimator=pipe, param_grid=param_dict, scoring='precision', cv=3, n_jobs=-1)
-    rf_grid = RandomizedSearchCV(estimator=pipe,
+    rf_grid = RandomizedSearchCV(estimator=KNeighborsClassifier(n_jobs=-1),
+                                 param_distributions=param_dict,
+                                 n_iter=10,
+                                 scoring='precision',
+                                 cv=3, n_jobs=-1)
+    rf_grid.fit(X_train, y_train)
+
+    return rf_grid
+
+
+def train_forest(X_train, y_train):
+    param_dict = dict(
+        # model__n_estimators=[100, 200, 300],#[int(x) for x in np.linspace(start=10, stop=200, num=7)],
+        max_features=[4, 6, 8, 10],
+        max_depth=[int(x) for x in np.linspace(start=10, stop=20, num=5)],
+        min_samples_split=[2, 3, 4], # must be 2 or more
+    )
+    # rf_grid = GridSearchCV(estimator=pipe, param_grid=param_dict, scoring='precision', cv=3, n_jobs=-1)
+    rf_grid = RandomizedSearchCV(estimator=RandomForestClassifier(class_weight='balanced',
+                                                                  n_estimators=300,
+                                                                  min_samples_leaf=2),
                                  param_distributions=param_dict,
                                  n_iter=60,
                                  scoring='precision',
                                  cv=3, n_jobs=-1)
     rf_grid.fit(X_train, y_train)
 
-    return rf_grid, X_test, y_test, z_test
+    return rf_grid
+
+
+def train_vc(X_train, y_train):
+    param_dict = dict(
+        knn__n_neighbors=[2, 4, 6, 8, 10],
+        knn__weights=['uniform', 'distance'],
+        rf__max_features=[4, 6, 8, 10],
+        rf__max_depth=[int(x) for x in np.linspace(start=10, stop=20, num=5)],
+        rf__min_samples_split=[2, 3, 4],  # must be 2 or more
+    )
+
+    vc = VotingClassifier(estimators=
+    [
+        ('knn', KNeighborsClassifier(n_jobs=-1)),
+        ('rf', RandomForestClassifier(class_weight='balanced',
+                                                 n_estimators=300,
+                                                 min_samples_leaf=2))
+    ], voting='soft')
+
+    rf_grid = RandomizedSearchCV(estimator=vc,
+                                 param_distributions=param_dict,
+                                 n_iter=120,
+                                 scoring='precision',
+                                 cv=3, n_jobs=-1)
+    rf_grid.fit(X_train, y_train)
+
+    return rf_grid
 
 
 def calc_scores(model, X_test, y_test, guess=False):
@@ -310,8 +412,8 @@ def best_features(grid, cols):
 
 
     # Get feature importances from the best estimator
-    importances = best_estimator.named_steps['model'].feature_importances_
-    imp_df = pd.DataFrame(importances, index=cols).sort_values(0, ascending=False)
+    importances = best_estimator.feature_importances_
+    imp_df = pd.Series(importances, index=cols)#.sort_values(0, ascending=False)
     # print(f'Best Features: '
     #       f'1 {imp_df.index[0]}: {imp_df.iat[0, 0]:.2%}, '
     #       f'2 {imp_df.index[1]}: {imp_df.iat[1, 0]:.2%}, '
@@ -322,96 +424,135 @@ def best_features(grid, cols):
     return imp_df
 
 
-def backtest(y, z):
-    """i want to compare the y_probability series to the actual pnl_r of the test set to see what the pnl curve would
-    have been like if those trades had been taken. i'm not sure it's something i could optimise for but it will at least
-    give me some perspective on whether eg 30% precision is enough to be profitable."""
+def backtest(model, X_test, y_test, z_test, min_conf=0.75):
+    y_pred = model.predict(X_test)
+    y_prob = model.predict_proba(X_test)[:, 1]
 
-    pass
+    results = pd.DataFrame(
+        {'labels': y_test,
+         'predictions': y_pred,
+         'confidence': y_prob,
+         'pnl_r': z_test}
+    ).reset_index(drop=True)
+
+    fr = 0.1
+    start_cash = 1
+
+    results['confidence'] = results.confidence * results.predictions
+    results['confidence'] = results.confidence.where(results.confidence >= min_conf, 0)
+    results['in_trade'] = results.confidence > 0
+    results['open_trade'] = results.in_trade.diff()
+    results['trades'] = results.confidence * results.pnl_r * results.open_trade
+    results['trade_pnl_mult'] = ((results.trades * fr) + 1).fillna(1)
+    results['pnl_curve'] = results.trade_pnl_mult.cumprod() * start_cash
+
+    print(f"Final PnL: {results.pnl_curve.iloc[-1]-1:.1%} from {results.in_trade.sum()} trades, {len(results)} signals")
 
 if __name__ == '__main__':
-    pairs = rank_pairs()
-    # timeframe = '4h'
+    print(f"Starting at {datetime.now().strftime('%d/%m/%y %H:%M')}")
+
+    features_dict = {}
 
     inval_lookback = 2  # lowest low / the highest high for last 2 bars
     # exit_method = {'type': 'trail_atr', 'len': 2, 'mult': 2}
-    exit_method = {'type': 'trail_fractal', 'width': 9, 'atr_spacing': 3}
+    exit_method = {'type': 'trail_fractal', 'width': 11, 'atr_spacing': 15}
     # exit_method = {'type': 'oco', 'r_multiple': 2}
+
+    pairs = rank_pairs()[:10]
+    sides = ['long', 'short']
+    # timeframes = ['1h', '4h', '12h', '1d']
+    # pairs = ['ETHUSDT']
+    # sides = ['short']
+    timeframes = ['1d']
 
     frac_widths = [3, 5, 7, 9, 11, 13, 15, 17, 19]
     atr_spacings = [1, 2, 4, 8, 16]
-    timeframes = ['1h', '4h', '12h', '1d']
-    # frac_widths = [11]
-    # atr_spacings = [2]
+    # frac_widths = [5]
+    # atr_spacings = [8]
+    data_len = 100
 
-    sides = ['long', 'short']
-    for pair, side, timeframe in product(pairs, sides, timeframes):
-        res_path = Path(f'results/{pair}_{side}_{timeframe}.parquet')
-        if res_path.exists():
+    for side, timeframe in product(sides, timeframes):
+        print(f"Testing {side} {timeframe}")
+        for pair in pairs:
+            # res_path = Path(f'results/{pair}_{side}_{timeframe}.parquet')
+            # if res_path.exists():
+            #     continue
+            # print(f"Testing {pair} {side} {timeframe}")
+            loop_start = time.perf_counter()
+
+            df = get_data(pair, timeframe).tail(data_len+200).reset_index(drop=True)
+            df = add_features(df, timeframe).tail(data_len).reset_index(drop=True)
+            # print(f"data length: {len(df)}")
+
+            res_list = []
+            all_res = pd.DataFrame()
+            for frac_width, spacing in product(frac_widths, atr_spacings):
+                df_loop = df.copy()
+                exit_method['width'] = frac_width
+                exit_method['atr_spacing'] = spacing
+                res_df = project_pnl(df_loop, side, exit_method, inval_lookback)
+                all_res = pd.concat([all_res, res_df], axis=0)
+
+        print(f"{all_res.shape}")
+        X_train, X_test, y_train, y_test, z_test, cols = prepare_data(all_res, 0.9)
+        print(f"train length: {len(y_train)}, test length: {len(y_test)}")
+        # model = train_knn(X_train, y_train)
+        model = train_forest(X_train, y_train)
+        # model = train_vc(X_train, y_train)
+
+        test_balance = Counter(y_test)
+        test_balance = {f"test_{k}": v for k, v in test_balance.items()}
+
+        best_params = model.best_params_
+        try:
+            scores = calc_scores(model, X_test, y_test)
+        except ValueError as e:
+            # print(f'ValueError while calculating scores on {pair}, skipping to next test.')
             continue
-        print(f"Testing {pair} {side} {timeframe}")
-        loop_start = time.perf_counter()
+        # guess_scores = analyse_results(model, X_test, y_test, guess=True)
+        imp_df = best_features(model, cols)
+        # features_dict[scaler][pair] = imp_df.rank()
+        print(imp_df.head)
+        test_pnl = backtest(model, X_test, y_test, z_test)
 
-        df = get_data(pair, timeframe)
-        df = add_features(df, timeframe)
+        print(f"{pair}, {side}, {timeframe}, {frac_width = }, {spacing = }, "
+              f"precision: {scores['precision']:.1%}, "
+              f"AUC: {scores['auroc']:.1%}, "
+              f"f beta: {scores['f_beta']:.1%}, "
+              f"abtg: {scores['accuracy_better_than_guess']}, "
+              f"pos predictions: {scores['true_pos']+scores['false_pos']}, "
+              f"neg predictions: {scores['true_neg']+scores['false_neg']}, "
+              )
 
-        res_list = []
-        for frac_width, spacing in product(frac_widths, atr_spacings):
-            exit_method['width'] = frac_width
-            exit_method['atr_spacing'] = spacing
-            res_df = project_pnl(df, side, exit_method, inval_lookback)
+        res_dict = dict(
+            pair=pair,
+            timeframe=timeframe,
+            frac_width=frac_width,
+            spacing=spacing,
+            side=side,
+            feature_1=imp_df.index[0],
+            feature_2=imp_df.index[1],
+            feature_3=imp_df.index[2],
+            feature_4=imp_df.index[3],
+            feature_5=imp_df.index[4],
+            feature_6=imp_df.index[5],
+            feature_7=imp_df.index[6],
+            feature_8=imp_df.index[7],
+        ) | scores | model.best_params_ | test_balance
 
-            model, X_test, y_test, z_test = train_ml(res_df)
+        res_list.append(res_dict)
 
-            test_balance = Counter(y_test)
-            test_balance = {f"test_{k}": v for k, v in test_balance.items()}
+        # final_results = pd.DataFrame(res_list)
+        # final_results.to_parquet(path=res_path)
 
-            best_params = model.best_params_
-            try:
-                scores = calc_scores(model, X_test, y_test)
-            except ValueError as e:
-                # print(f'ValueError while calculating scores on {pair}, skipping to next test.')
-                continue
-            # guess_scores = analyse_results(model, X_test, y_test, guess=True)
-            imp_df = best_features(model, X_test.columns)
-            test_pnl = backtest(y_test, z_test)
+        # loop_end = time.perf_counter()
+        # loop_elapsed = loop_end - loop_start
+        # print(f"Loop took {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s\n")
 
-            # print(f"{pair}, {side}, {timeframe}, {frac_width = }, {spacing = }, "
-            #       f"precision: {scores['precision']:.1%}, "
-            #       f"AUC: {scores['auroc']:.1%}, "
-            #       f"f beta: {scores['f_beta']:.1%}, "
-            #       f"abtg: {scores['accuracy_better_than_guess']}, "
-            #       f"pos predictions: {scores['true_pos']+scores['false_pos']}, "
-            #       f"neg predictions: {scores['true_neg']+scores['false_neg']}, "
-            #       f"Feature 1: {imp_df.index[0]}: {imp_df.iat[0, 0]:.2%}, "
-            #       f"Feature 2: {imp_df.index[1]}: {imp_df.iat[1, 0]:.2%}, "
-            #       f"Feature 3: {imp_df.index[2]}: {imp_df.iat[2, 0]:.2%}")
-
-            res_dict = dict(
-                pair=pair,
-                timeframe=timeframe,
-                frac_width=frac_width,
-                spacing=spacing,
-                side=side,
-                feature_1=imp_df.index[0],
-                feature_2=imp_df.index[1],
-                feature_3=imp_df.index[2],
-                feature_4=imp_df.index[3],
-                feature_5=imp_df.index[4],
-                feature_6=imp_df.index[5],
-                feature_7=imp_df.index[6],
-                feature_8=imp_df.index[7],
-            ) | scores | model.best_params_ | test_balance
-
-            res_list.append(res_dict)
-
-        final_results = pd.DataFrame(res_list)
-        final_results.to_parquet(path=res_path)
-        # print(final_results)
-
-        loop_end = time.perf_counter()
-        loop_elapsed = loop_end - loop_start
-        print(f"Loop took {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s\n")
+    # f_dict = {k: pd.DataFrame(v).mean(axis=1) for k, v in features_dict.items()}
+    # pprint(f_dict)
+    # features_df = pd.DataFrame(f_dict) - pd.DataFrame(f_dict).mean(axis=1)
+    # print(features_df)
 
     all_end = time.perf_counter()
     elapsed = all_end - all_start

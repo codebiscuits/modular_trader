@@ -24,6 +24,21 @@ def ema_ratio(df, length):
     return (df.close / df[f"ema_{length}"]).shift(1)
 
 
+def ema_breakout(df: pd.DataFrame, length: int, lookback: int) -> pd.DataFrame:
+    """creates two columns 'ema_break_up' and 'ema_break_down' which represent whether the ema of close prices is above or below the
+    range it occupied over the lookback period. if both are false, it is within the range."""
+
+    if f"ema_{length}" not in df.columns:
+        df[f"ema_{length}"] = df.close.ewm(length).mean()
+    ema_high = df[f"ema_{length}"].shift(1).rolling(lookback).max()
+    ema_low = df[f"ema_{length}"].shift(1).rolling(lookback).min()
+
+    df[f'ema_{length}_break_up'] = (df[f"ema_{length}"] > ema_high).shift()
+    df[f'ema_{length}_break_down'] = (df[f"ema_{length}"] < ema_low).shift()
+
+    return df
+
+
 def engulfing(df, lookback: int = 1) -> pd.DataFrame:
     df = ind.engulfing(df, lookback)
     df[f'bullish_engulf_{lookback}'] = df[f'bullish_engulf_{lookback}'].shift(1)
