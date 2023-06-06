@@ -16,6 +16,7 @@ from datetime import datetime
 import plotly.express as px
 
 from sklearnex import get_patch_names, patch_sklearn, unpatch_sklearn
+
 patch_sklearn()
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier, VotingClassifier
@@ -24,7 +25,7 @@ from sklearn.preprocessing import StandardScaler, QuantileTransformer, RobustSca
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, fbeta_score
-from sklearn.metrics import confusion_matrix, roc_auc_score, roc_curve
+from sklearn.metrics import confusion_matrix, roc_auc_score, roc_curve, make_scorer
 
 # print(get_patch_names())
 
@@ -40,6 +41,7 @@ pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
 pd.set_option('display.precision', 4)
 client = Client(keys.bPkey, keys.bSkey)
+
 
 def rank_pairs():
     with open('../recent_1d_volumes.json', 'r') as file:
@@ -88,7 +90,8 @@ def trail_atr(df, atr_len, atr_mult):
 
 def trail_fractal(df_0, width, spacing, side, trim_ohlc=1000):
     df_0 = ind.williams_fractals(df_0, width, spacing)
-    df_0 = df_0.drop(['fractal_high', 'fractal_low', f"atr-{spacing}", f"atr_{spacing}_pct"], axis=1).dropna(axis=0).reset_index(drop=True)
+    df_0 = df_0.drop(['fractal_high', 'fractal_low', f"atr-{spacing}", f"atr_{spacing}_pct"], axis=1).dropna(
+        axis=0).reset_index(drop=True)
 
     condition = (df_0.open > df_0.frac_low) if side == 'long' else (df_0.open < df_0.frac_high)
     rows = list(df_0.loc[condition].index)
@@ -134,7 +137,8 @@ def trail_fractal(df_0, width, spacing, side, trim_ohlc=1000):
         results.append(row_data | row_res)
 
         if lifespan / trim_ohlc > 0.5:
-            print(f"warning: trade lifespans getting close to trimmed ohlc length ({lifespan/trim_ohlc:.1%}), increase trim ohlc")
+            print(
+                f"warning: trade lifespans getting close to trimmed ohlc length ({lifespan / trim_ohlc:.1%}), increase trim ohlc")
 
     return results
 
@@ -298,9 +302,11 @@ def prepare_data(df, split_pct):
 
     cols = X.columns
 
+    # Train-test split
     X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=split_pct, random_state=11)
     _, _, _, z_test = train_test_split(X, z, train_size=split_pct, random_state=11)
 
+    # column transformation
     transformers = [
         ('minmax', MinMaxScaler(),
          ['vol_delta_pct', 'ema_25_roc', 'ema_50_roc', 'ema_100_roc', 'ema_200_roc', 'hma_25_roc', 'hma_50_roc',
@@ -313,7 +319,12 @@ def prepare_data(df, split_pct):
     X_train = ct.fit_transform(X_train)
     X_test = ct.transform(X_test)
 
-
+    # # limiting number of unique values in each feature
+    # n_limit = 512
+    # discretised = [col for col in range(X_train.shape[1]) if np.unique(X_train[:, col]).size > n_limit]
+    # discretizer = KBinsDiscretizer(n_bins=n_limit, encode='ordinal', strategy='uniform')
+    # X_train[:, discretised] = discretizer.fit_transform(X_train[:, discretised])
+    # X_test[:, discretised] = discretizer.transform(X_test[:, discretised])
 
     return X_train, X_test, y_train, y_test, z_test, cols
 
@@ -340,15 +351,16 @@ def train_forest(X_train, y_train):
         # model__n_estimators=[100, 200, 300],#[int(x) for x in np.linspace(start=10, stop=200, num=7)],
         max_features=[4, 6, 8, 10],
         max_depth=[int(x) for x in np.linspace(start=10, stop=20, num=5)],
-        min_samples_split=[2, 3, 4], # must be 2 or more
+        min_samples_split=[2, 3, 4],  # must be 2 or more
     )
+    fb_scorer = make_scorer(fbeta_score, beta=0.5, zero_division=0)
     # rf_grid = GridSearchCV(estimator=pipe, param_grid=param_dict, scoring='precision', cv=3, n_jobs=-1)
     rf_grid = RandomizedSearchCV(estimator=RandomForestClassifier(class_weight='balanced',
                                                                   n_estimators=300,
                                                                   min_samples_leaf=2),
                                  param_distributions=param_dict,
                                  n_iter=60,
-                                 scoring='precision',
+                                 scoring='precision',#fb_scorer, #
                                  cv=3, n_jobs=-1)
     rf_grid.fit(X_train, y_train)
 
@@ -368,8 +380,8 @@ def train_vc(X_train, y_train):
     [
         ('knn', KNeighborsClassifier(n_jobs=-1)),
         ('rf', RandomForestClassifier(class_weight='balanced',
-                                                 n_estimators=300,
-                                                 min_samples_leaf=2))
+                                      n_estimators=300,
+                                      min_samples_leaf=2))
     ], voting='soft')
 
     rf_grid = RandomizedSearchCV(estimator=vc,
@@ -393,9 +405,11 @@ def calc_scores(model, X_test, y_test, guess=False):
     # print(f"Confusion Matrix: TP: {cm[1, 1]}, TN: {cm[0, 0]}, FP: {cm[0, 1]}, FN: {cm[1, 0]}")
 
     return {
-        'precision': precision_score(y_test, y_guess if guess else y_pred, zero_division=0), # what % of trades taken were good
-        'recall': recall_score(y_test, y_guess if guess else y_pred, zero_division=0), # what % of good trades were taken
-        'f1': f1_score(y_test, y_guess if guess else y_pred, zero_division=0), # harmonic mean of precision and recall
+        'precision': precision_score(y_test, y_guess if guess else y_pred, zero_division=0),
+        # what % of trades taken were good
+        'recall': recall_score(y_test, y_guess if guess else y_pred, zero_division=0),
+        # what % of good trades were taken
+        'f1': f1_score(y_test, y_guess if guess else y_pred, zero_division=0),  # harmonic mean of precision and recall
         'f_beta': fbeta_score(y_test, y_guess if guess else y_pred, beta=0.5, zero_division=0),
         'auroc': roc_auc_score(y_test, y_guess if guess else y_proba),
         'accuracy_better_than_guess': accuracy > acc_guess,
@@ -410,10 +424,9 @@ def best_features(grid, cols):
     # Get the best estimator from the grid search
     best_estimator = grid.best_estimator_
 
-
     # Get feature importances from the best estimator
     importances = best_estimator.feature_importances_
-    imp_df = pd.Series(importances, index=cols)#.sort_values(0, ascending=False)
+    imp_df = pd.Series(importances, index=cols)  # .sort_values(0, ascending=False)
     # print(f'Best Features: '
     #       f'1 {imp_df.index[0]}: {imp_df.iat[0, 0]:.2%}, '
     #       f'2 {imp_df.index[1]}: {imp_df.iat[1, 0]:.2%}, '
@@ -435,7 +448,7 @@ def backtest(model, X_test, y_test, z_test, min_conf=0.75):
          'pnl_r': z_test}
     ).reset_index(drop=True)
 
-    fr = 0.1
+    fr = 0.01
     start_cash = 1
 
     results['confidence'] = results.confidence * results.predictions
@@ -446,7 +459,17 @@ def backtest(model, X_test, y_test, z_test, min_conf=0.75):
     results['trade_pnl_mult'] = ((results.trades * fr) + 1).fillna(1)
     results['pnl_curve'] = results.trade_pnl_mult.cumprod() * start_cash
 
-    print(f"Final PnL: {results.pnl_curve.iloc[-1]-1:.1%} from {results.in_trade.sum()} trades, {len(results)} signals")
+    trades_taken = results.in_trade.sum()
+    winners = len(results.loc[results.trades > 0])
+    win_rate = winners / trades_taken
+
+    final_pnl = results.pnl_curve.iloc[-1] - 1
+
+    # print(
+    #     f"Final PnL: {final_pnl:.1%}, win rate: {win_rate:.1%}, from {trades_taken} trades, {len(results)} signals")
+
+    return {'pnl': final_pnl, 'win_rate': win_rate}
+
 
 if __name__ == '__main__':
     print(f"Starting at {datetime.now().strftime('%d/%m/%y %H:%M')}")
@@ -458,101 +481,110 @@ if __name__ == '__main__':
     exit_method = {'type': 'trail_fractal', 'width': 11, 'atr_spacing': 15}
     # exit_method = {'type': 'oco', 'r_multiple': 2}
 
-    pairs = rank_pairs()[:10]
-    sides = ['long', 'short']
-    # timeframes = ['1h', '4h', '12h', '1d']
     # pairs = ['ETHUSDT']
     # sides = ['short']
-    timeframes = ['1d']
+    # timeframes = ['1d']
 
-    frac_widths = [3, 5, 7, 9, 11, 13, 15, 17, 19]
-    atr_spacings = [1, 2, 4, 8, 16]
-    # frac_widths = [5]
-    # atr_spacings = [8]
-    data_len = 100
+    sides = ['long', 'short']
+    timeframes = {
+        '1d': {'frac_widths': [3, 5, 7], 'atr_spacings': [1, 2, 3, 4], 'num_pairs': 60, 'data_len': 50},
+        '12h': {'frac_widths': [3, 5, 7], 'atr_spacings': [1, 2, 4, 8], 'num_pairs': 50, 'data_len': 75},
+        '4h': {'frac_widths': [3, 5, 7, 9], 'atr_spacings': [1, 2, 4, 8, 16], 'num_pairs': 40, 'data_len': 100},
+        '1h': {'frac_widths': [3, 5, 7, 9], 'atr_spacings': [1, 2, 4, 8, 16], 'num_pairs': 30, 'data_len': 200},
+    }
+
 
     for side, timeframe in product(sides, timeframes):
-        print(f"Testing {side} {timeframe}")
-        for pair in pairs:
-            # res_path = Path(f'results/{pair}_{side}_{timeframe}.parquet')
-            # if res_path.exists():
-            #     continue
-            # print(f"Testing {pair} {side} {timeframe}")
-            loop_start = time.perf_counter()
+        print(f"\nTesting {side} {timeframe}")
+        loop_start = time.perf_counter()
 
-            df = get_data(pair, timeframe).tail(data_len+200).reset_index(drop=True)
-            df = add_features(df, timeframe).tail(data_len).reset_index(drop=True)
-            # print(f"data length: {len(df)}")
+        frac_widths = timeframes[timeframe]['frac_widths']
+        atr_spacings = timeframes[timeframe]['atr_spacings']
+        # frac_widths = [3]
+        # atr_spacings = [2]
+        data_len = timeframes[timeframe]['data_len']
+        num_pairs = timeframes[timeframe]['num_pairs']
+        pairs = rank_pairs()[:num_pairs]
+        print(pairs)
 
-            res_list = []
+        res_path = Path(f'results/{side}_{timeframe}_top{num_pairs}.parquet')
+        if res_path.exists():
+            print('Results already present, skipping tests')
+            continue
+
+        res_list = []
+        for frac_width, spacing in product(frac_widths, atr_spacings):
             all_res = pd.DataFrame()
-            for frac_width, spacing in product(frac_widths, atr_spacings):
+            for pair in pairs:
+
+                df = get_data(pair, timeframe).tail(data_len + 200).reset_index(drop=True)
+                df = add_features(df, timeframe).tail(data_len).reset_index(drop=True)
+                # print(f"data length: {len(df)}")
+
                 df_loop = df.copy()
                 exit_method['width'] = frac_width
                 exit_method['atr_spacing'] = spacing
                 res_df = project_pnl(df_loop, side, exit_method, inval_lookback)
                 all_res = pd.concat([all_res, res_df], axis=0)
 
-        print(f"{all_res.shape}")
-        X_train, X_test, y_train, y_test, z_test, cols = prepare_data(all_res, 0.9)
-        print(f"train length: {len(y_train)}, test length: {len(y_test)}")
-        # model = train_knn(X_train, y_train)
-        model = train_forest(X_train, y_train)
-        # model = train_vc(X_train, y_train)
+            X_train, X_test, y_train, y_test, z_test, cols = prepare_data(all_res, 0.9)
 
-        test_balance = Counter(y_test)
-        test_balance = {f"test_{k}": v for k, v in test_balance.items()}
+            try:
+                # model = train_knn(X_train, y_train)
+                model = train_forest(X_train, y_train)
+                # model = train_vc(X_train, y_train)
+            except ValueError as e:
+                # print(
+                #     f"{side}, {timeframe}, {frac_width = }, {spacing = }, ValueError raised, skipping to next test.\n")
+                continue
 
-        best_params = model.best_params_
-        try:
-            scores = calc_scores(model, X_test, y_test)
-        except ValueError as e:
-            # print(f'ValueError while calculating scores on {pair}, skipping to next test.')
-            continue
-        # guess_scores = analyse_results(model, X_test, y_test, guess=True)
-        imp_df = best_features(model, cols)
-        # features_dict[scaler][pair] = imp_df.rank()
-        print(imp_df.head)
-        test_pnl = backtest(model, X_test, y_test, z_test)
+            test_balance = Counter(y_test)
+            test_balance = {f"test_{k}": v for k, v in test_balance.items()}
 
-        print(f"{pair}, {side}, {timeframe}, {frac_width = }, {spacing = }, "
-              f"precision: {scores['precision']:.1%}, "
-              f"AUC: {scores['auroc']:.1%}, "
-              f"f beta: {scores['f_beta']:.1%}, "
-              f"abtg: {scores['accuracy_better_than_guess']}, "
-              f"pos predictions: {scores['true_pos']+scores['false_pos']}, "
-              f"neg predictions: {scores['true_neg']+scores['false_neg']}, "
-              )
+            best_params = model.best_params_
+            try:
+                scores = calc_scores(model, X_test, y_test)
+            except ValueError as e:
+                # print(f'ValueError while calculating scores on {pair}, skipping to next test.')
+                continue
+            # guess_scores = analyse_results(model, X_test, y_test, guess=True)
+            imp_df = best_features(model, cols)
 
-        res_dict = dict(
-            pair=pair,
-            timeframe=timeframe,
-            frac_width=frac_width,
-            spacing=spacing,
-            side=side,
-            feature_1=imp_df.index[0],
-            feature_2=imp_df.index[1],
-            feature_3=imp_df.index[2],
-            feature_4=imp_df.index[3],
-            feature_5=imp_df.index[4],
-            feature_6=imp_df.index[5],
-            feature_7=imp_df.index[6],
-            feature_8=imp_df.index[7],
-        ) | scores | model.best_params_ | test_balance
+            # print(f"\n{side}, {timeframe}, {frac_width = }, {spacing = }, "
+            #       f"precision: {scores['precision']:.1%}, "
+            #       f"AUC: {scores['auroc']:.1%}, "
+            #       f"f beta: {scores['f_beta']:.1%}, "
+            #       f"abtg: {scores['accuracy_better_than_guess']}, "
+            #       f"pos predictions: {scores['true_pos'] + scores['false_pos']}, "
+            #       f"neg predictions: {scores['true_neg'] + scores['false_neg']}"
+            #       )
+            test_pnl = backtest(model, X_test, y_test, z_test)
 
-        res_list.append(res_dict)
+            res_dict = dict(
+                timeframe=timeframe,
+                frac_width=frac_width,
+                spacing=spacing,
+                side=side,
+                feature_1=imp_df.index[0],
+                feature_2=imp_df.index[1],
+                feature_3=imp_df.index[2],
+                feature_4=imp_df.index[3],
+                feature_5=imp_df.index[4],
+                feature_6=imp_df.index[5],
+                feature_7=imp_df.index[6],
+                feature_8=imp_df.index[7],
+                pos_preds=scores['true_pos'] + scores['false_pos']
+            ) | scores | model.best_params_ | test_balance | test_pnl
 
-        # final_results = pd.DataFrame(res_list)
-        # final_results.to_parquet(path=res_path)
+            res_list.append(res_dict)
 
-        # loop_end = time.perf_counter()
-        # loop_elapsed = loop_end - loop_start
-        # print(f"Loop took {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s\n")
+        final_results = pd.DataFrame(res_list)
+        final_results.to_parquet(path=res_path)
+        print(final_results.sort_values('precision').head())
 
-    # f_dict = {k: pd.DataFrame(v).mean(axis=1) for k, v in features_dict.items()}
-    # pprint(f_dict)
-    # features_df = pd.DataFrame(f_dict) - pd.DataFrame(f_dict).mean(axis=1)
-    # print(features_df)
+        loop_end = time.perf_counter()
+        loop_elapsed = loop_end - loop_start
+        print(f"Loop took {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s\n")
 
     all_end = time.perf_counter()
     elapsed = all_end - all_start
