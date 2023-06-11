@@ -158,3 +158,17 @@ def hma_ratio(df, length):
 
     return (df.close / df[f"hma_{length}"]).shift(1)
 
+def channel_mid_ratio(df: pd.DataFrame, lookback: int) -> pd.Series:
+    chan_hi = df.high.rolling(lookback).max()
+    chan_lo = df.low.rolling(lookback).min()
+
+    return (df.close / (chan_hi + chan_lo) / 2).shift()
+
+def channel_mid_width(df: pd.DataFrame, lookback: int) -> pd.Series:
+    chan_hi = df.high.rolling(lookback).max()
+    chan_lo = df.low.rolling(lookback).min()
+
+    chan_mid = (chan_hi + chan_lo) / 2
+
+    return ((chan_hi - chan_lo) / chan_mid).shift()
+
