@@ -14,12 +14,13 @@ from collections import Counter
 import joblib
 from datetime import datetime
 import plotly.express as px
+from pyarrow import ArrowInvalid
 
 from sklearnex import get_patch_names, patch_sklearn, unpatch_sklearn
 
 patch_sklearn()
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.ensemble import RandomForestClassifier, VotingClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier
 from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV, RandomizedSearchCV
 from sklearn.preprocessing import StandardScaler, QuantileTransformer, RobustScaler, MinMaxScaler, KBinsDiscretizer
 from sklearn.compose import ColumnTransformer
@@ -60,8 +61,15 @@ def get_data(pair, timeframe, vwma_periods=24):
     ohlc_path = ohlc_folder / f"{pair}.parquet"
 
     if ohlc_path.exists():
-        df = pd.read_parquet(ohlc_path)
-        # print("Loaded OHLC from file")
+        try:
+            df = pd.read_parquet(ohlc_path)
+            # print("Loaded OHLC from file")
+        except (ArrowInvalid, OSError) as e:
+            print('Error:\n', e)
+            print(f"Problem reading {pair} parquet file, downloading from scratch.")
+            ohlc_path.unlink()
+            df = funcs.get_ohlc(pair, '5m', '2 years ago UTC')
+            df.to_parquet(ohlc_path)
     else:
         df = funcs.get_ohlc(pair, '5m', '2 years ago UTC')
         ohlc_folder.mkdir(parents=True, exist_ok=True)
@@ -144,6 +152,9 @@ def trail_fractal(df_0, width, spacing, side, trim_ohlc=1000):
 
 
 def oco(df, r_mult, inval_lb, side):
+    """i want this function to either set the invalidation by looking at recent lows/highs or by using recent volatility
+    as a multiplier"""
+
     # method 1
     # I want to ask how many rows from current_row till row.high / row.low exceeds current_row.stop / current_row.profit
     # then I can compare those umber to find which will be hit first
@@ -197,6 +208,14 @@ def add_features(df, tf):
     df['stoch_num_trades_100'] = ind.stochastic(df.num_trades, 100).shift(1)
     df['stoch_num_trades_200'] = ind.stochastic(df.num_trades, 200).shift(1)
     df['inside_bar'] = ind.inside_bars(df).shift(1)
+    df['chan_mid_ratio_25'] = features.channel_mid_ratio(df, 25)
+    df['chan_mid_ratio_50'] = features.channel_mid_ratio(df, 50)
+    df['chan_mid_ratio_100'] = features.channel_mid_ratio(df, 100)
+    df['chan_mid_ratio_200'] = features.channel_mid_ratio(df, 200)
+    df['chan_mid_width_25'] = features.channel_mid_width(df, 25)
+    df['chan_mid_width_50'] = features.channel_mid_width(df, 50)
+    df['chan_mid_width_100'] = features.channel_mid_width(df, 100)
+    df['chan_mid_width_200'] = features.channel_mid_width(df, 200)
 
     df = df.copy()
 
@@ -261,7 +280,7 @@ def add_features(df, tf):
     return df
 
 
-def project_pnl(df, side, method, inval_lb) -> pd.DataFrame:
+def project_pnl(df, side, method) -> pd.DataFrame:
     start = time.perf_counter()
 
     res_list = []
@@ -270,7 +289,7 @@ def project_pnl(df, side, method, inval_lb) -> pd.DataFrame:
     if method['type'] == 'trail_fractal':
         res_list = trail_fractal(df, method['width'], method['atr_spacing'], side)
     if method['type'] == 'oco':
-        res_list = oco(df, method['r_multiple'], inval_lb, side)
+        res_list = oco(df, method['r_multiple'], side)
 
     elapsed = time.perf_counter() - start
     # print(f"project_pnl took {int(elapsed // 60)}m {elapsed % 60:.1f}s")
@@ -278,9 +297,7 @@ def project_pnl(df, side, method, inval_lb) -> pd.DataFrame:
     return pd.DataFrame(res_list).dropna(axis=0).reset_index(drop=True)
 
 
-def prepare_data(df, split_pct):
-    # split data into features and labels
-    # df = df.dropna(axis=0).reset_index(drop=True)
+def features_labels_split(df):
     X = df.drop(['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'quote_vol', 'num_trades',
                  'taker_buy_base_vol', 'taker_buy_quote_vol', 'vwma', 'pnl_pct', 'pnl_r', 'pnl_cat',
                  'atr-25', 'atr-50', 'atr-100', 'atr-200', 'ema_12', 'ema_25', 'ema_50', 'ema_100', 'ema_200',
@@ -288,29 +305,49 @@ def prepare_data(df, split_pct):
                 axis=1, errors='ignore')
     y = df.pnl_cat
     z = df.pnl_r
-    # print(X.describe())
 
-    # print(f"{len(y)} setups to test")
+    return X, y, z
 
-    # split into train and test sets for hold-out validation
-    # train_size = int(split_pct*len(X))
-    # X_train = X[:train_size, :]
-    # X_test = X[train_size:, :]
-    # y_train = y[:train_size]
-    # y_test = y[train_size:]
-    # z_test = z[train_size:]
 
-    cols = X.columns
-
-    # Train-test split
+def tt_split_rand(X, y, z, split_pct):
+    """split into train and test sets for hold-out validation"""
     X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=split_pct, random_state=11)
     _, _, _, z_test = train_test_split(X, z, train_size=split_pct, random_state=11)
 
+    return X_train, X_test, y_train, y_test, z_test
+
+
+def tt_split_bifurcate(X, y, z, split_pct):
+    """split into train and test sets for hold-out validation"""
+    train_size = int(split_pct*len(X))
+    X_train = X.iloc[:train_size]
+    X_test = X.iloc[train_size:]
+    y_train = y.iloc[:train_size]
+    y_test = y.iloc[train_size:]
+    z_test = z.iloc[train_size:]
+
+    return X_train, X_test, y_train, y_test, z_test
+
+
+def tt_split_idx(X, y, z, train_idxs, test_idxs):
+    """split into train and test sets for hold-out validation"""
+    X_train = X.iloc[train_idxs[0]:train_idxs[1]+1]
+    X_test = X.iloc[test_idxs[0]:test_idxs[1]+1]
+    y_train = y.iloc[train_idxs[0]:train_idxs[1]+1]
+    y_test = y.iloc[test_idxs[0]:test_idxs[1]+1]
+    z_test = z.iloc[test_idxs[0]:test_idxs[1]+1]
+
+    return X_train, X_test, y_train, y_test, z_test
+
+
+def transform_columns(X_train, X_test):
     # column transformation
     transformers = [
         ('minmax', MinMaxScaler(),
          ['vol_delta_pct', 'ema_25_roc', 'ema_50_roc', 'ema_100_roc', 'ema_200_roc', 'hma_25_roc', 'hma_50_roc',
-          'hma_100_roc', 'hma_200_roc', 'hour', 'hour_180', 'day_of_week', 'day_of_week_180']),
+          'hma_100_roc', 'hma_200_roc', 'hour', 'hour_180', 'day_of_week', 'day_of_week_180', 'chan_mid_ratio_25',
+          'chan_mid_ratio_50', 'chan_mid_ratio_100', 'chan_mid_ratio_200', 'chan_mid_width_25', 'chan_mid_width_50',
+          'chan_mid_width_100', 'chan_mid_width_200']),
         ('quantile', QuantileTransformer(),
          ['r_pct', 'ema_25_ratio', 'ema_50_ratio', 'ema_100_ratio', 'ema_200_ratio', 'hma_25_ratio', 'hma_50_ratio',
           'hma_100_ratio', 'hma_200_ratio', 'atr_5_pct', 'atr_10_pct', 'atr_25_pct', 'atr_50_pct'])
@@ -326,7 +363,7 @@ def prepare_data(df, split_pct):
     # X_train[:, discretised] = discretizer.fit_transform(X_train[:, discretised])
     # X_test[:, discretised] = discretizer.transform(X_test[:, discretised])
 
-    return X_train, X_test, y_train, y_test, z_test, cols
+    return X_train, X_test
 
 
 def train_knn(X_train, y_train):
@@ -361,6 +398,26 @@ def train_forest(X_train, y_train):
                                  param_distributions=param_dict,
                                  n_iter=60,
                                  scoring='precision',#fb_scorer, #
+                                 cv=3, n_jobs=-1)
+    rf_grid.fit(X_train, y_train)
+
+    return rf_grid
+
+
+def train_gbc(X_train, y_train):
+    param_dict = dict(
+        n_estimators=[100, 200, 300],
+        max_features=[2, 4, 8, 16, 32],
+        max_depth=[int(x) for x in np.linspace(start=4, stop=20, num=5)],
+        min_samples_split=[2, 4, 8],  # must be 2 or more
+        learning_rate=[0.01, 0.0333, 0.1, 0.333],
+        subsample=[0.125, 0.25, 0.5, 1.0]
+    )
+    fb_scorer = make_scorer(fbeta_score, beta=0.5, zero_division=0)
+    # rf_grid = GridSearchCV(estimator=pipe, param_grid=param_dict, scoring='precision', cv=3, n_jobs=-1)
+    rf_grid = RandomizedSearchCV(estimator=GradientBoostingClassifier(random_state=42),
+                                 param_distributions=param_dict,
+                                 n_iter=1200, # full test = 3600
                                  cv=3, n_jobs=-1)
     rf_grid.fit(X_train, y_train)
 
@@ -426,7 +483,7 @@ def best_features(grid, cols):
 
     # Get feature importances from the best estimator
     importances = best_estimator.feature_importances_
-    imp_df = pd.Series(importances, index=cols)  # .sort_values(0, ascending=False)
+    imp_df = pd.Series(importances, index=cols).sort_values(ascending=False)
     # print(f'Best Features: '
     #       f'1 {imp_df.index[0]}: {imp_df.iat[0, 0]:.2%}, '
     #       f'2 {imp_df.index[1]}: {imp_df.iat[1, 0]:.2%}, '
@@ -437,9 +494,7 @@ def best_features(grid, cols):
     return imp_df
 
 
-def backtest(model, X_test, y_test, z_test, min_conf=0.75):
-    y_pred = model.predict(X_test)
-    y_prob = model.predict_proba(X_test)[:, 1]
+def backtest(y_test, y_pred, y_prob, z_test, track_perf = False, min_conf=0.75, fr=0.01):
 
     results = pd.DataFrame(
         {'labels': y_test,
@@ -448,27 +503,22 @@ def backtest(model, X_test, y_test, z_test, min_conf=0.75):
          'pnl_r': z_test}
     ).reset_index(drop=True)
 
-    fr = 0.01
     start_cash = 1
 
+    results['pnl_r'] = results.pnl_r.clip(lower=-1)
     results['confidence'] = results.confidence * results.predictions
     results['confidence'] = results.confidence.where(results.confidence >= min_conf, 0)
     results['in_trade'] = results.confidence > 0
     results['open_trade'] = results.in_trade.diff()
     results['trades'] = results.confidence * results.pnl_r * results.open_trade
-    results['trade_pnl_mult'] = ((results.trades * fr) + 1).fillna(1)
-    results['pnl_curve'] = results.trade_pnl_mult.cumprod() * start_cash
+    if track_perf:
+        results['perf_score'] = (results.pnl_r > 0).astype(int).rolling(100).mean().shift()
+        results['trade_pnl_mult'] = ((results.trades * fr * results.perf_score) + 1).fillna(1)
+    else:
+        results['trade_pnl_mult'] = ((results.trades * fr) + 1).fillna(1)
+    results['pnl_curve'] = (results.trade_pnl_mult.cumprod() * start_cash) - 1
 
-    trades_taken = results.in_trade.sum()
-    winners = len(results.loc[results.trades > 0])
-    win_rate = winners / trades_taken
-
-    final_pnl = results.pnl_curve.iloc[-1] - 1
-
-    # print(
-    #     f"Final PnL: {final_pnl:.1%}, win rate: {win_rate:.1%}, from {trades_taken} trades, {len(results)} signals")
-
-    return {'pnl': final_pnl, 'win_rate': win_rate}
+    return results
 
 
 if __name__ == '__main__':
@@ -476,7 +526,6 @@ if __name__ == '__main__':
 
     features_dict = {}
 
-    inval_lookback = 2  # lowest low / the highest high for last 2 bars
     # exit_method = {'type': 'trail_atr', 'len': 2, 'mult': 2}
     exit_method = {'type': 'trail_fractal', 'width': 11, 'atr_spacing': 15}
     # exit_method = {'type': 'oco', 'r_multiple': 2}
@@ -487,10 +536,10 @@ if __name__ == '__main__':
 
     sides = ['long', 'short']
     timeframes = {
-        '1d': {'frac_widths': [3, 5, 7], 'atr_spacings': [1, 2, 3, 4], 'num_pairs': 60, 'data_len': 50},
-        '12h': {'frac_widths': [3, 5, 7], 'atr_spacings': [1, 2, 4, 8], 'num_pairs': 50, 'data_len': 75},
-        '4h': {'frac_widths': [3, 5, 7, 9], 'atr_spacings': [1, 2, 4, 8, 16], 'num_pairs': 40, 'data_len': 100},
-        '1h': {'frac_widths': [3, 5, 7, 9], 'atr_spacings': [1, 2, 4, 8, 16], 'num_pairs': 30, 'data_len': 200},
+        '1d': {'frac_widths': [3, 5, 7], 'atr_spacings': [1, 2, 3, 4], 'num_pairs': 100, 'data_len': 50},
+        '12h': {'frac_widths': [3, 5, 7], 'atr_spacings': [1, 2, 4, 8], 'num_pairs': 66, 'data_len': 75},
+        '4h': {'frac_widths': [3, 5, 7, 9], 'atr_spacings': [1, 2, 4, 8, 16], 'num_pairs': 50, 'data_len': 100},
+        '1h': {'frac_widths': [3, 5, 7, 9], 'atr_spacings': [1, 2, 4, 8, 16], 'num_pairs': 25, 'data_len': 200},
     }
 
 
@@ -505,9 +554,9 @@ if __name__ == '__main__':
         data_len = timeframes[timeframe]['data_len']
         num_pairs = timeframes[timeframe]['num_pairs']
         pairs = rank_pairs()[:num_pairs]
-        print(pairs)
+        # print(pairs)
 
-        res_path = Path(f'results/{side}_{timeframe}_top{num_pairs}.parquet')
+        res_path = Path(f'gbc_results/{side}_{timeframe}_top{num_pairs}.parquet')
         if res_path.exists():
             print('Results already present, skipping tests')
             continue
@@ -524,18 +573,25 @@ if __name__ == '__main__':
                 df_loop = df.copy()
                 exit_method['width'] = frac_width
                 exit_method['atr_spacing'] = spacing
-                res_df = project_pnl(df_loop, side, exit_method, inval_lookback)
+                res_df = project_pnl(df_loop, side, exit_method)
                 all_res = pd.concat([all_res, res_df], axis=0)
 
-            X_train, X_test, y_train, y_test, z_test, cols = prepare_data(all_res, 0.9)
+            X, y, z = features_labels_split(all_res)
+            X_train, X_test, y_train, y_test, z_test = tt_split_bifurcate(X, y, z, 0.75)
+            X_train, X_test = transform_columns(X_train, X_test)
 
             try:
+                train_start = time.perf_counter()
                 # model = train_knn(X_train, y_train)
-                model = train_forest(X_train, y_train)
+                model = train_gbc(X_train, y_train)
                 # model = train_vc(X_train, y_train)
+                train_end = time.perf_counter()
+                train_elapsed = train_end - train_start
+                print(f"Training time taken: {int(train_elapsed // 60)}m {train_elapsed % 60:.1f}s")
             except ValueError as e:
-                # print(
-                #     f"{side}, {timeframe}, {frac_width = }, {spacing = }, ValueError raised, skipping to next test.\n")
+                print(
+                    f"{side}, {timeframe}, {frac_width = }, {spacing = }, ValueError raised, skipping to next test.\n")
+                print(e.args)
                 continue
 
             test_balance = Counter(y_test)
@@ -548,7 +604,7 @@ if __name__ == '__main__':
                 # print(f'ValueError while calculating scores on {pair}, skipping to next test.')
                 continue
             # guess_scores = analyse_results(model, X_test, y_test, guess=True)
-            imp_df = best_features(model, cols)
+            imp_df = best_features(model, X.columns)
 
             # print(f"\n{side}, {timeframe}, {frac_width = }, {spacing = }, "
             #       f"precision: {scores['precision']:.1%}, "
@@ -558,13 +614,29 @@ if __name__ == '__main__':
             #       f"pos predictions: {scores['true_pos'] + scores['false_pos']}, "
             #       f"neg predictions: {scores['true_neg'] + scores['false_neg']}"
             #       )
-            test_pnl = backtest(model, X_test, y_test, z_test)
+
+            y_pred = model.predict(X_test)
+            y_prob = model.predict_proba(X_test)[:, 1]
+            bt_results = backtest(y_test, y_pred, y_prob, z_test)
+            trades_taken = bt_results.in_trade.sum()
+            winners = len(bt_results.loc[bt_results.trades > 0])
+            if trades_taken:
+                win_rate = winners / trades_taken
+            else:
+                win_rate = 0
+            final_pnl = bt_results.pnl_curve.iloc[-1]
+            # print(f"Final PnL: {final_pnl:.1%}, win rate: {win_rate:.1%}, from {trades_taken} trades, "
+            #       f"{len(bt_results)} signals")
 
             res_dict = dict(
                 timeframe=timeframe,
                 frac_width=frac_width,
                 spacing=spacing,
                 side=side,
+                pnl=final_pnl,
+                win_rate=win_rate,
+                trades_taken=trades_taken,
+                pos_preds=scores['true_pos'] + scores['false_pos'],
                 feature_1=imp_df.index[0],
                 feature_2=imp_df.index[1],
                 feature_3=imp_df.index[2],
@@ -572,15 +644,18 @@ if __name__ == '__main__':
                 feature_5=imp_df.index[4],
                 feature_6=imp_df.index[5],
                 feature_7=imp_df.index[6],
-                feature_8=imp_df.index[7],
-                pos_preds=scores['true_pos'] + scores['false_pos']
-            ) | scores | model.best_params_ | test_balance | test_pnl
+                feature_8=imp_df.index[7]
+            ) | scores | model.best_params_ | test_balance
 
             res_list.append(res_dict)
 
         final_results = pd.DataFrame(res_list)
         final_results.to_parquet(path=res_path)
-        print(final_results.sort_values('precision').head())
+        try:
+            print(final_results.loc[final_results.trades_taken > 30].sort_values('pnl', ascending=False).head())
+        except KeyError:
+            print("KeyError raised, probably an empty results df. moving on")
+            continue
 
         loop_end = time.perf_counter()
         loop_elapsed = loop_end - loop_start
