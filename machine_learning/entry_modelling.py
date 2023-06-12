@@ -309,7 +309,7 @@ def features_labels_split(df):
     return X, y, z
 
 
-def tt_split_rand(X, y, z, split_pct):
+def tt_split_rand(X: pd.DataFrame, y: pd.Series, z: pd.Series, split_pct: float) -> tuple:
     """split into train and test sets for hold-out validation"""
     X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=split_pct, random_state=11)
     _, _, _, z_test = train_test_split(X, z, train_size=split_pct, random_state=11)
@@ -317,7 +317,7 @@ def tt_split_rand(X, y, z, split_pct):
     return X_train, X_test, y_train, y_test, z_test
 
 
-def tt_split_bifurcate(X, y, z, split_pct):
+def tt_split_bifurcate(X: pd.DataFrame, y: pd.Series, z: pd.Series, split_pct: float) -> tuple:
     """split into train and test sets for hold-out validation"""
     train_size = int(split_pct*len(X))
     X_train = X.iloc[:train_size]
@@ -415,9 +415,12 @@ def train_gbc(X_train, y_train):
     )
     fb_scorer = make_scorer(fbeta_score, beta=0.5, zero_division=0)
     # rf_grid = GridSearchCV(estimator=pipe, param_grid=param_dict, scoring='precision', cv=3, n_jobs=-1)
-    rf_grid = RandomizedSearchCV(estimator=GradientBoostingClassifier(random_state=42),
+    rf_grid = RandomizedSearchCV(estimator=GradientBoostingClassifier(random_state=42,
+                                                                      validation_fraction=0.1,
+                                                                      n_iter_no_change=5),
                                  param_distributions=param_dict,
-                                 n_iter=1200, # full test = 3600
+                                 scoring='precision',
+                                 n_iter=3600, # full test = 3600
                                  cv=3, n_jobs=-1)
     rf_grid.fit(X_train, y_train)
 
@@ -536,10 +539,10 @@ if __name__ == '__main__':
 
     sides = ['long', 'short']
     timeframes = {
-        # '1d': {'frac_widths': [3, 5, 7], 'atr_spacings': [1, 2, 3, 4], 'num_pairs': 100, 'data_len': 50},
-        # '12h': {'frac_widths': [3, 5, 7], 'atr_spacings': [1, 2, 4, 8], 'num_pairs': 66, 'data_len': 75},
-        # '4h': {'frac_widths': [3, 5, 7, 9], 'atr_spacings': [1, 2, 4, 8, 16], 'num_pairs': 50, 'data_len': 100},
-        '1h': {'frac_widths': [3, 5, 7, 9], 'atr_spacings': [1, 2, 4, 8, 16], 'num_pairs': 25, 'data_len': 200},
+        '1d': {'frac_widths': [3], 'atr_spacings': [2], 'num_pairs': 100, 'data_len': 100},
+        '12h': {'frac_widths': [3], 'atr_spacings': [2], 'num_pairs': 66, 'data_len': 150},
+        '4h': {'frac_widths': [3, 5, 7], 'atr_spacings': [1, 2], 'num_pairs': 50, 'data_len': 200},
+        # '1h': {'frac_widths': [5, 7], 'atr_spacings': [2, 4, 8], 'num_pairs': 25, 'data_len': 400},
     }
 
 
@@ -579,6 +582,11 @@ if __name__ == '__main__':
             X, y, z = features_labels_split(all_res)
             X_train, X_test, y_train, y_test, z_test = tt_split_bifurcate(X, y, z, 0.75)
             X_train, X_test = transform_columns(X_train, X_test)
+
+            if y_test.value_counts().loc[1] < 30:
+                print(f'{side} {timeframe} {frac_width} {spacing} '
+                      f'Not enough positive values to reliably predict, skipping training')
+                continue
 
             try:
                 train_start = time.perf_counter()
