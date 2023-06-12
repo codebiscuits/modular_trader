@@ -536,9 +536,9 @@ if __name__ == '__main__':
 
     sides = ['long', 'short']
     timeframes = {
-        '1d': {'frac_widths': [3, 5, 7], 'atr_spacings': [1, 2, 3, 4], 'num_pairs': 100, 'data_len': 50},
-        '12h': {'frac_widths': [3, 5, 7], 'atr_spacings': [1, 2, 4, 8], 'num_pairs': 66, 'data_len': 75},
-        '4h': {'frac_widths': [3, 5, 7, 9], 'atr_spacings': [1, 2, 4, 8, 16], 'num_pairs': 50, 'data_len': 100},
+        # '1d': {'frac_widths': [3, 5, 7], 'atr_spacings': [1, 2, 3, 4], 'num_pairs': 100, 'data_len': 50},
+        # '12h': {'frac_widths': [3, 5, 7], 'atr_spacings': [1, 2, 4, 8], 'num_pairs': 66, 'data_len': 75},
+        # '4h': {'frac_widths': [3, 5, 7, 9], 'atr_spacings': [1, 2, 4, 8, 16], 'num_pairs': 50, 'data_len': 100},
         '1h': {'frac_widths': [3, 5, 7, 9], 'atr_spacings': [1, 2, 4, 8, 16], 'num_pairs': 25, 'data_len': 200},
     }
 
@@ -556,7 +556,7 @@ if __name__ == '__main__':
         pairs = rank_pairs()[:num_pairs]
         # print(pairs)
 
-        res_path = Path(f'gbc_results/{side}_{timeframe}_top{num_pairs}.parquet')
+        res_path = Path(f'gbc_results/cv-1200_{side}_{timeframe}_top{num_pairs}.parquet')
         if res_path.exists():
             print('Results already present, skipping tests')
             continue
@@ -624,6 +624,8 @@ if __name__ == '__main__':
                 win_rate = winners / trades_taken
             else:
                 win_rate = 0
+            mean_pnl = bt_results.trades.mean()
+            med_pnl = bt_results.trades.median()
             final_pnl = bt_results.pnl_curve.iloc[-1]
             # print(f"Final PnL: {final_pnl:.1%}, win rate: {win_rate:.1%}, from {trades_taken} trades, "
             #       f"{len(bt_results)} signals")
@@ -634,6 +636,8 @@ if __name__ == '__main__':
                 spacing=spacing,
                 side=side,
                 pnl=final_pnl,
+                mean_trade=mean_pnl,
+                med_trade=med_pnl,
                 win_rate=win_rate,
                 trades_taken=trades_taken,
                 pos_preds=scores['true_pos'] + scores['false_pos'],
