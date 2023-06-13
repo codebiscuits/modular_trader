@@ -633,6 +633,8 @@ if __name__ == '__main__':
                 win_rate = winners / trades_taken
             else:
                 win_rate = 0
+            mean_pnl = bt_results.trades.mean()
+            med_pnl = bt_results.trades.median()
             final_pnl = bt_results.pnl_curve.iloc[-1]
             # print(f"Final PnL: {final_pnl:.1%}, win rate: {win_rate:.1%}, from {trades_taken} trades, "
             #       f"{len(bt_results)} signals")
@@ -643,6 +645,8 @@ if __name__ == '__main__':
                 spacing=spacing,
                 side=side,
                 pnl=final_pnl,
+                mean_trade=mean_pnl,
+                med_trade=med_pnl,
                 win_rate=win_rate,
                 trades_taken=trades_taken,
                 pos_preds=scores['true_pos'] + scores['false_pos'],
