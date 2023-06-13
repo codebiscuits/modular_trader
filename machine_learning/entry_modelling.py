@@ -677,3 +677,4 @@ if __name__ == '__main__':
     all_end = time.perf_counter()
     elapsed = all_end - all_start
     print(f"\n\nTotal time taken: {int(elapsed // 60)}m {elapsed % 60:.1f}s")
+
