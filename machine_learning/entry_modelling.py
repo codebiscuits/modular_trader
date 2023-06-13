@@ -27,6 +27,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, fbeta_score
 from sklearn.metrics import confusion_matrix, roc_auc_score, roc_curve, make_scorer
+from sklearn.inspection import permutation_importance
 
 # print(get_patch_names())
 
@@ -406,21 +407,21 @@ def train_forest(X_train, y_train):
 
 def train_gbc(X_train, y_train):
     param_dict = dict(
-        n_estimators=[100, 200, 300],
-        max_features=[2, 4, 8, 16, 32],
+        # max_features=[2, 4, 8, 16, 32],
         max_depth=[int(x) for x in np.linspace(start=4, stop=20, num=5)],
         min_samples_split=[2, 4, 8],  # must be 2 or more
-        learning_rate=[0.01, 0.0333, 0.1, 0.333],
+        learning_rate=[0.05, 0.1],
         subsample=[0.125, 0.25, 0.5, 1.0]
     )
-    fb_scorer = make_scorer(fbeta_score, beta=0.5, zero_division=0)
+    fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
     # rf_grid = GridSearchCV(estimator=pipe, param_grid=param_dict, scoring='precision', cv=3, n_jobs=-1)
     rf_grid = RandomizedSearchCV(estimator=GradientBoostingClassifier(random_state=42,
+                                                                      n_estimators=1000,
                                                                       validation_fraction=0.1,
                                                                       n_iter_no_change=5),
                                  param_distributions=param_dict,
-                                 scoring='precision',
-                                 n_iter=3600, # full test = 3600
+                                 scoring=fb_scorer,
+                                 n_iter=120, # full test = 3600
                                  cv=3, n_jobs=-1)
     rf_grid.fit(X_train, y_train)
 
@@ -484,15 +485,13 @@ def best_features(grid, cols):
     # Get the best estimator from the grid search
     best_estimator = grid.best_estimator_
 
-    # Get feature importances from the best estimator
-    importances = best_estimator.feature_importances_
-    imp_df = pd.Series(importances, index=cols).sort_values(ascending=False)
-    # print(f'Best Features: '
-    #       f'1 {imp_df.index[0]}: {imp_df.iat[0, 0]:.2%}, '
-    #       f'2 {imp_df.index[1]}: {imp_df.iat[1, 0]:.2%}, '
-    #       f'3 {imp_df.index[2]}: {imp_df.iat[2, 0]:.2%}, '
-    #       f'4 {imp_df.index[3]}: {imp_df.iat[3, 0]:.2%}, '
-    #       f'5 {imp_df.index[4]}: {imp_df.iat[4, 0]:.2%}')
+    # # Get MDI feature importances from the best estimator
+    # importances = best_estimator.feature_importances_
+    # imp_df = pd.Series(importances, index=cols).sort_values(ascending=False)
+
+    # get permutation-based feature importances
+    importances = permutation_importance(best_estimator, X_test, y_test, n_repeats=10, random_state=42, n_jobs=-1)
+    imp_df = pd.Series(importances.importances_mean, index=X.columns)
 
     return imp_df
 
@@ -542,7 +541,7 @@ if __name__ == '__main__':
         '1d': {'frac_widths': [3], 'atr_spacings': [2], 'num_pairs': 100, 'data_len': 100},
         '12h': {'frac_widths': [3], 'atr_spacings': [2], 'num_pairs': 66, 'data_len': 150},
         '4h': {'frac_widths': [3, 5, 7], 'atr_spacings': [1, 2], 'num_pairs': 50, 'data_len': 200},
-        # '1h': {'frac_widths': [5, 7], 'atr_spacings': [2, 4, 8], 'num_pairs': 25, 'data_len': 400},
+        '1h': {'frac_widths': [5, 7], 'atr_spacings': [2, 4, 8], 'num_pairs': 25, 'data_len': 400},
     }
 
 
@@ -559,7 +558,7 @@ if __name__ == '__main__':
         pairs = rank_pairs()[:num_pairs]
         # print(pairs)
 
-        res_path = Path(f'gbc_results/cv-1200_{side}_{timeframe}_top{num_pairs}.parquet')
+        res_path = Path(f'gbc_results/cv-120_{side}_{timeframe}_top{num_pairs}.parquet')
         if res_path.exists():
             print('Results already present, skipping tests')
             continue
@@ -587,6 +586,8 @@ if __name__ == '__main__':
                 print(f'{side} {timeframe} {frac_width} {spacing} '
                       f'Not enough positive values to reliably predict, skipping training')
                 continue
+
+            print(f"Fitting model for {frac_width = } {spacing = }. {len(y_train)} observations in training set.")
 
             try:
                 train_start = time.perf_counter()
