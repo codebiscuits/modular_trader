@@ -5,7 +5,7 @@ import keys
 from binance import Client
 from pathlib import Path
 import indicators as ind
-import features
+import machine_learning.features as features
 import binance_funcs as funcs
 import numpy as np
 import json
@@ -28,6 +28,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, fbeta_score
 from sklearn.metrics import confusion_matrix, roc_auc_score, roc_curve, make_scorer
 from sklearn.inspection import permutation_importance
+from imblearn.under_sampling import RandomUnderSampler
 
 # print(get_patch_names())
 
@@ -491,7 +492,7 @@ def best_features(grid, cols):
 
     # get permutation-based feature importances
     importances = permutation_importance(best_estimator, X_test, y_test, n_repeats=10, random_state=42, n_jobs=-1)
-    imp_df = pd.Series(importances.importances_mean, index=X.columns)
+    imp_df = pd.Series(importances.importances_mean, index=cols).sort_values(ascending=False)
 
     return imp_df
 
@@ -533,7 +534,7 @@ if __name__ == '__main__':
     # exit_method = {'type': 'oco', 'r_multiple': 2}
 
     # pairs = ['ETHUSDT']
-    # sides = ['short']
+    sides = ['short']
     # timeframes = ['1d']
 
     sides = ['long', 'short']
@@ -558,7 +559,7 @@ if __name__ == '__main__':
         pairs = rank_pairs()[:num_pairs]
         # print(pairs)
 
-        res_path = Path(f'gbc_results/cv-120_{side}_{timeframe}_top{num_pairs}.parquet')
+        res_path = Path(f'gbc_results/fi-test_{side}_{timeframe}_top{num_pairs}.parquet')
         if res_path.exists():
             print('Results already present, skipping tests')
             continue
@@ -581,6 +582,12 @@ if __name__ == '__main__':
             X, y, z = features_labels_split(all_res)
             X_train, X_test, y_train, y_test, z_test = tt_split_bifurcate(X, y, z, 0.75)
             X_train, X_test = transform_columns(X_train, X_test)
+
+            # balancing classes/prototype selection
+            # print(f"{y_train.value_counts() = }")
+            rus = RandomUnderSampler(random_state=0)
+            X_train, y_train = rus.fit_resample(X_train, y_train)
+            # print(f"{y_train.value_counts() = }")
 
             if y_test.value_counts().loc[1] < 30:
                 print(f'{side} {timeframe} {frac_width} {spacing} '
@@ -614,6 +621,7 @@ if __name__ == '__main__':
                 continue
             # guess_scores = analyse_results(model, X_test, y_test, guess=True)
             imp_df = best_features(model, X.columns)
+            # print(imp_df.head(8))
 
             # print(f"\n{side}, {timeframe}, {frac_width = }, {spacing = }, "
             #       f"precision: {scores['precision']:.1%}, "
@@ -633,8 +641,8 @@ if __name__ == '__main__':
                 win_rate = winners / trades_taken
             else:
                 win_rate = 0
-            mean_pnl = bt_results.trades.mean()
-            med_pnl = bt_results.trades.median()
+            mean_pnl = bt_results.trades.loc[bt_results.open_trade.astype(bool)].mean()
+            med_pnl = bt_results.trades.loc[bt_results.open_trade.astype(bool)].median()
             final_pnl = bt_results.pnl_curve.iloc[-1]
             # print(f"Final PnL: {final_pnl:.1%}, win rate: {win_rate:.1%}, from {trades_taken} trades, "
             #       f"{len(bt_results)} signals")
@@ -651,13 +659,21 @@ if __name__ == '__main__':
                 trades_taken=trades_taken,
                 pos_preds=scores['true_pos'] + scores['false_pos'],
                 feature_1=imp_df.index[0],
+                imp_1=imp_df.iloc[0],
                 feature_2=imp_df.index[1],
+                imp_2=imp_df.iloc[1],
                 feature_3=imp_df.index[2],
+                imp_3=imp_df.iloc[2],
                 feature_4=imp_df.index[3],
+                imp_4=imp_df.iloc[3],
                 feature_5=imp_df.index[4],
+                imp_5=imp_df.iloc[4],
                 feature_6=imp_df.index[5],
+                imp_6=imp_df.iloc[5],
                 feature_7=imp_df.index[6],
-                feature_8=imp_df.index[7]
+                imp_7=imp_df.iloc[6],
+                feature_8=imp_df.index[7],
+                imp_8=imp_df.iloc[7]
             ) | scores | model.best_params_ | test_balance
 
             res_list.append(res_dict)
