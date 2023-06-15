@@ -512,7 +512,7 @@ def backtest(y_test, y_pred, y_prob, z_test, track_perf = False, min_conf=0.75, 
     results['confidence'] = results.confidence * results.predictions
     results['confidence'] = results.confidence.where(results.confidence >= min_conf, 0)
     results['in_trade'] = results.confidence > 0
-    results['open_trade'] = results.in_trade.diff()
+    results['open_trade'] = results.in_trade & results.in_trade.diff()
     results['trades'] = results.confidence * results.pnl_r * results.open_trade
     if track_perf:
         results['perf_score'] = (results.pnl_r > 0).astype(int).rolling(100).mean().shift()

@@ -75,8 +75,10 @@ class TradingSession():
         self.margin_usdt_bal = self.get_usdt_m()
         self.check_fees()
         # self.check_margin_lvl()
-        self.top_up_bnb_s(15)
-        self.top_up_bnb_m(15)
+        if self.spot_bal > 30:
+            self.top_up_bnb_s(15)
+        if self.margin_bal > 30:
+            self.top_up_bnb_m(15)
 
         # load local data and configure settings
         self.market_data_read, self.market_data_write = self.mkt_data_path()
@@ -681,7 +683,10 @@ class TradingSession():
         locked = bal['locked']
 
         value = round((free + locked), 2)
-        pct = round((100 * value / self.spot_bal), 5)
+        if self.spot_bal:
+            pct = round((100 * value / self.spot_bal), 5)
+        else:
+            pct = 0
         # print(f'spot usdt stats: qty = {bal.get("free")}, {value = }, {pct = }, {self.spot_bal = }')
 
         return {'qty': free, 'value': value, 'pf%': pct}
@@ -695,7 +700,10 @@ class TradingSession():
         qty = (self.spot_bals['USDT'].get('qty')) + up - down
         value = round(self.spot_bals['USDT'].get('value') + up - down, 2)
 
-        pct = round(100 * value / self.spot_bal, 5)
+        if self.spot_bal:
+            pct = round((100 * value / self.spot_bal), 5)
+        else:
+            pct = 0
 
         self.spot_bals['USDT'] = {'qty': float(qty), 'value': float(value), 'pf%': float(pct)}
 
@@ -798,7 +806,10 @@ class TradingSession():
         qty = float(bal.get('free'))
 
         value = round(net, 2)
-        pct = round(100 * value / self.margin_bal, 5)
+        if self.spot_bal:
+            pct = round((100 * value / self.margin_bal), 5)
+        else:
+            pct = 0
         # print(f'margin usdt stats: qty = {bal.get("free")}, owed = {bal.get("borrowed")}, {value = }, {pct = }, {self.margin_bal = }')
         um.stop()
         return {'qty': qty, 'owed': owed, 'value': value, 'pf%': pct}
@@ -814,7 +825,10 @@ class TradingSession():
         value = self.margin_usdt_bal.get('value') + up - down - borrow + repay
         owed = self.margin_usdt_bal.get('owed') + borrow - repay
 
-        pct = round(100 * value / self.margin_bal, 5)
+        if self.spot_bal:
+            pct = round((100 * value / self.margin_bal), 5)
+        else:
+            pct = 0
 
         # print(f'usdt stats: {qty = }, {owed = }, {value = }, {pct = }, {self.margin_bal = }')
         self.margin_usdt_bal = {'qty': float(qty), 'owed': float(owed), 'value': float(value), 'pf%': float(pct)}
