@@ -371,13 +371,14 @@ def transform_columns(X_train, X_test):
 def train_knn(X_train, y_train):
     param_dict = dict(
         # model__n_estimators=[100, 200, 300],#[int(x) for x in np.linspace(start=10, stop=200, num=7)],
-        n_neighbors=[2, 4, 6, 8, 10],
+        n_neighbors=[3, 5, 7, 9, 11, 13, 15, 17, 19, 21],
+        metric=['euclidean', 'manhattan', 'minkowski'],
         weights=['uniform', 'distance']
     )
     # rf_grid = GridSearchCV(estimator=pipe, param_grid=param_dict, scoring='precision', cv=3, n_jobs=-1)
     rf_grid = RandomizedSearchCV(estimator=KNeighborsClassifier(n_jobs=-1),
                                  param_distributions=param_dict,
-                                 n_iter=10,
+                                 n_iter=60,
                                  scoring='precision',
                                  cv=3, n_jobs=-1)
     rf_grid.fit(X_train, y_train)
@@ -385,7 +386,7 @@ def train_knn(X_train, y_train):
     return rf_grid
 
 
-def train_forest(X_train, y_train):
+def train_rfc(X_train, y_train):
     param_dict = dict(
         # model__n_estimators=[100, 200, 300],#[int(x) for x in np.linspace(start=10, stop=200, num=7)],
         max_features=[4, 6, 8, 10],
@@ -485,13 +486,14 @@ def calc_scores(model, X_test, y_test, guess=False):
 def best_features(grid, cols):
     # Get the best estimator from the grid search
     best_estimator = grid.best_estimator_
+    fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
 
     # # Get MDI feature importances from the best estimator
     # importances = best_estimator.feature_importances_
     # imp_df = pd.Series(importances, index=cols).sort_values(ascending=False)
 
     # get permutation-based feature importances
-    importances = permutation_importance(best_estimator, X_test, y_test, n_repeats=10, random_state=42, n_jobs=-1)
+    importances = permutation_importance(best_estimator, X_test, y_test, scoring=fb_scorer, n_repeats=100, random_state=42, n_jobs=-1)
     imp_df = pd.Series(importances.importances_mean, index=cols).sort_values(ascending=False)
 
     return imp_df
@@ -537,17 +539,18 @@ if __name__ == '__main__':
     sides = ['short']
     # timeframes = ['1d']
 
+    algorithms = ['knn', 'rfc', 'gbc']
     sides = ['long', 'short']
     timeframes = {
-        '1d': {'frac_widths': [3], 'atr_spacings': [2], 'num_pairs': 100, 'data_len': 100},
-        '12h': {'frac_widths': [3], 'atr_spacings': [2], 'num_pairs': 66, 'data_len': 150},
-        '4h': {'frac_widths': [3, 5, 7], 'atr_spacings': [1, 2], 'num_pairs': 50, 'data_len': 200},
-        '1h': {'frac_widths': [5, 7], 'atr_spacings': [2, 4, 8], 'num_pairs': 25, 'data_len': 400},
+        '1d': {'frac_widths': [3, 5], 'atr_spacings': [1, 2], 'num_pairs': 100, 'data_len': 100},
+        '12h': {'frac_widths': [3, 5], 'atr_spacings': [1, 2], 'num_pairs': 66, 'data_len': 150},
+        '4h': {'frac_widths': [3, 5], 'atr_spacings': [1, 2], 'num_pairs': 50, 'data_len': 200},
+        '1h': {'frac_widths': [3, 5], 'atr_spacings': [1, 2], 'num_pairs': 25, 'data_len': 400},
     }
 
 
-    for side, timeframe in product(sides, timeframes):
-        print(f"\nTesting {side} {timeframe}")
+    for algo, balanced, side, timeframe in product(algorithms, [True, False], sides, timeframes):
+        print(f"\nTesting {algo} {'balanced' if balanced else 'unbalanced'} {side} {timeframe}")
         loop_start = time.perf_counter()
 
         frac_widths = timeframes[timeframe]['frac_widths']
@@ -559,7 +562,9 @@ if __name__ == '__main__':
         pairs = rank_pairs()[:num_pairs]
         # print(pairs)
 
-        res_path = Path(f'gbc_results/fi-test_{side}_{timeframe}_top{num_pairs}.parquet')
+        res_folders = Path(f"{algo}_results/{'balanced' if balanced else 'unbalanced'}")
+        res_folders.mkdir(parents=True, exist_ok=True)
+        res_path = Path(f"{res_folders}/{side}_{timeframe}_top{num_pairs}.parquet")
         if res_path.exists():
             print('Results already present, skipping tests')
             continue
@@ -584,22 +589,26 @@ if __name__ == '__main__':
             X_train, X_test = transform_columns(X_train, X_test)
 
             # balancing classes/prototype selection
-            # print(f"{y_train.value_counts() = }")
-            rus = RandomUnderSampler(random_state=0)
-            X_train, y_train = rus.fit_resample(X_train, y_train)
-            # print(f"{y_train.value_counts() = }")
+            if balanced:
+                rus = RandomUnderSampler(random_state=0)
+                X_train, y_train = rus.fit_resample(X_train, y_train)
 
             if y_test.value_counts().loc[1] < 30:
                 print(f'{side} {timeframe} {frac_width} {spacing} '
                       f'Not enough positive values to reliably predict, skipping training')
                 continue
 
-            print(f"Fitting model for {frac_width = } {spacing = }. {len(y_train)} observations in training set.")
+            print(f"Fitting model for {algo} {'balanced' if balanced else 'unbalanced'} {frac_width = } {spacing = }. "
+                  f"{len(y_train)} observations in training set.")
 
             try:
                 train_start = time.perf_counter()
-                # model = train_knn(X_train, y_train)
-                model = train_gbc(X_train, y_train)
+                if algo == 'knn':
+                    model = train_knn(X_train, y_train)
+                elif algo == 'rfc':
+                    model = train_rfc(X_train, y_train)
+                elif algo == 'gbc':
+                    model = train_gbc(X_train, y_train)
                 # model = train_vc(X_train, y_train)
                 train_end = time.perf_counter()
                 train_elapsed = train_end - train_start

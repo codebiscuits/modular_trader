@@ -125,11 +125,11 @@ def vol_delta_div(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
     """adds a boolean series to the dataframe representing whether there was a volume delta divergence at any time
     during the lookback period"""
     roc: pd.Series = df.close.pct_change(1)
-    if not 'vol_delta' in df.columns:
+    if 'vol_delta' not in df.columns:
         df['vol_delta'] = ind.vol_delta(df)
 
-    vd_div_a = (roc > 0) & (0 > df.vol_delta)
-    vd_div_b = (roc < 0) & (0 < df.vol_delta)
+    vd_div_a = (roc > 0) & (df.vol_delta < 0)
+    vd_div_b = (roc < 0) & (df.vol_delta > 0)
     vd_div = vd_div_a | vd_div_b
 
     df[f'recent_vd_div_{lookback}'] = vd_div.shift(1).rolling(lookback).sum() > 0

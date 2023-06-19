@@ -49,8 +49,8 @@ X, y, z = em.features_labels_split(all_res)
 X_train, X_test, y_train, y_test, z_test = em.tt_split_rand(X, y, z, 0.9)
 X_train, X_test = em.transform_columns(X_train, X_test)
 
-rus = RandomUnderSampler(random_state=0)
-X_train, y_train = rus.fit_resample(X_train, y_train)
+# rus = RandomUnderSampler(random_state=0)
+# X_train, y_train = rus.fit_resample(X_train, y_train)
 
 # model = RandomForestClassifier(class_weight='balanced', n_estimators=300, min_samples_split=4, min_samples_leaf=4,
 #                                max_features=10, max_depth=20, n_jobs=-1)
