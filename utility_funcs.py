@@ -120,9 +120,9 @@ def get_market_state(session, agent, pair, data: pd.DataFrame) -> dict[str, floa
         market_rank_1w = session.market_ranks.at[pair, 'rank_1w']
         market_rank_1m = session.market_ranks.at[pair, 'rank_1m']
     except KeyError:
-        market_rank_1d = None
-        market_rank_1w = None
-        market_rank_1m = None
+        market_rank_1d = 1
+        market_rank_1w = 1
+        market_rank_1m = 1
 
     if hasattr(agent, 'cross_age_name'):
         cross_age = int(data[agent.cross_age_name].iloc[-1])

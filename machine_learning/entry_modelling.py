@@ -38,7 +38,13 @@ from imblearn.under_sampling import RandomUnderSampler
 #  svc all stacked into a random forest, or maybe those four or others all going into a voting classifier
 # TODO to speed everything up, i should try to use nvidia RAPIDS
 
+# TODO add features based on alternative data like spread, book imbalance, on-chain metrics etc
+# TODO add features from higher timeframes like weekly rsi, weekly s/r channel etc
+
 all_start = time.perf_counter()
+
+# I must remember that i am performing column transformation outside cross-validation. if real-world performance ends up
+# being significantly worse than this stage's performance, i should try to get the column transformer inside the cv.
 
 pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
@@ -268,10 +274,10 @@ def add_features(df, tf):
     df = features.engulfing(df, 3)
     df = features.doji(df, 0.5, 2)
     df = features.bull_bear_bar(df)
-    df = ind.ema_breakout(df, 12, 25)
-    df = ind.ema_breakout(df, 25, 50)
-    df = ind.ema_breakout(df, 50, 100)
-    df = ind.ema_breakout(df, 100, 200)
+    df = features.ema_breakout(df, 12, 25)
+    df = features.ema_breakout(df, 25, 50)
+    df = features.ema_breakout(df, 50, 100)
+    df = features.ema_breakout(df, 100, 200)
     df = features.atr_pct(df, 5)
     df = features.atr_pct(df, 10)
     df = features.atr_pct(df, 25)
@@ -319,25 +325,48 @@ def tt_split_rand(X: pd.DataFrame, y: pd.Series, z: pd.Series, split_pct: float)
     return X_train, X_test, y_train, y_test, z_test
 
 
-def tt_split_bifurcate(X: pd.DataFrame, y: pd.Series, z: pd.Series, split_pct: float) -> tuple:
+def tt_split_bifurcate(X: pd.DataFrame | np.ndarray, y: pd.Series | np.ndarray, z: pd.Series | np.ndarray, split_pct: float) -> tuple:
     """split into train and test sets for hold-out validation"""
     train_size = int(split_pct*len(X))
-    X_train = X.iloc[:train_size]
-    X_test = X.iloc[train_size:]
-    y_train = y.iloc[:train_size]
-    y_test = y.iloc[train_size:]
-    z_test = z.iloc[train_size:]
+    if isinstance(X, pd.DataFrame):
+        X_train = X.iloc[:train_size]
+        X_test = X.iloc[train_size:]
+    else:
+        X_train = X[:train_size, :]
+        X_test = X[train_size:, :]
+    if isinstance(y, pd.Series):
+        y_train = y.iloc[:train_size]
+        y_test = y.iloc[train_size:]
+    else:
+        y_train = y[:train_size, :]
+        y_test = y[train_size:, :]
+    if isinstance(z, pd.Series):
+        z_test = z.iloc[train_size:]
+    else:
+        z_test = z[train_size:, :]
 
     return X_train, X_test, y_train, y_test, z_test
 
 
 def tt_split_idx(X, y, z, train_idxs, test_idxs):
     """split into train and test sets for hold-out validation"""
-    X_train = X.iloc[train_idxs[0]:train_idxs[1]+1]
-    X_test = X.iloc[test_idxs[0]:test_idxs[1]+1]
-    y_train = y.iloc[train_idxs[0]:train_idxs[1]+1]
-    y_test = y.iloc[test_idxs[0]:test_idxs[1]+1]
-    z_test = z.iloc[test_idxs[0]:test_idxs[1]+1]
+
+    if isinstance(X, pd.DataFrame):
+        X_train = X.iloc[train_idxs[0]:train_idxs[1]+1]
+        X_test = X.iloc[test_idxs[0]:test_idxs[1]+1]
+    else:
+        X_train = X[train_idxs[0]:train_idxs[1] + 1, :]
+        X_test = X[test_idxs[0]:test_idxs[1] + 1, :]
+    if isinstance(y, pd.Series):
+        y_train = y.iloc[train_idxs[0]:train_idxs[1]+1]
+        y_test = y.iloc[test_idxs[0]:test_idxs[1]+1]
+    else:
+        y_train = y[train_idxs[0]:train_idxs[1] + 1]
+        y_test = y[test_idxs[0]:test_idxs[1] + 1]
+    if isinstance(z, pd.Series):
+        z_test = z.iloc[test_idxs[0]:test_idxs[1]+1]
+    else:
+        z_test = z[test_idxs[0]:test_idxs[1] + 1]
 
     return X_train, X_test, y_train, y_test, z_test
 
@@ -371,15 +400,16 @@ def transform_columns(X_train, X_test):
 def train_knn(X_train, y_train):
     param_dict = dict(
         # model__n_estimators=[100, 200, 300],#[int(x) for x in np.linspace(start=10, stop=200, num=7)],
-        n_neighbors=[3, 5, 7, 9, 11, 13, 15, 17, 19, 21],
-        metric=['euclidean', 'manhattan', 'minkowski'],
-        weights=['uniform', 'distance']
+        estimator__n_neighbors=[3, 5, 7, 9, 11, 13, 15, 17, 19, 21],
+        estimator__metric=['euclidean', 'manhattan', 'minkowski'],
+        estimator__weights=['uniform', 'distance']
     )
-    # rf_grid = GridSearchCV(estimator=pipe, param_grid=param_dict, scoring='precision', cv=3, n_jobs=-1)
-    rf_grid = RandomizedSearchCV(estimator=KNeighborsClassifier(n_jobs=-1),
+    fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
+    model = KNeighborsClassifier(n_jobs=-1)
+    rf_grid = RandomizedSearchCV(estimator=model,
                                  param_distributions=param_dict,
                                  n_iter=60,
-                                 scoring='precision',
+                                 scoring=fb_scorer,
                                  cv=3, n_jobs=-1)
     rf_grid.fit(X_train, y_train)
 
@@ -388,19 +418,16 @@ def train_knn(X_train, y_train):
 
 def train_rfc(X_train, y_train):
     param_dict = dict(
-        # model__n_estimators=[100, 200, 300],#[int(x) for x in np.linspace(start=10, stop=200, num=7)],
-        max_features=[4, 6, 8, 10],
-        max_depth=[int(x) for x in np.linspace(start=10, stop=20, num=5)],
-        min_samples_split=[2, 3, 4],  # must be 2 or more
+        estimator__max_features=[4, 6, 8, 10],
+        estimator__max_depth=[int(x) for x in np.linspace(start=15, stop=30, num=4)],
+        estimator__min_samples_split=[2, 3, 4],  # must be 2 or more
     )
-    fb_scorer = make_scorer(fbeta_score, beta=0.5, zero_division=0)
-    # rf_grid = GridSearchCV(estimator=pipe, param_grid=param_dict, scoring='precision', cv=3, n_jobs=-1)
-    rf_grid = RandomizedSearchCV(estimator=RandomForestClassifier(class_weight='balanced',
-                                                                  n_estimators=300,
-                                                                  min_samples_leaf=2),
+    fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
+    model = RandomForestClassifier(class_weight='balanced', n_estimators=300, min_samples_leaf=2)
+    rf_grid = RandomizedSearchCV(estimator=model,
                                  param_distributions=param_dict,
                                  n_iter=60,
-                                 scoring='precision',#fb_scorer, #
+                                 scoring=fb_scorer,
                                  cv=3, n_jobs=-1)
     rf_grid.fit(X_train, y_train)
 
@@ -410,17 +437,14 @@ def train_rfc(X_train, y_train):
 def train_gbc(X_train, y_train):
     param_dict = dict(
         # max_features=[2, 4, 8, 16, 32],
-        max_depth=[int(x) for x in np.linspace(start=4, stop=20, num=5)],
-        min_samples_split=[2, 4, 8],  # must be 2 or more
-        learning_rate=[0.05, 0.1],
-        subsample=[0.125, 0.25, 0.5, 1.0]
+        estimator__max_depth=[int(x) for x in np.linspace(start=5, stop=20, num=4)],
+        estimator__min_samples_split=[2, 4, 8],  # must be 2 or more
+        estimator__learning_rate=[0.05, 0.1],
+        estimator__subsample=[0.125, 0.25, 0.5, 1.0]
     )
     fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
-    # rf_grid = GridSearchCV(estimator=pipe, param_grid=param_dict, scoring='precision', cv=3, n_jobs=-1)
-    rf_grid = RandomizedSearchCV(estimator=GradientBoostingClassifier(random_state=42,
-                                                                      n_estimators=1000,
-                                                                      validation_fraction=0.1,
-                                                                      n_iter_no_change=5),
+    model = GradientBoostingClassifier(random_state=42, n_estimators=1000, validation_fraction=0.1, n_iter_no_change=5)
+    rf_grid = RandomizedSearchCV(estimator=model,
                                  param_distributions=param_dict,
                                  scoring=fb_scorer,
                                  n_iter=120, # full test = 3600
@@ -539,12 +563,14 @@ if __name__ == '__main__':
     sides = ['short']
     # timeframes = ['1d']
 
-    algorithms = ['knn', 'rfc', 'gbc']
+    algorithms = [
+        # 'knn',
+        'rfc', 'gbc']
     sides = ['long', 'short']
     timeframes = {
-        '1d': {'frac_widths': [3, 5], 'atr_spacings': [1, 2], 'num_pairs': 100, 'data_len': 100},
-        '12h': {'frac_widths': [3, 5], 'atr_spacings': [1, 2], 'num_pairs': 66, 'data_len': 150},
-        '4h': {'frac_widths': [3, 5], 'atr_spacings': [1, 2], 'num_pairs': 50, 'data_len': 200},
+        # '1d': {'frac_widths': [3, 5], 'atr_spacings': [1, 2], 'num_pairs': 100, 'data_len': 100},
+        # '12h': {'frac_widths': [3, 5], 'atr_spacings': [1, 2], 'num_pairs': 66, 'data_len': 150},
+        # '4h': {'frac_widths': [3, 5], 'atr_spacings': [1, 2], 'num_pairs': 50, 'data_len': 200},
         '1h': {'frac_widths': [3, 5], 'atr_spacings': [1, 2], 'num_pairs': 25, 'data_len': 400},
     }
 
@@ -562,7 +588,7 @@ if __name__ == '__main__':
         pairs = rank_pairs()[:num_pairs]
         # print(pairs)
 
-        res_folders = Path(f"{algo}_results/{'balanced' if balanced else 'unbalanced'}")
+        res_folders = Path(f"sfs/{algo}_results/{'balanced' if balanced else 'unbalanced'}")
         res_folders.mkdir(parents=True, exist_ok=True)
         res_path = Path(f"{res_folders}/{side}_{timeframe}_top{num_pairs}.parquet")
         if res_path.exists():
@@ -598,8 +624,8 @@ if __name__ == '__main__':
                       f'Not enough positive values to reliably predict, skipping training')
                 continue
 
-            print(f"Fitting model for {algo} {'balanced' if balanced else 'unbalanced'} {frac_width = } {spacing = }. "
-                  f"{len(y_train)} observations in training set.")
+            # print(f"Fitting model for {algo} {'balanced' if balanced else 'unbalanced'} {frac_width = } {spacing = }. "
+            #       f"{len(y_train)} observations in training set.")
 
             try:
                 train_start = time.perf_counter()
@@ -612,7 +638,7 @@ if __name__ == '__main__':
                 # model = train_vc(X_train, y_train)
                 train_end = time.perf_counter()
                 train_elapsed = train_end - train_start
-                print(f"Training time taken: {int(train_elapsed // 60)}m {train_elapsed % 60:.1f}s")
+                # print(f"Training time taken: {int(train_elapsed // 60)}m {train_elapsed % 60:.1f}s")
             except ValueError as e:
                 print(
                     f"{side}, {timeframe}, {frac_width = }, {spacing = }, ValueError raised, skipping to next test.\n")
@@ -690,7 +716,7 @@ if __name__ == '__main__':
         final_results = pd.DataFrame(res_list)
         final_results.to_parquet(path=res_path)
         try:
-            print(final_results.loc[final_results.trades_taken > 30].sort_values('pnl', ascending=False).head())
+            print(final_results.loc[final_results.trades_taken > 30].sort_values('pnl', ascending=False).head(1))
         except KeyError:
             print("KeyError raised, probably an empty results df. moving on")
             continue

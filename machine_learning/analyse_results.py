@@ -9,7 +9,7 @@ pd.set_option('display.expand_frame_repr', False)
 pd.set_option('display.precision', 4)
 pd.options.plotting.backend = "plotly"
 
-res_path = Path("/machine_learning/rfc_results/")
+res_path = Path("gbc_results/balanced")
 
 def choose_best(df, col):
     df = (
