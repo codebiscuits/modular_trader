@@ -248,6 +248,12 @@ def williams_fractals(df: pd.DataFrame, frac_width: int = 5, atr_spacing: int = 
     return df
 
 
+def williams_fractals_series(s: pd.Series, frac_width: int=5, atr_spacing: int=0) -> pd.Series:
+    """calculates williams fractals on a single series of data, useful for marking the highs and lows of closing prices
+    or indicators like rsi"""
+    pass
+
+
 def fractal_density(df: pd.DataFrame, lookback: int, frac_width: int) -> pd.DataFrame:
     """a way of detecting when price is trending based on how frequently williams fractals are printed, since they are
     much more common during choppy conditions and spaced further apart during trending conditions.
