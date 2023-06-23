@@ -642,13 +642,14 @@ def remove_duplicates(signals: list[dict]) -> list[dict]:
     tp_sigs = [sig for sig in signals if sig['action'] == 'tp']
     checked_signals = []
 
-    # check if any two dictionaries share the same age and city values
+    # check if any two dictionaries share the same salient values
     key1, key2, key3, key4 = 'agent', 'pair', 'direction', 'state'
     seen = {}
     while close_sigs:
         d = close_sigs.pop()
         k = (d[key1], d[key2], d[key3], d[key4])
         if k in seen:
+            print(f"duplicate close signal found: {key1} {key2} {key3} {key4}")
             continue
         seen[k] = d
         checked_signals.append(d)
@@ -657,9 +658,12 @@ def remove_duplicates(signals: list[dict]) -> list[dict]:
         d = tp_sigs.pop()
         k = (d[key1], d[key2], d[key3], d[key4])
         if k in seen:
+            print(f"duplicate tp signal found: {key1} {key2} {key3} {key4}")
             continue
         seen[k] = d
         checked_signals.append(d)
 
     return checked_signals
+
+
 

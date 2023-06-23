@@ -387,13 +387,6 @@ def transform_columns(X_train, X_test):
     X_train = ct.fit_transform(X_train)
     X_test = ct.transform(X_test)
 
-    # # limiting number of unique values in each feature
-    # n_limit = 512
-    # discretised = [col for col in range(X_train.shape[1]) if np.unique(X_train[:, col]).size > n_limit]
-    # discretizer = KBinsDiscretizer(n_bins=n_limit, encode='ordinal', strategy='uniform')
-    # X_train[:, discretised] = discretizer.fit_transform(X_train[:, discretised])
-    # X_test[:, discretised] = discretizer.transform(X_test[:, discretised])
-
     return X_train, X_test
 
 

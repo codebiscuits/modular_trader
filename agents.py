@@ -1067,7 +1067,10 @@ class Agent():
                     pprint(v)
                     print('')
             else:
-                size_dict[asset] = {}
+                direction = v['position']['direction']
+                wanted = v['trade'][0].get('wanted', True)
+                size_dict[asset] = {'value': '0', 'pf%': 0, 'duration (h)': 0, 'pnl_R': 0,
+                                    'pnl_%': 0, 'direction': direction, 'wanted': wanted}
 
         for i in drop_items:
             if state == 'open':
@@ -2057,7 +2060,7 @@ class Agent():
         # TODO use logging to create a dedicated file for each agent's printouts of trades closed at init inval. that
         #  will make them much much easier to see and compare
 
-        if rpnl <= -1:
+        if rpnl < -1:
             print(f"*.*.* problem with sim trade rpnl ({rpnl:.2f})")
             print(self.name)
             pprint(self.sim_trades[pair])

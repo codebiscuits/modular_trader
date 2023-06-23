@@ -225,7 +225,7 @@ def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame, session=None) -
     # check df is localised to UTC
     try:
         df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
-        print(f"funcs update_ohlc - {pair} ohlc data wasn't timezone aware, fixed now.")
+        # print(f"funcs update_ohlc - {pair} ohlc data wasn't timezone aware, fixed now.")
     except TypeError:
         pass
 
@@ -289,7 +289,7 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
             # check df is localised to UTC
             try:
                 df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
-                print(f"funcs prepare_ohlc - {pair} ohlc data wasn't timezone aware, fixed now.")
+                # print(f"funcs prepare_ohlc - {pair} ohlc data wasn't timezone aware, fixed now.")
             except TypeError:
                 pass
 
@@ -316,7 +316,7 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
         # check df is localised to UTC
         try:
             df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
-            print(f"funcs prepare_ohlc - {pair} ohlc data wasn't timezone aware, fixed now.")
+            # print(f"funcs prepare_ohlc - {pair} ohlc data wasn't timezone aware, fixed now.")
         except TypeError:
             pass
 

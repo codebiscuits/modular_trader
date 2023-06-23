@@ -200,7 +200,7 @@ class TradingSession():
     #     all_coins = cg.get_coins_list()
     #     self.cg_symbols = {x['symbol'].upper(): x['id'] for x in all_coins}
 
-    def binance_spreads(self, quote: str = 'USDT') -> None:
+    def binance_spreads(self, quote: str = 'USDT') -> dict[str: float]:
         """returns a dictionary with pairs as keys and current average spread as values"""
 
         sx = Timer('binance_spreads')

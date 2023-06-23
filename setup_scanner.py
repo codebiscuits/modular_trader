@@ -14,13 +14,15 @@ from pushbullet import Pushbullet
 from collections import Counter
 
 # TODO current (02/04/23) roadmap should be:
-#  1: get setup scanner back up and running with the new architecture in place
-#  2: get detailed push notes in all exception handling code so i always know whats going wrong, and change the ss_log
+#  * i've currently got sim trades closing at their stop price, with a tp signal as their recorded signal.
+#  why are they not being processed by rrst?
+#  why is the action on the open signal tp?
+#  why does it only seem to happen to sim trades on doublest and doublest no ema? coincidence?
+#  * get detailed push notes in all exception handling code so i always know whats going wrong, and change the ss_log
 #  so it creates a new file for each session, named by the date and time they took place
-#  3: start integrating polars and doing anything else i can to speed things up enough to run 3day and 1week timeframes
+#  * start integrating polars and doing anything else i can to speed things up enough to run 3day and 1week timeframes
 #  in the same session as everything else
-#  4: get spot trading and oco entries and trade adds working so i can use other strats
-#  5: ML analysis for better performing strats
+#  * get spot trading and oco entries and trade adds working so i can use other strats
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
@@ -203,9 +205,15 @@ while raw_signals:
 
     # find whether i am currently long, short or flat on the agent and pair in this signal
     asset = sig_pair[:-len(session.quote_asset)]
-    real_position = sig_agent.real_pos.get(asset, {'direction': 'flat'})['direction']
-    sim_position = sig_agent.sim_pos.get(asset, {'direction': 'flat'})['direction']  # returns 'flat' if no position
-    tracked_position = sig_agent.tracked.get(asset, {'direction': 'flat'})['direction']
+    try:
+        real_position = sig_agent.real_pos.get(asset, {'direction': 'flat'})['direction']
+        sim_position = sig_agent.sim_pos.get(asset, {'direction': 'flat'})['direction']  # returns 'flat' if no position
+        tracked_position = sig_agent.tracked.get(asset, {'direction': 'flat'})['direction']
+    except KeyError as e:
+        print('KeyError')
+        print(e)
+        pprint(signal)
+        pprint(sig_agent.tracked)
 
     bullish_pos = 'spot' if (sig_agent.mode == 'spot') else 'long'
 
