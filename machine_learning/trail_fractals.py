@@ -21,7 +21,7 @@ all_start = time.perf_counter()
 
 timeframes = ['1h']
 sides = ['long', 'short']
-data_len = 3000
+data_len = 200
 num_pairs = 10
 start_pair = 0
 width = 5
@@ -39,6 +39,7 @@ for side, timeframe in itertools.product(sides, timeframes):
         res_df = pd.DataFrame(res_list).dropna(axis=0).reset_index(drop=True)
         all_res = pd.concat([all_res, res_df], axis=0, ignore_index=True)
     all_res = all_res.sort_values('timestamp').reset_index(drop=True)
+    print(f"Training on {len(all_res)} observations")
 
     # split dataset
     X, y, z = em.features_labels_split(all_res)
@@ -46,15 +47,19 @@ for side, timeframe in itertools.product(sides, timeframes):
     X, _ = em.transform_columns(X, X)
 
     # feature selection
+    fs_start = time.perf_counter()
     rus = RandomUnderSampler(random_state=0)
     X, y = rus.fit_resample(X, y)
     scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
     selector_model = GradientBoostingClassifier(random_state=42, n_estimators=1000, validation_fraction=0.1, n_iter_no_change=5,
                                        subsample=0.5, min_samples_split=8, max_depth=12, learning_rate=0.1)
-    selector = SFS(estimator=selector_model, k_features='best', forward=False, floating=True, verbose=0, scoring=scorer, n_jobs=-1)
+    selector = SFS(estimator=selector_model, k_features='best', forward=False, floating=True, verbose=2, scoring=scorer, n_jobs=-1)
     selector = selector.fit(X, y)
     X = selector.transform(X)
     selected = [cols[x] for x in selector.k_feature_idx_]
+    fs_end = time.perf_counter()
+    fs_elapsed = fs_end - fs_start
+    print(f"\nFeature selection time taken: {int(fs_elapsed // 60)}m {fs_elapsed % 60:.1f}s")
 
     # fit model
     base_model = GradientBoostingClassifier(random_state=42, n_estimators=1000, validation_fraction=0.1, n_iter_no_change=5)
@@ -64,7 +69,7 @@ for side, timeframe in itertools.product(sides, timeframes):
         max_depth=[5, 10, 15, 20],
         learning_rate=[0.05, 0.1]
     )
-    gs = GridSearchCV(estimator=base_model, param_grid=params, scoring=scorer, n_jobs=-1, cv=5, verbose=0)
+    gs = GridSearchCV(estimator=base_model, param_grid=params, scoring=scorer, n_jobs=-1, cv=5, verbose=2)
     gs.fit(X, y)
     final_model = gs.best_estimator_
 
