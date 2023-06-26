@@ -240,6 +240,10 @@ def add_features(df, tf):
     df['rsi_50'] = ind.rsi(df.close, 50).shift(1)
     df['rsi_100'] = ind.rsi(df.close, 100).shift(1)
     df['rsi_200'] = ind.rsi(df.close, 200).shift(1)
+    df['daily_open_ratio'] = features.daily_open_ratio(df)
+    df['prev_daily_open_ratio'] = features.prev_daily_open_ratio(df)
+    df['prev_daily_high_ratio'] = features.prev_daily_high_ratio(df)
+    df['prev_daily_low_ratio'] = features.prev_daily_low_ratio(df)
 
     df = df.copy()
 
@@ -309,7 +313,8 @@ def features_labels_split(df):
     X = df.drop(['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'quote_vol', 'num_trades',
                  'taker_buy_base_vol', 'taker_buy_quote_vol', 'vwma', 'pnl_pct', 'pnl_r', 'pnl_cat',
                  'atr-25', 'atr-50', 'atr-100', 'atr-200', 'ema_12', 'ema_25', 'ema_50', 'ema_100', 'ema_200',
-                 'hma_25', 'hma_50', 'hma_100', 'hma_200', 'lifespan', 'frac_high', 'frac_low', 'inval'],
+                 'hma_25', 'hma_50', 'hma_100', 'hma_200', 'lifespan', 'frac_high', 'frac_low', 'inval', 'daily_open',
+                 'prev_daily_open'],
                 axis=1, errors='ignore')
     y = df.pnl_cat
     z = df.pnl_r

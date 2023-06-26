@@ -77,12 +77,13 @@ for side, timeframe in itertools.product(sides, timeframes):
     folder = Path("/home/ross/Documents/backtester_2021/machine_learning/models/trail_fractals")
     folder.mkdir(parents=True, exist_ok=True)
     model_file = folder / f"trail_fractal_{side}_{timeframe}_model.sav"
-    model_info = folder / f"trail_fractal_{side}_{timeframe}_info.json"
-    model_info.touch(exist_ok=True)
     joblib.dump(final_model, model_file)
-    info_dict = {'features': selected, 'pairs': pairs, 'data_length': data_len, 'frac_width': width, 'atr_spacing': atr_spacing}
-    with open(model_info, 'w') as info:
-        json.dump(info_dict, info)
+
+model_info = folder / f"trail_fractal_{timeframe}_info.json"
+model_info.touch(exist_ok=True)
+info_dict = {'features': selected, 'pairs': pairs, 'data_length': data_len, 'frac_width': width, 'atr_spacing': atr_spacing}
+with open(model_info, 'w') as info:
+    json.dump(info_dict, info)
 
 all_end = time.perf_counter()
 all_elapsed = all_end - all_start

@@ -457,3 +457,55 @@ def straddle_bar(df: pd.DataFrame, col: str):
 
     pass
 
+
+def daily_open(df: pd.DataFrame, timeframe: str='5T') -> pd.Series:
+    df_2 = df.set_index('timestamp', drop=True)
+    df_2['daily_open'] = (
+        df_2.open
+        .resample('D').agg('first')
+        .resample(timeframe)
+        .interpolate(method='pad')
+    )
+    df_2['daily_open'] = df_2.daily_open.ffill()
+    return df_2.reset_index()
+
+
+def prev_daily_open(df: pd.DataFrame, timeframe: str='5T') -> pd.Series:
+    df_2 = df.set_index('timestamp', drop=True)
+    df_2['prev_daily_open'] = (
+        df_2.open
+        .resample('D').agg('first')
+        .shift()
+        .resample(timeframe)
+        .interpolate(method='pad')
+    )
+    df_2['prev_daily_open'] = df_2.prev_daily_open.ffill()
+    return df_2.reset_index()
+
+
+def prev_daily_high(df: pd.DataFrame, timeframe: str='5T') -> pd.Series:
+    df_2 = df.set_index('timestamp', drop=True)
+    df_2['prev_daily_high'] = (
+        df_2.high
+        .resample('D').agg('max')
+        .shift()
+        .resample(timeframe)
+        .interpolate(method='pad')
+    )
+    df_2['prev_daily_high'] = df_2.prev_daily_high.ffill()
+    return df_2.reset_index()
+
+
+def prev_daily_low(df: pd.DataFrame, timeframe: str='5T') -> pd.Series:
+    df_2 = df.set_index('timestamp', drop=True)
+    df_2['prev_daily_low'] = (
+        df_2.low
+        .resample('D').agg('min')
+        .shift()
+        .resample(timeframe)
+        .interpolate(method='pad')
+    )
+    df_2['prev_daily_low'] = df_2.prev_daily_low.ffill()
+    return df_2.reset_index()
+
+

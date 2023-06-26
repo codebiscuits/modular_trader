@@ -185,27 +185,32 @@ def channel_mid_width(df: pd.DataFrame, lookback: int) -> pd.Series:
     return ((chan_hi - chan_lo) / chan_mid).shift()
 
 
-def daily_open(df: pd.DataFrame, timeframe: str='5T') -> pd.Series:
-    df_2 = df.set_index('timestamp', drop=True)
-    df_2['daily_open'] = (
-        df_2.open
-        .resample('D').agg('first')
-        .resample(timeframe)
-        .interpolate(method='pad')
-    )
-    df_2['daily_open'] = df_2.daily_open.ffill()
-    return df_2.reset_index()
+def daily_open_ratio(df: pd.DataFrame) -> pd.Series:
+    if 'daily_open' not in df.columns:
+        df = ind.daily_open(df)
+
+    return (df.close / df.daily_open).shift()
 
 
-def prev_daily_open(df: pd.DataFrame, timeframe: str='5T') -> pd.Series:
-    df_2 = df.set_index('timestamp', drop=True)
-    df_2['prev_daily_open'] = (
-        df_2.open
-        .resample('D').agg('first')
-        .shift()
-        .resample(timeframe)
-        .interpolate(method='pad')
-    )
-    df_2['prev_daily_open'] = df_2.prev_daily_open.ffill()
-    return df_2.reset_index()
+def prev_daily_open_ratio(df: pd.DataFrame) -> pd.Series:
+    if 'prev_daily_open' not in df.columns:
+        df = ind.prev_daily_open(df)
+
+    return (df.close / df.prev_daily_open).shift()
+
+
+def prev_daily_high_ratio(df: pd.DataFrame) -> pd.Series:
+    if 'prev_daily_high' not in df.columns:
+        df = ind.prev_daily_high(df)
+
+    return (df.close / df.prev_daily_high).shift()
+
+
+def prev_daily_low_ratio(df: pd.DataFrame) -> pd.Series:
+    if 'prev_daily_low' not in df.columns:
+        df = ind.prev_daily_low(df)
+
+    return (df.close / df.prev_daily_low).shift()
+
+
 
