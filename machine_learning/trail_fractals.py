@@ -52,7 +52,7 @@ for side, timeframe in itertools.product(sides, timeframes):
     X, y = rus.fit_resample(X, y)
     scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
     selector_model = GradientBoostingClassifier(random_state=42, n_estimators=1000, validation_fraction=0.1, n_iter_no_change=5,
-                                       subsample=0.5, min_samples_split=8, max_depth=12, learning_rate=0.1)
+                                       subsample=0.5, min_samples_split=8, max_depth=12, learning_rate=0.2)
     selector = SFS(estimator=selector_model, k_features='best', forward=False, floating=True, verbose=2, scoring=scorer, n_jobs=-1)
     selector = selector.fit(X, y)
     X = selector.transform(X)
