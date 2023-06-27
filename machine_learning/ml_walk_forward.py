@@ -22,6 +22,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, fbeta_score
 from sklearn.metrics import confusion_matrix, roc_auc_score, roc_curve, make_scorer
 from mlxtend.feature_selection import SequentialFeatureSelector as SFS
+from sklearn.calibration import CalibratedClassifierCV
 
 # TODO lots of variations to test for better performance:
 #  sequential backwards feature selection
@@ -57,9 +58,9 @@ def gbc_selector(model, X, y, z, cols):
     other training and testing"""
 
     scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
-    selector = SFS(estimator=model, k_features=15, forward=True, floating=True, verbose=2, scoring=scorer, n_jobs=-1)
+    selector = SFS(estimator=model, k_features=15, forward=True, floating=False, verbose=2, scoring=scorer, n_jobs=-1)
     X_pre, X_main, y_pre, y_main, z_main = em.tt_split_bifurcate(X, y, z, 0.05)
-    # X_pre, _ = em.transform_columns(X_pre, X_main) # i don't want to apply feature scaling to the main data set here
+    X_pre, _, cols = em.transform_columns(X_pre, X_main) # i don't want to apply feature scaling to the main data set here
     selector = selector.fit(X_pre, y_pre)
     X_main = selector.transform(X_main)
 
@@ -72,11 +73,11 @@ def gbc_selector(model, X, y, z, cols):
 
 
 def fit_gbc(model, X_train, X_test, y_train):
-    model.fit(X_train, y_train)
+    model = model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
     y_prob = model.predict_proba(X_test)[:, 1]
 
-    return y_pred, y_prob
+    return model, y_pred, y_prob
 
 
 fig = px.line()
@@ -106,14 +107,16 @@ all_res = all_res.sort_values('timestamp').reset_index(drop=True)
 model = GradientBoostingClassifier(random_state=42, n_estimators=1000, validation_fraction=0.1, n_iter_no_change=5,
                                    subsample=0.5, min_samples_split=8, max_depth=12, learning_rate=0.1)
 
-X, y, z = em.features_labels_split(all_res)
-cols = X.columns
+X_0, y_0, z_0 = em.features_labels_split(all_res)
+cols = X_0.columns
 
 # Walk-forward Tests
 test_results = dict(
     y_test=[],
     y_pred=[],
     y_prob=[],
+    y_pred_cal=[],
+    y_prob_cal=[],
     z_test=[]
 )
 
@@ -126,7 +129,7 @@ for i, g in enumerate(day_idxs):
 
     if i % 7 == 0:
         print(f"Day {i}, running feature selection")
-        X, y, z, selected = gbc_selector(model, X, y, z, cols)
+        X, y, z, selected = gbc_selector(model, X_0, y_0, z_0, cols)
 
     print(f"Train/test period {i}")
     print(f"Train from {day_idxs[i][0]} to {day_idxs[i + train_days - 1][1]} (days {i} - {i + train_days - 1})")
@@ -135,21 +138,35 @@ for i, g in enumerate(day_idxs):
     test_idxs = [day_idxs[i + train_days][0], day_idxs[i + train_days][1]]
 
     X_train, X_test, y_train, y_test, z_test = em.tt_split_idx(X, y, z, train_idxs, test_idxs)
-    # X_train, X_test = em.transform_columns(X_train, X_test)
 
     if X_test.shape[0] < 1:
         break
 
-    y_pred, y_prob = fit_gbc(model, X_train, X_test, y_train)
+    # split data for fitting and calibration
+    X_test, X_cal, y_test, y_cal = train_test_split(X_test, y_test, test_size=0.25, random_state=11)
+
+    model, y_pred, y_prob = fit_gbc(model, X_train, X_test, y_train)
 
     interim_precision = precision_score(test_results['y_test'], test_results['y_pred'], zero_division=0)
     interim_f_beta = fbeta_score(test_results['y_test'], test_results['y_pred'], beta=0.333, zero_division=0)
-    print(f"Scores for current walk-forward period: precision = {interim_precision}, f beta = {interim_f_beta}")
+    print(f"Scores for current walk-forward period: precision = {interim_precision:.1%}, f beta = {interim_f_beta:.1%}")
 
     test_results['y_test'].extend(list(y_test))
     test_results['y_pred'].extend(list(y_pred))
     test_results['y_prob'].extend(list(y_prob))
     test_results['z_test'].extend(list(z_test))
+
+    # calibrate model
+    cal = CalibratedClassifierCV(estimator=model, cv='prefit', n_jobs=-1)
+    cal, y_pred_cal, y_prob_cal = fit_gbc(cal, X_cal, X_test, y_cal)
+
+    test_results['y_pred_cal'].extend(list(y_pred_cal))
+    test_results['y_prob_cal'].extend(list(y_prob_cal))
+
+    interim_precision_cal = precision_score(test_results['y_test'], test_results['y_pred_cal'], zero_division=0)
+    interim_f_beta_cal = fbeta_score(test_results['y_test'], test_results['y_pred_cal'], beta=0.333, zero_division=0)
+    print(f"Calibrated scores for current walk-forward period: "
+          f"precision = {interim_precision_cal:.1%}, f beta = {interim_f_beta_cal:.1%}")
 
 for thresh in np.linspace(0.5, 0.9, num=20):
     thresh = round(thresh, 2)

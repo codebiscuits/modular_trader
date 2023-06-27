@@ -23,7 +23,7 @@ all_start = time.perf_counter()
 timeframes = ['1h']
 sides = ['long', 'short']
 data_len = 200
-num_pairs = 10
+num_pairs = 15
 start_pair = 0
 width = 5
 atr_spacing = 2
@@ -53,7 +53,7 @@ for side, timeframe in itertools.product(sides, timeframes):
     scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
     selector_model = GradientBoostingClassifier(random_state=42, n_estimators=1000, validation_fraction=0.1, n_iter_no_change=5,
                                        subsample=0.5, min_samples_split=8, max_depth=12, learning_rate=0.2)
-    selector = SFS(estimator=selector_model, k_features='best', forward=False, floating=True, verbose=2, scoring=scorer, n_jobs=-1)
+    selector = SFS(estimator=selector_model, k_features='best', forward=False, floating=True, verbose=0, scoring=scorer, n_jobs=-1)
     selector = selector.fit(X, y)
     X = selector.transform(X)
     selected = [cols[x] for x in selector.k_feature_idx_]
@@ -62,7 +62,7 @@ for side, timeframe in itertools.product(sides, timeframes):
     print(f"\nFeature selection time taken: {int(fs_elapsed // 60)}m {fs_elapsed % 60:.1f}s")
 
     # split data for fitting and calibration
-    # X, X_cal, y, y_cal = train_test_split(X, y, test_size=0.25, random_state=11)
+    X, X_cal, y, y_cal = train_test_split(X, y, test_size=0.333, random_state=11)
 
     # fit model
     X = pd.DataFrame(X, columns=selected)
@@ -73,22 +73,20 @@ for side, timeframe in itertools.product(sides, timeframes):
         max_depth=[5, 10, 15, 20],
         learning_rate=[0.05, 0.1]
     )
-    gs = GridSearchCV(estimator=base_model, param_grid=params, scoring=scorer, n_jobs=-1, cv=5, verbose=2)
+    gs = GridSearchCV(estimator=base_model, param_grid=params, scoring=scorer, n_jobs=-1, cv=5, verbose=0)
     gs.fit(X, y)
     final_model = gs.best_estimator_
 
     # calibrate model
-    # TODO don't forget to get this working
-    # cal = CalibratedClassifierCV(estimator=final_model, cv='prefit', n_jobs=-1)
-    # cal.fit(X_cal, y_cal)
+    cal_model = CalibratedClassifierCV(estimator=final_model, cv='prefit', n_jobs=-1)
+    cal_model.fit(X_cal, y_cal)
 
 
     # save to files
     folder = Path("models/trail_fractals")
     folder.mkdir(parents=True, exist_ok=True)
     model_file = folder / f"trail_fractal_{side}_{timeframe}_model.sav"
-    # TODO don't forget to use the calibrated model when it's ready
-    joblib.dump(final_model, model_file)
+    joblib.dump(cal_model, model_file)
 
     model_info = folder / f"trail_fractal_{side}_{timeframe}_info.json"
     model_info.touch(exist_ok=True)
