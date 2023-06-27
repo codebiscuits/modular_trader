@@ -4,9 +4,9 @@ import pandas as pd
 import time
 from pathlib import Path
 from pprint import pprint
-import entry_modelling as em
+from machine_learning import entry_modelling as em
 import indicators as ind
-import features
+from machine_learning import features
 from datetime import datetime
 from pushbullet import Pushbullet
 # import update_ohlc
@@ -17,13 +17,13 @@ pd.set_option('display.precision', 4)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 timeframe = '1h'
-side = 'short'
 
-long_model_path = Path(f"models/trail_fractals/trail_fractal_long_{timeframe}_model.sav")
-short_model_path = Path(f"models/trail_fractals/trail_fractal_short_{timeframe}_model.sav")
-long_info_path = Path(f"models/trail_fractals/trail_fractal_long_{timeframe}_info.json")
-short_info_path = Path(f"models/trail_fractals/trail_fractal_short_{timeframe}_info.json")
-ohlc_path = Path("/home/ross/coding/modular_trader/bin_ohlc_5m")
+folder = Path("machine_learning/models/trail_fractals")
+long_model_path = folder / f"trail_fractal_long_{timeframe}_model.sav"
+short_model_path = folder / f"trail_fractal_short_{timeframe}_model.sav"
+long_info_path = folder / f"trail_fractal_long_{timeframe}_info.json"
+short_info_path = folder / f"trail_fractal_short_{timeframe}_info.json"
+ohlc_path = Path("bin_ohlc_5m")
 
 long_model = joblib.load(long_model_path)
 short_model = joblib.load(short_model_path)

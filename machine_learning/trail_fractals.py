@@ -1,6 +1,7 @@
 """This is the script that will be run once a day to retrain the model using a grid search on the latest data. once per
 week it will also run a sequential floating backwards feature selection to update the feature list, and once a month it
 will do a full search of williams fractal params as well"""
+import datetime
 
 import pandas as pd
 import entry_modelling as em
@@ -53,7 +54,8 @@ for side, timeframe in itertools.product(sides, timeframes):
     scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
     selector_model = GradientBoostingClassifier(random_state=42, n_estimators=1000, validation_fraction=0.1, n_iter_no_change=5,
                                        subsample=0.5, min_samples_split=8, max_depth=12, learning_rate=0.2)
-    selector = SFS(estimator=selector_model, k_features='best', forward=False, floating=True, verbose=0, scoring=scorer, n_jobs=-1)
+    selector = SFS(estimator=selector_model, k_features='best', forward=False, floating=True, verbose=1, scoring=scorer, n_jobs=-1)
+    # selector = SFS(estimator=selector_model, k_features=10, forward=True, floating=False, verbose=1, scoring=scorer, n_jobs=-1)
     selector = selector.fit(X, y)
     X = selector.transform(X)
     selected = [cols[x] for x in selector.k_feature_idx_]
@@ -85,6 +87,7 @@ for side, timeframe in itertools.product(sides, timeframes):
     # save to files
     folder = Path("models/trail_fractals")
     folder.mkdir(parents=True, exist_ok=True)
+
     model_file = folder / f"trail_fractal_{side}_{timeframe}_model.sav"
     joblib.dump(cal_model, model_file)
 
