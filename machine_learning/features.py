@@ -91,7 +91,7 @@ def doji(df: pd.DataFrame, thresh: float, lookback: int) -> pd.DataFrame:
         df = ind.doji(df)
         bull_doji_bool = df.bullish_doji >= thresh
         bear_doji_bool = df.bearish_doji >= thresh
-        df = df.drop(['bullish_doji', 'bearish_doji'], axis=1)
+        # df = df.drop(['bullish_doji', 'bearish_doji'], axis=1)
 
         bull_bool_window = bull_doji_bool.rolling(lookback).sum() > 0
         bear_bool_window = bear_doji_bool.rolling(lookback).sum() > 0

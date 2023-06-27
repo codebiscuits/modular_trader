@@ -374,19 +374,22 @@ def tt_split_idx(X, y, z, train_idxs, test_idxs):
 
 def transform_columns(X_train, X_test):
     # column transformation
-    transformers = [
-        ('minmax', MinMaxScaler(),
-         ['vol_delta_pct', 'ema_25_roc', 'ema_50_roc', 'ema_100_roc', 'ema_200_roc', 'hma_25_roc', 'hma_50_roc',
+    min_max_cols = ['vol_delta_pct', 'ema_25_roc', 'ema_50_roc', 'ema_100_roc', 'ema_200_roc', 'hma_25_roc', 'hma_50_roc',
           'hma_100_roc', 'hma_200_roc', 'hour', 'hour_180', 'day_of_week', 'day_of_week_180', 'chan_mid_ratio_25',
           'chan_mid_ratio_50', 'chan_mid_ratio_100', 'chan_mid_ratio_200', 'chan_mid_width_25', 'chan_mid_width_50',
-          'chan_mid_width_100', 'chan_mid_width_200']),
-        ('quantile', QuantileTransformer(),
-         ['r_pct', 'ema_25_ratio', 'ema_50_ratio', 'ema_100_ratio', 'ema_200_ratio', 'hma_25_ratio', 'hma_50_ratio',
-          'hma_100_ratio', 'hma_200_ratio', 'atr_5_pct', 'atr_10_pct', 'atr_25_pct', 'atr_50_pct'])
-    ]
+          'chan_mid_width_100', 'chan_mid_width_200']
+    min_max_cols = [mmc for mmc in min_max_cols if mmc in X_train.columns]
+
+    quant_cols = ['r_pct', 'ema_25_ratio', 'ema_50_ratio', 'ema_100_ratio', 'ema_200_ratio', 'hma_25_ratio', 'hma_50_ratio',
+          'hma_100_ratio', 'hma_200_ratio', 'atr_5_pct', 'atr_10_pct', 'atr_25_pct', 'atr_50_pct']
+    quant_cols = [qc for qc in quant_cols if qc in X_train.columns]
+
+    transformers = [('minmax', MinMaxScaler(), min_max_cols), ('quantile', QuantileTransformer(), quant_cols)]
     ct = ColumnTransformer(transformers=transformers, remainder='passthrough')
     X_train = ct.fit_transform(X_train)
     X_test = ct.transform(X_test)
+    print(ct.transformers_)
+    print(ct.get_feature_names_out())
 
     return X_train, X_test
 

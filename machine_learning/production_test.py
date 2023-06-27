@@ -9,6 +9,10 @@ import indicators as ind
 import features
 from sklearn.ensemble import GradientBoostingClassifier
 
+pd.set_option('display.max_rows', None)
+pd.set_option('display.expand_frame_repr', False)
+pd.set_option('display.precision', 4)
+
 timeframe = '1h'
 side = 'short'
 
@@ -65,21 +69,31 @@ def add_feature(df, name):
     return feature_lookup[name]
 
 for pair in pairs:
-    print(f"Testing {pair}")
+    print(f"\nTesting {pair}")
     df = em.get_data(pair, timeframe)
     df = ind.williams_fractals(df, width, spacing)
     df = (df.drop(['fractal_high', 'fractal_low', f"atr-{spacing}", f"atr_{spacing}_pct"], axis=1)
           .dropna(axis=0).reset_index(drop=True))
 
-    print(df.head())
+    # print(df.head())
 
     for f in feature_set:
-        print(f"processing {f}")
+        # print(f"processing {f}")
         if f == 'r_pct':
             continue
         df = add_feature(df, f)
 
     print(df.tail())
+    cols = df.columns
+    X, _ = em.transform_columns(df, df)
+    df = pd.DataFrame(X, columns=cols)
+    print(df.tail())
+
+    # print(df.tail())
+    long_features = df[long_info['features']].iloc[-1]
+    long_X = pd.DataFrame(long_features).transpose()
+    print(long_info['features'])
+    print(long_X)
 
     # need to add r_pct to the features dict before i give it to the model
     # print(df.tail())
