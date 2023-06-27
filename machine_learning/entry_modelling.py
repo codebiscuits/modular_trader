@@ -181,10 +181,35 @@ def oco(df, r_mult, inval_lb, side):
 
 
 def add_features(df, tf):
-    df = features.vol_delta_pct(df)
-    df = features.stoch_vwma_ratio(df, 25)
-    df = features.stoch_vwma_ratio(df, 50)
-    df = features.stoch_vwma_ratio(df, 100)
+    df = features.atr_pct(df, 5)
+    df = features.atr_pct(df, 10)
+    df = features.atr_pct(df, 25)
+    df = features.atr_pct(df, 50)
+    df = features.ats_z(df, 25)
+    df = features.ats_z(df, 50)
+    df = features.ats_z(df, 100)
+    df = features.ats_z(df, 200)
+    df = features.bull_bear_bar(df)
+    df = features.channel_mid_ratio(df, 25)
+    df = features.channel_mid_ratio(df, 50)
+    df = features.channel_mid_ratio(df, 100)
+    df = features.channel_mid_ratio(df, 200)
+    df = features.channel_mid_width(df, 25)
+    df = features.channel_mid_width(df, 50)
+    df = features.channel_mid_width(df, 100)
+    df = features.channel_mid_width(df, 200)
+    df = features.daily_open_ratio(df)
+    df = features.daily_roc(df, tf)
+    df = features.day_of_week(df)
+    df = features.day_of_week_180(df)
+    df = features.doji(df, 0.5, 2)
+    df = features.engulfing(df, 1)
+    df = features.engulfing(df, 2)
+    df = features.engulfing(df, 3)
+    df = features.ema_breakout(df, 12, 25)
+    df = features.ema_breakout(df, 25, 50)
+    df = features.ema_breakout(df, 50, 100)
+    df = features.ema_breakout(df, 100, 200)
     df = features.ema_roc(df, 25)
     df = features.ema_roc(df, 50)
     df = features.ema_roc(df, 100)
@@ -201,9 +226,29 @@ def add_features(df, tf):
     df = features.hma_ratio(df, 50)
     df = features.hma_ratio(df, 100)
     df = features.hma_ratio(df, 200)
-
-    df = df.copy()
-
+    df = features.hour(df)
+    df = features.hour_180(df)
+    df = features.inside_bar(df)
+    df = features.kurtosis(df, 6)
+    df = features.kurtosis(df, 12)
+    df = features.kurtosis(df, 25)
+    df = features.kurtosis(df, 50)
+    df = features.kurtosis(df, 100)
+    df = features.kurtosis(df, 200)
+    df = features.prev_daily_open_ratio(df)
+    df = features.prev_daily_high_ratio(df)
+    df = features.prev_daily_low_ratio(df)
+    df = features.rsi(df, 14)
+    df = features.rsi(df, 25)
+    df = features.rsi(df, 50)
+    df = features.rsi(df, 100)
+    df = features.rsi(df, 200)
+    df = features.skew(df, 6)
+    df = features.skew(df, 12)
+    df = features.skew(df, 25)
+    df = features.skew(df, 50)
+    df = features.skew(df, 100)
+    df = features.skew(df, 200)
     df = features.stoch_base_vol(df, 25)
     df = features.stoch_base_vol(df, 50)
     df = features.stoch_base_vol(df, 100)
@@ -212,78 +257,19 @@ def add_features(df, tf):
     df = features.stoch_num_trades(df, 50)
     df = features.stoch_num_trades(df, 100)
     df = features.stoch_num_trades(df, 200)
-    df = features.channel_mid_ratio(df, 25)
-    df = features.channel_mid_ratio(df, 50)
-    df = features.channel_mid_ratio(df, 100)
-    df = features.channel_mid_ratio(df, 200)
-    df = features.channel_mid_width(df, 25)
-    df = features.channel_mid_width(df, 50)
-    df = features.channel_mid_width(df, 100)
-    df = features.channel_mid_width(df, 200)
-
-    df = df.copy()
-
-    df = features.hour(df)
-    df = features.hour_180(df)
-    df = features.day_of_week(df)
-    df = features.day_of_week_180(df)
-    # df = features.week_of_year(df)
-    # df = features.week_of_year_180(df)
-    df = features.vol_denom_roc(df, 2, 25)
-    df = features.vol_denom_roc(df, 5, 50)
-    df = features.rsi(df, 14)
-    df = features.rsi(df, 25)
-    df = features.rsi(df, 50)
-    df = features.rsi(df, 100)
-    df = features.rsi(df, 200)
-    df = features.daily_open_ratio(df)
-    df = features.prev_daily_open_ratio(df)
-    df = features.prev_daily_high_ratio(df)
-    df = features.prev_daily_low_ratio(df)
-
-    df = df.copy()
-
-    df = features.daily_roc(df, tf)
-    df = features.weekly_roc(df, tf)
-    df = features.kurtosis(df, 6)
-    df = features.kurtosis(df, 12)
-    df = features.kurtosis(df, 25)
-    df = features.kurtosis(df, 50)
-    df = features.kurtosis(df, 100)
-    df = features.kurtosis(df, 200)
-    df = features.skew(df, 6)
-    df = features.skew(df, 12)
-    df = features.skew(df, 25)
-    df = features.skew(df, 50)
-    df = features.skew(df, 100)
-    df = features.skew(df, 200)
-
-    df = df.copy()
-
+    df = features.stoch_vwma_ratio(df, 25)
+    df = features.stoch_vwma_ratio(df, 50)
+    df = features.stoch_vwma_ratio(df, 100)
     df = features.vol_delta_div(df, 1)
     df = features.vol_delta_div(df, 2)
     df = features.vol_delta_div(df, 3)
     df = features.vol_delta_div(df, 4)
-    df = features.ats_z(df, 25)
-    df = features.ats_z(df, 50)
-    df = features.ats_z(df, 100)
-    df = features.ats_z(df, 200)
-    df = features.engulfing(df, 1)
-    df = features.engulfing(df, 2)
-    df = features.engulfing(df, 3)
-    df = features.inside_bar(df)
-    df = features.doji(df, 0.5, 2)
-    df = features.bull_bear_bar(df)
-    df = features.ema_breakout(df, 12, 25)
-    df = features.ema_breakout(df, 25, 50)
-    df = features.ema_breakout(df, 50, 100)
-    df = features.ema_breakout(df, 100, 200)
-    df = features.atr_pct(df, 5)
-    df = features.atr_pct(df, 10)
-    df = features.atr_pct(df, 25)
-    df = features.atr_pct(df, 50)
-
-    df = df.copy()
+    df = features.vol_delta_pct(df)
+    df = features.vol_denom_roc(df, 2, 25)
+    df = features.vol_denom_roc(df, 5, 50)
+    # df = features.week_of_year(df)
+    # df = features.week_of_year_180(df)
+    df = features.weekly_roc(df, tf)
 
     return df
 
@@ -310,7 +296,7 @@ def features_labels_split(df):
                  'taker_buy_base_vol', 'taker_buy_quote_vol', 'vwma', 'pnl_pct', 'pnl_r', 'pnl_cat',
                  'atr-25', 'atr-50', 'atr-100', 'atr-200', 'ema_12', 'ema_25', 'ema_50', 'ema_100', 'ema_200',
                  'hma_25', 'hma_50', 'hma_100', 'hma_200', 'lifespan', 'frac_high', 'frac_low', 'inval', 'daily_open',
-                 'prev_daily_open'],
+                 'prev_daily_open', 'prev_daily_high', 'prev_daily_low'],
                 axis=1, errors='ignore')
     y = df.pnl_cat
     z = df.pnl_r
@@ -388,10 +374,10 @@ def transform_columns(X_train, X_test):
     ct = ColumnTransformer(transformers=transformers, remainder='passthrough')
     X_train = ct.fit_transform(X_train)
     X_test = ct.transform(X_test)
-    print(ct.transformers_)
-    print(ct.get_feature_names_out())
 
-    return X_train, X_test
+    feature_cols = [f.split('__')[1] for f in ct.get_feature_names_out()]
+
+    return X_train, X_test, feature_cols
 
 
 def train_knn(X_train, y_train):
@@ -609,7 +595,7 @@ if __name__ == '__main__':
 
             X, y, z = features_labels_split(all_res)
             X_train, X_test, y_train, y_test, z_test = tt_split_bifurcate(X, y, z, 0.75)
-            X_train, X_test = transform_columns(X_train, X_test)
+            X_train, X_test, cols = transform_columns(X_train, X_test)
 
             # balancing classes/prototype selection
             if balanced:
@@ -652,7 +638,7 @@ if __name__ == '__main__':
                 # print(f'ValueError while calculating scores on {pair}, skipping to next test.')
                 continue
             # guess_scores = analyse_results(model, X_test, y_test, guess=True)
-            imp_df = best_features(model, X.columns)
+            imp_df = best_features(model, cols)
             # print(imp_df.head(8))
 
             # print(f"\n{side}, {timeframe}, {frac_width = }, {spacing = }, "

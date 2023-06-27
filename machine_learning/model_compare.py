@@ -49,7 +49,7 @@ for pair in pairs:
 
 X, y, z = em.features_labels_split(all_res)
 X_train, X_test, y_train, y_test, z_test = em.tt_split_rand(X, y, z, 0.9)
-X_train, X_test = em.transform_columns(X_train, X_test)
+X_train, X_test, cols = em.transform_columns(X_train, X_test)
 
 imp_df = pd.DataFrame()
 
@@ -94,7 +94,7 @@ for model, rus in product([knn, rfc, gbc], [0, 1]):
           f"Precision score: {precision:.1%}, F Beta score: {f_beta:.1%}")
 
     importances = permutation_importance(model, X_test, y_test, n_repeats=10, random_state=42, n_jobs=-1)
-    imp_df[name] = pd.Series(importances.importances_mean, index=X.columns)#.sort_values(ascending=False)
+    imp_df[name] = pd.Series(importances.importances_mean, index=cols)#.sort_values(ascending=False)
 
 imp_df['max'] = imp_df.max(axis=1) # max <= 0 will help me see which features are not useful to any model
 print(imp_df.sort_values('avg', ascending=False))

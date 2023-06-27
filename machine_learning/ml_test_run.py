@@ -47,7 +47,7 @@ for pair in pairs:
 
 X, y, z = em.features_labels_split(all_res)
 X_train, X_test, y_train, y_test, z_test = em.tt_split_rand(X, y, z, 0.9)
-X_train, X_test = em.transform_columns(X_train, X_test)
+X_train, X_test, cols = em.transform_columns(X_train, X_test)
 
 # rus = RandomUnderSampler(random_state=0)
 # X_train, y_train = rus.fit_resample(X_train, y_train)
@@ -84,7 +84,7 @@ precision = precision_score(y_test, y_pred, zero_division=0)
 f_beta = fbeta_score(y_test, y_pred, beta=0.5, zero_division=0)
 
 importances = permutation_importance(model, X_test, y_test, n_repeats=10, random_state=42, n_jobs=-1)
-imp_df = pd.Series(importances.importances_mean, index=X.columns).sort_values(ascending=False)
+imp_df = pd.Series(importances.importances_mean, index=cols).sort_values(ascending=False)
 print(imp_df)
 
 # final_pnl = results['']

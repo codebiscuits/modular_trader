@@ -12,8 +12,9 @@ import json
 from sklearnex import patch_sklearn
 patch_sklearn()
 from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.metrics import fbeta_score, make_scorer
+from sklearn.calibration import CalibratedClassifierCV
 from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 from imblearn.under_sampling import RandomUnderSampler
 
@@ -41,10 +42,9 @@ for side, timeframe in itertools.product(sides, timeframes):
     all_res = all_res.sort_values('timestamp').reset_index(drop=True)
     print(f"Training on {len(all_res)} observations")
 
-    # split dataset
+    # split features from labels
     X, y, z = em.features_labels_split(all_res)
-    cols = X.columns
-    X, _ = em.transform_columns(X, X)
+    X, _, cols = em.transform_columns(X, X)
 
     # feature selection
     fs_start = time.perf_counter()
@@ -61,7 +61,11 @@ for side, timeframe in itertools.product(sides, timeframes):
     fs_elapsed = fs_end - fs_start
     print(f"\nFeature selection time taken: {int(fs_elapsed // 60)}m {fs_elapsed % 60:.1f}s")
 
+    # split data for fitting and calibration
+    # X, X_cal, y, y_cal = train_test_split(X, y, test_size=0.25, random_state=11)
+
     # fit model
+    X = pd.DataFrame(X, columns=selected)
     base_model = GradientBoostingClassifier(random_state=42, n_estimators=1000, validation_fraction=0.1, n_iter_no_change=5)
     params = dict(
         subsample=[0.25, 0.5, 1],
@@ -73,17 +77,24 @@ for side, timeframe in itertools.product(sides, timeframes):
     gs.fit(X, y)
     final_model = gs.best_estimator_
 
+    # calibrate model
+    # TODO don't forget to get this working
+    # cal = CalibratedClassifierCV(estimator=final_model, cv='prefit', n_jobs=-1)
+    # cal.fit(X_cal, y_cal)
+
+
     # save to files
-    folder = Path("/home/ross/Documents/backtester_2021/machine_learning/models/trail_fractals")
+    folder = Path("models/trail_fractals")
     folder.mkdir(parents=True, exist_ok=True)
     model_file = folder / f"trail_fractal_{side}_{timeframe}_model.sav"
+    # TODO don't forget to use the calibrated model when it's ready
     joblib.dump(final_model, model_file)
 
-model_info = folder / f"trail_fractal_{timeframe}_info.json"
-model_info.touch(exist_ok=True)
-info_dict = {'features': selected, 'pairs': pairs, 'data_length': data_len, 'frac_width': width, 'atr_spacing': atr_spacing}
-with open(model_info, 'w') as info:
-    json.dump(info_dict, info)
+    model_info = folder / f"trail_fractal_{side}_{timeframe}_info.json"
+    model_info.touch(exist_ok=True)
+    info_dict = {'features': selected, 'pairs': pairs, 'data_length': data_len, 'frac_width': width, 'atr_spacing': atr_spacing}
+    with open(model_info, 'w') as info:
+        json.dump(info_dict, info)
 
 all_end = time.perf_counter()
 all_elapsed = all_end - all_start
