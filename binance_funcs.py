@@ -201,6 +201,13 @@ def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame, session=None) -
     abc = Timer('all binance calls')
     abc.start()
 
+    # check old_df is localised to UTC
+    try:
+        old_df['timestamp'] = old_df.timestamp.dt.tz_localize('UTC')
+        # print(f"funcs update_ohlc - {pair} ohlc data wasn't timezone aware, fixed now.")
+    except TypeError:
+        pass
+
     # get_klines is quicker than get_historical_klines but will only download 500 periods, calculate which to use
     deltas = {'1m': timedelta(minutes=1), '5m': timedelta(minutes=5), '15m': timedelta(minutes=15)}
     span_periods = (datetime.now(timezone.utc) - old_df.timestamp.iloc[-1]) / deltas[timeframe]

@@ -359,10 +359,10 @@ class TradingSession():
             market_data_write = Path('/home/ross/coding/modular_trader/market_data')
         elif Path('/mnt/pi_d/modular_trader/market_data').exists():  # must be running on laptop and rpi is accessible
             market_data_read = Path('/mnt/pi_d/modular_trader/market_data')
-            market_data_write = Path('/home/ross/Documents/backtester_2021/market_data')
+            market_data_write = Path('/home/ross/coding/modular_trader/market_data')
         else:  # running on laptop and rpi is not available
-            market_data_read = Path('/home/ross/Documents/backtester_2021/market_data')
-            market_data_write = Path('/home/ross/Documents/backtester_2021/market_data')
+            market_data_read = Path('/home/ross/coding/modular_trader/market_data')
+            market_data_write = Path('/home/ross/coding/modular_trader/market_data')
 
         market_data_write.mkdir(parents=True, exist_ok=True)
 
@@ -384,13 +384,10 @@ class TradingSession():
             write_records = Path(f'/home/ross/coding/modular_trader/records')
         elif Path(f'/home/ross/coding/pi_down/modular_trader/records').exists():
             read_records = Path(f'/home/ross/coding/pi_down/modular_trader/records')
-            write_records = Path(f'/home/ross/Documents/backtester_2021/records')
-        elif Path("/home/ross/coding/modular_trader").exists():
-            read_records = Path(f'/home/ross/coding/modular_trader/records')
             write_records = Path(f'/home/ross/coding/modular_trader/records')
         else:
-            read_records = Path(f'/home/ross/Documents/backtester_2021/records')
-            write_records = Path(f'/home/ross/Documents/backtester_2021/records')
+            read_records = Path(f'/home/ross/coding/modular_trader/records')
+            write_records = Path(f'/home/ross/coding/modular_trader/records')
 
         # print(f"{read_records = }")
         # print(f"{write_records = }")
@@ -411,8 +408,7 @@ class TradingSession():
         v.start()
         ohlc_data = None
         possible_paths = [Path(f'/home/pi/coding/modular_trader/bin_ohlc_{self.ohlc_tf}'),
-                          Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}'),
-                          Path(f'/home/ross/Documents/backtester_2021/bin_ohlc_{self.ohlc_tf}')]
+                          Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')]
 
         for ohlc_path in possible_paths:
             if ohlc_path.exists():
