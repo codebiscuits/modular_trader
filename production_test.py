@@ -18,12 +18,13 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 timeframe = '1h'
 
-folder = Path("machine_learning/models/trail_fractals")
+# paths
+folder = Path("/home/ross/Documents/backtester_2021/machine_learning/models/trail_fractals")
 long_model_path = folder / f"trail_fractal_long_{timeframe}_model.sav"
 short_model_path = folder / f"trail_fractal_short_{timeframe}_model.sav"
 long_info_path = folder / f"trail_fractal_long_{timeframe}_info.json"
 short_info_path = folder / f"trail_fractal_short_{timeframe}_info.json"
-ohlc_path = Path("bin_ohlc_5m")
+ohlc_path = Path("/home/ross/Documents/backtester_2021/bin_ohlc_5m")
 
 long_model = joblib.load(long_model_path)
 short_model = joblib.load(short_model_path)
