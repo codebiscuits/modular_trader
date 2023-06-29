@@ -9,10 +9,11 @@ import itertools
 from pathlib import Path
 import joblib
 import json
+from datetime import datetime, timezone
 from sklearnex import patch_sklearn
 patch_sklearn()
 from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.model_selection import GridSearchCV, train_test_split, cross_val_score
 from sklearn.metrics import fbeta_score, make_scorer
 from sklearn.calibration import CalibratedClassifierCV
 from mlxtend.feature_selection import SequentialFeatureSelector as SFS
@@ -20,6 +21,8 @@ from imblearn.under_sampling import RandomUnderSampler
 
 all_start = time.perf_counter()
 import update_ohlc
+now = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M')
+print(f"-:--:--:--:--:--:--:--:--:--:-  {now} Running Trail Fractals Fitting  -:--:--:--:--:--:--:--:--:--:-")
 
 
 def feature_selection(X, y, limit, quick=False):
@@ -49,7 +52,7 @@ def feature_selection(X, y, limit, quick=False):
 
     return X_transformed, y, selected
 
-timeframes = ['1h']
+timeframes = ['1h', '4h', '12h', '1d']
 sides = ['long', 'short']
 data_len = 200
 num_pairs = 20
@@ -59,8 +62,8 @@ atr_spacing = 2
 pairs = em.rank_pairs()[start_pair:start_pair + num_pairs]
 scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
 
-for side, timeframe in itertools.product(sides, timeframes):
-    print(f"Fitting {timeframe} {side} model")
+for side, timeframe in itertools.product(sides, timeframes[2:]):
+    print(f"\nFitting {timeframe} {side} model")
     # create dataset
     all_res = pd.DataFrame()
     for pair in pairs:
@@ -97,14 +100,15 @@ for side, timeframe in itertools.product(sides, timeframes):
     )
     gs = GridSearchCV(estimator=base_model, param_grid=params, scoring=scorer, n_jobs=-1, cv=5, verbose=1)
     gs.fit(X, y)
-    final_model = gs.best_estimator_
+    grid_model = gs.best_estimator_
 
     # calibrate model
     print(f"Calibrating on {X_cal.shape[0]} observations")
     X_cal = pd.DataFrame(X_cal, columns=selected)
-    cal_model = CalibratedClassifierCV(estimator=final_model, cv='prefit', n_jobs=-1)
+    cal_model = CalibratedClassifierCV(estimator=grid_model, cv='prefit', n_jobs=-1)
     cal_model.fit(X_cal, y_cal)
-
+    cal_score = cal_model.score(X_cal, y_cal)
+    print(f"\nModel score after calibration: {cal_score:.1%}")
 
     # save to files
     folder = Path("models/trail_fractals")
