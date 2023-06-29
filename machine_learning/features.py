@@ -24,6 +24,7 @@ def daily_open_ratio(df: pd.DataFrame):
     # for each period in the df, find the daily open, then divide each period's close price by that daily open
     pass
 
+
 def daily_sfp(df: pd.DataFrame):
     # group by day (not day of week or day of year but every unique day) and calculate for each period whether the price
     # has started on one side of the open and then crossed to the other side.
@@ -83,23 +84,41 @@ def engulfing(df, lookback: int = 1) -> pd.DataFrame:
     return df
 
 
-def doji(df: pd.DataFrame, thresh: float, lookback: int) -> pd.DataFrame:
-    """returns booleans which represent whether or not there was an upper or lower wick which met the threshold
-    requirement in the lookback window"""
+def doji(df: pd.DataFrame, thresh: float, lookback: int, weighted: bool) -> pd.DataFrame:
+    """returns booleans which represent whether there was an upper or lower wick which met the threshold requirement in
+    the lookback window. If weighted == True, a rolling 50 period z-score of base volume is calculated and the wick size
+    is multiplied by the volume z-score, so higher than average volume will increase the chance of the wick being
+    considered over the threshold"""
 
-    if 'recent_bull_doji' not in df.columns:
-        df = ind.doji(df)
+    w = f'weighted_{thresh}' if weighted else 'unweighted'
+
+    if f'{w}_bull_doji' in df.columns:
+        return df
+
+    df = ind.doji(df)
+
+    if weighted:
+        z_volume = ind.z_score(df.base_volume, 50)
+        bull_doji_bool = df.bullish_doji * z_volume >= thresh
+        bear_doji_bool = df.bearish_doji * z_volume >= thresh
+    else:
         bull_doji_bool = df.bullish_doji >= thresh
         bear_doji_bool = df.bearish_doji >= thresh
-        # df = df.drop(['bullish_doji', 'bearish_doji'], axis=1)
 
-        bull_bool_window = bull_doji_bool.rolling(lookback).sum() > 0
-        bear_bool_window = bear_doji_bool.rolling(lookback).sum() > 0
+    # df = df.drop(['bullish_doji', 'bearish_doji'], axis=1)
 
-        df['recent_bull_doji'] = bull_bool_window
-        df['recent_bear_doji'] = bear_bool_window
+    bull_bool_window = bull_doji_bool.rolling(lookback).sum() > 0
+    bear_bool_window = bear_doji_bool.rolling(lookback).sum() > 0
+
+    df[f'{w}_bull_doji'] = bull_bool_window
+    df[f'{w}_bear_doji'] = bear_bool_window
 
     return df
+
+
+def vol_doji(df: pd.DataFrame, thresh: float, lookback: int, weighted: bool) -> pd.DataFrame:
+    """same as doji, but the wicks are measured in terms of recent atr volatility, so """
+    pass
 
 
 def bull_bear_bar(df) -> pd.DataFrame:
