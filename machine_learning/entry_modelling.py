@@ -109,9 +109,9 @@ def trail_fractal(df_0, width, spacing, side, trim_ohlc=1000):
     df_0 = df_0.drop(['fractal_high', 'fractal_low', f"atr-{spacing}", f"atr_{spacing}_pct"], axis=1).dropna(
         axis=0).reset_index(drop=True)
 
-    condition = (df_0.open > df_0.frac_low) if side == 'long' else (df_0.open < df_0.frac_high)
-    rows = list(df_0.loc[condition].index)
-    df_0['trend_age'] = ind.consec_condition(condition)
+    trend_condition = (df_0.open > df_0.frac_low) if side == 'long' else (df_0.open < df_0.frac_high)
+    rows = list(df_0.loc[trend_condition].index)
+    df_0[f'fractal_trend_age_{side}'] = ind.consec_condition(trend_condition)
     results = []
 
     # loop through potential entries
@@ -135,7 +135,7 @@ def trail_fractal(df_0, width, spacing, side, trim_ohlc=1000):
         exit_price = df.inval.iloc[exit_row]
         trade_diff = exit_price / entry_price
 
-        pnl_pct = (trade_diff - 1.0015) if side == 'long' else (0.9985 - trade_diff)  # accounting for 15bps fees
+        pnl_pct = (trade_diff - 1.003) if side == 'long' else (0.997 - trade_diff)  # accounting for 15bps fees and 15bps slippage
         pnl_r = pnl_pct / r_pct
         pnl_cat = 0 if (pnl_r <= 0) else 1
 
@@ -204,7 +204,7 @@ def add_features(df, tf):
     df = features.day_of_week_180(df)
     df = features.doji(df, 0.5, 2, weighted=True)
     df = features.doji(df, 1, 2, weighted=True)
-    df = features.doji(df, 2, 2, weighted=True)
+    df = features.doji(df, 1.5, 2, weighted=True)
     df = features.doji(df, 0.5, 2, weighted=False)
     df = features.engulfing(df, 1)
     df = features.engulfing(df, 2)

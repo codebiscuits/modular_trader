@@ -90,7 +90,7 @@ def doji(df: pd.DataFrame, thresh: float, lookback: int, weighted: bool) -> pd.D
     is multiplied by the volume z-score, so higher than average volume will increase the chance of the wick being
     considered over the threshold"""
 
-    w = f'weighted_{thresh}' if weighted else 'unweighted'
+    w = f'weighted_{thresh*100}' if weighted else 'unweighted'
 
     if f'{w}_bull_doji' in df.columns:
         return df
@@ -325,5 +325,12 @@ def skew(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
 
 def vol_delta(df: pd.DataFrame) -> pd.DataFrame:
     df['vol_delta'] = ind.vol_delta(df)
+    return df
+
+
+def fractal_trend_age(df: pd.DataFrame, side) -> pd.DataFrame:
+    condition = (df.open > df.frac_low) if side == 'long' else (df.open < df.frac_high)
+    df['trend_age'] = ind.consec_condition(condition)
+
     return df
 

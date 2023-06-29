@@ -5,7 +5,7 @@ import keys
 from binance.client import Client
 from datetime import datetime, timezone
 import binance_funcs as funcs
-from agents import DoubleST, DoubleSTnoEMA, EMACross, EMACrossHMA
+from agents import DoubleST, DoubleSTnoEMA, EMACross, EMACrossHMA, TrailFractals
 from pprint import pprint
 import utility_funcs as uf
 import sessions
@@ -70,10 +70,7 @@ for timeframe, offset in timeframes:
             EMACrossHMA(session, timeframe, offset, 12, 21, 1.2),
             EMACrossHMA(session, timeframe, offset, 12, 21, 1.8),
             EMACrossHMA(session, timeframe, offset, 12, 21, 2.4),
-            # AvgTradeSize(session, timeframe, offset, 2, 200, 1.1, 'trail'),
-            # AvgTradeSize(session, timeframe, offset, 2, 200, 2.0, 'oco'),
-            # AvgTradeSize(session, timeframe, offset, 2, 200, 3.0, 'oco'),
-            # AvgTradeSize(session, timeframe, offset, 2, 200, 4.0, 'oco'),
+            # TrailFractals(session, timeframe, offset, 0.75),
         ]
     )
 

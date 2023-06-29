@@ -9,6 +9,7 @@ from timers import Timer
 from typing import Union, List, Tuple, Dict, Set, Optional, Any
 import binance_funcs as funcs
 import utility_funcs as uf
+import indicators as ind
 from datetime import datetime, timezone
 from binance.exceptions import BinanceAPIException
 from pushbullet import Pushbullet
@@ -23,6 +24,7 @@ from pyarrow import ArrowInvalid
 import traceback
 import math
 import plotly.graph_objects as go
+import joblib
 
 client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
@@ -2999,34 +3001,47 @@ class EMACrossHMA(Agent):
         }
 
 
-class AvgTradeSize(Agent):
-    """Long-only strategy that looks for unusual spikes in average trade size to detect bullish reversals"""
+class TrailFractals(Agent):
+    """Machine learning strategy based around williams fractals triling stops"""
 
-    def __init__(self, session, tf, offset, min_z: int, lookback: int, mult: float, exit_strat: str) -> None:
-        t = Timer('AvgTradeSize init')
+    # TODO get all features into the session
+
+    def __init__(self, session, tf: str, offset: int, min_conf: float=0.75) -> None:
+        t = Timer('TrailFractals init')
         t.start()
-        self.mode = 'spot'
+        self.mode = 'margin'
         self.tf = tf
         self.offset = offset
-        self.mult = mult  # atr multiplier for trailing stop / oco targets
-        self.atr_lb = 5
-        self.min_z = min_z
-        self.lookback = lookback
-        self.exit = exit_strat
-        self.rr_ratio = 2
-        self.name = f'{self.tf} ats {self.min_z}-{self.lookback}-{self.mult}-{self.exit}'
-        self.id = f"avg_trade_size_{self.tf}_{self.offset}_{self.min_z}_{self.lookback}_{self.mult}_{self.exit}"
-        self.ohlc_length = max(200, self.lookback)
-        self.trail_stop = (self.exit == 'trail')
+        self.min_confidence = min_conf
+        self.load_data()
+        self.name = f'{self.tf} trail_fractals {self.width}-{self.spacing}'
+        self.id = f"avg_trade_size_{self.tf}_{self.offset}_{self.width}_{self.spacing}"
+        self.ohlc_length = 200
+        self.notes = ''
         Agent.__init__(self, session)
-        session.indicators.update(['ema-200',
-                                   f'atsz-{lookback}',
-                                   'stoch_rsi-14-14',
-                                   'inside',
-                                   'doji',
-                                   'engulfing-1',
-                                   f"atr-{self.atr_lb}-{self.mult}"])
+        session.indicators.update(self.feature_set)
         t.stop()
+
+    def load_data(self):
+        # paths
+        folder = Path("/home/ross/coding/modular_trader/machine_learning/models/trail_fractals")
+        long_model_path = folder / f"trail_fractal_long_{self.tf}_model.sav"
+        short_model_path = folder / f"trail_fractal_short_{self.tf}_model.sav"
+        long_info_path = folder / f"trail_fractal_long_{self.tf}_info.json"
+        short_info_path = folder / f"trail_fractal_short_{self.tf}_info.json"
+
+        self.long_model = joblib.load(long_model_path)
+        self.short_model = joblib.load(short_model_path)
+        with open(long_info_path, 'r') as ip:
+            self.long_info = json.load(ip)
+        with open(short_info_path, 'r') as ip:
+            self.short_info = json.load(ip)
+
+        self.pairs = self.long_info['pairs']
+        self.feature_set = set(self.long_info['features'] + self.short_info['features'])
+        self.width = self.long_info['frac_width']
+        self.spacing = self.long_info['atr_spacing']
+        pprint(self.feature_set)
 
     def signals(self, session, df: pd.DataFrame, pair: str) -> dict:
         """generates spot buy signals based on the ats_z indicator. does not account for currently open positions,
@@ -3035,44 +3050,51 @@ class AvgTradeSize(Agent):
         sig = Timer('ats_spot_signals')
         sig.start()
 
-        price = df.close.iloc[-1]
-        atsz = df.ats_z.iloc[-10:].max()
-        stoch_rsi = df.stoch_rsi.iloc[-1]
-        doji = 'doji' if df.bullish_doji.iloc[-1] else ''
-        engulf = 'engulf' if df.bullish_engulf.iloc[-1] else ''
-        ib = 'inside_bar' if df.inside_bar.iloc[-1] else ''
-        candle = ' '.join([doji, engulf, ib])
-
-        bullish_atsz = atsz > self.min_z
-        bullish_candles = df.inside_bar.iloc[-1] or df.bullish_doji.iloc[-1] or df.bullish_engulf.iloc[-1]
-
         signal_dict = {'agent': self.id, 'mode': self.mode, 'pair': pair}
 
-        lower = f'atr-{self.atr_lb}-{self.mult}-lower'
-        signal_dict['inval'] = df[lower].iloc[-1]
-        signal_dict['inval_ratio'] = df[lower].iloc[-1] / price
+        df = ind.williams_fractals(df, self.width, self.spacing)
 
-        if bullish_atsz and bullish_candles and (signal_dict['inval_ratio'] < 1):
-            if self.exit == 'trail':
-                signal_dict['bias'] = 'bullish'
-            elif self.exit == 'oco':
-                signal_dict['bias'] = 'bullish'
-                signal_dict['target'] = df.close.iloc[-1] * (signal_dict['inval_ratio'] ** self.rr_ratio)
-        else:
-            return None
+        # make predictions
+        df['long_r_pct'] = abs(df.close - df.frac_low) / df.close
+        df['short_r_pct'] = abs(df.close - df.frac_high) / df.close
 
-        # record signals in json file for analysis
-        signal_dict['time'] = df.timestamp.iloc[-1].timestamp()
-        signal_dict['timeframe'] = self.tf
+        # Long model
+        df['r_pct'] = df.long_r_pct
+        long_features = df[self.long_info['features']].iloc[-1]
+        long_X = pd.DataFrame(long_features).transpose()
+        long_confidence = self.long_model.predict_proba(long_X)[0, 1]
+
+        # Short model
+        df = df.drop('long_r_pct', axis=1)
+        df['r_pct'] = df.short_r_pct
+        short_features = df[self.short_info['features']].iloc[-1]
+        short_X = pd.DataFrame(short_features).transpose()
+        short_confidence = self.short_model.predict_proba(short_X)[0, 1]
+
+        print(f"{self.name} {pair} {self.tf} long conf: {long_confidence:.1%} short conf: {short_confidence:.1%}")
+
+        price = df.close.iloc[-1]
+        combined_conf = long_confidence - short_confidence
+
+        if (price > df.frac_low.iloc[-1]) and combined_conf > self.min_confidence:
+            signal_dict['bias'] = 'bullish'
+            inval = df.frac_low.iloc[-1]
+            note = f"{self.name} Long {self.tf} {pair} @ {df.close.iloc[-1]} confidence: {combined_conf:.1%}\n"
+            print(note)
+            self.notes += note
+        if (price < df.frac_high.iloc[-1]) and combined_conf > -self.min_confidence:
+            signal_dict['bias'] = 'bearish'
+            inval = df.frac_high.iloc[-1]
+            note = f"{self.name} Short {self.tf} {pair} @ {df.close.iloc[-1]} confidence: {0-combined_conf:.1%}\n"
+            print(note)
+            self.notes += note
+
+        signal_dict['confidence'] = combined_conf
+        stp = self.calc_stop(inval, session.pairs_data[pair]['spread'], price)
+        signal_dict['inval_ratio'] = stp / price
+        signal_dict['inval_score'] = self.calc_inval_risk_score(abs((price - stp) / price))
         signal_dict['trig_price'] = price
-        signal_dict['stoch_rsi'] = stoch_rsi
-        signal_dict['ats_z'] = atsz
-        signal_dict['pattern'] = candle
-        signal_dict['exit'] = self.exit
-        signal_dict['min_z'] = self.min_z
-        signal_dict['lookback'] = self.lookback
-        signal_dict['atr_mult'] = self.mult
-        signal_dict['bullish_ema'] = int(df['ema_200'].iloc[-1] > df['ema_200'].iloc[-5])
+        signal_dict['pct_of_full_pos'] = 1
 
         sig.stop()
 
