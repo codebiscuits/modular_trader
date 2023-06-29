@@ -65,7 +65,7 @@ def get_data(pair, timeframe, vwma_periods=24):
     vwma_lengths just accounts for timeframe resampling, vwma_periods is a multiplier on that"""
     start = time.perf_counter()
 
-    ohlc_folder = Path('../bin_ohlc_5m')
+    ohlc_folder = Path('/home/ross/coding/modular_trader/bin_ohlc_5m')
     ohlc_path = ohlc_folder / f"{pair}.parquet"
 
     if ohlc_path.exists():
@@ -202,7 +202,10 @@ def add_features(df, tf):
     df = features.daily_roc(df, tf)
     df = features.day_of_week(df)
     df = features.day_of_week_180(df)
-    df = features.doji(df, 0.5, 2)
+    df = features.doji(df, 0.5, 2, weighted=True)
+    df = features.doji(df, 1, 2, weighted=True)
+    df = features.doji(df, 2, 2, weighted=True)
+    df = features.doji(df, 0.5, 2, weighted=False)
     df = features.engulfing(df, 1)
     df = features.engulfing(df, 2)
     df = features.engulfing(df, 3)

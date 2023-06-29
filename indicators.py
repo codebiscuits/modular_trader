@@ -509,3 +509,8 @@ def prev_daily_low(df: pd.DataFrame, timeframe: str='5T') -> pd.Series:
     return df_2.reset_index()
 
 
+def z_score(s: pd.Series, lookback) -> pd.Series:
+    s_mean = s.ewm(lookback).mean()
+    s_std = s.ewm(lookback).std()
+
+    return (s - s_mean) / s_std

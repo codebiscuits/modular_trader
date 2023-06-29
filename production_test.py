@@ -7,7 +7,7 @@ from pprint import pprint
 from machine_learning import entry_modelling as em
 import indicators as ind
 from machine_learning import features
-from datetime import datetime
+from datetime import datetime, timezone
 from pushbullet import Pushbullet
 # import update_ohlc
 
@@ -15,6 +15,9 @@ pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
 pd.set_option('display.precision', 4)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
+
+all_start = time.perf_counter()
+print(f"\nRunning Production Test {datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M')}")
 
 timeframe = '1h'
 
@@ -67,7 +70,7 @@ def add_feature(df, name, timeframe):
         'chan_mid_width_100': {'call': features.channel_mid_width, 'params': (df, 100)},
         'chan_mid_width_200': {'call': features.channel_mid_width, 'params': (df, 200)},
         'daily_open_ratio': {'call': features.daily_open_ratio, 'params': (df,)},
-        'daily_roc': {'call': features.daily_roc, 'params': (df, timeframe)},
+        'roc_1d': {'call': features.daily_roc, 'params': (df, timeframe)},
         'day_of_week': {'call': features.day_of_week, 'params': (df,)},
         'day_of_week_180': {'call': features.day_of_week_180, 'params': (df,)},
         'ema_12_break_up': {'call': features.ema_breakout, 'params': (df, 12, 25)},
@@ -106,8 +109,14 @@ def add_feature(df, name, timeframe):
         'prev_daily_open_ratio': {'call': features.prev_daily_open_ratio, 'params': (df,)},
         'prev_daily_high_ratio': {'call': features.prev_daily_high_ratio, 'params': (df,)},
         'prev_daily_low_ratio': {'call': features.prev_daily_low_ratio, 'params': (df,)},
-        'recent_bull_doji': {'call': features.doji, 'params': (df, 0.5, 2)},
-        'recent_bear_doji': {'call': features.doji, 'params': (df, 0.5, 2)},
+        'weighted_bull_doji': {'call': features.doji, 'params': (df, 0.5, 2, True)},
+        'weighted_bear_doji': {'call': features.doji, 'params': (df, 0.5, 2, True)},
+        'weighted_1_bull_doji': {'call': features.doji, 'params': (df, 1, 2, True)},
+        'weighted_1_bear_doji': {'call': features.doji, 'params': (df, 1, 2, True)},
+        'weighted_2_bull_doji': {'call': features.doji, 'params': (df, 2, 2, True)},
+        'weighted_2_bear_doji': {'call': features.doji, 'params': (df, 2, 2, True)},
+        'unweighted_bull_doji': {'call': features.doji, 'params': (df, 0.5, 2, False)},
+        'unweighted_bear_doji': {'call': features.doji, 'params': (df, 0.5, 2, False)},
         'recent_vd_div_1': {'call': features.vol_delta_div, 'params': (df, 1)},
         'recent_vd_div_2': {'call': features.vol_delta_div, 'params': (df, 2)},
         'recent_vd_div_3': {'call': features.vol_delta_div, 'params': (df, 3)},
@@ -140,12 +149,15 @@ def add_feature(df, name, timeframe):
         'vol_denom_roc_5': {'call': features.vol_denom_roc, 'params': (df, 2, 50)},
         'week_of_year': {'call': features.week_of_year, 'params': (df,)},
         'week_of_year_180': {'call': features.week_of_year_180, 'params': (df,)},
-        'weekly_roc': {'call': features.weekly_roc, 'params': (df, timeframe)}
+        'roc_1w': {'call': features.weekly_roc, 'params': (df, timeframe)}
     }
     feature = feature_lookup[name]
     df = feature['call'](*feature['params'])
 
     return df
+
+now = datetime.now().strftime('%d/%m/%y %H:%M')
+notes = ''
 
 for pair in pairs:
     # print(f"\nTesting {pair}")
@@ -183,16 +195,18 @@ for pair in pairs:
     combined_long = long_confidence - short_confidence
     combined_short = short_confidence - long_confidence
 
-    now = datetime.now().strftime('%d/%m/%y %H:%M')
-
-    if combined_long > 0.5:
-        note = f"Buy {pair} @ {df.close.iloc[-1]} confidence: {combined_long:.1%}"
+    if combined_long > 0.75:
+        note = f"Buy {pair} @ {df.close.iloc[-1]} confidence: {combined_long:.1%}\n"
         print(note)
-        pb.push_note(now, note)
-    if combined_short > 0.5:
-        note = f"Sell {pair} @ {df.close.iloc[-1]} confidence: {combined_short:.1%}"
+        notes += note
+    if combined_short > 0.75:
+        note = f"Sell {pair} @ {df.close.iloc[-1]} confidence: {combined_short:.1%}\n"
         print(note)
-        pb.push_note(now, note)
+        notes += note
 
-    # need to add r_pct to the features dict before i give it to the model
-    # print(df.tail())
+pb.push_note(now, notes)
+
+all_end = time.perf_counter()
+all_elapsed = all_end - all_start
+print(f"\nFinished, time taken: {int(all_elapsed // 60)}m {all_elapsed % 60:.1f}s\n{'-'*50:^100}")
+
