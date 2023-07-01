@@ -2,6 +2,11 @@ import indicators as ind
 import pandas as pd
 import numpy as np
 
+
+# new features: round_numbers_proximity (powers of 10, single digit integer multiples of powers of 10,
+# numerology numbers, numerology multiples of powers of 10
+
+
 def htf_fractals_proximity(df: pd.DataFrame, orig_tf: str, htf: str='W', frac_width: int=5) -> pd.DataFrame:
     """resamples to weekly or monthly timeframe, calculates williams fractals on that, works out which is closest to the
     current price and returns the pct difference"""
@@ -328,7 +333,11 @@ def vol_delta(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def fractal_trend_age(df: pd.DataFrame, side) -> pd.DataFrame:
+def fractal_trend_age(df: pd.DataFrame, side, width: int=5, spacing: int=2) -> pd.DataFrame:
+    if 'frac_low' not in df.columns:
+        df = ind.williams_fractals(df, width, spacing)
+        df = df.drop(['fractal_high', 'fractal_low', f"atr-{spacing}", f"atr_{spacing}_pct"], axis=1).dropna(
+            axis=0).reset_index(drop=True)
     condition = (df.open > df.frac_low) if side == 'long' else (df.open < df.frac_high)
     df['trend_age'] = ind.consec_condition(condition)
 

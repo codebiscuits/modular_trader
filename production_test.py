@@ -21,7 +21,7 @@ print(f"\nRunning Production Test {datetime.now(timezone.utc).strftime('%Y/%m/%d
 
 timeframes = ['1h', '4h', '12h', '1d']
 
-now = datetime.now().strftime('%d/%m/%y %H:%M')
+now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
 notes = ''
 
 for timeframe in timeframes:

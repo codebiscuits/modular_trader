@@ -30,58 +30,54 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 print('\n-+-+-+-+-+-+-+-+-+-+-+- Running Setup Scanner -+-+-+-+-+-+-+-+-+-+-+-\n')
 
 
-def get_timeframes():
-    hour = datetime.now(timezone.utc).hour
-    # hour = 0 # for testing all timeframes
-    d = {1: ('1h', None), 4: ('4h', None), 12: ('12h', None), 24: ('1d', None)}
 
-    return [d[tf] for tf in d if hour % tf == 0]
 
 
 ########################################################################################################################
 
-timeframes = get_timeframes()
+session = sessions.TradingSession(0.0003)
 # timeframes = [('1h', None)]
 
-print(f"Running setup_scan({timeframes})")
-session = sessions.TradingSession(0.0003)
+print(f"Running setup_scan({session.timeframes})")
 print(f"\nCurrent time: {session.now_start}, {session.name}\n")
 
 # initialise agents
 agents = []
-for timeframe, offset in timeframes:
+for timeframe, offset in session.timeframes:
     agents.extend(
         [
-            DoubleST(session, timeframe, offset, 3, 1.0),
-            DoubleST(session, timeframe, offset, 3, 1.4),
-            DoubleST(session, timeframe, offset, 3, 1.8),
-            DoubleST(session, timeframe, offset, 5, 2.2),
-            DoubleST(session, timeframe, offset, 5, 2.8),
-            DoubleST(session, timeframe, offset, 5, 3.4),
-            DoubleSTnoEMA(session, timeframe, offset, 3, 1.0),
-            DoubleSTnoEMA(session, timeframe, offset, 3, 1.4),
-            DoubleSTnoEMA(session, timeframe, offset, 3, 1.8),
-            DoubleSTnoEMA(session, timeframe, offset, 5, 2.2),
-            DoubleSTnoEMA(session, timeframe, offset, 5, 2.8),
-            DoubleSTnoEMA(session, timeframe, offset, 5, 3.4),
-            EMACross(session, timeframe, offset, 12, 21, 1.2),
-            EMACross(session, timeframe, offset, 12, 21, 1.8),
-            EMACross(session, timeframe, offset, 12, 21, 2.4),
-            EMACrossHMA(session, timeframe, offset, 12, 21, 1.2),
-            EMACrossHMA(session, timeframe, offset, 12, 21, 1.8),
-            EMACrossHMA(session, timeframe, offset, 12, 21, 2.4),
-            # TrailFractals(session, timeframe, offset, 0.75),
+            # DoubleST(session, timeframe, offset, 3, 1.0),
+            # DoubleST(session, timeframe, offset, 3, 1.4),
+            # DoubleST(session, timeframe, offset, 3, 1.8),
+            # DoubleST(session, timeframe, offset, 5, 2.2),
+            # DoubleST(session, timeframe, offset, 5, 2.8),
+            # DoubleST(session, timeframe, offset, 5, 3.4),
+            # DoubleSTnoEMA(session, timeframe, offset, 3, 1.0),
+            # DoubleSTnoEMA(session, timeframe, offset, 3, 1.4),
+            # DoubleSTnoEMA(session, timeframe, offset, 3, 1.8),
+            # DoubleSTnoEMA(session, timeframe, offset, 5, 2.2),
+            # DoubleSTnoEMA(session, timeframe, offset, 5, 2.8),
+            # DoubleSTnoEMA(session, timeframe, offset, 5, 3.4),
+            # EMACross(session, timeframe, offset, 12, 21, 1.2),
+            # EMACross(session, timeframe, offset, 12, 21, 1.8),
+            # EMACross(session, timeframe, offset, 12, 21, 2.4),
+            # EMACrossHMA(session, timeframe, offset, 12, 21, 1.2),
+            # EMACrossHMA(session, timeframe, offset, 12, 21, 1.8),
+            # EMACrossHMA(session, timeframe, offset, 12, 21, 2.4),
+            TrailFractals(session, timeframe, offset, min_conf=.75),
         ]
     )
 
 agents = {a.id: a for a in agents}
 
+pprint(session.features)
+
 # session.name = ' | '.join([n.name for n in agents.values()])
 
 print("\n-*-*-*- Running rst and rsst for all agents -*-*-*-\n")
 for agent in agents.values():
-    agent.record_stopped_trades(session, timeframes)
-    agent.record_stopped_sim_trades(session, timeframes)
+    agent.record_stopped_trades(session, session.timeframes)
+    agent.record_stopped_sim_trades(session, session.timeframes)
 
     # pprint(agent.real_pos)
 print("\n-*-*-*- rst and rsst finished for all agents -*-*-*-\n")
@@ -110,7 +106,7 @@ for n, pair in enumerate(pairs):
     now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
 
     # df_dict contains ohlc dataframes for each active timeframe for the current pair
-    df_dict = funcs.prepare_ohlc(session, timeframes, pair)
+    df_dict = funcs.prepare_ohlc(session, session.timeframes, pair)
 
     # if there is not enough history at a given timeframe, this function will return None instead of the df
     # TODO this would be a good function to start the migration to polars
@@ -119,6 +115,7 @@ for n, pair in enumerate(pairs):
 
     for tf, df in df_dict.items():
         df_dict[tf] = session.compute_indicators(df, tf)
+        df_dict[tf] = session.compute_features(df, tf)
 
     for agent in agents.values():
         if agent.tf not in df_dict: # some pairs will not have all required timeframes for the session
@@ -162,7 +159,7 @@ for n, pair in enumerate(pairs):
                 agent.sim_pos[asset]['price_delta'] = (price - sim_ep) / sim_ep
 
 signal_counts = Counter([f"{signal['tf']}_{signal['bias']}" for signal in raw_signals])
-for tf in timeframes:
+for tf in session.timeframes:
     tf_signals = [sig for sig in raw_signals if sig['tf'] == tf[0]]
     session.market_bias[tf[0]] = (signal_counts.get(f'{tf[0]}_bullish', 0) - signal_counts.get(f'{tf[0]}_bearish', 0)) / len(raw_signals)
 
@@ -642,7 +639,7 @@ for agent in agents.values():
 if not session.live:
     print('warning: logging directed to test_records')
 
-for tf in timeframes:
+for tf in session.timeframes:
     print(f"\n\n{tf[0]} market bias: {session.market_bias[tf[0]]:.2f} range from 1 (bullish) to -1 (bearish)\n\n")
 pprint(signal_counts)
 
@@ -675,8 +672,6 @@ print('\n-----------------------------------------------------------------------
 #     pprint(agent.real_pos)
 #     print('open_trades')
 #     pprint(agent.open_trades)
-
-session.save_spreads()
 
 script_end = time.perf_counter()
 total_time = script_end - script_start

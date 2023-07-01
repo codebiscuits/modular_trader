@@ -2517,7 +2517,7 @@ class DoubleST(Agent):
         self.name = f'{self.tf} dst {self.mult1}-{self.mult2}'
         self.id = f"double_st_{self.tf}_{self.offset}_{self.mult1}_{self.mult2}"
         self.ohlc_length = 200 + self.signal_age
-        self.cross_age_name = f"cross_age-st-10-{self.mult1}-10-{self.mult2}"
+        self.cross_age_name = f"cross_age-st-10-{int(self.mult1 * 10)}-10-{int(self.mult2 * 10)}"
         self.trail_stop = False
         Agent.__init__(self, session)
         session.indicators.update(['ema-200', f"st-10-{self.mult1}", f"st-10-{self.mult2}", self.cross_age_name])
@@ -2642,7 +2642,7 @@ class DoubleSTnoEMA(Agent):
         self.name = f'{self.tf} dst no ema {self.mult1}-{self.mult2}'
         self.id = f"double_st_no_ema_{self.tf}_{self.offset}_{self.mult1}_{self.mult2}"
         self.ohlc_length = 10 + self.signal_age
-        self.cross_age_name = f"cross_age-st-10-{self.mult1}-10-{self.mult2}"
+        self.cross_age_name = f"cross_age-st-10-{int(self.mult1 * 10)}-10-{int(self.mult2 * 10)}"
         self.trail_stop = False
         Agent.__init__(self, session)
         session.indicators.update([f"st-10-{self.mult1}", f"st-10-{self.mult2}", self.cross_age_name])
@@ -3004,7 +3004,13 @@ class EMACrossHMA(Agent):
 class TrailFractals(Agent):
     """Machine learning strategy based around williams fractals triling stops"""
 
-    # TODO get all features into the session
+    # TODO make sure move_stops is looking at williams fractals to recalculate where the stop should be every time.
+    #  maybe use the 'trail_stop' instance attribute to specify the indicator that should be used
+    # TODO think about how to use the confidence score (and other scores)
+    # TODO if i'm only going to use machine learning strats from this point forward, it would be worth  making a
+    #  session.valid_pairs set just like the session.features set so i'm not going through hundreds of pairs for no
+    #  reason, but make sure things like spreads still get recorded for every pair (maybe it's time to move that to
+    #  update_ohlc or something)
 
     def __init__(self, session, tf: str, offset: int, min_conf: float=0.75) -> None:
         t = Timer('TrailFractals init')
@@ -3013,16 +3019,17 @@ class TrailFractals(Agent):
         self.tf = tf
         self.offset = offset
         self.min_confidence = min_conf
-        self.load_data()
+        self.load_data(session, tf)
         self.name = f'{self.tf} trail_fractals {self.width}-{self.spacing}'
-        self.id = f"avg_trade_size_{self.tf}_{self.offset}_{self.width}_{self.spacing}"
-        self.ohlc_length = 200
+        self.id = f"trail_fractals_{self.tf}_{self.offset}_{self.width}_{self.spacing}"
+        self.ohlc_length = 201
+        self.trail_stop = True
         self.notes = ''
         Agent.__init__(self, session)
-        session.indicators.update(self.feature_set)
+        session.features[tf].update(self.feature_set)
         t.stop()
 
-    def load_data(self):
+    def load_data(self, session, tf):
         # paths
         folder = Path("/home/ross/coding/modular_trader/machine_learning/models/trail_fractals")
         long_model_path = folder / f"trail_fractal_long_{self.tf}_model.sav"
@@ -3039,9 +3046,9 @@ class TrailFractals(Agent):
 
         self.pairs = self.long_info['pairs']
         self.feature_set = set(self.long_info['features'] + self.short_info['features'])
+        session.features[tf].update(self.feature_set)
         self.width = self.long_info['frac_width']
         self.spacing = self.long_info['atr_spacing']
-        pprint(self.feature_set)
 
     def signals(self, session, df: pd.DataFrame, pair: str) -> dict:
         """generates spot buy signals based on the ats_z indicator. does not account for currently open positions,
@@ -3049,6 +3056,9 @@ class TrailFractals(Agent):
 
         sig = Timer('ats_spot_signals')
         sig.start()
+
+        if pair not in self.pairs:
+            return None
 
         signal_dict = {'agent': self.id, 'mode': self.mode, 'pair': pair}
 
@@ -3071,7 +3081,7 @@ class TrailFractals(Agent):
         short_X = pd.DataFrame(short_features).transpose()
         short_confidence = self.short_model.predict_proba(short_X)[0, 1]
 
-        print(f"{self.name} {pair} {self.tf} long conf: {long_confidence:.1%} short conf: {short_confidence:.1%}")
+        # print(f"{self.name} {pair} {self.tf} long conf: {long_confidence:.1%} short conf: {short_confidence:.1%}")
 
         price = df.close.iloc[-1]
         combined_conf = long_confidence - short_confidence
@@ -3080,21 +3090,25 @@ class TrailFractals(Agent):
             signal_dict['bias'] = 'bullish'
             inval = df.frac_low.iloc[-1]
             note = f"{self.name} Long {self.tf} {pair} @ {df.close.iloc[-1]} confidence: {combined_conf:.1%}\n"
-            print(note)
+            # print(note)
             self.notes += note
-        if (price < df.frac_high.iloc[-1]) and combined_conf > -self.min_confidence:
+        elif (price < df.frac_high.iloc[-1]) and combined_conf < -self.min_confidence:
             signal_dict['bias'] = 'bearish'
             inval = df.frac_high.iloc[-1]
             note = f"{self.name} Short {self.tf} {pair} @ {df.close.iloc[-1]} confidence: {0-combined_conf:.1%}\n"
-            print(note)
+            # print(note)
             self.notes += note
+        else:
+            return None
 
         signal_dict['confidence'] = combined_conf
         stp = self.calc_stop(inval, session.pairs_data[pair]['spread'], price)
+        signal_dict['inval'] = stp
         signal_dict['inval_ratio'] = stp / price
         signal_dict['inval_score'] = self.calc_inval_risk_score(abs((price - stp) / price))
         signal_dict['trig_price'] = price
         signal_dict['pct_of_full_pos'] = 1
+        signal_dict['tf'] = self.tf
 
         sig.stop()
 
