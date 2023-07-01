@@ -40,7 +40,7 @@ def feature_selection(X, y, limit, quick=False):
         selector = SFS(estimator=selector_model, k_features=10, forward=True, floating=False, verbose=0,
                        scoring=scorer, n_jobs=-1)
     else:
-        selector = SFS(estimator=selector_model, k_features='best', forward=False, floating=True, verbose=1,
+        selector = SFS(estimator=selector_model, k_features='best', forward=False, floating=True, verbose=0,
                        scoring=scorer, n_jobs=-1)
     selector = selector.fit(X_train, y_train)
     X_transformed = selector.transform(X)
@@ -62,7 +62,7 @@ atr_spacing = 2
 pairs = em.rank_pairs()[start_pair:start_pair + num_pairs]
 scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
 
-for side, timeframe in itertools.product(sides, timeframes[2:]):
+for side, timeframe in itertools.product(sides, timeframes):
     print(f"\nFitting {timeframe} {side} model")
     # create dataset
     all_res = pd.DataFrame()
@@ -98,7 +98,7 @@ for side, timeframe in itertools.product(sides, timeframes[2:]):
         max_depth=[5, 10, 15, 20],
         learning_rate=[0.05, 0.1]
     )
-    gs = GridSearchCV(estimator=base_model, param_grid=params, scoring=scorer, n_jobs=-1, cv=5, verbose=1)
+    gs = GridSearchCV(estimator=base_model, param_grid=params, scoring=scorer, n_jobs=-1, cv=5, verbose=0)
     gs.fit(X, y)
     grid_model = gs.best_estimator_
 
