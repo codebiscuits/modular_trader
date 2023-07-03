@@ -326,7 +326,8 @@ def consec_condition(s: pd.Series) -> pd.Series:
     integers representing the cummulative length counts of each run of Trues and Falses"""
 
     cum_diff = s.diff().cumsum()
-    return cum_diff.groupby(cum_diff).cumcount()
+    n = cum_diff.groupby(cum_diff).cumcount()
+    return n
 
 
 def trend_consec_bars(df, bars):

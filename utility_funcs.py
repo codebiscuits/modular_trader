@@ -303,6 +303,7 @@ def log(session, agent) -> None:
     if agent.mode == 'spot':
         new_record['balance'] = round(session.spot_bal, 2)
         new_record['fr_spot'] = agent.fr_score_spot
+        new_record['model_info'] = agent.long_info
 
         new_record['real_rpnl_spot'] = agent.realised_pnls['real_spot']
         new_record['sim_rpnl_spot'] = agent.realised_pnls['sim_spot']
@@ -313,6 +314,8 @@ def log(session, agent) -> None:
         new_record['balance'] = round(session.margin_bal, 2)
         new_record['fr_long'] = agent.fr_score_l
         new_record['fr_short'] = agent.fr_score_s
+        new_record['long_model_info'] = agent.long_info
+        new_record['short_model_info'] = agent.short_info
 
         new_record['real_rpnl_long'] = agent.realised_pnls['real_long']
         new_record['sim_rpnl_long'] = agent.realised_pnls['sim_long']

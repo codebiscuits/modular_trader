@@ -3002,15 +3002,14 @@ class EMACrossHMA(Agent):
 
 
 class TrailFractals(Agent):
-    """Machine learning strategy based around williams fractals triling stops"""
+    """Machine learning strategy based around williams fractals trailing stops"""
 
-    # TODO make sure move_stops is looking at williams fractals to recalculate where the stop should be every time.
-    #  maybe use the 'trail_stop' instance attribute to specify the indicator that should be used
     # TODO think about how to use the confidence score (and other scores)
     # TODO if i'm only going to use machine learning strats from this point forward, it would be worth  making a
     #  session.valid_pairs set just like the session.features set so i'm not going through hundreds of pairs for no
     #  reason, but make sure things like spreads still get recorded for every pair (maybe it's time to move that to
     #  update_ohlc or something)
+    # TODO need to make sure that model info gets recorded in the logs at the end of the session
 
     def __init__(self, session, tf: str, offset: int, min_conf: float=0.75) -> None:
         t = Timer('TrailFractals init')
@@ -3026,7 +3025,7 @@ class TrailFractals(Agent):
         self.trail_stop = True
         self.notes = ''
         Agent.__init__(self, session)
-        session.features[tf].update(self.feature_set)
+        session.features[tf].update(self.features)
         t.stop()
 
     def load_data(self, session, tf):
@@ -3045,8 +3044,8 @@ class TrailFractals(Agent):
             self.short_info = json.load(ip)
 
         self.pairs = self.long_info['pairs']
-        self.feature_set = set(self.long_info['features'] + self.short_info['features'])
-        session.features[tf].update(self.feature_set)
+        self.features = set(self.long_info['features'] + self.short_info['features'])
+        session.features[tf].update(self.features)
         self.width = self.long_info['frac_width']
         self.spacing = self.long_info['atr_spacing']
 
@@ -3060,17 +3059,21 @@ class TrailFractals(Agent):
         if pair not in self.pairs:
             return None
 
+        print(f"\nTesting {pair} for signals, length: {len(df)}")
+
         signal_dict = {'agent': self.id, 'mode': self.mode, 'pair': pair}
 
         df = ind.williams_fractals(df, self.width, self.spacing)
 
-        # make predictions
+        # calculate % from invalidation
         df['long_r_pct'] = abs(df.close - df.frac_low) / df.close
         df['short_r_pct'] = abs(df.close - df.frac_high) / df.close
 
         # Long model
         df['r_pct'] = df.long_r_pct
         long_features = df[self.long_info['features']].iloc[-1]
+        # print(f"{self.name} {self.tf} long inputs:")
+        # print(long_features)
         long_X = pd.DataFrame(long_features).transpose()
         long_confidence = self.long_model.predict_proba(long_X)[0, 1]
 
@@ -3078,6 +3081,8 @@ class TrailFractals(Agent):
         df = df.drop('long_r_pct', axis=1)
         df['r_pct'] = df.short_r_pct
         short_features = df[self.short_info['features']].iloc[-1]
+        # print(f"{self.name} {self.tf} short inputs:")
+        # print(short_features)
         short_X = pd.DataFrame(short_features).transpose()
         short_confidence = self.short_model.predict_proba(short_X)[0, 1]
 

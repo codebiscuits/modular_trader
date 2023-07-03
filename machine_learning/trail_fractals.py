@@ -20,10 +20,15 @@ from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 from imblearn.under_sampling import RandomUnderSampler
 
 all_start = time.perf_counter()
-import update_ohlc
+# import update_ohlc
 now = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M')
 print(f"-:--:--:--:--:--:--:--:--:--:-  {now} Running Trail Fractals Fitting  -:--:--:--:--:--:--:--:--:--:-")
 
+# TODO i need to work out an elegant way to run this with or without feature selection, so i can run it without every
+#  day, and with every week, or i can run it without every day on the computer which runs setup_scanner live, and every
+#  week i can just run the feature selection and copy the info files to the live computer. maybe i can separate the two
+#  tasks into two separate files, but put the bits they share into another file (maybe start that ml_funcs again) so i
+#  don't have the same functionality in two different places
 
 def feature_selection(X, y, limit, quick=False):
     fs_start = time.perf_counter()
@@ -52,6 +57,17 @@ def feature_selection(X, y, limit, quick=False):
 
     return X_transformed, y, selected
 
+
+def load_features(side, tf):
+    folder = Path("/home/ross/coding/modular_trader/machine_learning/models/trail_fractals")
+    info_path = folder / f"trail_fractal_{side}_{tf}_info.json"
+    with open(info_path, 'r') as ip:
+        info = json.load(ip)
+
+    return list(info['features'])
+
+
+perform_feature_selection = False
 timeframes = ['1h', '4h', '12h', '1d']
 sides = ['long', 'short']
 data_len = 200
@@ -76,14 +92,19 @@ for side, timeframe in itertools.product(sides, timeframes):
 
     # split features from labels
     X, y, z = em.features_labels_split(all_res)
+    if not perform_feature_selection:
+        selected = load_features(side, timeframe)
+        X = X.loc[:, selected]
     X, _, cols = em.transform_columns(X, X)
+
 
     # random undersampling
     rus = RandomUnderSampler(random_state=0)
     X, y = rus.fit_resample(X, y)
 
     # feature selection
-    X, y, selected = feature_selection(X, y, 1000, quick=False)
+    if perform_feature_selection:
+        X, y, selected = feature_selection(X, y, 1000, quick=False)
 
     # split data for fitting and calibration
     X, X_cal, y, y_cal = train_test_split(X, y, test_size=0.333, random_state=11)

@@ -53,7 +53,7 @@ client = Client(keys.bPkey, keys.bSkey)
 
 
 def rank_pairs():
-    with open('../recent_1d_volumes.json', 'r') as file:
+    with open('recent_1d_volumes.json', 'r') as file:
         vols = json.load(file)
 
     return sorted(vols, key=lambda x: vols[x], reverse=True)
@@ -373,7 +373,7 @@ def transform_columns(X_train, X_test):
           'hma_100_ratio', 'hma_200_ratio', 'atr_5_pct', 'atr_10_pct', 'atr_25_pct', 'atr_50_pct']
     quant_cols = [qc for qc in quant_cols if qc in X_train.columns]
 
-    transformers = [('minmax', MinMaxScaler(), min_max_cols), ('quantile', QuantileTransformer(), quant_cols)]
+    transformers = [('minmax', MinMaxScaler(), min_max_cols), ('quantile', QuantileTransformer(n_quantiles=200), quant_cols)]
     ct = ColumnTransformer(transformers=transformers, remainder='passthrough')
     X_train = ct.fit_transform(X_train)
     X_test = ct.transform(X_test)

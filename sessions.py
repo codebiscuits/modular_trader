@@ -337,7 +337,10 @@ class TradingSession():
         # hour = 0 # for testing all timeframes
         d = {1: ('1h', None), 4: ('4h', None), 12: ('12h', None), 24: ('1d', None)}
 
-        return [d[tf] for tf in d if hour % tf == 0]
+        timeframes = [d[tf] for tf in d if hour % tf == 0]
+        # timeframes = [('4h', None)]
+
+        return timeframes
 
 
     def set_live(self) -> bool:
@@ -636,6 +639,7 @@ class TradingSession():
 
         for f in self.features[tf]:
             # print(f"processing {f}")
+            # print(len(df))
             if f == 'r_pct':
                 continue
             df = features.add_feature(df, f, tf)

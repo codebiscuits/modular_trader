@@ -36,7 +36,6 @@ print('\n-+-+-+-+-+-+-+-+-+-+-+- Running Setup Scanner -+-+-+-+-+-+-+-+-+-+-+-\n
 ########################################################################################################################
 
 session = sessions.TradingSession(0.0003)
-# timeframes = [('1h', None)]
 
 print(f"Running setup_scan({session.timeframes})")
 print(f"\nCurrent time: {session.now_start}, {session.name}\n")
@@ -64,7 +63,7 @@ for timeframe, offset in session.timeframes:
             # EMACrossHMA(session, timeframe, offset, 12, 21, 1.2),
             # EMACrossHMA(session, timeframe, offset, 12, 21, 1.8),
             # EMACrossHMA(session, timeframe, offset, 12, 21, 2.4),
-            TrailFractals(session, timeframe, offset, min_conf=.75),
+            TrailFractals(session, timeframe, offset, min_conf=0.5),
         ]
     )
 
@@ -161,7 +160,13 @@ for n, pair in enumerate(pairs):
 signal_counts = Counter([f"{signal['tf']}_{signal['bias']}" for signal in raw_signals])
 for tf in session.timeframes:
     tf_signals = [sig for sig in raw_signals if sig['tf'] == tf[0]]
-    session.market_bias[tf[0]] = (signal_counts.get(f'{tf[0]}_bullish', 0) - signal_counts.get(f'{tf[0]}_bearish', 0)) / len(raw_signals)
+    session.market_bias[tf[0]] = (
+            (
+                    signal_counts.get(f'{tf[0]}_bullish', 0)
+                    - signal_counts.get(f'{tf[0]}_bearish', 0)
+            )
+            / max(len(raw_signals), 1)
+    )
 
 tech_end = time.perf_counter()
 tech_took = tech_end - tech_start

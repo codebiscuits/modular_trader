@@ -20,8 +20,8 @@ def add_feature(df, name, timeframe):
         'weighted_100_bear_doji': {'call': doji, 'params': (df, 1, 2, True)},
         'weighted_150_bull_doji': {'call': doji, 'params': (df, 1.5, 2, True)},
         'weighted_150_bear_doji': {'call': doji, 'params': (df, 1.5, 2, True)},
-        'un_weighted_bull_doji': {'call': doji, 'params': (df, 0.5, 2, False)},
-        'un_weighted_bear_doji': {'call': doji, 'params': (df, 0.5, 2, False)},
+        'unweighted_bull_doji': {'call': doji, 'params': (df, 0.5, 2, False)},
+        'unweighted_bear_doji': {'call': doji, 'params': (df, 0.5, 2, False)},
         'bearish_engulf_1': {'call': engulfing, 'params': (df, 1)},
         'bearish_engulf_2': {'call': engulfing, 'params': (df, 2)},
         'bearish_engulf_3': {'call': engulfing, 'params': (df, 3)},
@@ -102,12 +102,12 @@ def add_feature(df, name, timeframe):
         'stoch_vwma_ratio_25': {'call': stoch_vwma_ratio, 'params': (df, 25)},
         'stoch_vwma_ratio_50': {'call': stoch_vwma_ratio, 'params': (df, 50)},
         'stoch_vwma_ratio_100': {'call': stoch_vwma_ratio, 'params': (df, 100)},
-        'fractal_trend_age_long': {'call': fractal_trend_age, 'params': (df, 'long')},
-        'fractal_trend_age_short': {'call': fractal_trend_age, 'params': (df, 'short')},
+        'fractal_trend_age_long': {'call': fractal_trend_age, 'params': (df, )},
+        'fractal_trend_age_short': {'call': fractal_trend_age, 'params': (df, )},
         'vol_delta': {'call': vol_delta, 'params': (df,)},
         'vol_delta_pct': {'call': vol_delta_pct, 'params': (df,)},
         'vol_denom_roc_2': {'call': vol_denom_roc, 'params': (df, 2, 25)},
-        'vol_denom_roc_5': {'call': vol_denom_roc, 'params': (df, 2, 50)},
+        'vol_denom_roc_5': {'call': vol_denom_roc, 'params': (df, 5, 50)},
         'week_of_year': {'call': week_of_year, 'params': (df,)},
         'week_of_year_180': {'call': week_of_year_180, 'params': (df,)},
         'roc_1w': {'call': weekly_roc, 'params': (df, timeframe)}
@@ -447,13 +447,16 @@ def vol_delta(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def fractal_trend_age(df: pd.DataFrame, side, width: int=5, spacing: int=2) -> pd.DataFrame:
+def fractal_trend_age(df: pd.DataFrame, width: int=5, spacing: int=2) -> pd.DataFrame:
     if 'frac_low' not in df.columns:
         df = ind.williams_fractals(df, width, spacing)
-        df = df.drop(['fractal_high', 'fractal_low', f"atr-{spacing}", f"atr_{spacing}_pct"], axis=1).dropna(
-            axis=0).reset_index(drop=True)
-    condition = (df.open > df.frac_low) if side == 'long' else (df.open < df.frac_high)
-    df['trend_age'] = ind.consec_condition(condition)
+        df = df.drop(['fractal_high', 'fractal_low', f"atr-{spacing}", f"atr_{spacing}_pct"], axis=1)
+
+    long_trend_condition = df.open > df.frac_low
+    df['fractal_trend_age_long'] = ind.consec_condition(long_trend_condition)
+
+    short_trend_condition = df.open < df.frac_high
+    df['fractal_trend_age_short'] = ind.consec_condition(short_trend_condition)
 
     return df
 
