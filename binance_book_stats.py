@@ -4,7 +4,7 @@ import json
 from json.decoder import JSONDecodeError
 import time
 from binance.client import Client
-import keys
+from resources import keys
 from pushbullet import Pushbullet
 from pathlib import Path
 import ccxt

@@ -3,11 +3,9 @@ import matplotlib.pyplot as plt
 from config import not_pairs, ohlc_data
 import time
 from datetime import datetime
-import binance_funcs as funcs
 import statistics as stats
-import numpy as np
 from pathlib import Path
-import indicators as ind
+from functions import indicators as ind, binance_funcs as funcs
 
 plt.style.use('fivethirtyeight')
 plt.rcParams['figure.figsize'] = (20,10)

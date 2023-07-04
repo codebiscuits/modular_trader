@@ -1,13 +1,11 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from binance.client import Client
-import keys
+from functions import keys
 import talib
 import statistics as stats
 import time
 client = Client(keys.bPkey, keys.bSkey)
-from pprint import pprint
 import json
 from pathlib import Path
 

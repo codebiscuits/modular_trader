@@ -1,12 +1,9 @@
-import binance_funcs as funcs
 from config import ohlc_data
 from pathlib import Path
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 import mplfinance as mpf
-import indicators as ind
-import time
+from functions import indicators as ind
 
 plt.style.use('fivethirtyeight')
 plt.rcParams['figure.figsize'] = (20,10)

@@ -1,24 +1,15 @@
 import pandas as pd
-import numpy as np
-from pathlib import Path
-import indicators as ind
-import features
-import binance_funcs as funcs
 import entry_modelling as em
 import plotly.express as px
 import plotly.graph_objects as go
-from pprint import pprint
 from itertools import product
 
-from sklearnex import get_patch_names, patch_sklearn, unpatch_sklearn
+from sklearnex import patch_sklearn
+
 patch_sklearn()
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.preprocessing import StandardScaler, QuantileTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, fbeta_score
-from sklearn.metrics import confusion_matrix, roc_auc_score, roc_curve
+from sklearn.metrics import precision_score, fbeta_score
 from sklearn.inspection import permutation_importance
 from imblearn.under_sampling import RandomUnderSampler
 

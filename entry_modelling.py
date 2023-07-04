@@ -1,30 +1,26 @@
 import time
 import pandas as pd
-from pprint import pprint
 from pathlib import Path
-import indicators as ind
-import machine_learning.features as features
-import binance_funcs as funcs
+from resources import indicators as ind, binance_funcs as funcs, features as features
 import numpy as np
 import json
 from itertools import product
 from collections import Counter
 from datetime import datetime
-import plotly.express as px
 from pyarrow import ArrowInvalid
 
 if not Path('/pi_2.txt').exists():
-    from sklearnex import get_patch_names, patch_sklearn, unpatch_sklearn
+    from sklearnex import patch_sklearn
+
     patch_sklearn()
 
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier
-from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV, RandomizedSearchCV
-from sklearn.preprocessing import StandardScaler, QuantileTransformer, RobustScaler, MinMaxScaler, KBinsDiscretizer
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
+from sklearn.preprocessing import QuantileTransformer, MinMaxScaler
 from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, fbeta_score
-from sklearn.metrics import confusion_matrix, roc_auc_score, roc_curve, make_scorer
+from sklearn.metrics import confusion_matrix, roc_auc_score, make_scorer
 from sklearn.inspection import permutation_importance
 from imblearn.under_sampling import RandomUnderSampler
 
@@ -62,7 +58,7 @@ def get_data(pair, timeframe, vwma_periods=24):
     vwma_lengths just accounts for timeframe resampling, vwma_periods is a multiplier on that"""
     start = time.perf_counter()
 
-    ohlc_folder = Path('/home/ross/coding/modular_trader/bin_ohlc_5m')
+    ohlc_folder = Path('bin_ohlc_5m')
     ohlc_path = ohlc_folder / f"{pair}.parquet"
 
     if ohlc_path.exists():

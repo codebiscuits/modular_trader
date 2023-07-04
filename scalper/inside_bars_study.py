@@ -1,19 +1,16 @@
-import datetime
 import pandas as pd
-import keys
 from binance import Client
 from pathlib import Path
-from decimal import Decimal, getcontext
+from decimal import getcontext
 from pushbullet import Pushbullet
-from typing import Union, List, Tuple, Dict, Set, Optional, Any
+from typing import List
 import itertools as it
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import math
 import statistics as stats
 import time
 import numpy as np
-import indicators as ind
+from functions import indicators as ind, keys
 from config import not_pairs
 
 pd.set_option('display.max_rows', None)

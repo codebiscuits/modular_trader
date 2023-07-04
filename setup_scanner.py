@@ -1,15 +1,13 @@
 import time
 script_start = time.perf_counter()
 
-import keys
+from resources import keys, utility_funcs as uf, binance_funcs as funcs
 from binance.client import Client
 from datetime import datetime, timezone
-import binance_funcs as funcs
-from agents import DoubleST, DoubleSTnoEMA, EMACross, EMACrossHMA, TrailFractals
+from agents import TrailFractals
 from pprint import pprint
-import utility_funcs as uf
 import sessions
-from timers import Timer
+from resources.timers import Timer
 from pushbullet import Pushbullet
 from collections import Counter
 

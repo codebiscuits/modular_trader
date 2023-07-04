@@ -1,24 +1,15 @@
 import datetime
-import keys
 import pandas as pd
 from pushbullet import Pushbullet
-from decimal import Decimal, getcontext
+from decimal import getcontext
 import json
 import websocket
-import numpy as np
-from binance import Client
 from scalper_agent import Agent
 from scalper_stream import Ohlc_Stream
 from scalper_market import Market
-from pathlib import Path
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import math
-import statistics as stats
-from typing import Union, List, Tuple, Dict, Set, Optional, Any
-import threading
 import time
-from pprint import pprint, pformat
+from pprint import pprint
+
 # from unicorn_binance_websocket_api.manager import BinanceWebSocketApiManager
 
 all_start = time.perf_counter()

@@ -62,7 +62,7 @@ def feature_selection(X, y, limit, quick=False):
 
 
 def load_features(side, tf):
-    folder = Path("/home/ross/coding/modular_trader/machine_learning/models/trail_fractals")
+    folder = Path("machine_learning/models/trail_fractals")
     info_path = folder / f"trail_fractal_{side}_{tf}_info.json"
     with open(info_path, 'r') as ip:
         info = json.load(ip)
@@ -71,7 +71,7 @@ def load_features(side, tf):
 
 
 def load_pairs(side, tf):
-    folder = Path("/home/ross/coding/modular_trader/machine_learning/models/trail_fractals")
+    folder = Path("machine_learning/models/trail_fractals")
     info_path = folder / f"trail_fractal_{side}_{tf}_info.json"
     with open(info_path, 'r') as ip:
         info = json.load(ip)
@@ -149,7 +149,7 @@ for side, timeframe in itertools.product(sides, timeframes):
     print(f"\nModel score after calibration: {cal_score:.1%}")
 
     # save to files
-    folder = Path("models/trail_fractals")
+    folder = Path("machine_learning/models/trail_fractals")
     folder.mkdir(parents=True, exist_ok=True)
 
     model_file = folder / f"trail_fractal_{side}_{timeframe}_model.sav"

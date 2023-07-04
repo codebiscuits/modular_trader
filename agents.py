@@ -1,29 +1,21 @@
 import binance.exceptions as bx
 import pandas as pd
-import polars as pl
 from pathlib import Path
 import json
 from json.decoder import JSONDecodeError
 import statistics as stats
-from timers import Timer
-from typing import Union, List, Tuple, Dict, Set, Optional, Any
-import binance_funcs as funcs
-import utility_funcs as uf
-import indicators as ind
+from resources.timers import Timer
+from typing import Dict
+from resources import indicators as ind, keys, utility_funcs as uf, binance_funcs as funcs
 from datetime import datetime, timezone
-from binance.exceptions import BinanceAPIException
 from pushbullet import Pushbullet
 from binance.client import Client
-import keys
 import binance.enums as be
 from decimal import Decimal, getcontext
 from pprint import pprint
 import sys
-import math
 from pyarrow import ArrowInvalid
 import traceback
-import math
-import plotly.graph_objects as go
 import joblib
 
 client = Client(keys.bPkey, keys.bSkey)

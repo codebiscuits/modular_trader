@@ -1,19 +1,13 @@
 import time
-import keys
+from functions import keys, binance_funcs as funcs
 from binance.client import Client
-import binance.exceptions as bx
-import binance_funcs as funcs
 import pandas as pd
-from pprint import pprint
 import sessions
 from config import not_pairs
-import matplotlib.pyplot as plt
-import numpy as np
 import json
 from pathlib import Path
 import itertools
 import statistics as stats
-import math
 import _pickle
 
 live = True

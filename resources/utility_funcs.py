@@ -1,17 +1,16 @@
-import json, keys
+import json
+from resources import keys
 from json.decoder import JSONDecodeError
-import binance_funcs as funcs
 from binance.client import Client
 from pathlib import Path
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 import statistics as stats
 from pushbullet import Pushbullet
-import time
 from pprint import pprint
 from decimal import Decimal, getcontext
-from timers import Timer
-from typing import Union, List, Tuple, Dict, Set, Optional, Any
+from resources.timers import Timer
+from typing import Tuple, Dict
 import sys
 import math
 import pytz

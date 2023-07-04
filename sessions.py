@@ -1,14 +1,12 @@
 from pathlib import Path
 from datetime import datetime, timezone
 from pushbullet import Pushbullet
-from timers import Timer
+from resources.timers import Timer
 from binance.client import Client
 import binance.enums as be
-import keys
-import indicators as ind
-import machine_learning.features as features
-import machine_learning.entry_modelling as em
-from typing import Union, List, Tuple, Dict, Set, Optional, Any
+from resources import indicators as ind, keys, features as features
+import entry_modelling as em
+from typing import Tuple, Dict
 from collections import Counter
 import sys
 import time

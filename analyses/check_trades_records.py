@@ -1,10 +1,7 @@
 from pathlib import Path
-import keys
+from functions import keys, utility_funcs as uf, binance_funcs as funcs
 import json
 from json.decoder import JSONDecodeError
-import utility_funcs as uf
-from pprint import pprint
-import binance_funcs as funcs
 import statistics as stats
 from datetime import datetime as dt
 from binance.client import Client

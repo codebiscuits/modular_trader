@@ -5,19 +5,16 @@ and see whats happening pair by pair, trade by trade. that might give me some
 insight into why so few pairs are producing 30+ trades in a year'''
 
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 import mplfinance as mpf
-import keys
 import talib
 import statistics as stats
 import time
 from pathlib import Path
 from rsi_optimising import get_results
-import binance_funcs as funcs
-import indicators as ind
+from functions import indicators as ind, keys, binance_funcs as funcs
 import strategies as strats
-from config import not_pairs, ohlc_data
+from config import not_pairs
 from binance.client import Client
 
 plt.style.use('fivethirtyeight')

@@ -1,7 +1,6 @@
 import pandas as pd
 from pathlib import Path
-import binance_funcs as funcs
-import indicators as ind
+from functions import indicators as ind, binance_funcs as funcs
 
 all_pairs = funcs.get_pairs()
 stables = ['EURUSDT', 'SUSDUSDT', 'USDCUSDT', 'BUSDUSDT', 'DAIUSDT', 'USTUSDT',

@@ -1,9 +1,8 @@
 import pandas as pd
 import polars as pl
-import keys
+from resources import keys, binance_funcs as funcs
 import time
 from datetime import datetime, timezone
-import binance_funcs as funcs
 from binance.client import Client
 from pushbullet import Pushbullet
 from pathlib import Path

@@ -1,10 +1,8 @@
 import json
 from pathlib import Path
 from pprint import pprint
-from statistics import mean
-import matplotlib.pyplot as plt
 from binance.client import Client
-import keys
+from functions import keys
 
 client = Client(keys.bPkey, keys.bSkey)
 

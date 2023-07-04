@@ -1,4 +1,4 @@
-import indicators as ind
+from resources import indicators as ind
 import pandas as pd
 import numpy as np
 

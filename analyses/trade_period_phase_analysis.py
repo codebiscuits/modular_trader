@@ -1,12 +1,10 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from binance.client import Client
-from binance.exceptions import BinanceAPIException
 from config import not_pairs
-import keys, time
+import time
+from functions import keys, binance_funcs as funcs
 from datetime import datetime
-import binance_funcs as funcs
-import math
 import numpy as np
 
 plt.style.use('fivethirtyeight')

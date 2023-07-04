@@ -1,14 +1,10 @@
 from binance.client import Client
-from binance.exceptions import BinanceAPIException
-import binance_funcs as funcs
-from config import ohlc_data, market_data
+from config import market_data
 from pathlib import Path
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
-import mplfinance as mpf
-import indicators as ind
-import time, json, keys
+from functions import indicators as ind, keys
+import json
 from datetime import datetime as dt
 from datetime import timedelta as delt
 

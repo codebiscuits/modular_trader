@@ -2,4 +2,4 @@
 __pycache__/
 ohlc_data/
 results/
-keys.py
+resources/keys.py

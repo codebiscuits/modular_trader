@@ -1,8 +1,7 @@
-import keys, math, time, json
+from resources import keys
 import statistics as stats
 import pandas as pd
 import polars as pl
-import numpy as np
 from binance.client import Client
 import binance.enums as be
 import binance.exceptions as bx
@@ -11,14 +10,13 @@ from decimal import Decimal, getcontext
 from pprint import pprint
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
-import utility_funcs as uf
-from timers import Timer
-from typing import Union, List, Tuple, Dict, Set, Optional, Any
-from collections import Counter
+from resources import utility_funcs as uf
+from resources.timers import Timer
+from typing import Tuple, Dict, Any
 import sys
 from pycoingecko import CoinGeckoAPI
 from pyarrow import ArrowInvalid
-import indicators as ind
+from resources import indicators as ind
 
 client = Client(keys.bPkey, keys.bSkey)
 cg = CoinGeckoAPI()

@@ -1,13 +1,9 @@
-import binance_funcs as funcs
-import utility_funcs as uf
-from datetime import datetime
 from binance.exceptions import BinanceAPIException
 from pushbullet import Pushbullet
 from binance.client import Client
-import keys
+from functions import keys
 import binance.enums as be
 from decimal import Decimal
-from pprint import pprint
 from time import sleep
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')

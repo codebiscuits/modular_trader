@@ -1,15 +1,12 @@
 import pandas as pd
-import numpy as np
 from binance.client import Client
-import keys
 import talib
 import statistics as stats
 import time
 import json
 from pathlib import Path
 # from execution import binance_spreads
-import binance_funcs as funcs
-import indicators as ind
+from functions import indicators as ind, keys, binance_funcs as funcs
 import strategies as strats
 from config import not_pairs, ohlc_data, results_data
 

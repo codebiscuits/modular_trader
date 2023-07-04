@@ -2,7 +2,7 @@ from pprint import pprint
 from binance.client import Client
 import binance.enums as be
 import binance.exceptions as bx
-import keys
+from functions import keys
 
 client = Client(keys.bPkey, keys.bSkey)
 

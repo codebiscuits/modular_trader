@@ -3,7 +3,7 @@ from json.decoder import JSONDecodeError
 from pathlib import Path
 from config import market_data
 from pprint import pprint
-import utility_funcs as uf
+from functions import utility_funcs as uf
 
 strat = 'double_st_lo' # 'rsi_st_ema'
 
