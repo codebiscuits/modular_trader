@@ -44,7 +44,7 @@ class TradingSession():
         self.now_start = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
         self.client = Client(keys.bPkey, keys.bSkey, testnet=False)
         self.last_price_update = 0
-        self.fr_max = fr_max  # at 0.0025, one agent makes good use of total balance
+        self.fr_max = fr_max
         self.name = 'agent names here'
         self.last_price_update = 0
         self.live = self.set_live()

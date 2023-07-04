@@ -1,8 +1,6 @@
 import time
 import pandas as pd
 from pprint import pprint
-import keys
-from binance import Client
 from pathlib import Path
 import indicators as ind
 import machine_learning.features as features
@@ -11,7 +9,6 @@ import numpy as np
 import json
 from itertools import product
 from collections import Counter
-import joblib
 from datetime import datetime
 import plotly.express as px
 from pyarrow import ArrowInvalid
@@ -49,7 +46,6 @@ all_start = time.perf_counter()
 pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
 pd.set_option('display.precision', 4)
-client = Client(keys.bPkey, keys.bSkey)
 
 
 def rank_pairs():
