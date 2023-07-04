@@ -123,12 +123,12 @@ for n, pair in enumerate(pairs):
         df_2 = df_dict[agent.tf].copy()
         # print(f"\n{pair} {tf} {len(df_2)}")
 
-        market_state = uf.get_market_state(session, agent, pair, df_2)
+        # market_state = uf.get_market_state(session, agent, pair, df_2)
 
         signal = agent.signals(session, df_2, pair)
         if signal and signal['bias']:
 
-            signal.update(market_state)
+            # signal.update(market_state)
             raw_signals.append(signal)
 
             # if this agent is in position with this pair, calculate open risk and related metrics here
@@ -185,6 +185,8 @@ processed_signals = dict(
     tracked_close=[],  # can be left until last
 )
 
+pprint(raw_signals)
+
 while raw_signals:
     signal = raw_signals.pop(0)
 
@@ -194,30 +196,42 @@ while raw_signals:
 
     # TODO i need to add other scores here
     inval_score = signal['inval_score']
+    confidence_score = signal['confidence']
     if signal['tf'] == '1h':
         rank_score = signal.get('market_rank_1d', 1) if sig_bias == 'bullish' else (1 - signal.get('market_rank_1d', 1))
     elif signal['tf'] in {'4h', '12h'}:
         rank_score = signal.get('market_rank_1w', 1) if sig_bias == 'bullish' else (1 - signal.get('market_rank_1w', 1))
     elif signal['tf'] == '1d':
         rank_score = signal.get('market_rank_1m', 1) if sig_bias == 'bullish' else (1 - signal.get('market_rank_1m', 1))
-    sig_score = ((2 * inval_score) + (1 * rank_score)) / 3
+    sig_score = ((2 * confidence_score) + (1 * inval_score) + (1 * rank_score)) / 4
+    signal['score'] = sig_score
+    min_score = 0.5
 
     # find whether i am currently long, short or flat on the agent and pair in this signal
-    asset = sig_pair[:-len(session.quote_asset)]
     try:
-        real_position = sig_agent.real_pos.get(asset, {'direction': 'flat'})['direction']
-        sim_position = sig_agent.sim_pos.get(asset, {'direction': 'flat'})['direction']  # returns 'flat' if no position
-        tracked_position = sig_agent.tracked.get(asset, {'direction': 'flat'})['direction']
+        real_position = sig_agent.real_pos.get(signal['asset'], {'direction': 'flat'})['direction']
+        sim_position = sig_agent.sim_pos.get(signal['asset'], {'direction': 'flat'})['direction']  # returns 'flat' if no position
+        tracked_position = sig_agent.tracked.get(signal['asset'], {'direction': 'flat'})['direction']
     except KeyError as e:
         print('KeyError')
         print(e)
         pprint(signal)
         pprint(sig_agent.tracked)
 
+    print(f"{pair} {real_position = } {sim_position = } {tracked_position = }")
+
     bullish_pos = 'spot' if (sig_agent.mode == 'spot') else 'long'
 
     # TODO 'oco' signals are an alternative to 'open', so they should be treated as such in this section, maybe as a
     #  condition which requires that position is flat and signal['exit'] is oco and bias is either bullish or bearish
+
+    # TODO i need to add conditions so that strategies which trail stops don't have their positions closed by a bias
+    #  flip, only new positions will be opened on  signals. so i might end up with long and short positions open
+    #  simultaneously, but that's ok because each position will be managed and the price will decide which should stay open
+
+    # TODO perhaps there should be a flag in each signal that says whether that agent's positions should be closed with
+    #  signals or not, because oco orders should never be managed by signals but trailing stop strategies sometimes have
+    #  close/tp conditions and sometimes don't
 
     if sig_bias == 'bullish':
         if real_position in ['long', 'spot']:
@@ -233,16 +247,16 @@ while raw_signals:
 
         elif real_position == 'short':
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', 'short'))
-            if sig_score >= 0.8:
+            if sig_score >= min_score:
                 processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', 'long'))
-            else:
+            elif sim_position == 'flat':
                 signal['sim_reasons'] = ['low_score']
                 processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', 'long'))
 
         elif real_position == 'flat':
-            if sig_score >= 0.8:
+            if sig_score >= min_score:
                 processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', bullish_pos))
-            else:
+            elif sim_position == 'flat':
                 signal['sim_reasons'] = ['low_score']
                 processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', bullish_pos))
         else:
@@ -288,9 +302,9 @@ while raw_signals:
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', 'spot'))
         elif real_position == 'long':
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', 'long'))
-            if sig_score >= 0.8:
+            if sig_score >= min_score:
                 processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', 'short'))
-            else:
+            elif sim_position == 'flat':
                 signal['sim_reasons'] = ['low_score']
                 processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', 'short'))
         elif real_position == 'short':
@@ -305,9 +319,9 @@ while raw_signals:
             # TODO check for low or and make add signals if so
 
         elif real_position == 'flat':
-            if sig_score >= 0.8:
+            if sig_score >= min_score:
                 processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', 'short'))
-            else:
+            elif sim_position == 'flat':
                 signal['sim_reasons'] = ['low_score']
                 processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', 'short'))
         else:
@@ -389,7 +403,7 @@ process_took = process_end - process_start
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 tp_close_start = time.perf_counter()
 # execute any real and sim technical close and tp signals
-print(f"\n-+-+-+-+-+-+-+- Processing {len(processed_signals['real_sim_tp_close'])} Real/Sim TPs/Closes -+-+-+-+-+-+-+-")
+print(f"\n-+-+-+-+-+-+-+- Executing {len(processed_signals['real_sim_tp_close'])} Real/Sim TPs/Closes -+-+-+-+-+-+-+-")
 
 checked_signals = uf.remove_duplicates(processed_signals['real_sim_tp_close'])
 print(f"{len(checked_signals) = }")
@@ -556,10 +570,10 @@ sort_took = sort_end - sort_start
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 real_open_start = time.perf_counter()
 
-print(f"\n-+-+-+-+-+-+-+-+-+-+-+- Processing {len(processed_signals['real_open'])} Real Opens -+-+-+-+-+-+-+-+-+-+-+-")
+print(f"\n-+-+-+-+-+-+-+-+-+-+-+- Executing {len(processed_signals['real_open'])} Real Opens -+-+-+-+-+-+-+-+-+-+-+-")
 for signal in processed_signals['real_open']:
 
-    # print(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
+    print(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
     if signal['mode'] == 'margin':
         agents[signal['agent']].open_real_M(session, signal, 0)
     elif signal['mode'] == 'spot':
@@ -575,12 +589,16 @@ real_open_took = real_open_end - real_open_start
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 sim_open_start = time.perf_counter()
 
+print('sim_pos keys:')
+pprint(agents[signal['agent']].sim_pos.keys())
+
 sim_opens = [sig for sig in processed_signals['sim_open'] # discard signals for existing sim positions
-             if signal['pair'] not in agents[signal['agent']].sim_pos.keys()]
-print(f"\n-+-+-+-+-+-+-+-+-+-+-+- Processing {len(sim_opens)} Sim Opens -+-+-+-+-+-+-+-+-+-+-+-")
+             if signal['asset'] not in agents[signal['agent']].sim_pos.keys()]
+print(f"\n-+-+-+-+-+-+-+-+-+-+-+- Executing {len(sim_opens)} Sim Opens -+-+-+-+-+-+-+-+-+-+-+-")
 for signal in sim_opens:
 
-    # print(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
+    print(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
+    print(f"Sim reason: {signal['sim_reasons']}, score: {signal['score']}")
     agents[signal['agent']].open_sim(session, signal)
 
 # when they are all finished, update records once

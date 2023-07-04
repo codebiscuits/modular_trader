@@ -422,7 +422,7 @@ class Agent():
                     stop_dt = datetime.fromtimestamp(stop_time).astimezone(timezone.utc)
                     hit_dt = datetime.fromtimestamp(stop_hit_time).astimezone(timezone.utc)
                     entry_price = v['position']['entry_price']
-                    # print(f"{pair} {direction} {open_dt = }, {stop_dt = } {hit_dt = }, {entry_price = } {stop = }")
+                    print(f"{pair} {direction} {open_dt = }, {stop_dt = } {hit_dt = }, {entry_price = } {stop = }")
                     base_size = float(v['position']['base_size'])
                     stop_dict = {
                         'timestamp': int(stop_time),
@@ -686,7 +686,7 @@ class Agent():
             df = self.get_data(session, pair, timeframes, stop_time)
             stopped, overshoot_pct, stop_hit_time = self.check_stop_hit(pair, df, direction, stop)
             if stopped:
-                # print(f"{v['position']['open_time']}, {stop_hit_time}, {v['position']['entry_price']}")
+                print(f"{v['position']['open_time']}, {stop_hit_time}, {v['position']['entry_price']}")
                 trade_dict = self.create_trade_dict(pair, direction, stop, base_size, stop_hit_time, overshoot_pct, 'sim')
                 self.sim_to_closed_sim(session, pair, trade_dict, save_file=False)
                 self.counts_dict[f'sim_stop_{direction}'] += 1
@@ -3059,8 +3059,6 @@ class TrailFractals(Agent):
         if pair not in self.pairs:
             return None
 
-        print(f"\nTesting {pair} for signals, length: {len(df)}")
-
         signal_dict = {'agent': self.id, 'mode': self.mode, 'pair': pair}
 
         df = ind.williams_fractals(df, self.width, self.spacing)
@@ -3089,24 +3087,28 @@ class TrailFractals(Agent):
         # print(f"{self.name} {pair} {self.tf} long conf: {long_confidence:.1%} short conf: {short_confidence:.1%}")
 
         price = df.close.iloc[-1]
-        combined_conf = long_confidence - short_confidence
 
-        if (price > df.frac_low.iloc[-1]) and combined_conf > self.min_confidence:
+        combined_long = long_confidence - short_confidence
+        combined_short = short_confidence - long_confidence
+
+        if (price > df.frac_low.iloc[-1]) and (combined_long > 0):
+            signal_dict['confidence'] = combined_long
             signal_dict['bias'] = 'bullish'
             inval = df.frac_low.iloc[-1]
-            note = f"{self.name} Long {self.tf} {pair} @ {df.close.iloc[-1]} confidence: {combined_conf:.1%}\n"
+            note = f"{self.name} Long {self.tf} {pair} @ {df.close.iloc[-1]} confidence: {long_confidence - short_confidence:.1%}\n"
             # print(note)
             self.notes += note
-        elif (price < df.frac_high.iloc[-1]) and combined_conf < -self.min_confidence:
+        elif (price < df.frac_high.iloc[-1]) and (combined_short > 0):
+            signal_dict['confidence'] = combined_short
             signal_dict['bias'] = 'bearish'
             inval = df.frac_high.iloc[-1]
-            note = f"{self.name} Short {self.tf} {pair} @ {df.close.iloc[-1]} confidence: {0-combined_conf:.1%}\n"
+            note = f"{self.name} Short {self.tf} {pair} @ {df.close.iloc[-1]} confidence: {short_confidence - long_confidence:.1%}\n"
             # print(note)
             self.notes += note
         else:
             return None
 
-        signal_dict['confidence'] = combined_conf
+
         stp = self.calc_stop(inval, session.pairs_data[pair]['spread'], price)
         signal_dict['inval'] = stp
         signal_dict['inval_ratio'] = stp / price
@@ -3114,6 +3116,7 @@ class TrailFractals(Agent):
         signal_dict['trig_price'] = price
         signal_dict['pct_of_full_pos'] = 1
         signal_dict['tf'] = self.tf
+        signal_dict['asset'] = pair[:-len(session.quote_asset)]
 
         sig.stop()
 

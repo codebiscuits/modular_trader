@@ -67,6 +67,15 @@ def load_features(side, tf):
     return list(info['features'])
 
 
+def load_pairs(side, tf):
+    folder = Path("/home/ross/coding/modular_trader/machine_learning/models/trail_fractals")
+    info_path = folder / f"trail_fractal_{side}_{tf}_info.json"
+    with open(info_path, 'r') as ip:
+        info = json.load(ip)
+
+    return list(info['pairs'])
+
+
 perform_feature_selection = False
 timeframes = ['1h', '4h', '12h', '1d']
 sides = ['long', 'short']
@@ -75,11 +84,16 @@ num_pairs = 20
 start_pair = 0
 width = 5
 atr_spacing = 2
-pairs = em.rank_pairs()[start_pair:start_pair + num_pairs]
 scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
 
 for side, timeframe in itertools.product(sides, timeframes):
     print(f"\nFitting {timeframe} {side} model")
+
+    if perform_feature_selection:
+        pairs = em.rank_pairs()[start_pair:start_pair + num_pairs]
+    else:
+        pairs = load_pairs(side, timeframe)
+
     # create dataset
     all_res = pd.DataFrame()
     for pair in pairs:
