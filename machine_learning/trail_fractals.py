@@ -10,8 +10,11 @@ from pathlib import Path
 import joblib
 import json
 from datetime import datetime, timezone
-from sklearnex import patch_sklearn
-patch_sklearn()
+
+if not Path('/pi_2.txt').exists():
+    from sklearnex import get_patch_names, patch_sklearn, unpatch_sklearn
+    patch_sklearn()
+
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.model_selection import GridSearchCV, train_test_split, cross_val_score
 from sklearn.metrics import fbeta_score, make_scorer

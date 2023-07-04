@@ -13,9 +13,10 @@ from datetime import datetime
 import plotly.express as px
 from pyarrow import ArrowInvalid
 
-from sklearnex import get_patch_names, patch_sklearn, unpatch_sklearn
+if not Path('/pi_2.txt').exists():
+    from sklearnex import get_patch_names, patch_sklearn, unpatch_sklearn
+    patch_sklearn()
 
-patch_sklearn()
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier
 from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV, RandomizedSearchCV
