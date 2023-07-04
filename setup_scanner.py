@@ -218,7 +218,7 @@ while raw_signals:
         pprint(signal)
         pprint(sig_agent.tracked)
 
-    print(f"{pair} {real_position = } {sim_position = } {tracked_position = }")
+    print(f"{sig_pair} {real_position = } {sim_position = } {tracked_position = }")
 
     bullish_pos = 'spot' if (sig_agent.mode == 'spot') else 'long'
 
@@ -238,8 +238,8 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_real_stop(session, signal)
             # check if tp is necessary
-            if sig_agent.real_pos[asset]['or_R'] > sig_agent.indiv_r_limit:
-                print(f"{sig_agent} Real {sig_pair} or_R: {sig_agent.real_pos[asset]['or_R']}")
+            if sig_agent.real_pos[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
+                print(f"{sig_agent} Real {sig_pair} or_R: {sig_agent.real_pos[signal['asset']]['or_R']}")
                 processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'real', 'long'))
 
             # check if add is necessary
@@ -266,8 +266,8 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'sim')
             # check if tp is necessary
-            if sig_agent.sim_pos[asset]['or_R'] > sig_agent.indiv_r_limit:
-                print(f"{sig_agent} Sim {sig_pair} or_R: {sig_agent.sim_pos[asset]['or_R']}")
+            if sig_agent.sim_pos[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
+                print(f"{sig_agent} Sim {sig_pair} or_R: {sig_agent.sim_pos[signal['asset']]['or_R']}")
                 processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'sim', 'long'))
 
             # check if add is necessary
@@ -284,8 +284,8 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'tracked')
             # check if tp is necessary
-            if sig_agent.tracked[asset]['or_R'] > sig_agent.indiv_r_limit:
-                print(f"{sig_agent} Tracked {sig_pair} or_R: {sig_agent.tracked[asset]['or_R']}")
+            if sig_agent.tracked[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
+                print(f"{sig_agent} Tracked {sig_pair} or_R: {sig_agent.tracked[signal['asset']]['or_R']}")
                 processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'tracked', 'long'))
 
         elif tracked_position == 'short':
@@ -311,8 +311,8 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_real_stop(session, signal)
             # check if tp is necessary
-            if sig_agent.real_pos[asset]['or_R'] > sig_agent.indiv_r_limit:
-                print(f"{sig_agent} Real {sig_pair} or_R: {sig_agent.real_pos[asset]['or_R']}")
+            if sig_agent.real_pos[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
+                print(f"{sig_agent} Real {sig_pair} or_R: {sig_agent.real_pos[signal['asset']]['or_R']}")
                 processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'real', 'short'))
 
             # check if add is necessary
@@ -333,8 +333,8 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'sim')
             # check if tp is necessary
-            if sig_agent.sim_pos[asset]['or_R'] > sig_agent.indiv_r_limit:
-                print(f"{sig_agent} Sim {sig_pair} or_R: {sig_agent.sim_pos[asset]['or_R']}")
+            if sig_agent.sim_pos[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
+                print(f"{sig_agent} Sim {sig_pair} or_R: {sig_agent.sim_pos[signal['asset']]['or_R']}")
                 processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'sim', 'short'))
 
             # check if add is necessary
@@ -351,8 +351,8 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'tracked')
             # check if tp is necessary
-            if sig_agent.tracked[asset]['or_R'] > sig_agent.indiv_r_limit:
-                print(f"{sig_agent} Tracked {sig_pair} or_R: {sig_agent.tracked[asset]['or_R']}")
+            if sig_agent.tracked[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
+                print(f"{sig_agent} Tracked {sig_pair} or_R: {sig_agent.tracked[signal['asset']]['or_R']}")
                 processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'tracked', 'short'))
 
 
