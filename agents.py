@@ -960,13 +960,13 @@ class Agent():
         #  a scalar on the inval distance for each timeframe.
 
         if self.tf == '1h':
-            score = max(1 - (inval * 10), 0)
+            score = max(1 - (inval * 10), 0) # inval of 0% returns max score of 1, 10% or more returns 0
         elif self.tf == '4h':
-            score = max(1-(inval * 5), 0)
+            score = max(1-(inval * 5), 0) # inval of 20% or more returns 0
         elif self.tf == '12h':
-            score = max(1-(inval * 3), 0)
+            score = max(1-(inval * 3), 0) # inval of 33% or more returns 0
         elif self.tf == '1d':
-            score = max(1-(inval * 2), 0)
+            score = max(1-(inval * 2), 0) # inval of 50% or more returns 0
 
         return score
 

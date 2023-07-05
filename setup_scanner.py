@@ -33,7 +33,7 @@ print('\n-+-+-+-+-+-+-+-+-+-+-+- Running Setup Scanner -+-+-+-+-+-+-+-+-+-+-+-\n
 
 ########################################################################################################################
 
-session = sessions.TradingSession(0.0003)
+session = sessions.TradingSession(0.001)
 
 print(f"Running setup_scan({session.timeframes})")
 print(f"\nCurrent time: {session.now_start}, {session.name}\n")
@@ -43,6 +43,7 @@ agents = []
 for timeframe, offset in session.timeframes:
     agents.extend(
         [
+            TrailFractals(session, timeframe, offset, min_conf=0.5),
             # DoubleST(session, timeframe, offset, 3, 1.0),
             # DoubleST(session, timeframe, offset, 3, 1.4),
             # DoubleST(session, timeframe, offset, 3, 1.8),
@@ -61,7 +62,6 @@ for timeframe, offset in session.timeframes:
             # EMACrossHMA(session, timeframe, offset, 12, 21, 1.2),
             # EMACrossHMA(session, timeframe, offset, 12, 21, 1.8),
             # EMACrossHMA(session, timeframe, offset, 12, 21, 2.4),
-            TrailFractals(session, timeframe, offset, min_conf=0.5),
         ]
     )
 
@@ -182,8 +182,6 @@ processed_signals = dict(
     real_open=[],  # nothing will be put in here at first, real open signals will end up here if they pass all tests
     tracked_close=[],  # can be left until last
 )
-
-pprint(raw_signals)
 
 while raw_signals:
     signal = raw_signals.pop(0)
