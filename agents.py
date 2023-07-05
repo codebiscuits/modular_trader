@@ -414,7 +414,7 @@ class Agent():
                     stop_dt = datetime.fromtimestamp(stop_time).astimezone(timezone.utc)
                     hit_dt = datetime.fromtimestamp(stop_hit_time).astimezone(timezone.utc)
                     entry_price = v['position']['entry_price']
-                    print(f"{pair} {direction} {open_dt = }, {stop_dt = } {hit_dt = }, {entry_price = } {stop = }")
+                    print(f"{self.name} {pair} {direction} {open_dt = }, {stop_dt = } {hit_dt = }, {entry_price = } {stop = }")
                     base_size = float(v['position']['base_size'])
                     stop_dict = {
                         'timestamp': int(stop_time),
@@ -678,7 +678,8 @@ class Agent():
             df = self.get_data(session, pair, timeframes, stop_time)
             stopped, overshoot_pct, stop_hit_time = self.check_stop_hit(pair, df, direction, stop)
             if stopped:
-                print(f"{v['position']['open_time']}, {stop_hit_time}, {v['position']['entry_price']}")
+                print(f"{self.name} {pair} {v['position']['open_time'] = }, {stop_hit_time = }, "
+                      f"{v['position']['entry_price'] = }")
                 trade_dict = self.create_trade_dict(pair, direction, stop, base_size, stop_hit_time, overshoot_pct, 'sim')
                 self.sim_to_closed_sim(session, pair, trade_dict, save_file=False)
                 self.counts_dict[f'sim_stop_{direction}'] += 1
@@ -882,9 +883,9 @@ class Agent():
             self.fixed_risk_s = fr_s
 
     def print_fixed_risk(self):
-        if self.mode == 'spot' and self.fixed_risk_spot:
+        if self.mode == 'spot':# and self.fixed_risk_spot:
             print(f"{self.name} fixed risk: {(self.fixed_risk_spot * 10000):.2f}bps")
-        elif self.mode == 'margin' and self.fixed_risk_l or self.fixed_risk_s:
+        elif self.mode == 'margin':# and self.fixed_risk_l or self.fixed_risk_s:
             frl_bps = self.fixed_risk_l * 10000
             frs_bps = self.fixed_risk_s * 10000
             print(f"{self.name} fr long: {(frl_bps):.2f}bps, fr short: {(frs_bps):.2f}bps")
