@@ -12,6 +12,7 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.metrics import precision_score, fbeta_score
 from sklearn.inspection import permutation_importance
 from imblearn.under_sampling import RandomUnderSampler
+from xgboost import XGBClassifier
 
 """the idea of this script is to see how feature importances and predictive power change when swapping models but 
 keeping all data the same"""
@@ -49,9 +50,14 @@ rfc = RandomForestClassifier(class_weight='balanced', n_estimators=300, min_samp
                                max_features=10, max_depth=20, n_jobs=-1)
 gbc = GradientBoostingClassifier(random_state=42, n_estimators=1000, validation_fraction=0.1, n_iter_no_change=5,
                                    subsample=0.25, min_samples_split=2, max_depth=4, learning_rate=0.1)
-for model, rus in product([knn, rfc, gbc], [0, 1]):
+xgb = XGBClassifier(random_state=42, n_estimators=1000, early_stopping_rounds=5, max_depth=3, colsample_bylevel=0.5,
+                    colsample_bytree=0.5, min_child_weight=1, learning_rate=0.1, reg_lambda=1, reg_alpha=0.1,
+                    subsample=0.5)
+print(xgb)
 
-    name = 'knn' if model == knn else 'rfc' if model == rfc else 'gbc'
+for model, rus in product([xgb], [0, 1]):
+
+    name = 'knn' if model == knn else 'rfc' if model == rfc else 'gbc' if model == 'gbc' else 'xgb'
     if rus:
         name += '_rus'
         rus = RandomUnderSampler(random_state=0)

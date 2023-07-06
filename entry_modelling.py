@@ -11,7 +11,6 @@ from pyarrow import ArrowInvalid
 
 if not Path('/pi_2.txt').exists():
     from sklearnex import patch_sklearn
-
     patch_sklearn()
 
 from sklearn.neighbors import KNeighborsClassifier
@@ -23,6 +22,7 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 from sklearn.metrics import confusion_matrix, roc_auc_score, make_scorer
 from sklearn.inspection import permutation_importance
 from imblearn.under_sampling import RandomUnderSampler
+from xgboost import XGBClassifier
 
 # print(get_patch_names())
 
@@ -418,15 +418,44 @@ def train_gbc(X_train, y_train):
         # max_features=[2, 4, 8, 16, 32],
         estimator__max_depth=[int(x) for x in np.linspace(start=5, stop=20, num=4)],
         estimator__min_samples_split=[2, 4, 8],  # must be 2 or more
-        estimator__learning_rate=[0.05, 0.1],
+        # estimator__learning_rate=[0.05, 0.1],
         estimator__subsample=[0.125, 0.25, 0.5, 1.0]
     )
     fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
-    model = GradientBoostingClassifier(random_state=42, n_estimators=1000, validation_fraction=0.1, n_iter_no_change=5)
+    model = GradientBoostingClassifier(random_state=42, n_estimators=50000, validation_fraction=0.1,
+                                       n_iter_no_change=50, learning_rate=0.05)
     rf_grid = RandomizedSearchCV(estimator=model,
                                  param_distributions=param_dict,
                                  scoring=fb_scorer,
-                                 n_iter=120, # full test = 3600
+                                 n_iter=48, # full test = 3600
+                                 cv=3, n_jobs=-1)
+    rf_grid.fit(X_train, y_train)
+
+    return rf_grid
+
+
+def train_xgb(X_train, y_train):
+
+    X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.9)
+    validation = [(X_val, y_val)]
+
+    param_dict = dict(
+        max_depth=[int(x) for x in np.linspace(start=2, stop=30, num=4)],
+        colsample_bylevel=[int(x) for x in np.linspace(start=0.1, stop=1, num=4)],
+        colsample_bytree=[int(x) for x in np.linspace(start=0.1, stop=1, num=4)],
+        min_child_weight=[0.1, 1, 10, 100],
+        learning_rate=[0.05, 0.1, 0.3],
+        reg_lambda=[0.1, 1, 10, 100],
+        reg_alpha=[0.1, 1, 10, 100],
+        subsample=[0.125, 0.25, 0.5, 1.0],
+        eval_set=validation
+    )
+    fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
+    model = XGBClassifier(random_state=42, n_estimators=1000, early_stopping_rounds=5)
+    rf_grid = RandomizedSearchCV(estimator=model,
+                                 param_distributions=param_dict,
+                                 scoring=fb_scorer,
+                                 n_iter=1000, # full test = 3600
                                  cv=3, n_jobs=-1)
     rf_grid.fit(X_train, y_train)
 
@@ -544,18 +573,21 @@ if __name__ == '__main__':
 
     algorithms = [
         # 'knn',
-        'rfc', 'gbc']
+        # 'rfc',
+        'gbc',
+        # 'xgb'
+    ]
     sides = ['long', 'short']
     timeframes = {
-        # '1d': {'frac_widths': [3, 5], 'atr_spacings': [1, 2], 'num_pairs': 100, 'data_len': 100},
-        # '12h': {'frac_widths': [3, 5], 'atr_spacings': [1, 2], 'num_pairs': 66, 'data_len': 150},
-        # '4h': {'frac_widths': [3, 5], 'atr_spacings': [1, 2], 'num_pairs': 50, 'data_len': 200},
-        '1h': {'frac_widths': [3, 5], 'atr_spacings': [1, 2], 'num_pairs': 25, 'data_len': 400},
+        # '1d': {'frac_widths': [3], 'atr_spacings': [2], 'num_pairs': 100, 'data_len': 100},
+        # '12h': {'frac_widths': [3], 'atr_spacings': [2], 'num_pairs': 75, 'data_len': 150},
+        # '4h': {'frac_widths': [5], 'atr_spacings': [2], 'num_pairs': 66, 'data_len': 200},
+        '1h': {'frac_widths': [5], 'atr_spacings': [2], 'num_pairs': 100, 'data_len': 720},
     }
 
 
-    for algo, balanced, side, timeframe in product(algorithms, [True, False], sides, timeframes):
-        print(f"\nTesting {algo} {'balanced' if balanced else 'unbalanced'} {side} {timeframe}")
+    for algo, side, timeframe, balanced in product(algorithms, sides, timeframes, [True]):
+        print(f"\nTesting {algo} {side} {timeframe}")
         loop_start = time.perf_counter()
 
         frac_widths = timeframes[timeframe]['frac_widths']
@@ -567,7 +599,7 @@ if __name__ == '__main__':
         pairs = rank_pairs()[:num_pairs]
         # print(pairs)
 
-        res_folders = Path(f"sfs/{algo}_results/{'balanced' if balanced else 'unbalanced'}")
+        res_folders = Path(f"xgb/{algo}_results")
         res_folders.mkdir(parents=True, exist_ok=True)
         res_path = Path(f"{res_folders}/{side}_{timeframe}_top{num_pairs}.parquet")
         if res_path.exists():
@@ -614,6 +646,8 @@ if __name__ == '__main__':
                     model = train_rfc(X_train, y_train)
                 elif algo == 'gbc':
                     model = train_gbc(X_train, y_train)
+                elif algo == 'xgb':
+                    model = train_xgb(X_train, y_train)
                 # model = train_vc(X_train, y_train)
                 train_end = time.perf_counter()
                 train_elapsed = train_end - train_start
