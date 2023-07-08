@@ -581,7 +581,7 @@ if __name__ == '__main__':
     timeframes = {
         # '1d': {'frac_widths': [3], 'atr_spacings': [2], 'num_pairs': 100, 'data_len': 100},
         # '12h': {'frac_widths': [3], 'atr_spacings': [2], 'num_pairs': 75, 'data_len': 150},
-        # '4h': {'frac_widths': [5], 'atr_spacings': [2], 'num_pairs': 66, 'data_len': 200},
+        # '4h': {'frac_widths': [5], 'atr_spacings': [2], 'num_pairs': 66, 'data_len': 250},
         '1h': {'frac_widths': [5], 'atr_spacings': [2], 'num_pairs': 100, 'data_len': 720},
     }
 
@@ -596,7 +596,6 @@ if __name__ == '__main__':
         # atr_spacings = [2]
         data_len = timeframes[timeframe]['data_len']
         num_pairs = timeframes[timeframe]['num_pairs']
-        pairs = rank_pairs()[:num_pairs]
         # print(pairs)
 
         res_folders = Path(f"xgb/{algo}_results")
@@ -609,9 +608,15 @@ if __name__ == '__main__':
         res_list = []
         for frac_width, spacing in product(frac_widths, atr_spacings):
             all_res = pd.DataFrame()
-            for pair in pairs:
+            pairs = rank_pairs()
+            for i in range(num_pairs):
+                df = pd.DataFrame()
+                while len(df) < data_len:
+                    pair = pairs.pop()
+                    df = get_data(pair, timeframe).tail(data_len + 200).reset_index(drop=True)
 
-                df = get_data(pair, timeframe).tail(data_len + 200).reset_index(drop=True)
+
+
                 df = add_features(df, timeframe).tail(data_len).reset_index(drop=True)
                 # print(f"data length: {len(df)}")
 

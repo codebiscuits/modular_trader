@@ -667,5 +667,3 @@ def remove_duplicates(signals: list[dict]) -> list[dict]:
 
     return checked_signals
 
-
-

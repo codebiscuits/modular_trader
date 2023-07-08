@@ -1,4 +1,6 @@
 from pprint import pprint
+
+import pandas as pd
 from pushbullet import Pushbullet
 from pathlib import Path
 import json
@@ -8,10 +10,11 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 records_folder_1 = Path('/home/ross/coding/pi_down/modular_trader/records')
 records_folder_2 = Path('/home/ross/coding/pi_2/modular_trader/records')
 
-def load_all(folder):
+def load_all(folder, state):
     all_data = {}
     for agent in folder.glob('*'):
-        filepath = folder / agent.parts[7] / 'open_trades.json'
+        filepath = folder / agent.parts[7] / f'{state}_trades.json'
+        print(filepath)
 
         try:
             with open(filepath, 'r') as file:
@@ -29,15 +32,24 @@ def print_positions(data, name):
     if data:
         for k, v in data.items():
             print(f"\n{k}")
-
+            all_rpnls = []
             for a, b in v.items():
                 print(f"\n{a}")
-                pprint(b['position'])
+                pprint(b)
+                rpnl = 0
+                for t in b['trade']:
+                    if t.get('rpnl'):
+                        rpnl += t['rpnl']
+                all_rpnls.append(rpnl)
+            rpnl_s = pd.Series(all_rpnls)
+            rpnl_cum = rpnl_s.cumsum()
+            rpnl_df = pd.concat([rpnl_s, rpnl_cum], axis=1)
+            rpnl_df.columns = ['rpnl', 'cum_rpnl']
+            rpnl_df['ema_4'] = rpnl_df.rpnl.ewm(4).mean()
+            print(rpnl_df)
     else:
         print('\nNone')
 
-pi_1_data = load_all(records_folder_1)
-pi_2_data = load_all(records_folder_2)
+pi_2_data = load_all(records_folder_2, 'closed_sim')
 
-print_positions(pi_1_data, 'pi down')
 print_positions(pi_2_data, 'pi 2')

@@ -58,7 +58,7 @@ class Agent():
                             'real_close_short': 0,
                             'sim_stop_short': 0, 'sim_open_short': 0, 'sim_add_short': 0, 'sim_tp_short': 0,
                             'sim_close_short': 0,
-                            'too_small': 0, 'too_risky': 0, 'too_many_pos': 0, 'too_much_or': 0, 'algo_order_limit': 0,
+                            'too_small': 0, 'low_score': 0, 'too_many_pos': 0, 'too_much_or': 0, 'algo_order_limit': 0,
                             'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0, 'reduce_risk': 0}
         if self.live:
             self.load_perf_log(session)
@@ -766,6 +766,9 @@ class Agent():
                 filepath.touch()
             with open(filepath, "w") as file:
                 json.dump(self.closed_sim_trades, file)
+
+        print(f"called record_trades, {state = }")
+
         b.stop()
 
     def reduce_fr(self, factor: float, fr_prev: float, fr_inc: float):
@@ -1997,6 +2000,9 @@ class Agent():
         k7 = Timer(f'tp_sim')
         k7.start()
 
+        print('before tp_sim')
+        pprint(self.sim_trades[pair])
+
         price = session.pairs_data[pair]['price']
         asset = pair[:-4]
         sim_bal = float(self.sim_trades[pair]['position']['base_size'])
@@ -2033,10 +2039,16 @@ class Agent():
         rpnl = self.realised_pnl(session, self.sim_trades[pair])
         self.sim_trades[pair]['trade'][-1]['rpnl'] = rpnl
         self.realised_pnls[f"sim_{direction}"] += rpnl
-        if 'too_risky' in self.sim_trades[pair]['signal']['sim_reasons']:
+        if 'low_score' in self.sim_trades[pair]['signal']['sim_reasons']:
             self.realised_pnls[f"unwanted_{direction}"] += rpnl
         else:
             self.realised_pnls[f"wanted_{direction}"] += rpnl
+
+        # save records
+        self.record_trades(session, 'sim')
+
+        print('after tp_sim')
+        pprint(self.sim_trades[pair])
 
         # update sim_pos
         self.sim_pos[asset].update(self.update_non_live_tp(session, asset, 50, 'sim'))

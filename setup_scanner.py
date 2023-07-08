@@ -27,7 +27,11 @@ pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 print('\n-+-+-+-+-+-+-+-+-+-+-+- Running Setup Scanner -+-+-+-+-+-+-+-+-+-+-+-\n')
 
-
+# TODO on the problem with trade records, it seems that sim tp trades are not being saved properly, so the tp signal
+#  replaces the open signal in the record, which is actually not what i want, and the tp trade record is lost, which is
+#  also not what i want. Also closed trades don't all seem to be making it into the records either. It seems as though
+#  maybe the last closed trade of the session gets recorded but any others are discarded perhaps, that's what i can guess
+#  from the mismatch between the records and the scanner summaries
 
 
 
