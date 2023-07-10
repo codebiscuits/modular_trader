@@ -79,7 +79,7 @@ def load_pairs(side, tf):
     return list(info['pairs'])
 
 
-perform_feature_selection = False
+perform_feature_selection = True
 timeframes = ['1h', '4h', '12h', '1d']
 sides = ['long', 'short']
 data_len = 200
