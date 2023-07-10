@@ -27,12 +27,6 @@ all_start = time.perf_counter()
 now = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M')
 print(f"-:--:--:--:--:--:--:--:--:--:-  {now} Running Trail Fractals Fitting  -:--:--:--:--:--:--:--:--:--:-")
 
-# TODO i need to work out an elegant way to run this with or without feature selection, so i can run it without every
-#  day, and with every week, or i can run it without every day on the computer which runs setup_scanner live, and every
-#  week i can just run the feature selection and copy the info files to the live computer. maybe i can separate the two
-#  tasks into two separate files, but put the bits they share into another file (maybe start that ml_funcs again) so i
-#  don't have the same functionality in two different places
-
 def feature_selection(X, y, limit, quick=False):
     fs_start = time.perf_counter()
 
@@ -78,8 +72,7 @@ def load_pairs(side, tf):
 
     return list(info['pairs'])
 
-
-perform_feature_selection = True
+running_on_pi = Path('/pi_2.txt').exists()
 timeframes = ['1h', '4h', '12h', '1d']
 sides = ['long', 'short']
 data_len = 200
@@ -92,10 +85,10 @@ scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
 for side, timeframe in itertools.product(sides, timeframes):
     print(f"\nFitting {timeframe} {side} model")
 
-    if perform_feature_selection:
-        pairs = em.rank_pairs()[start_pair:start_pair + num_pairs]
-    else:
+    if running_on_pi:
         pairs = load_pairs(side, timeframe)
+    else:
+        pairs = em.rank_pairs()[start_pair:start_pair + num_pairs]
 
     # create dataset
     all_res = pd.DataFrame()
@@ -109,7 +102,7 @@ for side, timeframe in itertools.product(sides, timeframes):
 
     # split features from labels
     X, y, z = em.features_labels_split(all_res)
-    if not perform_feature_selection:
+    if running_on_pi:
         selected = load_features(side, timeframe)
         X = X.loc[:, selected]
     X, _, cols = em.transform_columns(X, X)
@@ -120,7 +113,7 @@ for side, timeframe in itertools.product(sides, timeframes):
     X, y = rus.fit_resample(X, y)
 
     # feature selection
-    if perform_feature_selection:
+    if not running_on_pi:
         X, y, selected = feature_selection(X, y, 1000, quick=False)
 
     # split data for fitting and calibration
