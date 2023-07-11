@@ -1449,11 +1449,11 @@ class Agent():
         usdt_size = f"{size * price:.2f}"
 
         if direction == 'long' and session.pairs_data[pair]['qoq_allowed']:
-            api_order = funcs.buy_asset_M(session, pair, float(usdt_size), False, price, session.live)
+            api_order = funcs.buy_asset_M(session, pair, float(usdt_size), False, session.live)
         elif direction == 'long':
-            api_order = funcs.buy_asset_M(session, pair, size, True, price, session.live)
+            api_order = funcs.buy_asset_M(session, pair, size, True, session.live)
         elif direction == 'short':
-            api_order = funcs.sell_asset_M(session, pair, size, price, session.live)
+            api_order = funcs.sell_asset_M(session, pair, size, session.live)
 
         self.open_trades[pair]['position']['base_size'] = str(api_order.get('executedQty'))
         self.open_trades[pair]['position']['init_base_size'] = str(api_order.get('executedQty'))
@@ -1619,9 +1619,9 @@ class Agent():
         price = session.pairs_data[pair]['price']
         order_size = float(base_size) * (pct / 100)
         if direction == 'long':
-            api_order = funcs.sell_asset_M(session, pair, order_size, price, session.live)
+            api_order = funcs.sell_asset_M(session, pair, order_size, session.live)
         elif direction == 'short':
-            api_order = funcs.buy_asset_M(session, pair, order_size, True, price, session.live)
+            api_order = funcs.buy_asset_M(session, pair, order_size, True, session.live)
 
         # update records
         self.open_trades[pair]['placeholder']['api_order'] = api_order
@@ -1870,9 +1870,9 @@ class Agent():
         price = session.pairs_data[pair]['price']
 
         if direction == 'long':
-            api_order = funcs.sell_asset_M(session, pair, close_size, price, session.live)
+            api_order = funcs.sell_asset_M(session, pair, close_size, session.live)
         elif direction == 'short':
-            api_order = funcs.buy_asset_M(session, pair, close_size, True, price, session.live)
+            api_order = funcs.buy_asset_M(session, pair, close_size, True, session.live)
 
         # update position and placeholder
         self.open_trades[pair]['placeholder']['api_order'] = api_order
@@ -2410,9 +2410,9 @@ class Agent():
             else:
                 close_size = ph['api_order']['executedQty']
                 if ph['direction'] == 'long':
-                    funcs.sell_asset_M(session, pair, close_size, price, session.live)
+                    funcs.sell_asset_M(session, pair, close_size, session.live)
                 else:
-                    funcs.buy_asset_M(session, pair, close_size, True, price, session.live)
+                    funcs.buy_asset_M(session, pair, close_size, True, session.live)
                 funcs.repay_asset_M(session, ph['loan_asset'], ph['liability'], session.live)
                 del self.open_trades[pair]
 
@@ -2422,9 +2422,9 @@ class Agent():
             else:
                 close_size = ph['api_order']['executedQty']
                 if direction == 'long':
-                    funcs.sell_asset_M(session, pair, close_size, price, session.live)
+                    funcs.sell_asset_M(session, pair, close_size, session.live)
                 else:
-                    funcs.buy_asset_M(session, pair, close_size, True, price, session.live)
+                    funcs.buy_asset_M(session, pair, close_size, True, session.live)
                 funcs.repay_asset_M(session, ph['loan_asset'], ph['liability'], session.live)
                 del self.open_trades[pair]
 

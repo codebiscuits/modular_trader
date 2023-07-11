@@ -22,9 +22,6 @@ ctx = getcontext()
 ctx.prec = 12
 
 
-# now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
-
-
 def transform_signal(signal: dict, type: str, state: str, direction: str) -> dict:
     """takes a raw signal as input, returns a 'processed' signal ready to be scored and passed to an omf"""
 

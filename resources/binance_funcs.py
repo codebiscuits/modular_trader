@@ -577,7 +577,7 @@ def clear_stop_s(session, pair: str, position: dict) -> Tuple[Any, Decimal]:
 
 
 @uf.retry_on_busy()
-def buy_asset_M(session, pair: str, size: float, is_base: bool, price: float, live: bool) -> dict:
+def buy_asset_M(session, pair: str, size: float, is_base: bool, live: bool) -> dict:
     """sends a market buy order to binance in the margin account and returns the order data"""
 
     fg = Timer('buy_asset_M')
@@ -629,7 +629,7 @@ def buy_asset_M(session, pair: str, size: float, is_base: bool, price: float, li
 
 
 @uf.retry_on_busy()
-def sell_asset_M(session, pair: str, base_size: float, price: float, live: bool) -> dict:
+def sell_asset_M(session, pair: str, base_size: float, live: bool) -> dict:
     """sends a market sell order to binance in the margin account and returns the order data"""
 
     df = Timer('sell_asset_M')
