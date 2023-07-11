@@ -69,6 +69,10 @@ class Agent():
         self.tracked_trades = self.read_open_trade_records(session, 'tracked')
         self.closed_trades = self.read_closed_trade_records(session)
         self.closed_sim_trades = self.read_closed_sim_trade_records(session)
+        print('score_accum long')
+        self.score_accum('long')
+        print('score_accum short')
+        self.score_accum('short')
         self.backup_trade_records(session)
         self.repair_trade_records(session)
         self.real_pos = self.current_positions(session, 'open')
@@ -731,8 +735,8 @@ class Agent():
         scalar = position['pct_of_full_pos']
         realised_r = trade_r * scalar
 
-        # print(f"{position['pair']} rpnl calc: r_val: {r_val:.1%} trade_pnl: {trade_pnl:.1%} trade_r: {trade_r:.2f} "
-        #       f"{scalar = } realised_r: {realised_r:.2f}")
+        print(f"{position['pair']} rpnl calc: r_val: {r_val:.1%} trade_pnl: {trade_pnl:.1%} trade_r: {trade_r:.2f} "
+              f"{scalar = } realised_r: {realised_r:.2f}")
         k15.stop()
 
         return realised_r
@@ -785,6 +789,64 @@ class Agent():
 
 
     def score_accum(self, direction: str):
+        '''calculates perf score from recent performance. also saves the
+        instance property open_pnl_changes dictionary'''
+
+        all_rpnls = []
+        for a, b in self.closed_trades.items():
+            wanted = b['trade'][0]['wanted']
+            right_direction = b['trade'][0]['direction'] == direction
+            if wanted and right_direction:
+                rpnl = 0
+                for t in b['trade']:
+                    if t.get('rpnl'):
+                        rpnl += t['rpnl']
+                all_rpnls.append((a, rpnl))
+        for a, b in self.closed_sim_trades.items():
+            wanted = b['trade'][0]['wanted']
+            right_direction = b['trade'][0]['direction'] == direction
+            if wanted and right_direction:
+                rpnl = 0
+                for t in b['trade']:
+                    if t.get('rpnl'):
+                        rpnl += t['rpnl']
+                all_rpnls.append((a, rpnl))
+        rpnl_df = pd.DataFrame(all_rpnls, columns=['timestamp', 'rpnl'])
+        rpnl_df['cum_rpnl'] = rpnl_df.rpnl.cumsum()
+        rpnl_df['ema_3'] = rpnl_df.rpnl.ewm(3).mean()
+        rpnl_df['ema_9'] = rpnl_df.rpnl.ewm(9).mean()
+        rpnl_df['ema_27'] = rpnl_df.rpnl.ewm(27).mean()
+        rpnl_df['ema_81'] = rpnl_df.rpnl.ewm(81).mean()
+        rpnl_df = rpnl_df.sort_values('timestamp')
+
+        pnls = rpnl_df.to_dict(orient='records')[-1]
+        print(f'{direction} pnls:', pnls)
+
+        score = 0
+        if  rpnl_df.rpnl.iloc[-1] > 0.1:
+            score += 5
+        elif rpnl_df.rpnl.iloc[-1] < -0.1:
+            score -= 5
+        if rpnl_df.ema_3.iloc[-1] > 0:
+            score += 4
+        elif rpnl_df.ema_3.iloc[-1] < 0:
+            score -= 4
+        if rpnl_df.ema_9.iloc[-1] > 0:
+            score += 3
+        elif rpnl_df.ema_9.iloc[-1] < 0:
+            score -= 3
+        if rpnl_df.ema_27.iloc[-1] > 0:
+            score += 2
+        elif rpnl_df.ema_27.iloc[-1] < 0:
+            score -= 2
+        if rpnl_df.ema_81.iloc[-1] > 0:
+            score += 1
+        elif rpnl_df.ema_81.iloc[-1] < 0:
+            score -= 1
+
+        return score, pnls
+
+    def score_accum_old(self, direction: str):
         '''calculates perf score from recent performance. also saves the
         instance property open_pnl_changes dictionary'''
 

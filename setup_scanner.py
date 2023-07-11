@@ -200,6 +200,7 @@ while raw_signals:
     min_score = 0.5
 
     # find whether i am currently long, short or flat on the agent and pair in this signal
+    print("got this far")
     try:
         real_position = sig_agent.real_pos.get(signal['asset'], {'direction': 'flat'})['direction']
         sim_position = sig_agent.sim_pos.get(signal['asset'], {'direction': 'flat'})['direction']  # returns 'flat' if no position
@@ -209,6 +210,7 @@ while raw_signals:
         print(e)
         pprint(signal)
         pprint(sig_agent.tracked)
+    print("got this far")
 
     bullish_pos = 'spot' if (sig_agent.mode == 'spot') else 'long'
 

@@ -452,6 +452,7 @@ def update_liability(trade_record: Dict[str, dict], size: str, operation: str) -
 
 
 def score_accum(log_path, direction: str) -> Tuple[int, str]:
+    """goes through recent perf logs and uses the wanted pnl"""
     func_name = sys._getframe().f_code.co_name
     x12 = Timer(f'{func_name}')
     x12.start()

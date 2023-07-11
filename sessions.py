@@ -408,8 +408,8 @@ class TradingSession():
             read_records = Path(f'/home/ross/coding/modular_trader/records')
             write_records = Path(f'/home/ross/coding/modular_trader/records')
 
-        # print(f"{read_records = }")
-        # print(f"{write_records = }")
+        print(f"{read_records = }")
+        print(f"{write_records = }")
 
         write_records.mkdir(exist_ok=True)
 
