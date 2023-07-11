@@ -473,6 +473,7 @@ class TradingSession():
         margin_symbols = [d['symbol'] for d in self.margin_orders if d['type'] in algo_types]
         order_symbols = spot_symbols + margin_symbols
 
+        print('algo order counts:')
         counted = Counter(order_symbols)
         for p, v in self.pairs_data.items():
             v['algo_orders'] = 0 if p not in counted else counted[p]

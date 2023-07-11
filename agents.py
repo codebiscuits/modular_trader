@@ -818,6 +818,8 @@ class Agent():
         rpnl_df['ema_27'] = rpnl_df.rpnl.ewm(27).mean()
         rpnl_df['ema_81'] = rpnl_df.rpnl.ewm(81).mean()
         rpnl_df = rpnl_df.sort_values('timestamp')
+        print(direction)
+        print(rpnl_df)
 
         pnls = rpnl_df.to_dict(orient='records')[-1]
         print(f'{direction} pnls:', pnls)
@@ -1446,8 +1448,10 @@ class Agent():
         price = session.pairs_data[pair]['price']
         usdt_size = f"{size * price:.2f}"
 
-        if direction == 'long':
+        if direction == 'long' and session.pairs_data[pair]['qoq_allowed']:
             api_order = funcs.buy_asset_M(session, pair, float(usdt_size), False, price, session.live)
+        elif direction == 'long':
+            api_order = funcs.buy_asset_M(session, pair, size, True, price, session.live)
         elif direction == 'short':
             api_order = funcs.sell_asset_M(session, pair, size, price, session.live)
 
