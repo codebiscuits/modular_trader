@@ -26,7 +26,7 @@ print('\n-+-+-+-+-+-+-+-+-+-+-+- Running Setup Scanner -+-+-+-+-+-+-+-+-+-+-+-\n
 
 ########################################################################################################################
 
-session = sessions.TradingSession(0.002)
+session = sessions.TradingSession(0.005)
 
 print(f"Running setup_scan({session.timeframes})")
 print(f"\nCurrent time: {session.now_start}, {session.name}\n")

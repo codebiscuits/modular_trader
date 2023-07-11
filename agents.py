@@ -809,8 +809,8 @@ class Agent():
                 rpnl = 0
                 for t in b['trade']:
                     if t.get('rpnl'):
-                        rpnl += t['rpnl']
-                all_rpnls.append((a, rpnl))
+                        rpnl += float(t['rpnl'])
+                all_rpnls.append((int(a), rpnl))
         rpnl_df = pd.DataFrame(all_rpnls, columns=['timestamp', 'rpnl'])
         rpnl_df['cum_rpnl'] = rpnl_df.rpnl.cumsum()
         rpnl_df['ema_3'] = rpnl_df.rpnl.ewm(3).mean()
