@@ -794,7 +794,7 @@ class Agent():
 
         all_rpnls = []
         for a, b in self.closed_trades.items():
-            wanted = b['trade'][0]['wanted']
+            wanted = (b['trade'][0]['wanted']) or (b['trade'][0]['state'] == 'real')
             right_direction = b['trade'][0]['direction'] == direction
             if wanted and right_direction:
                 rpnl = 0
@@ -900,6 +900,9 @@ class Agent():
 
         fr_prev = self.perf_log[-1].get(f'fr_{direction}', 0) if self.perf_log else 0
         score, pnls = self.score_accum(direction)
+        score_str = f"rpnl: {score['rpnl']:.2f}, ema_3: {score['ema_3']:.2f}, ema_9: {score['ema_9']:.2f}, " \
+                    f"ema_27: {score['ema_27']:.2f}, ema_81: {score['ema_81']:.2f}"
+        print(f"{direction} score accum returned {score_str}")
 
         if score == 15:
             fr = min(fr_prev + 2, self.fr_div)

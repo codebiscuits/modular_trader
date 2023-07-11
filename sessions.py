@@ -547,6 +547,8 @@ class TradingSession():
         with open(spreads_path, 'w') as file:
             json.dump(spreads_data, file)
 
+        print(f'\nsaved spreads to {spreads_path}\n')
+
     def load_mkt_ranks(self):
         filepath = self.market_data_read / 'market_ranks.parquet'
 
@@ -809,9 +811,9 @@ class TradingSession():
 
         # repay interest
         try:
-            if float(interest):
+            if float(interest) > 0.001:
                 # uid weight of 3000. not sure how to keep track of this
-                self.client.repay_margin_loan(asset='BNB', amount=interest)
+                self.client.repay_margin_loan(asset='BNB', amount='0.001')
         except bx.BinanceAPIException as e:
             if e.code == -3015:
                 print(" Top up BNB caused an exception trying to repay interest")
@@ -993,6 +995,7 @@ class LightSession(TradingSession):
         # self.track_weights(2)
         # self.obt = self.client.get_orderbook_tickers()
         self.spreads = self.binance_spreads()
+        self.save_spreads()
 
         # filter and organise data
         self.get_pairs_info()

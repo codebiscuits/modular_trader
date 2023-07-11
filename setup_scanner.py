@@ -11,7 +11,7 @@ from pushbullet import Pushbullet
 from collections import Counter
 
 # TODO current (02/04/23) roadmap should be:
-#  * write new set_fixed_risk using trades instead of sessions
+#  * move save_spreads to update_ohlc so i don't need setup_scanner to run every time
 #  * implement agent pairs lists being submitted to the session so only relevant pairs get checked in the
 #  update_algo_orders check
 #  * get detailed push notes in all exception handling code so i always know whats going wrong, and change the ss_log
