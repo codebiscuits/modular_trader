@@ -800,8 +800,8 @@ class Agent():
                 rpnl = 0
                 for t in b['trade']:
                     if t.get('rpnl'):
-                        rpnl += t['rpnl']
-                all_rpnls.append((a, rpnl))
+                        rpnl += float(t['rpnl'])
+                all_rpnls.append((int(a), rpnl))
         for a, b in self.closed_sim_trades.items():
             wanted = b['trade'][0]['wanted']
             right_direction = b['trade'][0]['direction'] == direction
@@ -817,6 +817,7 @@ class Agent():
         rpnl_df['ema_9'] = rpnl_df.rpnl.ewm(9).mean()
         rpnl_df['ema_27'] = rpnl_df.rpnl.ewm(27).mean()
         rpnl_df['ema_81'] = rpnl_df.rpnl.ewm(81).mean()
+        rpnl_df['timestamp'] = rpnl_df.timestamp.astype(int)
         rpnl_df = rpnl_df.sort_values('timestamp')
         print(direction)
         print(rpnl_df)
