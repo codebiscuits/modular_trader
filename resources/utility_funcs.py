@@ -1,7 +1,5 @@
 import json
-from resources import keys
 from json.decoder import JSONDecodeError
-from binance.client import Client
 from pathlib import Path
 import pandas as pd
 from datetime import datetime, timedelta, timezone
@@ -14,8 +12,11 @@ from typing import Tuple, Dict
 import sys
 import math
 import pytz
+import time
+from functools import wraps
+from binance.exceptions import BinanceAPIException
+import plotly.express as px
 
-client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 ctx = getcontext()
 ctx.prec = 12
@@ -667,3 +668,31 @@ def remove_duplicates(signals: list[dict]) -> list[dict]:
 
     return checked_signals
 
+
+def plot_call_weights(session):
+    plot_df = pd.DataFrame({
+        'times': [time for time, weight in session.all_weights],
+        'weights': [weight for time, weight in session.all_weights]})
+    plot_df['seconds'] = plot_df.times - plot_df.times.iloc[0]
+    plot_df['cum_weight'] = plot_df.weights.cumsum()
+    plot_df = plot_df.drop('weights', axis=1)
+    fig = px.scatter(plot_df, x='seconds', y='cum_weight')
+    fig.show()
+
+
+def retry_on_busy(max_retries=360, delay=5):
+    def decorator_retry(func):
+        @wraps(func)
+        def wrapper_retry(*args, **kwargs):
+            for _ in range(max_retries + 1):
+                try:
+                    result = func(*args, **kwargs)
+                    return result
+                except BinanceAPIException as e:
+                    if e.code != -3044:
+                        raise e
+                    print("System busy, retrying in {} seconds...".format(delay))
+                    time.sleep(delay)
+            raise Exception("Max retries exceeded. Request still failed after {} attempts.".format(max_retries))
+        return wrapper_retry
+    return decorator_retry

@@ -18,7 +18,6 @@ from pycoingecko import CoinGeckoAPI
 from pyarrow import ArrowInvalid
 from resources import indicators as ind
 
-client = Client(keys.bPkey, keys.bSkey)
 cg = CoinGeckoAPI()
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 ctx = getcontext()
@@ -37,6 +36,8 @@ tf_dict = {'1m': Client.KLINE_INTERVAL_1MINUTE,
            '3d': Client.KLINE_INTERVAL_3DAY,
            '1w': Client.KLINE_INTERVAL_1WEEK,
            }
+
+
 
 
 # -#-#- Market Data Functions
@@ -111,16 +112,21 @@ def get_current_cg_data(cg_symbol):
 #     return df
 
 
+@uf.retry_on_busy()
 def get_bin_ohlc(pair: str, timeframe: str, span: str = "2 years ago UTC", session=None) -> pd.DataFrame:
     """fetches kline data from binance for the stated pair and timeframe.
     span tells the function how far back to start the data, in plain english
     for timeframe, use strings like 5m or 1h or 1d"""
 
-    if session:
-        session.track_weights(1)
     abc = Timer('all binance calls')
     abc.start()
-    klines = client.get_historical_klines(pair, tf_dict.get(timeframe), span)
+
+    if session:
+        session.track_weights(1)
+        klines = session.client.get_historical_klines(pair, tf_dict.get(timeframe), span)
+    else:
+        client = Client(keys.bPkey, keys.bSkey)
+        klines = client.get_historical_klines(pair, tf_dict.get(timeframe), span)
     abc.stop()
     cols = ['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'close_time',
             'quote_vol', 'num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol', 'ignore']
@@ -179,7 +185,7 @@ def get_bin_ohlc(pair: str, timeframe: str, span: str = "2 years ago UTC", sessi
 def get_ohlc(pair: str, timeframe: str, span: str = "2 years ago UTC", session=None) -> pd.DataFrame:
     """calls get_bin_ohlc and get_5min_cg_data or get_daily_cg_data and stitches their outputs together"""
 
-    bin_data = get_bin_ohlc(pair, timeframe, span, session)
+    bin_data = get_bin_ohlc(pair, timeframe, span, session=session)
 
     # cg_data = get_all_cg_data(session, pair, timeframe, bin_data.timestamp.iloc[0], bin_data.timestamp.iloc[-1])
 
@@ -188,16 +194,21 @@ def get_ohlc(pair: str, timeframe: str, span: str = "2 years ago UTC", session=N
     return bin_data
 
 
+@uf.retry_on_busy()
 def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame, session=None) -> pd.DataFrame:
     """takes an ohlc dataframe, works out when the data ends, then requests from
     binance all data from the end to the current moment. It then joins the new
     data onto the old data and returns the updated dataframe"""
 
+    abc = Timer('all binance calls')
+    abc.start()
+
     # print('get_klines')
     if session:
         session.track_weights(1)
-    abc = Timer('all binance calls')
-    abc.start()
+        client = session.client
+    else:
+        client = Client(keys.bPkey, keys.bSkey)
 
     # check old_df is localised to UTC
     try:
@@ -289,7 +300,7 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
                 print(f"Problem reading {pair} parquet file, downloading from scratch.")
                 print(e)
                 filepath.unlink()
-                df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
+                df = get_ohlc(None, pair, session.ohlc_tf, '2 years ago UTC')
 
             # check df is localised to UTC
             try:
@@ -311,11 +322,11 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
                 df = update_ohlc(pair, session.ohlc_tf, df, session)
                 # print('updated ohlc')
             else:
-                df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
+                df = get_ohlc(None, pair, session.ohlc_tf, '2 years ago UTC')
                 # print(f'{pair} ohlc too short to update, downloaded from scratch')
 
         else:
-            df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
+            df = get_ohlc(None, pair, session.ohlc_tf, '2 years ago UTC')
             print(f'downloaded {pair} from scratch')
 
         # check df is localised to UTC
@@ -425,6 +436,7 @@ def create_trade_dict(order: dict, price: float, live: bool) -> Dict[str, str]:
 # -#-#- Spot Trading Functions
 
 
+@uf.retry_on_busy()
 def buy_asset_s(session, pair: str, size: float, live: bool) -> dict:
     """sends a market buy order to binance in the spot account and returns the order data"""
 
@@ -435,7 +447,7 @@ def buy_asset_s(session, pair: str, size: float, live: bool) -> dict:
     price = session.pairs_data[pair]['price']
     base_size: str = uf.valid_size(session, pair, size)
     if live:
-        buy_order = client.order_market_buy(symbol=pair, quantity=base_size)
+        buy_order = session.client.order_market_buy(symbol=pair, quantity=base_size)
 
     else:
         usdt_size: str = f"{base_size} * {price}:.2f"
@@ -460,6 +472,7 @@ def buy_asset_s(session, pair: str, size: float, live: bool) -> dict:
     return buy_order
 
 
+@uf.retry_on_busy()
 def sell_asset_s(session, pair: str, size: float, live: bool) -> dict:
     """sends a market sell order to binance in the spot account and returns the order data"""
 
@@ -471,7 +484,7 @@ def sell_asset_s(session, pair: str, size: float, live: bool) -> dict:
     base_size = uf.valid_size(session, pair, size)
 
     if live:
-        sell_order = client.order_market_sell(symbol=pair, quantity=base_size)
+        sell_order = session.client.order_market_sell(symbol=pair, quantity=base_size)
     else:
         usdt_size: str = f"{base_size} * {price}:.2f"
         sell_order = {'clientOrderId': '111111',
@@ -495,6 +508,7 @@ def sell_asset_s(session, pair: str, size: float, live: bool) -> dict:
     return sell_order
 
 
+@uf.retry_on_busy()
 def set_stop_s(session, pair, trigger, limit, size):
     """sends a stop-loss limit order to binance spot account and returns the order data"""
 
@@ -509,7 +523,7 @@ def set_stop_s(session, pair, trigger, limit, size):
     stop_size = uf.valid_size(session, pair, size)
     print(f"setting {pair} stop: {stop_size = } {trigger = } {limit = }")
     if session.live:
-        stop_sell_order = client.create_order(symbol=pair,
+        stop_sell_order = session.client.create_order(symbol=pair,
                                               side=be.SIDE_SELL,
                                               type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
                                               timeInForce=be.TIME_IN_FORCE_GTC,
@@ -526,6 +540,7 @@ def set_stop_s(session, pair, trigger, limit, size):
     return stop_sell_order
 
 
+@uf.retry_on_busy()
 def clear_stop_s(session, pair: str, position: dict) -> Tuple[Any, Decimal]:
     """finds the order id of the most recent stop-loss from the trade record
     and cancels that specific order. if no such id can be found, returns null values"""
@@ -540,7 +555,7 @@ def clear_stop_s(session, pair: str, position: dict) -> Tuple[Any, Decimal]:
     if session.live:
         if stop_id:
             try:
-                clear = client.cancel_order(symbol=pair, orderId=str(stop_id))
+                clear = session.client.cancel_order(symbol=pair, orderId=str(stop_id))
                 base_size = clear.get('origQty')
             except bx.BinanceAPIException as e:
                 print(f"Exception during clear_stop_s on {pair}. If it's 'unknown order sent' then it was probably "
@@ -561,6 +576,7 @@ def clear_stop_s(session, pair: str, position: dict) -> Tuple[Any, Decimal]:
 # -#-#- Margin Trading Functions
 
 
+@uf.retry_on_busy()
 def buy_asset_M(session, pair: str, size: float, is_base: bool, price: float, live: bool) -> dict:
     """sends a market buy order to binance in the margin account and returns the order data"""
 
@@ -569,12 +585,12 @@ def buy_asset_M(session, pair: str, size: float, is_base: bool, price: float, li
 
     if live and is_base:
         base_size = uf.valid_size(session, pair, size)
-        buy_order = client.create_margin_order(symbol=pair,
+        buy_order = session.client.create_margin_order(symbol=pair,
                                                side=be.SIDE_BUY,
                                                type=be.ORDER_TYPE_MARKET,
                                                quantity=base_size)
     elif live and not is_base:
-        buy_order = client.create_margin_order(symbol=pair,
+        buy_order = session.client.create_margin_order(symbol=pair,
                                                side=be.SIDE_BUY,
                                                type=be.ORDER_TYPE_MARKET,
                                                quoteOrderQty=size)
@@ -612,6 +628,7 @@ def buy_asset_M(session, pair: str, size: float, is_base: bool, price: float, li
     return buy_order
 
 
+@uf.retry_on_busy()
 def sell_asset_M(session, pair: str, base_size: float, price: float, live: bool) -> dict:
     """sends a market sell order to binance in the margin account and returns the order data"""
 
@@ -622,7 +639,7 @@ def sell_asset_M(session, pair: str, base_size: float, price: float, live: bool)
     if not base_size:  # if size == 0, valid_size will output None
         base_size = 0
     if live:
-        sell_order = client.create_margin_order(symbol=pair, side=be.SIDE_SELL, type=be.ORDER_TYPE_MARKET,
+        sell_order = session.client.create_margin_order(symbol=pair, side=be.SIDE_SELL, type=be.ORDER_TYPE_MARKET,
                                                 quantity=base_size)
     else:
         now = int(datetime.now(timezone.utc).timestamp())
@@ -652,19 +669,21 @@ def sell_asset_M(session, pair: str, base_size: float, price: float, live: bool)
     return sell_order
 
 
-def borrow_asset_M(asset: str, qty: str, live: bool) -> None:
+@uf.retry_on_busy()
+def borrow_asset_M(session, asset: str, qty: str, live: bool) -> None:
     """calls the binance api function to take out a margin loan"""
 
     if live:
-        client.create_margin_loan(asset=asset, amount=qty)
+        session.client.create_margin_loan(asset=asset, amount=qty)
 
 
-def repay_asset_M(asset: str, qty: str, live: bool) -> bool:
+@uf.retry_on_busy()
+def repay_asset_M(session, asset: str, qty: str, live: bool) -> bool:
     """calls the binance api function to repay a margin loan"""
 
     if live and float(qty):
         try:
-            client.repay_margin_loan(asset=asset, amount=qty)
+            session.client.repay_margin_loan(asset=asset, amount=qty)
             return True
         except bx.BinanceAPIException as e:
             print(f"*** Exception whilst trying to repay {qty} {asset}. If it says 'repay amount larger than loan "
@@ -674,6 +693,7 @@ def repay_asset_M(asset: str, qty: str, live: bool) -> bool:
             return False
 
 
+@uf.retry_on_busy()
 def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit: float) -> dict:
     """sends a margin stop-loss limit order to binance and returns the order data"""
 
@@ -687,7 +707,7 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit
     stop_size = uf.valid_size(session, pair, size)
     # print(f"setting {pair} stop: {stop_size = } {side = } {trigger = } {limit = }")
     if session.live:
-        stop_sell_order = client.create_margin_order(symbol=pair,
+        stop_sell_order = session.client.create_margin_order(symbol=pair,
                                                      side=side,
                                                      type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
                                                      timeInForce=be.TIME_IN_FORCE_GTC,
@@ -704,6 +724,7 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit
     return stop_sell_order
 
 
+@uf.retry_on_busy()
 def clear_stop_M(session, pair: str, position: dict) -> Tuple[Any, Decimal]:
     """finds the order id of the most recent stop-loss from the trade record
     and cancels that specific order. if no such id can be found, returns null values"""
@@ -717,7 +738,7 @@ def clear_stop_M(session, pair: str, position: dict) -> Tuple[Any, Decimal]:
     if session.live:
         if stop_id:
             try:
-                clear = client.cancel_margin_order(symbol=pair, orderId=str(stop_id))
+                clear = session.client.cancel_margin_order(symbol=pair, orderId=str(stop_id))
                 base_size = clear.get('origQty')
                 session.pairs_data[pair]['algo_orders'] -= 1
             except bx.BinanceAPIException as e:

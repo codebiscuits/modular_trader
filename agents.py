@@ -18,7 +18,7 @@ from pyarrow import ArrowInvalid
 import traceback
 import joblib
 
-client = Client(keys.bPkey, keys.bSkey)
+# client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 ctx = getcontext()
 ctx.prec = 12
@@ -264,6 +264,7 @@ class Agent():
 
     # record stopped trades ------------------------------------------------
 
+    @uf.retry_on_busy()
     def find_order(self, session, pair, sid):
         if sid == 'not live':
             return None
@@ -271,7 +272,7 @@ class Agent():
         session.track_weights(10)
         abc = Timer('all binance calls')
         abc.start()
-        order = client.get_margin_order(symbol=pair, orderId=sid)
+        order = session.client.get_margin_order(symbol=pair, orderId=sid)
         abc.stop()
         session.counts.append('get_margin_order')
 
@@ -294,10 +295,10 @@ class Agent():
         if (order.get('side') == 'BUY'):
             asset = pair[:-4]
             stop_size = Decimal(order.get('executedQty'))
-            repayed = funcs.repay_asset_M(asset, stop_size, session.live)
+            repayed = funcs.repay_asset_M(session, asset, stop_size, session.live)
         else:
             stop_size = Decimal(order.get('cummulativeQuoteQty'))
-            repayed = funcs.repay_asset_M('USDT', stop_size, session.live)
+            repayed = funcs.repay_asset_M(session, 'USDT', stop_size, session.live)
 
         self.open_trades[pair]['placeholder']['completed'] = 'repay'
 
@@ -391,6 +392,10 @@ class Agent():
                     except bx.BinanceAPIException as e:
                         self.error_print(session, pair, 'close', e)
 
+    @uf.retry_on_busy()
+    def retrieve_margin_order(self, session, pair, sid):
+        return session.client.get_margin_order(symbol=pair, orderId=sid)
+
     def record_stopped_trades(self, session, timeframes) -> None:
         m = Timer('record_stopped_trades')
         m.start()
@@ -446,7 +451,7 @@ class Agent():
             session.track_weights(10)
             abc = Timer('all binance calls')
             abc.start()
-            order = client.get_margin_order(symbol=pair, orderId=sid)
+            order = self.retrieve_margin_order(session, pair, sid)
             abc.stop()
             session.counts.append('get_margin_order')
 
@@ -538,12 +543,12 @@ class Agent():
                     print(f"problem loading {pair} ohlc")
                     print(e)
                     filepath.unlink()
-                    df = funcs.get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
+                    df = funcs.get_ohlc(session, pair, session.ohlc_tf, '2 years ago UTC')
                     source = 'exchange'
                     print(f'downloaded {pair} from scratch')
             else:
                 print(f"{filepath} doesn't exist")
-                df = funcs.get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
+                df = funcs.get_ohlc(session, pair, session.ohlc_tf, '2 years ago UTC')
                 source = 'exchange'
                 print(f'downloaded {pair} from scratch')
 
@@ -766,8 +771,6 @@ class Agent():
                 filepath.touch()
             with open(filepath, "w") as file:
                 json.dump(self.closed_sim_trades, file)
-
-        print(f"called record_trades, {state = }")
 
         b.stop()
 
@@ -1295,7 +1298,10 @@ class Agent():
         asset = signal['pair'][:-len(session.quote_asset)]
         size = trade_record['position']['base_size']
         inval_ratio = signal['inval_ratio']
-        self.real_pos[asset] = self.update_pos(session, pair, size, inval_ratio, state)
+        if state == 'sim':
+            self.sim_pos[asset] = self.update_pos(session, pair, size, inval_ratio, state)
+        elif state == 'tracked':
+            self.tracked[asset] = self.update_pos(session, pair, size, inval_ratio, state)
         self.record_trades(session, state)
 
         k13.stop()
@@ -1356,12 +1362,12 @@ class Agent():
         if direction == 'long':
             price = session.pairs_data[pair]['price']
             borrow_size = f"{size * price:.2f}"
-            funcs.borrow_asset_M('USDT', borrow_size, session.live)
+            funcs.borrow_asset_M(session, 'USDT', borrow_size, session.live)
             self.open_trades[pair]['placeholder']['loan_asset'] = 'USDT'
         elif direction == 'short':
             asset = pair[:-4]
             borrow_size = uf.valid_size(session, pair, size)
-            funcs.borrow_asset_M(asset, borrow_size, session.live)
+            funcs.borrow_asset_M(session, asset, borrow_size, session.live)
             self.open_trades[pair]['placeholder']['loan_asset'] = asset
         else:
             print('*** WARNING open_real_2 given wrong direction argument ***')
@@ -1569,10 +1575,10 @@ class Agent():
         liability = self.open_trades[pair]['position']['liability']
         if direction == 'long':
             repay_size = str(max(Decimal(tp_order.get('quote_size', 0)), Decimal(liability)))
-            funcs.repay_asset_M('USDT', repay_size, session.live)
+            funcs.repay_asset_M(session, 'USDT', repay_size, session.live)
         else:
             repay_size = str(max(Decimal(liability), Decimal(tp_order.get('base_size', 0))))
-            funcs.repay_asset_M(asset, repay_size, session.live)
+            funcs.repay_asset_M(session, asset, repay_size, session.live)
 
         # update trade dict
         tp_order['action'] = 'close'
@@ -1637,10 +1643,10 @@ class Agent():
 
         if direction == 'long':
             repay_size = tp_order.get('quote_size')
-            funcs.repay_asset_M('USDT', repay_size, session.live)
+            funcs.repay_asset_M(session, 'USDT', repay_size, session.live)
         elif direction == 'short':
             repay_size = tp_order.get('base_size')
-            funcs.repay_asset_M(asset, repay_size, session.live)
+            funcs.repay_asset_M(session, asset, repay_size, session.live)
 
         # create trade dict
         tp_order['action'] = 'tp'
@@ -1826,10 +1832,10 @@ class Agent():
 
         if direction == 'long':
             repay_size = str(max(Decimal(close_order.get('quote_size', 0)), Decimal(liability)))
-            funcs.repay_asset_M('USDT', repay_size, session.live)
+            funcs.repay_asset_M(session, 'USDT', repay_size, session.live)
         elif direction == 'short':
             repay_size = str(max(Decimal(liability), Decimal(close_order.get('base_size', 0))))
-            funcs.repay_asset_M(asset, repay_size, session.live)
+            funcs.repay_asset_M(session, asset, repay_size, session.live)
 
         # update records
         self.open_trades[pair]['position']['liability'] = '0'
@@ -1930,7 +1936,6 @@ class Agent():
         if stage <= 4:
             # update records
             self.open_to_closed(session, pair, close_order, repay_size)
-            # update in_pos, real_pos, counts etc
             # TODO if this function was ever called from stage 4, repay_size would not be defined.
             self.close_real_7(session, pair, repay_size, direction)
 
@@ -2281,6 +2286,7 @@ class Agent():
 
         k3.stop()
 
+    @uf.retry_on_busy()
     def set_size_from_free(self, session, pair):
         """if clear_stop returns a base size of 0, this can be called to check for free balance,
         in case the position was there but just not in a stop order"""
@@ -2341,7 +2347,7 @@ class Agent():
 
         elif ph['completed'] == 'borrow':
             try:
-                funcs.repay_asset_M(ph['loan_asset'], ph['liability'], session.live)
+                funcs.repay_asset_M(session, ph['loan_asset'], ph['liability'], session.live)
             except bx.BinanceAPIException as e:
                 print('Problem during repair_open')
                 pprint(ph)
@@ -2359,7 +2365,7 @@ class Agent():
                     funcs.sell_asset_M(session, pair, close_size, price, session.live)
                 else:
                     funcs.buy_asset_M(session, pair, close_size, True, price, session.live)
-                funcs.repay_asset_M(ph['loan_asset'], ph['liability'], session.live)
+                funcs.repay_asset_M(session, ph['loan_asset'], ph['liability'], session.live)
                 del self.open_trades[pair]
 
         elif ph['completed'] == 'trade_dict':
@@ -2371,7 +2377,7 @@ class Agent():
                     funcs.sell_asset_M(session, pair, close_size, price, session.live)
                 else:
                     funcs.buy_asset_M(session, pair, close_size, True, price, session.live)
-                funcs.repay_asset_M(ph['loan_asset'], ph['liability'], session.live)
+                funcs.repay_asset_M(session, ph['loan_asset'], ph['liability'], session.live)
                 del self.open_trades[pair]
 
         elif ph['completed'] == 'set_stop':

@@ -52,7 +52,7 @@ def rank_pairs():
     return sorted(vols, key=lambda x: vols[x], reverse=True)
 
 
-def get_data(pair, timeframe, vwma_periods=24):
+def get_data(session, pair, timeframe, vwma_periods=24):
     """loads the ohlc data from file or downloads it from binance if necessary, then calculates vwma at the correct
     scale before resampling to the desired timeframe.
     vwma_lengths just accounts for timeframe resampling, vwma_periods is a multiplier on that"""
@@ -69,10 +69,10 @@ def get_data(pair, timeframe, vwma_periods=24):
             print('Error:\n', e)
             print(f"Problem reading {pair} parquet file, downloading from scratch.")
             ohlc_path.unlink()
-            df = funcs.get_ohlc(pair, '5m', '2 years ago UTC')
+            df = funcs.get_ohlc(session, pair, '5m', '2 years ago UTC')
             df.to_parquet(ohlc_path)
     else:
-        df = funcs.get_ohlc(pair, '5m', '2 years ago UTC')
+        df = funcs.get_ohlc(session, pair, '5m', '2 years ago UTC')
         ohlc_folder.mkdir(parents=True, exist_ok=True)
         df.to_parquet(ohlc_path)
         # print("Downloaded OHLC from internet")

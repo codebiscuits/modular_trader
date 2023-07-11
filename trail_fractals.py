@@ -73,8 +73,12 @@ def load_pairs(side, tf):
     return list(info['pairs'])
 
 running_on_pi = Path('/pi_2.txt').exists()
-timeframes = ['1h', '4h', '12h', '1d']
-sides = ['long', 'short']
+timeframes = [
+    # '1h', '4h',
+    '12h', '1d']
+sides = [
+    # 'long',
+    'short']
 data_len = 200
 num_pairs = 20
 start_pair = 0

@@ -13,8 +13,6 @@ import json
 pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
 
-client = Client(keys.bPkey, keys.bSkey)
-
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
@@ -36,16 +34,16 @@ pairs = list(session.pairs_data.keys())
 rocs = {}
 volumes = {}
 
-def from_scratch(pair, tf):
+def from_scratch(session, pair, tf):
     df_start = time.perf_counter()
-    df = funcs.get_ohlc(pair, tf, '2 years ago UTC')
+    df = funcs.get_ohlc(pair, tf, '2 years ago UTC', session)
     df_end = time.perf_counter()
     elapsed = df_end - df_start
     print(f'downloaded {pair} from scratch, took {int(elapsed // 60)}m {elapsed % 60:.1f}s')
     return df
 
 
-def iterations(n, pair, tf):
+def iterations(n, session, pair, tf):
     # print(f"{n} {pair} {tf}")
     session.set_ohlc_tf(tf)
     # print(session.ohlc_data)
@@ -62,15 +60,15 @@ def iterations(n, pair, tf):
             print('Error:\n', e)
             print(f"Problem reading {pair} parquet file, downloading from scratch.")
             filepath.unlink()
-            df = from_scratch(pair, tf)
+            df = from_scratch(session, pair, tf)
 
         # df = pd.read_parquet(filepath)
 
         if len(df) > 2:
-            df = funcs.update_ohlc(pair, tf, df)
+            df = funcs.update_ohlc(pair, tf, df, session)
     # -------------------- if theres no local data yet -------------------------#
     else:
-        df = from_scratch(pair, tf)
+        df = from_scratch(session, pair, tf)
         # print(f'{n} downloaded {pair} from scratch')
 
     max_dict = {'1m': 1051200, '5m': 210240, '15m': 70080, '1h': 17520}
@@ -107,13 +105,13 @@ def save_vols(vols):
         json.dump(vols, file)
 
 
-iterations(0, 'BTCUSDT', '1m')
-iterations(1, 'ETHUSDT', '1m')
+iterations(0, session, 'BTCUSDT', '1m')
+iterations(1, session, 'ETHUSDT', '1m')
 
 for n, pair in enumerate(pairs):
     # print(n, pair)
     try:
-        df = iterations(n, pair, '5m')
+        df = iterations(n, session, pair, '5m')
     except Exception as e:
         print(f"*** {pair} exception during download, data not downloaded ***")
         print(e)
@@ -133,5 +131,5 @@ end = time.perf_counter()
 all_time = end - start
 elapsed_str = f'Time taken: {round(all_time // 60)}m {round(all_time % 60)}s'
 
-print(f"used-weight-1m: {client.response.headers['x-mbx-used-weight-1m']}")
+print(f"used-weight-1m: {session.client.response.headers['x-mbx-used-weight-1m']}")
 print(f'update_ohlc complete, {elapsed_str}')

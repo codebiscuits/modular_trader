@@ -1,8 +1,7 @@
 import time
 script_start = time.perf_counter()
 
-from resources import keys, utility_funcs as uf, binance_funcs as funcs
-from binance.client import Client
+from resources import utility_funcs as uf, binance_funcs as funcs
 from datetime import datetime, timezone
 from agents import TrailFractals
 from pprint import pprint
@@ -12,28 +11,15 @@ from pushbullet import Pushbullet
 from collections import Counter
 
 # TODO current (02/04/23) roadmap should be:
-#  * i've currently got sim trades closing at their stop price, with a tp signal as their recorded signal.
-#  why are they not being processed by rrst?
-#  why is the action on the open signal tp?
-#  why does it only seem to happen to sim trades on doublest and doublest no ema? coincidence?
 #  * get detailed push notes in all exception handling code so i always know whats going wrong, and change the ss_log
 #  so it creates a new file for each session, named by the date and time they took place
 #  * start integrating polars and doing anything else i can to speed things up enough to run 3day and 1week timeframes
 #  in the same session as everything else
 #  * get spot trading and oco entries and trade adds working so i can use other strats
 
-client = Client(keys.bPkey, keys.bSkey)
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 
 print('\n-+-+-+-+-+-+-+-+-+-+-+- Running Setup Scanner -+-+-+-+-+-+-+-+-+-+-+-\n')
-
-# TODO on the problem with trade records, it seems that sim tp trades are not being saved properly, so the tp signal
-#  replaces the open signal in the record, which is actually not what i want, and the tp trade record is lost, which is
-#  also not what i want. Also closed trades don't all seem to be making it into the records either. It seems as though
-#  maybe the last closed trade of the session gets recorded but any others are discarded perhaps, that's what i can guess
-#  from the mismatch between the records and the scanner summaries
-
-
 
 ########################################################################################################################
 
@@ -465,13 +451,7 @@ for signal in processed_signals['unassigned']:
 sort_start = time.perf_counter()
 
 # gather data on current algo orders
-session.track_weights(40)
-session.spot_orders = session.client.get_open_orders()
-session.track_weights(len(session.client.get_margin_all_pairs()))  # weighting for this call = number of pairs on exchange
-session.margin_orders = session.client.get_open_margin_orders()
-session.check_open_spot_orders()
-session.check_open_margin_orders()
-session.count_algo_orders() # kind of redundant since the above two methods create lists which could be counted
+session.update_algo_orders()
 
 # next sort the unassigned list by scores. items are popped from the end of the list so i want the best signals to be
 # last so that they get processed first, so i don't use the 'reverse=True' option
@@ -593,7 +573,7 @@ print('sim_pos keys:')
 pprint(agents[signal['agent']].sim_pos.keys())
 
 sim_opens = [sig for sig in processed_signals['sim_open'] # discard signals for existing sim positions
-             if signal['asset'] not in agents[signal['agent']].sim_pos.keys()]
+             if sig['asset'] not in agents[sig['agent']].sim_pos.keys()]
 print(f"\n-+-+-+-+-+-+-+-+-+-+-+- Executing {len(sim_opens)} Sim Opens -+-+-+-+-+-+-+-+-+-+-+-")
 for signal in sim_opens:
 
@@ -690,11 +670,11 @@ print(f"pairs tested: {len(pairs)}")
 pprint(Counter(session.counts))
 print('\n-------------------------------------------------------------------------------\n')
 
-# for agent in agents.values():
-#     print(f'{agent.name} real_pos')
-#     pprint(agent.real_pos)
-#     print('open_trades')
-#     pprint(agent.open_trades)
+for agent in agents.values():
+    print(f'{agent.name} real_pos')
+    pprint(agent.real_pos)
+    print('open_trades')
+    pprint(agent.open_trades)
 
 script_end = time.perf_counter()
 total_time = script_end - script_start
@@ -712,15 +692,9 @@ def section_times():
     print(f"Total time taken: {int(total_time // 60)}m {int(total_time % 60)}s")
 section_times()
 
-print(f"used-weight: {client.response.headers['x-mbx-used-weight']}")
-print(f"used-weight-1m: {client.response.headers['x-mbx-used-weight-1m']}")
+pprint(session.client.response.headers)
 
-# start_dt = datetime.fromtimestamp(session.all_weights[0][0])
-# plot_df = pd.DataFrame({
-#     'times': [time for time, weight in session.all_weights],
-#     'weights': [weight for time, weight in session.all_weights]})
-# plot_df['seconds'] = plot_df.times - plot_df.times.iloc[0]
-# plot_df['cum_weight'] = plot_df.weights.cumsum()
-# plot_df = plot_df.drop('weights', axis=1)
-# fig = px.scatter(plot_df, x='seconds', y='cum_weight')
-# fig.show()
+print(f"used-weight: {session.client.response.headers['x-mbx-used-weight']}")
+print(f"used-weight-1m: {session.client.response.headers['x-mbx-used-weight-1m']}")
+
+# uf.plot_call_weights(session)

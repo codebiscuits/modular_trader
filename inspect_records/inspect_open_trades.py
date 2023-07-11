@@ -34,18 +34,21 @@ def print_positions(data, name):
             print(f"\n{k}")
             all_rpnls = []
             for a, b in v.items():
-                print(f"\n{a}")
-                pprint(b)
-                rpnl = 0
-                for t in b['trade']:
-                    if t.get('rpnl'):
-                        rpnl += t['rpnl']
-                all_rpnls.append(rpnl)
+                if b['trade'][0]['wanted']:
+                    print(f"\n{a}")
+                    pprint(b)
+                    rpnl = 0
+                    for t in b['trade']:
+                        if t.get('rpnl'):
+                            rpnl += t['rpnl']
+                    all_rpnls.append(rpnl)
             rpnl_s = pd.Series(all_rpnls)
             rpnl_cum = rpnl_s.cumsum()
             rpnl_df = pd.concat([rpnl_s, rpnl_cum], axis=1)
             rpnl_df.columns = ['rpnl', 'cum_rpnl']
             rpnl_df['ema_4'] = rpnl_df.rpnl.ewm(4).mean()
+            rpnl_df['ema_12'] = rpnl_df.rpnl.ewm(12).mean()
+            rpnl_df['ema_36'] = rpnl_df.rpnl.ewm(36).mean()
             print(rpnl_df)
     else:
         print('\nNone')

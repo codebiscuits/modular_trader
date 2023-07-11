@@ -4,7 +4,7 @@ from pushbullet import Pushbullet
 from resources.timers import Timer
 from binance.client import Client
 import binance.enums as be
-from resources import indicators as ind, keys, features as features
+from resources import indicators as ind, keys, features, utility_funcs as uf
 import entry_modelling as em
 from typing import Tuple, Dict
 from collections import Counter
@@ -16,7 +16,6 @@ import pandas as pd
 import json
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
-client = Client(keys.bPkey, keys.bSkey)
 
 
 class TradingSession():
@@ -34,6 +33,7 @@ class TradingSession():
     all_weights = []
     market_bias = {}
 
+    @uf.retry_on_busy()
     def __init__(self, fr_max):
         t = Timer('session init')
         t.start()
@@ -134,7 +134,7 @@ class TradingSession():
                 flag = 0
                 print(f"request weight limit: {weight_limit} per {window}s. currently: {total} in the last {timespan:.1f}s")
                 print(f"track_weights needs {window - timespan:.1f}s of sleep")
-                print(f"used-weight-1m: {client.response.headers['x-mbx-used-weight-1m']}")
+                print(f"used-weight-1m: {self.client.response.headers['x-mbx-used-weight-1m']}")
                 time.sleep(window - timespan)
             if timespan > max(window, raw_window):
                 flag = 0
@@ -152,8 +152,8 @@ class TradingSession():
             print(
                 f"raw request limit: {raw_limit} per {raw_window}s. currently: {total} in the last {timespan:.1f}s")
             print(f"track_weights needs {raw_window - timespan:.1f}s of sleep")
-            print(f"used-weight: {client.response.headers['x-mbx-used-weight']}")
-            print(f"used-weight-1m: {client.response.headers['x-mbx-used-weight-1m']}")
+            print(f"used-weight: {self.client.response.headers['x-mbx-used-weight']}")
+            print(f"used-weight-1m: {self.client.response.headers['x-mbx-used-weight-1m']}")
             time.sleep(raw_window - timespan)
 
         # if flag and rolling_weight:
@@ -203,6 +203,7 @@ class TradingSession():
     #     all_coins = cg.get_coins_list()
     #     self.cg_symbols = {x['symbol'].upper(): x['id'] for x in all_coins}
 
+    @uf.retry_on_busy()
     def binance_spreads(self, quote: str = 'USDT') -> dict[str: float]:
         """returns a dictionary with pairs as keys and current average spread as values"""
 
@@ -247,6 +248,7 @@ class TradingSession():
 
         return avg_spreads
 
+    @uf.retry_on_busy()
     def update_prices(self) -> None:
         """fetches current prices for all pairs on binance. much faster than get_price"""
         up = Timer('update_prices')
@@ -399,6 +401,9 @@ class TradingSession():
         elif Path(f'/home/ross/coding/pi_down/modular_trader/records').exists():
             read_records = Path(f'/home/ross/coding/pi_down/modular_trader/records')
             write_records = Path(f'/home/ross/coding/modular_trader/records')
+        elif Path(f'/home/ross/coding/pi_2/modular_trader/records').exists():
+            read_records = Path(f'/home/ross/coding/pi_2/modular_trader/records')
+            write_records = Path(f'/home/ross/coding/modular_trader/records')
         else:
             read_records = Path(f'/home/ross/coding/modular_trader/records')
             write_records = Path(f'/home/ross/coding/modular_trader/records')
@@ -434,6 +439,7 @@ class TradingSession():
         v.stop()
         return ohlc_data
 
+    @uf.retry_on_busy()
     def get_pair_info(self, pair):
         """tries to find details about the pair from local records. if no local data exists, fetches it from exchange"""
 
@@ -490,6 +496,7 @@ class TradingSession():
     #
     #     return limit == count
 
+    @uf.retry_on_busy()
     def get_book_data(self, pair):
 
         func_name = sys._getframe().f_code.co_name
@@ -649,6 +656,7 @@ class TradingSession():
 
     # Spot Specific Methods
 
+    @uf.retry_on_busy()
     def top_up_bnb_s(self, usdt_size: int) -> dict:
         """checks net BNB balance and interest owed, if net is below the threshold,
         buys BNB then repays any interest"""
@@ -759,6 +767,7 @@ class TradingSession():
         gab.stop()
 
     # Margin Specific Methods
+    @uf.retry_on_busy()
     def top_up_bnb_m(self, usdt_size: int) -> dict:
         """checks net BNB balance and interest owed, if net is below the threshold,
         buys BNB then repays any interest"""
@@ -907,6 +916,7 @@ class TradingSession():
 
         x5.stop()
 
+    @uf.retry_on_busy()
     def max_loan(self, asset):
         func_name = sys._getframe().f_code.co_name
         x9 = Timer(f'{func_name}')
@@ -946,8 +956,20 @@ class TradingSession():
 
         x2.stop()
 
+    @uf.retry_on_busy()
+    def update_algo_orders(self):
+        self.track_weights(40)
+        self.spot_orders = self.client.get_open_orders()
+        self.track_weights(
+            len(self.client.get_margin_all_pairs()))  # weighting for this call = number of pairs on exchange
+        self.margin_orders = self.client.get_open_margin_orders()
+        self.check_open_spot_orders()
+        self.check_open_margin_orders()
+        self.count_algo_orders()  # kind of redundant since the above two methods create lists which could be counted
+
 
 class LightSession(TradingSession):
+    @uf.retry_on_busy()
     def __init__(self):
         self.now_start = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
         self.client = Client(keys.bPkey, keys.bSkey)
@@ -974,6 +996,7 @@ class LightSession(TradingSession):
 
 
 class CheckRecordsSession(TradingSession):
+    @uf.retry_on_busy()
     def __init__(self):
         self.fr_max = 0.0005
         self.pairs_data = {}

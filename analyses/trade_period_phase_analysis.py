@@ -1,10 +1,9 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from binance.client import Client
-from config import not_pairs
 import time
-from functions import keys, binance_funcs as funcs
-from datetime import datetime
+from resources import keys, binance_funcs as funcs
+from datetime import datetime, timezone
 import numpy as np
 
 plt.style.use('fivethirtyeight')
@@ -35,7 +34,7 @@ for i, pair in enumerate(pairs):
     elif tf == '4h':
         span_periods = {'6 months': 1085, '1 month': 168, '1 week': 42, '1 day': 6}
         period_modulus = 6
-    df = funcs.get_ohlc(pair, tf, f'{span} ago UTC')
+    df = resources.funcs.get_ohlc(session, pair, tf, f'{span} ago UTC')
     if len(df) < span_periods.get(span):
         # print(f'{len(df) = } span = {span_periods.get(span)}')
         continue
