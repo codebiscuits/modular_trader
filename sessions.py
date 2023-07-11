@@ -134,7 +134,7 @@ class TradingSession():
                 flag = 0
                 print(f"request weight limit: {weight_limit} per {window}s. currently: {total} in the last {timespan:.1f}s")
                 print(f"track_weights needs {window - timespan:.1f}s of sleep")
-                print(f"used-weight-1m: {self.client.response.headers['x-mbx-used-weight-1m']}")
+                print(f"used-weight-1m: {self.client.response.headers.get('x-mbx-used-weight-1m')}")
                 time.sleep(window - timespan)
             if timespan > max(window, raw_window):
                 flag = 0

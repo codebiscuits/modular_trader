@@ -11,6 +11,9 @@ from pushbullet import Pushbullet
 from collections import Counter
 
 # TODO current (02/04/23) roadmap should be:
+#  * write new set_fixed_risk using trades instead of sessions
+#  * implement agent pairs lists being submitted to the session so only relevant pairs get checked in the
+#  update_algo_orders check
 #  * get detailed push notes in all exception handling code so i always know whats going wrong, and change the ss_log
 #  so it creates a new file for each session, named by the date and time they took place
 #  * start integrating polars and doing anything else i can to speed things up enough to run 3day and 1week timeframes
@@ -692,7 +695,7 @@ def section_times():
     print(f"Total time taken: {int(total_time // 60)}m {int(total_time % 60)}s")
 section_times()
 
-print(f"used-weight: {session.client.response.headers['x-mbx-used-weight']}")
-print(f"used-weight-1m: {session.client.response.headers['x-mbx-used-weight-1m']}")
+print(f"used-weight: {session.client.response.headers.get('x-mbx-used-weight')}")
+print(f"used-weight-1m: {session.client.response.headers.get('x-mbx-used-weight-1m')}")
 
 # uf.plot_call_weights(session)
