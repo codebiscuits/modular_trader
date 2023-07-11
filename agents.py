@@ -69,10 +69,6 @@ class Agent():
         self.tracked_trades = self.read_open_trade_records(session, 'tracked')
         self.closed_trades = self.read_closed_trade_records(session)
         self.closed_sim_trades = self.read_closed_sim_trade_records(session)
-        print('score_accum long')
-        self.score_accum('long')
-        print('score_accum short')
-        self.score_accum('short')
         self.backup_trade_records(session)
         self.repair_trade_records(session)
         self.real_pos = self.current_positions(session, 'open')
@@ -903,7 +899,7 @@ class Agent():
         score, pnls = self.score_accum(direction)
         score_str = f"rpnl: {pnls['rpnl']:.2f}, ema_3: {pnls['ema_3']:.2f}, ema_9: {pnls['ema_9']:.2f}, " \
                     f"ema_27: {pnls['ema_27']:.2f}, ema_81: {pnls['ema_81']:.2f}"
-        print(f"{direction} score accum returned {score_str}")
+        print(f"{direction} score accum returned score: {score}, pnls: {score_str}")
 
         if score == 15:
             fr = min(fr_prev + 2, self.fr_div)
