@@ -204,8 +204,6 @@ while raw_signals:
         pprint(signal)
         pprint(sig_agent.tracked)
 
-    print(f"{sig_pair} {real_position = } {sim_position = } {tracked_position = }")
-
     bullish_pos = 'spot' if (sig_agent.mode == 'spot') else 'long'
 
     # TODO 'oco' signals are an alternative to 'open', so they should be treated as such in this section, maybe as a
@@ -569,16 +567,15 @@ real_open_took = real_open_end - real_open_start
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 sim_open_start = time.perf_counter()
 
-print('sim_pos keys:')
-pprint(agents[signal['agent']].sim_pos.keys())
-
 sim_opens = [sig for sig in processed_signals['sim_open'] # discard signals for existing sim positions
              if sig['asset'] not in agents[sig['agent']].sim_pos.keys()]
+
 print(f"\n-+-+-+-+-+-+-+-+-+-+-+- Executing {len(sim_opens)} Sim Opens -+-+-+-+-+-+-+-+-+-+-+-")
+
 for signal in sim_opens:
 
-    print(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
-    print(f"Sim reason: {signal['sim_reasons']}, score: {signal['score']}")
+    # print(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
+    # print(f"Sim reason: {signal['sim_reasons']}, score: {signal['score']}")
     agents[signal['agent']].open_sim(session, signal)
 
 # when they are all finished, update records once
@@ -691,8 +688,6 @@ def section_times():
     print(f"Logging took: {int(log_elapsed // 60)}m {int(log_elapsed % 60)}s")
     print(f"Total time taken: {int(total_time // 60)}m {int(total_time % 60)}s")
 section_times()
-
-pprint(session.client.response.headers)
 
 print(f"used-weight: {session.client.response.headers['x-mbx-used-weight']}")
 print(f"used-weight-1m: {session.client.response.headers['x-mbx-used-weight-1m']}")

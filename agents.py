@@ -1845,10 +1845,6 @@ class Agent():
 
     def open_to_closed(self, session, pair, close_order, repay_size):
 
-        print('calling open_to_closed')
-        print(self.open_trades.keys())
-        print(self.closed_trades.keys())
-
         self.open_trades[pair]['trade'].append(close_order)
         self.open_trades[pair]['trade'][-1]['liability'] = str(Decimal(0) - Decimal(repay_size))
         self.open_trades[pair]['trade'][-1]['utc_datetime'] = self.open_trades[pair]['placeholder']['utc_datetime']
@@ -1873,9 +1869,6 @@ class Agent():
         self.record_trades(session, 'open')
         asset = pair[:-len(session.quote_asset)]
         del self.real_pos[asset]
-
-        print(self.open_trades.keys())
-        print(self.closed_trades.keys())
 
     def close_real_7(self, session, pair, close_size, direction):
         asset = pair[:-4]
@@ -2001,8 +1994,6 @@ class Agent():
 
         self.sim_trades[pair] = {'trade': [sim_order], 'position': pos_record, 'signal': signal}
 
-        # self.record_trades(session, 'sim') # might not be necessary to do this on every trade
-
         self.sim_pos[asset] = self.update_pos(session, pair, float(size), signal['inval_ratio'], 'sim')
         self.sim_pos[asset]['pnl_R'] = 0
         self.counts_dict[f'sim_open_{direction}'] += 1
@@ -2012,9 +2003,6 @@ class Agent():
     def tp_sim(self, session, pair, stp, direction):
         k7 = Timer(f'tp_sim')
         k7.start()
-
-        print('before tp_sim')
-        pprint(self.sim_trades[pair])
 
         price = session.pairs_data[pair]['price']
         asset = pair[:-4]
@@ -2060,9 +2048,6 @@ class Agent():
         # save records
         self.record_trades(session, 'sim')
 
-        print('after tp_sim')
-        pprint(self.sim_trades[pair])
-
         # update sim_pos
         self.sim_pos[asset].update(self.update_non_live_tp(session, asset, 50, 'sim'))
         self.counts_dict[f'sim_tp_{direction}'] += 1
@@ -2070,10 +2055,6 @@ class Agent():
         k7.stop()
 
     def sim_to_closed_sim(self, session, pair, close_order, save_file):
-
-        print('calling sim_to_closed_sim')
-        print(self.sim_trades.keys())
-        print(self.closed_sim_trades.keys())
 
         self.sim_trades[pair]['trade'].append(close_order)
 
@@ -2107,9 +2088,6 @@ class Agent():
         if save_file:
             self.record_trades(session, 'closed_sim')
             self.record_trades(session, 'sim')
-
-        print(self.sim_trades.keys())
-        print(self.closed_sim_trades.keys())
 
     def close_sim(self, session, pair, direction):
         k6 = Timer(f'close_sim')
