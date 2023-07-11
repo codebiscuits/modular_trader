@@ -794,7 +794,7 @@ class Agent():
 
         all_rpnls = []
         for a, b in self.closed_trades.items():
-            wanted = (b['trade'][0]['wanted']) or (b['trade'][0]['state'] == 'real')
+            wanted = (b['trade'][0]['state'] == 'real') or (b['trade'][0]['wanted'])
             right_direction = b['trade'][0]['direction'] == direction
             if wanted and right_direction:
                 rpnl = 0
