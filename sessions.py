@@ -4,6 +4,7 @@ from pushbullet import Pushbullet
 from resources.timers import Timer
 from binance.client import Client
 import binance.enums as be
+import binance.exceptions as bx
 from resources import indicators as ind, keys, features, utility_funcs as uf
 import entry_modelling as em
 from typing import Tuple, Dict
@@ -806,9 +807,16 @@ class TradingSession():
             order = None
 
         # repay interest
-        if float(interest):
-            # uid weight of 3000. not sure how to keep track of this
-            self.client.repay_margin_loan(asset='BNB', amount=interest)
+        try:
+            if float(interest):
+                # uid weight of 3000. not sure how to keep track of this
+                self.client.repay_margin_loan(asset='BNB', amount=interest)
+        except bx.BinanceAPIException as e:
+            if e.code == -3015:
+                print(" Top up BNB caused an exception trying to repay interest")
+                return order
+            else:
+                raise e
         gh.stop()
         return order
 
