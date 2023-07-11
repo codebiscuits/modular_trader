@@ -480,6 +480,9 @@ class Agent():
                     print(f"{self.name} {pair} stop canceled, no placeholder found, deleting record")
                     pprint(self.open_trades[pair])
                     del self.open_trades[pair]
+                    del self.real_pos[pair[:-len(self.quote_asset)]]
+                    now = datetime.now().strftime("%y/%m/%d %H:%M")
+                    pb.push_note(now, f"{self.name} {pair} records deleted, check exchange for remaining position")
                     self.record_trades(session, 'open')
                     print('\n\n*******************************************\n\n')
             elif order['status'] == 'PARTIALLY_FILLED':
