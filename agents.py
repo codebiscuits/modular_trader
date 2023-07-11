@@ -1207,11 +1207,12 @@ class Agent():
 
         return base_size
 
-    def update_records_1(self, pair, base_size):
+    def update_records_1(self, session, pair, base_size):
         self.open_trades[pair]['position']['hard_stop'] = None
         self.open_trades[pair]['position']['stop_id'] = None
         self.open_trades[pair]['placeholder']['cleared_size'] = base_size
         self.open_trades[pair]['placeholder']['completed'] = 'clear_stop'
+        self.record_trades(session, 'open')
 
     def reset_stop(self, session, pair, base_size, direction, atr):
         trade_side = be.SIDE_SELL if direction == 'long' else be.SIDE_BUY
@@ -1233,7 +1234,7 @@ class Agent():
         if stage <= 1:
             base_size = self.clear_stop(session, pair, pos_record)
 
-            self.update_records_1(pair, base_size)
+            self.update_records_1(session, pair, base_size)
 
         if stage <= 2:
             stop_order = self.reset_stop(session, pair, base_size, direction, atr)
