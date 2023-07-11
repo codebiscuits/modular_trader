@@ -901,8 +901,8 @@ class Agent():
 
         fr_prev = self.perf_log[-1].get(f'fr_{direction}', 0) if self.perf_log else 0
         score, pnls = self.score_accum(direction)
-        score_str = f"rpnl: {score_str['rpnl']:.2f}, ema_3: {score_str['ema_3']:.2f}, ema_9: {score_str['ema_9']:.2f}, " \
-                    f"ema_27: {score_str['ema_27']:.2f}, ema_81: {score_str['ema_81']:.2f}"
+        score_str = f"rpnl: {pnls['rpnl']:.2f}, ema_3: {pnls['ema_3']:.2f}, ema_9: {pnls['ema_9']:.2f}, " \
+                    f"ema_27: {pnls['ema_27']:.2f}, ema_81: {pnls['ema_81']:.2f}"
         print(f"{direction} score accum returned {score_str}")
 
         if score == 15:
