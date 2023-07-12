@@ -35,8 +35,8 @@ def feature_selection(X, y, limit, quick=False):
     else:
         X_train, y_train = X, y
 
-    selector_model = GradientBoostingClassifier(random_state=42, n_estimators=1000, validation_fraction=0.1,
-                                                n_iter_no_change=5,
+    selector_model = GradientBoostingClassifier(random_state=42, n_estimators=10000, validation_fraction=0.1,
+                                                n_iter_no_change=50,
                                                 subsample=0.5, min_samples_split=8, max_depth=12, learning_rate=0.3)
     if quick:
         selector = SFS(estimator=selector_model, k_features=10, forward=True, floating=False, verbose=0,
@@ -122,7 +122,7 @@ for side, timeframe in itertools.product(sides, timeframes):
     # fit model
     print(f"Training on {X.shape[0]} observations")
     X = pd.DataFrame(X, columns=selected)
-    base_model = GradientBoostingClassifier(random_state=42, n_estimators=1000, validation_fraction=0.1, n_iter_no_change=5)
+    base_model = GradientBoostingClassifier(random_state=42, n_estimators=10000, validation_fraction=0.1, n_iter_no_change=50)
     params = dict(
         subsample=[0.25, 0.5, 1],
         min_samples_split=[2, 4, 8],
