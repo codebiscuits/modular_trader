@@ -11,9 +11,6 @@ from pushbullet import Pushbullet
 from collections import Counter
 
 # TODO current (02/04/23) roadmap should be:
-#  * move save_spreads to update_ohlc so i don't need setup_scanner to run every time
-#  * implement agent pairs lists being submitted to the session so only relevant pairs get checked in the
-#  update_algo_orders check
 #  * get detailed push notes in all exception handling code so i always know whats going wrong, and change the ss_log
 #  so it creates a new file for each session, named by the date and time they took place
 #  * start integrating polars and doing anything else i can to speed things up enough to run 3day and 1week timeframes
@@ -169,7 +166,7 @@ process_start = time.perf_counter()
 print(f"\n-*-*-*- Processing {len(raw_signals)} Raw Signals for all agents -*-*-*-\n")
 
 # gather data on current algo orders
-session.count_algo_orders() # don't need the full update_algo_orders check here, just a quick check
+session.update_algo_orders()
 
 processed_signals = dict(
     real_sim_tp_close=[],  # all real and sim tps and closes go in here for immediate execution

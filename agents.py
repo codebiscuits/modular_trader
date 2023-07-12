@@ -3101,6 +3101,7 @@ class TrailFractals(Agent):
         self.offset = offset
         self.min_confidence = min_conf
         self.load_data(session, tf)
+        session.pairs_set.update(self.pairs)
         self.name = f'{self.tf} trail_fractals {self.width}-{self.spacing}'
         self.id = f"trail_fractals_{self.tf}_{self.offset}_{self.width}_{self.spacing}"
         self.ohlc_length = 201

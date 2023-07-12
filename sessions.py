@@ -89,6 +89,7 @@ class TradingSession():
         self.save_spreads()
         self.market_ranks = self.load_mkt_ranks()
         self.max_loan_amounts = {}
+        self.pairs_set = set()
         self.book_data = {}
         self.indicators = {'ema-200', 'ema-100', 'ema-50', 'ema-25', 'vol_delta',
                            'vol_delta_div', 'roc_1d', 'roc_1w', 'roc_1m', 'vwma-24'}
@@ -969,11 +970,21 @@ class TradingSession():
 
     @uf.retry_on_busy()
     def update_algo_orders(self):
-        self.track_weights(40)
-        self.spot_orders = self.client.get_open_orders()
-        self.track_weights(
-            len(self.client.get_margin_all_pairs()))  # weighting for this call = number of pairs on exchange
-        self.margin_orders = self.client.get_open_margin_orders()
+        # TODO i need to implement a check so that spot orders can be looked for only if there is a spot agent in play
+        # self.track_weights(40)
+        # self.spot_orders = self.client.get_open_orders()
+        self.spot_orders = []
+
+        if len(self.pairs_set) > 35:
+            print("getting open margin orders for all pairs")
+            self.track_weights(
+                len(self.client.get_margin_all_pairs()))  # weighting for this call = number of pairs on exchange
+            self.margin_orders = self.client.get_open_margin_orders()
+        else:
+            for pair in self.pairs_set:
+                print(f"getting open margin orders for {pair}")
+                self.track_weights(10)
+                self.margin_orders = self.client.get_open_margin_orders(symbol=pair)
         self.check_open_spot_orders()
         self.check_open_margin_orders()
         self.count_algo_orders()  # kind of redundant since the above two methods create lists which could be counted
