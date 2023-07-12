@@ -995,7 +995,6 @@ class LightSession(TradingSession):
         # self.track_weights(2)
         # self.obt = self.client.get_orderbook_tickers()
         self.spreads = self.binance_spreads()
-        self.save_spreads()
 
         # filter and organise data
         self.get_pairs_info()
@@ -1004,6 +1003,7 @@ class LightSession(TradingSession):
         self.market_data_read, self.market_data_write = self.mkt_data_path()
         self.read_records, self.write_records = self.records_path()
         self.ohlc_data = self.ohlc_path()
+        self.save_spreads()
         self.indicators = None # to stop any default indicators being calculated by inheritance
 
 
