@@ -317,9 +317,13 @@ class Agent():
 
         return stop_dict
 
-    def save_records(self, session, pair, stop_dict):
+    def save_records(self, session, pair, stop_dict, order):
+        print("\nstop_dict:")
+        pprint(stop_dict)
+        print('')
+
         self.open_trades[pair]['trade'].append(stop_dict)
-        self.open_trades[pair]['trade'][-1]['liability'] = str(Decimal(0) - Decimal(stop_dict['executedQty']))
+        self.open_trades[pair]['trade'][-1]['liability'] = str(Decimal(0) - Decimal(order['executedQty']))
         rpnl = self.realised_pnl(session, self.open_trades[pair])
         self.open_trades[pair]['trade'][-1]['rpnl'] = rpnl
         direction = self.open_trades[pair]['position']['direction']
@@ -341,18 +345,14 @@ class Agent():
         print(f"code: {e.code}")
         print(f"message: {e.message}")
 
-    def rst_iteration_m(self, session, pair, sid):
+    def rst_iteration_m(self, session, pair, order):
         direction = self.open_trades[pair]['position']['direction']
-        try:
-            order = self.find_order(session, pair, sid)
-        except bx.BinanceAPIException as e:
-            self.error_print(session, pair, 'find_order', e)
 
         if order:
             # if an order can be found on binance, complete the records
             stop_size = self.repay_stop(session, pair, order)
             stop_dict = self.create_stop_dict(session, pair, order, stop_size)
-            self.save_records(session, pair, stop_dict)
+            self.save_records(session, pair, stop_dict, order)
 
             self.counts_dict[f'real_stop_{direction}'] += 1
 
@@ -393,9 +393,6 @@ class Agent():
                         self.error_print(session, pair, 'close', e)
 
     @uf.retry_on_busy()
-    def retrieve_margin_order(self, session, pair, sid):
-        return session.client.get_margin_order(symbol=pair, orderId=sid)
-
     def record_stopped_trades(self, session, timeframes) -> None:
         m = Timer('record_stopped_trades')
         m.start()
@@ -419,7 +416,7 @@ class Agent():
                     stop_dt = datetime.fromtimestamp(stop_time).astimezone(timezone.utc)
                     hit_dt = datetime.fromtimestamp(stop_hit_time).astimezone(timezone.utc)
                     entry_price = v['position']['entry_price']
-                    print(f"{self.name} {pair} {direction} {open_dt = }, {stop_dt = } {hit_dt = }, {entry_price = } {stop = }")
+                    print(f"{self.name} {pair} real {direction} stopped out")
                     base_size = float(v['position']['base_size'])
                     stop_dict = {
                         'timestamp': int(stop_time),
@@ -451,14 +448,14 @@ class Agent():
             session.track_weights(10)
             abc = Timer('all binance calls')
             abc.start()
-            order = self.retrieve_margin_order(session, pair, sid)
+            order = self.find_order(session, pair, sid)
             abc.stop()
             session.counts.append('get_margin_order')
 
             if order['status'] == 'FILLED':
                 print(f"{self.name} {pair} stop order filled")
                 try:
-                    self.rst_iteration_m(session, pair, sid)
+                    self.rst_iteration_m(session, pair, order)
                 except bx.BinanceAPIException as e:
                     self.record_trades(session, 'all')
                     print(f'{self.name} problem with record_stopped_trades during {pair}')
@@ -809,11 +806,11 @@ class Agent():
                 all_rpnls.append((int(a), rpnl))
         rpnl_df = pd.DataFrame(all_rpnls, columns=['timestamp', 'rpnl'])
         rpnl_df = rpnl_df.sort_values('timestamp').reset_index(drop=True)
-        rpnl_df['cum_rpnl'] = rpnl_df.rpnl.cumsum()
-        rpnl_df['ema_3'] = rpnl_df.rpnl.ewm(3).mean()
-        rpnl_df['ema_9'] = rpnl_df.rpnl.ewm(9).mean()
-        rpnl_df['ema_27'] = rpnl_df.rpnl.ewm(27).mean()
-        rpnl_df['ema_81'] = rpnl_df.rpnl.ewm(81).mean()
+        rpnl_df['ema_4'] = rpnl_df.rpnl.ewm(4).mean()
+        rpnl_df['ema_8'] = rpnl_df.rpnl.ewm(8).mean()
+        rpnl_df['ema_16'] = rpnl_df.rpnl.ewm(16).mean()
+        rpnl_df['ema_32'] = rpnl_df.rpnl.ewm(32).mean()
+        rpnl_df['ema_64'] = rpnl_df.rpnl.ewm(64).mean()
         # rpnl_df['timestamp'] = rpnl_df.timestamp.astype(int)
         # print(direction)
         # print(rpnl_df.tail())
@@ -823,30 +820,30 @@ class Agent():
             print(f'{direction} pnls:', pnls)
 
             score = 0
-            if  rpnl_df.rpnl.iloc[-1] > 0.1:
+            if  rpnl_df.ema_4.iloc[-1] > 0.1:
                 score += 5
-            elif rpnl_df.rpnl.iloc[-1] < -0.1:
+            elif rpnl_df.ema_4.iloc[-1] < -0.1:
                 score -= 5
-            if rpnl_df.ema_3.iloc[-1] > 0:
+            if rpnl_df.ema_8.iloc[-1] > 0:
                 score += 4
-            elif rpnl_df.ema_3.iloc[-1] < 0:
+            elif rpnl_df.ema_8.iloc[-1] < 0:
                 score -= 4
-            if rpnl_df.ema_9.iloc[-1] > 0:
+            if rpnl_df.ema_16.iloc[-1] > 0:
                 score += 3
-            elif rpnl_df.ema_9.iloc[-1] < 0:
+            elif rpnl_df.ema_16.iloc[-1] < 0:
                 score -= 3
-            if rpnl_df.ema_27.iloc[-1] > 0:
+            if rpnl_df.ema_32.iloc[-1] > 0:
                 score += 2
-            elif rpnl_df.ema_27.iloc[-1] < 0:
+            elif rpnl_df.ema_32.iloc[-1] < 0:
                 score -= 2
-            if rpnl_df.ema_81.iloc[-1] > 0:
+            if rpnl_df.ema_64.iloc[-1] > 0:
                 score += 1
-            elif rpnl_df.ema_81.iloc[-1] < 0:
+            elif rpnl_df.ema_64.iloc[-1] < 0:
                 score -= 1
 
         else:
             score = 0
-            pnls = {'rpnl': 0, 'ema_3': 0, 'ema_9': 0, 'ema_27': 0, 'ema_81': 0}
+            pnls = {'ema_4': 0, 'ema_8': 0, 'ema_16': 0, 'ema_32': 0, 'ema_64': 0}
 
         return score, pnls
 
@@ -902,8 +899,8 @@ class Agent():
 
         fr_prev = self.perf_log[-1].get(f'fr_{direction}', 0) if self.perf_log else 0
         score, pnls = self.score_accum(direction)
-        score_str = f"rpnl: {pnls['rpnl']:.2f}, ema_3: {pnls['ema_3']:.2f}, ema_9: {pnls['ema_9']:.2f}, " \
-                    f"ema_27: {pnls['ema_27']:.2f}, ema_81: {pnls['ema_81']:.2f}"
+        score_str = f"ema_4: {pnls['ema_4']:.2f}, ema_8: {pnls['ema_8']:.2f}, ema_16: {pnls['ema_16']:.2f}, " \
+                    f"ema_32: {pnls['ema_32']:.2f}, ema_64: {pnls['ema_64']:.2f}"
         print(f"{direction} score accum returned score: {score}, pnls: {score_str}")
 
         if score == 15:
@@ -1609,8 +1606,7 @@ class Agent():
 
     def tp_clear_stop(self, session, pair):
         clear, cleared_size = funcs.clear_stop_M(session, pair, self.open_trades[pair]['position'])
-        real_bal = Decimal(self.open_trades[pair]['position']['base_size'])
-        self.check_size_against_records(pair, real_bal, cleared_size)
+        cleared_size = self.check_size_against_records(pair, cleared_size)
 
         # update position and placeholder
         self.open_trades[pair]['position']['hard_stop'] = None
@@ -1859,8 +1855,7 @@ class Agent():
 
     def close_clear_stop(self, session, pair):
         clear, cleared_size = funcs.clear_stop_M(session, pair, self.open_trades[pair]['position'])
-        real_bal = Decimal(self.open_trades[pair]['position']['base_size'])
-        self.check_size_against_records(pair, real_bal, cleared_size)
+        cleared_size = self.check_size_against_records(pair, cleared_size)
 
         # update position and placeholder
         # self.open_trades[pair]['position']['hard_stop'] = None # don't want this to be changed to none in case it is
@@ -2327,17 +2322,21 @@ class Agent():
         # if tot adds up to the same number as signal age that shows that all loops returned True
         return tot == self.signal_age
 
-    def check_size_against_records(self, pair, real_bal, base_size):
+    def check_size_against_records(self, pair, base_size):
         k3 = Timer(f'check_size_against_records')
         k3.start()
 
+        real_bal = Decimal(self.open_trades[pair]['position']['base_size'])
         base_size = Decimal(base_size)
         if base_size and (real_bal != base_size):  # check records match reality
             print(f"{self.name} {pair} records don't match real balance. {real_bal = }, {base_size = }")
             mismatch = 100 * abs(base_size - real_bal) / base_size
             print(f"{mismatch = }%")
+        elif base_size == 0: # in this case the stop was probably cleared previously
+            base_size = real_bal
 
         k3.stop()
+        return str(base_size)
 
     @uf.retry_on_busy()
     def set_size_from_free(self, session, pair):
