@@ -815,33 +815,38 @@ class Agent():
         rpnl_df['ema_27'] = rpnl_df.rpnl.ewm(27).mean()
         rpnl_df['ema_81'] = rpnl_df.rpnl.ewm(81).mean()
         # rpnl_df['timestamp'] = rpnl_df.timestamp.astype(int)
-        print(direction)
-        print(rpnl_df)
+        # print(direction)
+        # print(rpnl_df.tail())
 
-        pnls = rpnl_df.to_dict(orient='records')[-1]
-        print(f'{direction} pnls:', pnls)
+        if len(rpnl_df) >= 4:
+            pnls = rpnl_df.to_dict(orient='records')[-1]
+            print(f'{direction} pnls:', pnls)
 
-        score = 0
-        if  rpnl_df.rpnl.iloc[-1] > 0.1:
-            score += 5
-        elif rpnl_df.rpnl.iloc[-1] < -0.1:
-            score -= 5
-        if rpnl_df.ema_3.iloc[-1] > 0:
-            score += 4
-        elif rpnl_df.ema_3.iloc[-1] < 0:
-            score -= 4
-        if rpnl_df.ema_9.iloc[-1] > 0:
-            score += 3
-        elif rpnl_df.ema_9.iloc[-1] < 0:
-            score -= 3
-        if rpnl_df.ema_27.iloc[-1] > 0:
-            score += 2
-        elif rpnl_df.ema_27.iloc[-1] < 0:
-            score -= 2
-        if rpnl_df.ema_81.iloc[-1] > 0:
-            score += 1
-        elif rpnl_df.ema_81.iloc[-1] < 0:
-            score -= 1
+            score = 0
+            if  rpnl_df.rpnl.iloc[-1] > 0.1:
+                score += 5
+            elif rpnl_df.rpnl.iloc[-1] < -0.1:
+                score -= 5
+            if rpnl_df.ema_3.iloc[-1] > 0:
+                score += 4
+            elif rpnl_df.ema_3.iloc[-1] < 0:
+                score -= 4
+            if rpnl_df.ema_9.iloc[-1] > 0:
+                score += 3
+            elif rpnl_df.ema_9.iloc[-1] < 0:
+                score -= 3
+            if rpnl_df.ema_27.iloc[-1] > 0:
+                score += 2
+            elif rpnl_df.ema_27.iloc[-1] < 0:
+                score -= 2
+            if rpnl_df.ema_81.iloc[-1] > 0:
+                score += 1
+            elif rpnl_df.ema_81.iloc[-1] < 0:
+                score -= 1
+
+        else:
+            score = 0
+            pnls = {'rpnl': 0, 'ema_3': 0, 'ema_9': 0, 'ema_27': 0, 'ema_81': 0}
 
         return score, pnls
 
