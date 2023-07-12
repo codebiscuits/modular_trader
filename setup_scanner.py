@@ -169,7 +169,7 @@ process_start = time.perf_counter()
 print(f"\n-*-*-*- Processing {len(raw_signals)} Raw Signals for all agents -*-*-*-\n")
 
 # gather data on current algo orders
-# session.update_algo_orders()
+session.update_algo_orders()
 
 processed_signals = dict(
     real_sim_tp_close=[],  # all real and sim tps and closes go in here for immediate execution
