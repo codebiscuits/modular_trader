@@ -2148,8 +2148,6 @@ class Agent():
         del self.sim_trades[pair]['position']
         self.closed_sim_trades[trade_id] = self.sim_trades[pair]
 
-        print(f"added {pair} record to close_sim_trades, id: {trade_id}")
-
         del self.sim_trades[pair]
         asset = pair[:-len(session.quote_asset)]
         del self.sim_pos[asset]

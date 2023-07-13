@@ -115,35 +115,34 @@ for n, pair in enumerate(pairs):
 
         signal = agent.signals(session, df_2, pair)
         if signal and signal['bias']:
-
             # signal.update(market_state)
             raw_signals.append(signal)
 
-            # if this agent is in position with this pair, calculate open risk and related metrics here
-            # update positions dictionary with current pair's open_risk values ------------
-            price = df_2.close.iloc[-1]
-            asset = pair[:-1 * len(session.quote_asset)]
+        # if this agent is in position with this pair, calculate open risk and related metrics here
+        # update positions dictionary with current pair's open_risk values ------------
+        price = df_2.close.iloc[-1]
+        asset = pair[:-1 * len(session.quote_asset)]
 
-            real_match = (asset in agent.real_pos.keys()) == (pair in agent.open_trades.keys())
-            sim_match = (asset in agent.sim_pos.keys()) == (pair in agent.sim_trades.keys())
-            if not real_match:
-                print(f"{pair} real pos doesn't match real trades")
-            if not sim_match:
-                print(f"{pair} sim pos doesn't match sim trades")
+        real_match = (asset in agent.real_pos.keys()) == (pair in agent.open_trades.keys())
+        sim_match = (asset in agent.sim_pos.keys()) == (pair in agent.sim_trades.keys())
+        if not real_match:
+            print(f"{pair} real pos doesn't match real trades")
+        if not sim_match:
+            print(f"{pair} sim pos doesn't match sim trades")
 
-            if pair in agent.open_trades:
-                real_qty = float(agent.open_trades[pair]['position']['base_size'])
-                agent.real_pos[asset].update(
-                    agent.update_pos(session, pair, real_qty, signal['inval_ratio'], 'real'))
-                real_ep = float(agent.open_trades[pair]['position']['entry_price'])
-                agent.real_pos[asset]['price_delta'] = (price - real_ep) / real_ep
+        if pair in agent.open_trades:
+            real_qty = float(agent.open_trades[pair]['position']['base_size'])
+            agent.real_pos[asset].update(
+                agent.update_pos(session, pair, real_qty, signal['inval_ratio'], 'real'))
+            real_ep = float(agent.open_trades[pair]['position']['entry_price'])
+            agent.real_pos[asset]['price_delta'] = (price - real_ep) / real_ep
 
-            if pair in agent.sim_trades:
-                sim_qty = float(agent.sim_trades[pair]['position']['base_size'])
-                new_stats = agent.update_pos(session, pair, sim_qty, signal['inval_ratio'], 'sim')
-                agent.sim_pos[asset].update(new_stats)
-                sim_ep = float(agent.sim_trades[pair]['position']['entry_price'])
-                agent.sim_pos[asset]['price_delta'] = (price - sim_ep) / sim_ep
+        if pair in agent.sim_trades:
+            sim_qty = float(agent.sim_trades[pair]['position']['base_size'])
+            new_stats = agent.update_pos(session, pair, sim_qty, signal['inval_ratio'], 'sim')
+            agent.sim_pos[asset].update(new_stats)
+            sim_ep = float(agent.sim_trades[pair]['position']['entry_price'])
+            agent.sim_pos[asset]['price_delta'] = (price - sim_ep) / sim_ep
 
 signal_counts = Counter([f"{signal['tf']}_{signal['bias']}" for signal in raw_signals])
 for tf in session.timeframes:
