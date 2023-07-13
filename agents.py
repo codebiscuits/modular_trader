@@ -285,7 +285,7 @@ class Agent():
                        'state': 'real',
                        'pair': pair,
                        'order': order,
-                       'completed': 'order'
+                       'completed': 'find_order'
                        }
         self.open_trades[pair]['placeholder'] = placeholder
 
@@ -509,7 +509,7 @@ class Agent():
 
             else:
                 # print(f"{self.name} {pair} stop order (id {sid}) not filled, status: {order['status']}")
-                pass
+                del self.open_trades[pair]['placeholder']
 
         self.record_trades(session, 'closed')
         self.record_trades(session, 'open')
@@ -683,8 +683,8 @@ class Agent():
             df = self.get_data(session, pair, timeframes, stop_time)
             stopped, overshoot_pct, stop_hit_time = self.check_stop_hit(pair, df, direction, stop)
             if stopped:
-                print(f"{self.name} {pair} {v['position']['open_time'] = }, {stop_hit_time = }, "
-                      f"{v['position']['entry_price'] = }")
+                # print(f"{self.name} {pair} {v['position']['open_time'] = }, {stop_hit_time = }, "
+                #       f"{v['position']['entry_price'] = }")
                 trade_dict = self.create_trade_dict(pair, direction, stop, base_size, stop_hit_time, overshoot_pct, 'sim')
                 self.sim_to_closed_sim(session, pair, trade_dict, save_file=False)
                 self.counts_dict[f'sim_stop_{direction}'] += 1
@@ -811,13 +811,10 @@ class Agent():
         rpnl_df['ema_16'] = rpnl_df.rpnl.ewm(16).mean()
         rpnl_df['ema_32'] = rpnl_df.rpnl.ewm(32).mean()
         rpnl_df['ema_64'] = rpnl_df.rpnl.ewm(64).mean()
-        # rpnl_df['timestamp'] = rpnl_df.timestamp.astype(int)
-        # print(direction)
-        # print(rpnl_df.tail())
 
         if len(rpnl_df) >= 4:
             pnls = rpnl_df.to_dict(orient='records')[-1]
-            print(f'{direction} pnls:', pnls)
+            # print(f'{direction} pnls:', pnls)
 
             score = 0
             if  rpnl_df.ema_4.iloc[-1] > 0.1:
@@ -846,6 +843,7 @@ class Agent():
             pnls = {'ema_4': 0, 'ema_8': 0, 'ema_16': 0, 'ema_32': 0, 'ema_64': 0}
 
         return score, pnls
+
 
     def score_accum_old(self, direction: str):
         '''calculates perf score from recent performance. also saves the
@@ -883,6 +881,7 @@ class Agent():
 
         return score, pnls
 
+
     def fixed_risk_score(self, direction: str) -> float:
         """calculates fixed risk setting for new trades based on recent performance and previous setting. if recent
         performance is very good, fr is increased slightly. if not, fr is decreased by thirds"""
@@ -901,7 +900,7 @@ class Agent():
         score, pnls = self.score_accum(direction)
         score_str = f"ema_4: {pnls['ema_4']:.2f}, ema_8: {pnls['ema_8']:.2f}, ema_16: {pnls['ema_16']:.2f}, " \
                     f"ema_32: {pnls['ema_32']:.2f}, ema_64: {pnls['ema_64']:.2f}"
-        print(f"{direction} score accum returned score: {score}, pnls: {score_str}")
+        print(f"\n{direction} score accum returned score: {score}, pnls: {score_str}")
 
         if score == 15:
             fr = min(fr_prev + 2, self.fr_div)
