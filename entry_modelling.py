@@ -8,7 +8,6 @@ from itertools import product
 from collections import Counter
 from datetime import datetime
 from pyarrow import ArrowInvalid
-from sessions import LightSession
 
 if not Path('/pi_2.txt').exists():
     from sklearnex import patch_sklearn
