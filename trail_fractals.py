@@ -47,10 +47,11 @@ def feature_selection(X, y, limit, quick=False):
     selector = selector.fit(X_train, y_train)
     X_transformed = selector.transform(X)
     selected = [cols[i] for i in selector.k_feature_idx_]
+    print(f"Number of features selected: {len(selected)}")
 
     fs_end = time.perf_counter()
     fs_elapsed = fs_end - fs_start
-    print(f"\nFeature selection time taken: {int(fs_elapsed // 60)}m {fs_elapsed % 60:.1f}s")
+    print(f"Feature selection time taken: {int(fs_elapsed // 60)}m {fs_elapsed % 60:.1f}s")
 
     return X_transformed, y, selected
 
@@ -84,6 +85,7 @@ scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
 
 for side, timeframe in itertools.product(sides, timeframes):
     print(f"\nFitting {timeframe} {side} model")
+    loop_start = time.perf_counter()
 
     if running_on_pi:
         pairs = load_pairs(side, timeframe)
@@ -139,7 +141,7 @@ for side, timeframe in itertools.product(sides, timeframes):
     cal_model = CalibratedClassifierCV(estimator=grid_model, cv='prefit', n_jobs=-1)
     cal_model.fit(X_cal, y_cal)
     cal_score = cal_model.score(X_cal, y_cal)
-    print(f"\nModel score after calibration: {cal_score:.1%}")
+    print(f"Model score after calibration: {cal_score:.1%}")
 
     # save to files
     folder = Path("machine_learning/models/trail_fractals")
@@ -153,6 +155,10 @@ for side, timeframe in itertools.product(sides, timeframes):
     info_dict = {'features': selected, 'pairs': pairs, 'data_length': data_len, 'frac_width': width, 'atr_spacing': atr_spacing}
     with open(model_info, 'w') as info:
         json.dump(info_dict, info)
+
+    loop_end = time.perf_counter()
+    loop_elapsed = loop_end - loop_start
+    print(f"Thyis test time taken: {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
 
 all_end = time.perf_counter()
 all_elapsed = all_end - all_start
