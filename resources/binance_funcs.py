@@ -707,13 +707,27 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit
     stop_size = uf.valid_size(session, pair, size)
     # print(f"setting {pair} stop: {stop_size = } {side = } {trigger = } {limit = }")
     if session.live:
-        stop_sell_order = session.client.create_margin_order(symbol=pair,
-                                                     side=side,
-                                                     type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
-                                                     timeInForce=be.TIME_IN_FORCE_GTC,
-                                                     stopPrice=trigger,
-                                                     quantity=stop_size,
-                                                     price=limit)
+        try:
+            stop_sell_order = session.client.create_margin_order(symbol=pair,
+                                                         side=side,
+                                                         type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
+                                                         timeInForce=be.TIME_IN_FORCE_GTC,
+                                                         stopPrice=trigger,
+                                                         quantity=stop_size,
+                                                         price=limit)
+        except bx.BinanceAPIException as e:
+            if e.code == -2010:
+                if side == 'long':
+                    trigger = uf.valid_price(session, pair, trigger*0.99)
+                else:
+                    trigger = uf.valid_price(session, pair, trigger * 1.01)
+            stop_sell_order = session.client.create_margin_order(symbol=pair,
+                                                                 side=side,
+                                                                 type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
+                                                                 timeInForce=be.TIME_IN_FORCE_GTC,
+                                                                 stopPrice=trigger,
+                                                                 quantity=stop_size,
+                                                                 price=limit)
         session.pairs_data[pair]['algo_orders'] += 1
     else:
         stop_sell_order = {'orderId': 'not live',
