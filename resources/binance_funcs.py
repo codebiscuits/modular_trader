@@ -705,7 +705,8 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit
     trigger = uf.valid_price(session, pair, trigger)
     limit = uf.valid_price(session, pair, limit)
     stop_size = uf.valid_size(session, pair, size)
-    # print(f"setting {pair} stop: {stop_size = } {side = } {trigger = } {limit = }")
+
+    print(f"setting {pair} stop: {stop_size = } {side = } {trigger = } {limit = }")
     if session.live:
         try:
             stop_sell_order = session.client.create_margin_order(symbol=pair,
