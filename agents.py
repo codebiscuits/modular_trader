@@ -3135,10 +3135,6 @@ class TrailFractals(Agent):
 
         sig = Timer('ats_spot_signals')
         sig.start()
-
-        if pair not in self.pairs:
-            return None
-
         signal_dict = {'agent': self.id, 'mode': self.mode, 'pair': pair}
 
         df = ind.williams_fractals(df, self.width, self.spacing)
@@ -3146,6 +3142,15 @@ class TrailFractals(Agent):
         # calculate % from invalidation
         df['long_r_pct'] = abs(df.close - df.frac_low) / df.close
         df['short_r_pct'] = abs(df.close - df.frac_high) / df.close
+
+        price = df.close.iloc[-1]
+        long_stop = self.calc_stop(df.frac_low.iloc[-1], session.pairs_data[pair]['spread'], price)
+        short_stop = self.calc_stop(df.frac_high.iloc[-1], session.pairs_data[pair]['spread'], price)
+
+        if pair not in self.pairs:
+            return {'long_ratio': long_stop / price,
+                    'short_ratio': short_stop / price}
+
 
         # Long model
         df['r_pct'] = df.long_r_pct
@@ -3166,8 +3171,6 @@ class TrailFractals(Agent):
 
         # print(f"{self.name} {pair} {self.tf} long conf: {long_confidence:.1%} short conf: {short_confidence:.1%}")
 
-        price = df.close.iloc[-1]
-
         combined_long = long_confidence - short_confidence
         combined_short = short_confidence - long_confidence
 
@@ -3186,7 +3189,8 @@ class TrailFractals(Agent):
             # print(note)
             self.notes += note
         else:
-            return None
+            return {'long_ratio': long_stop / price,
+                    'short_ratio': short_stop / price}
 
 
         stp = self.calc_stop(inval, session.pairs_data[pair]['spread'], price)

@@ -114,7 +114,7 @@ for n, pair in enumerate(pairs):
         # market_state = uf.get_market_state(session, agent, pair, df_2)
 
         signal = agent.signals(session, df_2, pair)
-        if signal and signal['bias']:
+        if signal.get('bias'):
             # signal.update(market_state)
             raw_signals.append(signal)
 
@@ -131,15 +131,26 @@ for n, pair in enumerate(pairs):
             print(f"{pair} sim pos doesn't match sim trades")
 
         if pair in agent.open_trades:
+            if signal.get('inval_ratio'):
+                inval_ratio = signal['inval_ratio']
+            elif agent.open_trades[pair]['position']['direction'] in ['spot', 'long']:
+                inval_ratio = signal['long_ratio']
+            elif agent.open_trades[pair]['position']['direction'] == 'short':
+                inval_ratio = signal['short_ratio']
             real_qty = float(agent.open_trades[pair]['position']['base_size'])
-            agent.real_pos[asset].update(
-                agent.update_pos(session, pair, real_qty, signal['inval_ratio'], 'real'))
+            new_stats = agent.update_pos(session, pair, real_qty, inval_ratio, 'real')
+            agent.real_pos[asset].update(new_stats)
             real_ep = float(agent.open_trades[pair]['position']['entry_price'])
             agent.real_pos[asset]['price_delta'] = (price - real_ep) / real_ep
-
         if pair in agent.sim_trades:
+            if signal.get('inval_ratio'):
+                inval_ratio = signal['inval_ratio']
+            elif agent.sim_trades[pair]['position']['direction'] in ['spot', 'long']:
+                inval_ratio = signal['long_ratio']
+            elif agent.sim_trades[pair]['position']['direction'] == 'short':
+                inval_ratio = signal['short_ratio']
             sim_qty = float(agent.sim_trades[pair]['position']['base_size'])
-            new_stats = agent.update_pos(session, pair, sim_qty, signal['inval_ratio'], 'sim')
+            new_stats = agent.update_pos(session, pair, sim_qty, inval_ratio, 'sim')
             agent.sim_pos[asset].update(new_stats)
             sim_ep = float(agent.sim_trades[pair]['position']['entry_price'])
             agent.sim_pos[asset]['price_delta'] = (price - sim_ep) / sim_ep
@@ -670,10 +681,12 @@ pprint(Counter(session.counts))
 print('\n-------------------------------------------------------------------------------\n')
 
 for agent in agents.values():
-    print(f'{agent.name} real_pos')
+    print(agent.name)
+    print('real_pos')
     pprint(agent.real_pos)
     print('open_trades')
     pprint(agent.open_trades)
+    print('<->' * 15)
 
 script_end = time.perf_counter()
 total_time = script_end - script_start

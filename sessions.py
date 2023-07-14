@@ -340,7 +340,7 @@ class TradingSession():
         d = {1: ('1h', None), 4: ('4h', None), 12: ('12h', None), 24: ('1d', None)}
 
         timeframes = [d[tf] for tf in d if hour % tf == 0]
-        # timeframes = [('4h', None)]
+        # timeframes = [('1d', None), ('12h', None), ('4h', None), ('1h', None)]
 
         return timeframes
 
