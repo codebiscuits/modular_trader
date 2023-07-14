@@ -718,9 +718,9 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit
         except bx.BinanceAPIException as e:
             if e.code == -2010:
                 if side == 'long':
-                    trigger = uf.valid_price(session, pair, trigger*0.99)
+                    trigger = uf.valid_price(session, pair, float(trigger) * 0.99)
                 else:
-                    trigger = uf.valid_price(session, pair, trigger * 1.01)
+                    trigger = uf.valid_price(session, pair, float(trigger) * 1.01)
             stop_sell_order = session.client.create_margin_order(symbol=pair,
                                                                  side=side,
                                                                  type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
