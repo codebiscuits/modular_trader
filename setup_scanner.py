@@ -571,11 +571,12 @@ for signal in processed_signals['real_open']:
     if signal['mode'] == 'spot':
         agents[signal['agent']].open_real_s(session, signal, 0)
 
-    elif signal['quote_size'] > remaining_borrow:
+    elif signal['quote_size'] > (remaining_borrow - 100):
         signal['state'] == 'sim'
         signal['sim_reasons'] = ['too_much_leverage']
         processed_signals['sim_open'].append(signal)
         print("changed real open signal to sim, borrow limit reached\n")
+        pb.push_note(body='Margin limit reached, maybe add collateral')
 
     else:
         print(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
