@@ -23,7 +23,6 @@ from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 from imblearn.under_sampling import RandomUnderSampler
 
 all_start = time.perf_counter()
-# import update_ohlc
 now = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M')
 print(f"-:--:--:--:--:--:--:--:--:--:-  {now} Running Trail Fractals Fitting  -:--:--:--:--:--:--:--:--:--:-")
 
@@ -74,6 +73,9 @@ def load_pairs(side, tf):
     return list(info['pairs'])
 
 running_on_pi = Path('/pi_2.txt').exists()
+if not running_on_pi:
+    import update_ohlc
+
 timeframes = ['1h', '4h', '12h', '1d']
 sides = ['long', 'short']
 data_len = 200
