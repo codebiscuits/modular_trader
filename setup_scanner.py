@@ -23,7 +23,7 @@ print('\n-+-+-+-+-+-+-+-+-+-+-+- Running Setup Scanner -+-+-+-+-+-+-+-+-+-+-+-\n
 
 ########################################################################################################################
 
-session = sessions.TradingSession(0.003)
+session = sessions.TradingSession(0.002)
 
 print(f"Running setup_scan({session.timeframes})")
 print(f"\nCurrent time: {session.now_start}, {session.name}\n")
@@ -474,7 +474,6 @@ or_limits = {agent.name: agent.total_open_risk for agent in agents.values()}
 pos_limits = {agent.name: agent.num_open_positions for agent in agents.values()}
 algo_limits = {pair: (v['max_algo_orders'] - v['algo_orders']) for pair, v in session.pairs_data.items()}
 usdt_bal_s = session.spot_usdt_bal
-session.check_margin_lvl()
 
 while unassigned:
     s = unassigned.pop()
@@ -562,13 +561,23 @@ sort_took = sort_end - sort_start
 real_open_start = time.perf_counter()
 
 print(f"\n-+-+-+-+-+-+-+-+-+-+-+- Executing {len(processed_signals['real_open'])} Real Opens -+-+-+-+-+-+-+-+-+-+-+-")
-for signal in processed_signals['real_open']:
 
-    print(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
-    if signal['mode'] == 'margin':
-        agents[signal['agent']].open_real_M(session, signal, 0)
-    elif signal['mode'] == 'spot':
-        agents[signal['agent']].open_real_s(session, signal, 0)
+# TODO i have used margin_lvl to decide whether the account is over-levered, but it would be more precise to use total
+#  assets and total liabilities and actualy calculate how much more i can still borrow, then i can still do some real
+#  opens until the leverage really runs out
+if session.check_margin_lvl():
+    for signal in processed_signals['real_open']:
+        signal['state'] == 'sim'
+        signal['sim_reasons'] = ['too_much_leverage']
+        processed_signals['sim_open'].append(signal)
+
+else:
+    for signal in processed_signals['real_open']:
+        print(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
+        if signal['mode'] == 'margin':
+            agents[signal['agent']].open_real_M(session, signal, 0)
+        elif signal['mode'] == 'spot':
+            agents[signal['agent']].open_real_s(session, signal, 0)
 
 # when they are all finished, update records once
 

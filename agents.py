@@ -1423,7 +1423,7 @@ class Agent():
         price = signal['trig_price']
         stp = signal['inval']
         score = signal['inval_score']
-        note = f"{self.name} real open {direction} {size:.5} {pair} ({usdt_size} usdt) @ {price}, stop @ {stp:.5}, " \
+        note = f"{self.name} real open {direction} {size:.5} {pair} ({usdt_size:.2f} usdt) @ {price}, stop @ {stp:.5}, " \
                f"score: {score:.1%}"
         print(now, note)
 

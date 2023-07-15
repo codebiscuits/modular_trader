@@ -891,15 +891,20 @@ class TradingSession():
         x4 = Timer(f'{func_name}')
         x4.start()
 
+        self.m_acct = self.client.get_margin_account()
         self.margin_lvl = float(self.m_acct.get('marginLevel'))
         print(f"Margin level: {self.margin_lvl:.2f}")
 
-        if self.margin_lvl <= 2:
-            pb.push_note('*** Warning ***', 'Margin level <= 2, reduce risk')
+        if self.margin_lvl <= 1.75:
+            pb.push_note('*** Warning ***', 'Margin level <= 1.75, no more borrow allowed')
+            return True
+        elif self.margin_lvl <= 2:
+            pb.push_note('*** Warning ***', 'Margin level <= 2, reduce max fixed risk')
         elif self.margin_lvl <= 3:
             pb.push_note('Warning', 'Margin level <= 3, keep an eye on it')
 
         x4.stop()
+        return False
 
     def get_asset_bals_m(self) -> None:
         '''creates a dictionary of margin asset balances, stored as floats'''
