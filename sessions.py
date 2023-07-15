@@ -257,7 +257,7 @@ class TradingSession():
         up.start()
         now = time.perf_counter()
         last = self.last_price_update
-        if now - last > 60:
+        if now - last > 30:
             self.track_weights(2)
             abc = Timer('all binance calls')
             abc.start()

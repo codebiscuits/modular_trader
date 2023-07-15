@@ -3143,7 +3143,7 @@ class TrailFractals(Agent):
         df['long_r_pct'] = abs(df.close - df.frac_low) / df.close
         df['short_r_pct'] = abs(df.close - df.frac_high) / df.close
 
-        price = df.close.iloc[-1]
+        price = session.pairs_data[pair]['price']
         long_stop = self.calc_stop(df.frac_low.iloc[-1], session.pairs_data[pair]['spread'], price)
         short_stop = self.calc_stop(df.frac_high.iloc[-1], session.pairs_data[pair]['spread'], price)
 
