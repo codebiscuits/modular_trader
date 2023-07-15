@@ -519,12 +519,12 @@ while unassigned:
     elif s['mode'] == 'spot' and quote_size > usdt_bal_s:
         sim_reasons.append('not_enough_usdt')
 
-    if s['mode'] == 'margin' and session.margin_lvl < 3:
-        r = session.margin_lvl / 3
-        quote_size *= r
-
-    if s['mode'] == 'margin' and session.margin_lvl < 2:
-        sim_reasons.append('margin_acct_too_levered')
+    # if s['mode'] == 'margin' and session.margin_lvl < 3:
+    #     r = session.margin_lvl / 3
+    #     quote_size *= r
+    #
+    # if s['mode'] == 'margin' and session.margin_lvl < 2:
+    #     sim_reasons.append('margin_acct_too_levered')
 
     if quote_size < session.min_size: # this condition must come after all the conditions which could reduce size
         sim_reasons.append('too_small')
@@ -565,19 +565,23 @@ print(f"\n-+-+-+-+-+-+-+-+-+-+-+- Executing {len(processed_signals['real_open'])
 # TODO i have used margin_lvl to decide whether the account is over-levered, but it would be more precise to use total
 #  assets and total liabilities and actualy calculate how much more i can still borrow, then i can still do some real
 #  opens until the leverage really runs out
-if session.check_margin_lvl():
-    for signal in processed_signals['real_open']:
+remaining_borrow = session.check_margin_lvl()
+
+for signal in processed_signals['real_open']:
+    if signal['mode'] == 'spot':
+        agents[signal['agent']].open_real_s(session, signal, 0)
+
+    elif signal['quote_size'] > remaining_borrow:
         signal['state'] == 'sim'
         signal['sim_reasons'] = ['too_much_leverage']
         processed_signals['sim_open'].append(signal)
+        print("changed real open signal to sim, borrow limit reached\n")
 
-else:
-    for signal in processed_signals['real_open']:
+    else:
         print(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
-        if signal['mode'] == 'margin':
-            agents[signal['agent']].open_real_M(session, signal, 0)
-        elif signal['mode'] == 'spot':
-            agents[signal['agent']].open_real_s(session, signal, 0)
+        agents[signal['agent']].open_real_M(session, signal, 0)
+        remaining_borrow -= signal['quote_size']
+        print(f"remaining_borrow: {remaining_borrow:.2f}\n")
 
 # when they are all finished, update records once
 

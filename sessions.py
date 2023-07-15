@@ -837,12 +837,26 @@ class TradingSession():
 
         jh = Timer('account_bal_M')
         jh.start()
-        info = self.m_acct
-        total_net = float(info.get('totalNetAssetOfBtc'))
+
+        total_net = float(self.m_acct.get('totalNetAssetOfBtc'))
         btc_price = self.pairs_data['BTCUSDT']['price']
         usdt_total_net = total_net * btc_price
+
         jh.stop()
         return round(usdt_total_net, 2)
+
+
+    def total_debt(self) -> float:
+        td = Timer('account_bal_M')
+        td.start()
+
+        total_debt = float(self.m_acct.get('totalLiabilityOfBtc'))
+        btc_price = self.pairs_data['BTCUSDT']['price']
+        usdt_total_debt = total_debt * btc_price
+
+        td.stop()
+        return round(usdt_total_debt, 2)
+
 
     def get_usdt_m(self) -> Dict[str, float]:
         '''checks current usdt balance and returns a dictionary for updating the sizing dict'''
@@ -895,16 +909,13 @@ class TradingSession():
         self.margin_lvl = float(self.m_acct.get('marginLevel'))
         print(f"Margin level: {self.margin_lvl:.2f}")
 
-        if self.margin_lvl <= 1.75:
-            pb.push_note('*** Warning ***', 'Margin level <= 1.75, no more borrow allowed')
-            return True
-        elif self.margin_lvl <= 2:
-            pb.push_note('*** Warning ***', 'Margin level <= 2, reduce max fixed risk')
-        elif self.margin_lvl <= 3:
-            pb.push_note('Warning', 'Margin level <= 3, keep an eye on it')
+        net_asset = self.account_bal_m()
+        max_debt = net_asset * 2
+        total_debt = self.total_debt()
+        remaining = max_debt - total_debt
 
         x4.stop()
-        return False
+        return remaining
 
     def get_asset_bals_m(self) -> None:
         '''creates a dictionary of margin asset balances, stored as floats'''
