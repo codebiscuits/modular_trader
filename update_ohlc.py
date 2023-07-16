@@ -19,7 +19,7 @@ now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
 
 session = LightSession()
 
-print('-:-' * 10, f' {now} running update_ohlc ', '-:-' * 10)
+print('-:-' * 10, f' {now} UTC running update_ohlc ', '-:-' * 10)
 
 start = time.perf_counter()
 

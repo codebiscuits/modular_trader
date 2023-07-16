@@ -24,7 +24,7 @@ from imblearn.under_sampling import RandomUnderSampler
 
 all_start = time.perf_counter()
 now = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M')
-print(f"-:--:--:--:--:--:--:--:--:--:-  {now} Running Trail Fractals Fitting  -:--:--:--:--:--:--:--:--:--:-")
+print(f"-:--:--:--:--:--:--:--:--:--:-  {now} UTC Running Trail Fractals Fitting  -:--:--:--:--:--:--:--:--:--:-")
 
 def feature_selection(X, y, limit, quick=False):
     fs_start = time.perf_counter()

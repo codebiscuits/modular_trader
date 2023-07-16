@@ -416,10 +416,9 @@ def train_rfc(X_train, y_train):
 def train_gbc(X_train, y_train):
     param_dict = dict(
         # max_features=[2, 4, 8, 16, 32],
-        estimator__max_depth=[int(x) for x in np.linspace(start=5, stop=20, num=4)],
-        estimator__min_samples_split=[2, 4, 8],  # must be 2 or more
-        # estimator__learning_rate=[0.05, 0.1],
-        estimator__subsample=[0.125, 0.25, 0.5, 1.0]
+        max_depth=[int(x) for x in np.linspace(start=5, stop=20, num=4)],
+        min_samples_split=[2, 4, 8],  # must be 2 or more
+        subsample=[0.125, 0.25, 0.5, 1.0]
     )
     fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
     model = GradientBoostingClassifier(random_state=42, n_estimators=50000, validation_fraction=0.1,
@@ -586,7 +585,7 @@ if __name__ == '__main__':
     }
 
 
-    for algo, side, timeframe, balanced in product(algorithms, sides, timeframes, [True]):
+    for algo, side, timeframe in product(algorithms, sides, timeframes):
         print(f"\nTesting {algo} {side} {timeframe}")
         loop_start = time.perf_counter()
 
@@ -598,7 +597,7 @@ if __name__ == '__main__':
         num_pairs = timeframes[timeframe]['num_pairs']
         # print(pairs)
 
-        res_folders = Path(f"xgb/{algo}_results")
+        res_folders = Path(f"machine_learning/{algo}_tuning_results")
         res_folders.mkdir(parents=True, exist_ok=True)
         res_path = Path(f"{res_folders}/{side}_{timeframe}_top{num_pairs}.parquet")
         if res_path.exists():
@@ -631,9 +630,8 @@ if __name__ == '__main__':
             X_train, X_test, cols = transform_columns(X_train, X_test)
 
             # balancing classes/prototype selection
-            if balanced:
-                rus = RandomUnderSampler(random_state=0)
-                X_train, y_train = rus.fit_resample(X_train, y_train)
+            rus = RandomUnderSampler(random_state=0)
+            X_train, y_train = rus.fit_resample(X_train, y_train)
 
             if y_test.value_counts().loc[1] < 30:
                 print(f'{side} {timeframe} {frac_width} {spacing} '
