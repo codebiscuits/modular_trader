@@ -3204,7 +3204,7 @@ class TrailFractals(Agent):
         signal_dict['pct_of_full_pos'] = 1
         signal_dict['tf'] = self.tf
         signal_dict['asset'] = pair[:-len(session.quote_asset)]
-        signal_dict['model_age'] = model_age
+        signal_dict['model_age'] = model_age.seconds
 
         sig.stop()
 
