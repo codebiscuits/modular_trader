@@ -322,11 +322,11 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
                 df = update_ohlc(pair, session.ohlc_tf, df, session)
                 # print('updated ohlc')
             else:
-                df = get_ohlc(None, pair, session.ohlc_tf, '2 years ago UTC')
+                df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
                 # print(f'{pair} ohlc too short to update, downloaded from scratch')
 
         else:
-            df = get_ohlc(None, pair, session.ohlc_tf, '2 years ago UTC')
+            df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
             print(f'downloaded {pair} from scratch')
 
         # check df is localised to UTC
