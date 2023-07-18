@@ -17,7 +17,11 @@ from collections import Counter
 #  in the same session as everything else
 #  * get spot trading and oco entries and trade adds working so i can use other strats
 
-pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
+@uf.retry_on_busy()
+def init_pb():
+    return Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
+
+pb = init_pb()
 
 print('\n-+-+-+-+-+-+-+-+-+-+-+- Running Setup Scanner -+-+-+-+-+-+-+-+-+-+-+-\n')
 
@@ -455,6 +459,11 @@ pprint(session.urpnl_totals)
 
 for signal in processed_signals['unassigned']:
     signal['base_size'], signal['quote_size'] = agents[signal['agent']].get_size(session, signal)
+    signal['perf_ema4'] = agents[signal['agent']].pnls['ema_4']
+    signal['perf_ema8'] = agents[signal['agent']].pnls['ema_8']
+    signal['perf_ema16'] = agents[signal['agent']].pnls['ema_16']
+    signal['perf_ema32'] = agents[signal['agent']].pnls['ema_32']
+    signal['perf_ema64'] = agents[signal['agent']].pnls['ema_64']
 
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 # Sort and Filter Signals
@@ -562,9 +571,6 @@ real_open_start = time.perf_counter()
 
 print(f"\n-+-+-+-+-+-+-+-+-+-+-+- Executing {len(processed_signals['real_open'])} Real Opens -+-+-+-+-+-+-+-+-+-+-+-")
 
-# TODO i have used margin_lvl to decide whether the account is over-levered, but it would be more precise to use total
-#  assets and total liabilities and actualy calculate how much more i can still borrow, then i can still do some real
-#  opens until the leverage really runs out
 remaining_borrow = session.check_margin_lvl()
 
 for signal in processed_signals['real_open']:
@@ -722,3 +728,5 @@ print(f"used-weight: {session.client.response.headers.get('x-mbx-used-weight')}"
 print(f"used-weight-1m: {session.client.response.headers.get('x-mbx-used-weight-1m')}")
 
 # uf.plot_call_weights(session)
+
+print('\n\n<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>\n\n')

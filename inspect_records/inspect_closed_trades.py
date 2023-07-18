@@ -1,9 +1,6 @@
-from pprint import pprint
-
 import pandas as pd
 from pushbullet import Pushbullet
 from pathlib import Path
-import json
 import trade_records_funcs as trf
 
 pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
@@ -54,6 +51,5 @@ def print_positions(data, name):
     else:
         print('\nNone')
 
-data = trf.load_all(records_folder_2, ['open'])
-pprint(data)
-# print_positions(data, 'pi 2')
+data = trf.load_all(records_folder_2, ['closed', 'closed_sim'])
+print_positions(data, 'pi 2')

@@ -478,7 +478,7 @@ class Agent():
                     pprint(self.open_trades[pair])
                     del self.open_trades[pair]
                     del self.real_pos[pair[:-len(self.quote_asset)]]
-                    now = datetime.now().strftime("%y/%m/%d %H:%M")
+                    now = datetime.now().strftime(timestring)
                     pb.push_note(now, f"{self.name} {pair} records deleted, check exchange for remaining position")
                     self.record_trades(session, 'open')
                     print('\n\n*******************************************\n\n')
@@ -897,9 +897,9 @@ class Agent():
             return 0
 
         fr_prev = self.perf_log[-1].get(f'fr_{direction}', 0) if self.perf_log else 0
-        score, pnls = self.score_accum(direction)
-        score_str = f"ema_4: {pnls['ema_4']:.2f}, ema_8: {pnls['ema_8']:.2f}, ema_16: {pnls['ema_16']:.2f}, " \
-                    f"ema_32: {pnls['ema_32']:.2f}, ema_64: {pnls['ema_64']:.2f}"
+        score, self.pnls = self.score_accum(direction)
+        score_str = f"ema_4: {self.pnls['ema_4']:.2f}, ema_8: {self.pnls['ema_8']:.2f}, ema_16: {self.pnls['ema_16']:.2f}, " \
+                    f"ema_32: {self.pnls['ema_32']:.2f}, ema_64: {self.pnls['ema_64']:.2f}"
         print(f"\n{direction} score accum returned score: {score}, pnls: {score_str}")
 
         if score == 15:
@@ -921,7 +921,7 @@ class Agent():
             note = f'{self.name} {direction} fixed risk score adjusted from {fr_prev} to {fr}'
             # pb.push_note(title, note)
             print(note)
-            print(f"{self.name} calculated {direction} score: {score}, pnls: {pnls}")
+            print(f"{self.name} calculated {direction} score: {score}, pnls: {self.pnls}")
 
         o.stop()
         return fr
@@ -3111,12 +3111,12 @@ class TrailFractals(Agent):
     def load_data(self, session, tf):
         # paths
         folder = Path("/home/ross/coding/modular_trader/machine_learning/models/trail_fractals")
-        long_model_path = folder / f"trail_fractal_long_{self.tf}_model.sav"
+        self.long_model_path = folder / f"trail_fractal_long_{self.tf}_model.sav"
         short_model_path = folder / f"trail_fractal_short_{self.tf}_model.sav"
         long_info_path = folder / f"trail_fractal_long_{self.tf}_info.json"
         short_info_path = folder / f"trail_fractal_short_{self.tf}_info.json"
 
-        self.long_model = joblib.load(long_model_path)
+        self.long_model = joblib.load(self.long_model_path)
         self.short_model = joblib.load(short_model_path)
         with open(long_info_path, 'r') as ip:
             self.long_info = json.load(ip)
@@ -3192,6 +3192,9 @@ class TrailFractals(Agent):
             return {'long_ratio': long_stop / price,
                     'short_ratio': short_stop / price}
 
+        model_created = self.long_model_path.stat().st_mtime
+        created_dt = datetime.fromtimestamp(model_created).astimezone(timezone.utc)
+        model_age = datetime.now(timezone.utc) - created_dt
 
         stp = self.calc_stop(inval, session.pairs_data[pair]['spread'], price)
         signal_dict['inval'] = stp
@@ -3201,6 +3204,7 @@ class TrailFractals(Agent):
         signal_dict['pct_of_full_pos'] = 1
         signal_dict['tf'] = self.tf
         signal_dict['asset'] = pair[:-len(session.quote_asset)]
+        signal_dict['model_age'] = model_age
 
         sig.stop()
 

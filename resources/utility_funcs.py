@@ -5,6 +5,7 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 import statistics as stats
 from pushbullet import Pushbullet
+import requests
 from pprint import pprint
 from decimal import Decimal, getcontext
 from resources.timers import Timer
@@ -689,6 +690,9 @@ def retry_on_busy(max_retries=360, delay=5):
                 except BinanceAPIException as e:
                     if e.code != -3044:
                         raise e
+                    print("System busy, retrying in {} seconds...".format(delay))
+                    time.sleep(delay)
+                except requests.exceptions.ConnectionError:
                     print("System busy, retrying in {} seconds...".format(delay))
                     time.sleep(delay)
             raise Exception("Max retries exceeded. Request still failed after {} attempts.".format(max_retries))
