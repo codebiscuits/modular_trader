@@ -304,7 +304,7 @@ class TradingSession():
                     elif filter['filterType'] == 'MAX_NUM_ALGO_ORDERS':
                         max_algo = filter['maxNumAlgoOrders']
 
-                spread = self.spreads[pair]
+                spread = self.spreads.get(pair)
 
                 self.pairs_data[sym.get('symbol')] = dict(
                     base_asset=base_asset,
