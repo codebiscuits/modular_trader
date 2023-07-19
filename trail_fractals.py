@@ -72,6 +72,20 @@ def load_pairs(side, tf):
 
     return list(info['pairs'])
 
+
+def fit_gbc(X, y, selected, scorer):
+    base_model = GradientBoostingClassifier(random_state=42, n_estimators=10000, validation_fraction=0.1, n_iter_no_change=50)
+    params = dict(
+        subsample=[0.25, 0.5, 1],
+        min_samples_split=[2, 4, 8],
+        max_depth=[5, 10, 15, 20],
+        learning_rate=[0.05, 0.1]
+    )
+    gs = GridSearchCV(estimator=base_model, param_grid=params, scoring=scorer, n_jobs=-1, cv=5, verbose=0)
+    gs.fit(X, y)
+    return gs.best_estimator_
+
+
 running_on_pi = Path('/pi_2.txt').exists()
 if not running_on_pi:
     import update_ohlc
@@ -126,16 +140,7 @@ for side, timeframe in itertools.product(sides, timeframes):
     # fit model
     print(f"Training on {X.shape[0]} observations")
     X = pd.DataFrame(X, columns=selected)
-    base_model = GradientBoostingClassifier(random_state=42, n_estimators=10000, validation_fraction=0.1, n_iter_no_change=50)
-    params = dict(
-        subsample=[0.25, 0.5, 1],
-        min_samples_split=[2, 4, 8],
-        max_depth=[5, 10, 15, 20],
-        learning_rate=[0.05, 0.1]
-    )
-    gs = GridSearchCV(estimator=base_model, param_grid=params, scoring=scorer, n_jobs=-1, cv=5, verbose=0)
-    gs.fit(X, y)
-    grid_model = gs.best_estimator_
+    grid_model = fit_gbc(X, y, selected, scorer)
 
     # calibrate model
     print(f"Calibrating on {X_cal.shape[0]} observations")
