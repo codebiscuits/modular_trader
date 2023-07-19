@@ -552,10 +552,10 @@ def tot_rpnl(agents: list) -> str:
     total = 0
 
     for agent in agents:
-        total += agent.realised_pnls.get('real_spot', 0)
-        total += agent.realised_pnls.get('real_long', 0)
-        total += agent.realised_pnls.get('real_short', 0)
-        total += agent.realised_pnls.get('real_neutral', 0)
+        total += agent.realised_pnls.get('wanted_spot', 0)
+        total += agent.realised_pnls.get('wanted_long', 0)
+        total += agent.realised_pnls.get('wanted_short', 0)
+        total += agent.realised_pnls.get('wanted_neutral', 0)
 
     return f"{total:.1f}"
 
@@ -577,7 +577,7 @@ def scanner_summary(session, agents: list) -> None:
     mkt_bench = session.benchmark
 
     final_msg = f"\n{live_str} {ema_str}\nmkt perf 1w {mkt_bench.get('market_1w'):.2%}" \
-                f"\nTotal real rpnl: {tot_rpnl(agents)}\n-"
+                f"\nTotal wanted rpnl: {tot_rpnl(agents)}\n-"
 
     for agent in agents:
         print_msg = False
@@ -593,7 +593,7 @@ def scanner_summary(session, agents: list) -> None:
             agent_msg += f"\nrealised real spot pnl: {agent.realised_pnls['real_spot']:.1f}R"
         elif (agent.mode == 'spot') and (agent.realised_pnls['sim_spot'] > 0):
             print_msg = True
-            agent_msg += f"\nrealised sim spot pnl: {agent.realised_pnls['sim_spot']:.1f}R"
+            agent_msg += f"\nrealised wanted spot pnl: {agent.realised_pnls['wanted_spot']:.1f}R"
 
         # margin
         if (agent.mode == 'margin') and agent.fixed_risk_l:
@@ -608,14 +608,14 @@ def scanner_summary(session, agents: list) -> None:
             agent_msg += f"\nrealised real long pnl: {agent.realised_pnls['real_long']:.1f}R"
         elif (agent.mode == 'margin') and (agent.realised_pnls['sim_long'] > 0):
             print_msg = True
-            agent_msg += f"\nrealised sim long pnl: {agent.realised_pnls['sim_long']:.1f}R"
+            agent_msg += f"\nrealised wanted long pnl: {agent.realised_pnls['wanted_long']:.1f}R"
 
         if (agent.mode == 'margin') and agent.realised_pnls['real_short']:
             print_msg = True
             agent_msg += f"\nrealised real short pnl: {agent.realised_pnls['real_short']:.1f}R"
         elif (agent.mode == 'margin') and (agent.realised_pnls['sim_short'] > 0):
             print_msg = True
-            agent_msg += f"\nrealised sim short pnl: {agent.realised_pnls['sim_short']:.1f}R"
+            agent_msg += f"\nrealised wanted short pnl: {agent.realised_pnls['wanted_short']:.1f}R"
 
         or_list = [v.get('or_$') for v in agent.real_pos.values() if v.get('or_$')]
         num_open_positions = len(or_list)

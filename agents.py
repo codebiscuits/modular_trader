@@ -3199,12 +3199,15 @@ class TrailFractals(Agent):
         stp = self.calc_stop(inval, session.pairs_data[pair]['spread'], price)
         signal_dict['inval'] = stp
         signal_dict['inval_ratio'] = stp / price
+        signal_dict['inval_dist'] = abs((stp / price) - 1)
         signal_dict['inval_score'] = self.calc_inval_risk_score(abs((price - stp) / price))
         signal_dict['trig_price'] = price
         signal_dict['pct_of_full_pos'] = 1
         signal_dict['tf'] = self.tf
         signal_dict['asset'] = pair[:-len(session.quote_asset)]
         signal_dict['model_age'] = model_age.seconds
+        signal_dict['confidence_l'] = long_confidence
+        signal_dict['confidence_s'] = short_confidence
 
         sig.stop()
 
