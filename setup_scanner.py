@@ -582,8 +582,8 @@ for signal in processed_signals['real_open']:
         signal['sim_reasons'] = ['too_much_leverage']
         processed_signals['sim_open'].append(signal)
         print("changed real open signal to sim, borrow limit reached\n")
-        now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
-        pb.push_note(now, 'Margin limit reached, maybe add collateral')
+        # now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
+        # pb.push_note(now, 'Margin limit reached, maybe add collateral')
 
     else:
         print(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
@@ -701,13 +701,13 @@ print(f"pairs tested: {len(pairs)}")
 pprint(Counter(session.counts))
 print('\n-------------------------------------------------------------------------------\n')
 
-for agent in agents.values():
-    print(agent.name)
-    print('real_pos')
-    pprint(agent.real_pos)
-    print('open_trades')
-    pprint(agent.open_trades)
-    print('<->' * 15)
+# for agent in agents.values():
+#     print(agent.name)
+#     print('real_pos')
+#     pprint(agent.real_pos)
+#     print('open_trades')
+#     pprint(agent.open_trades)
+#     print('<->' * 15)
 
 script_end = time.perf_counter()
 total_time = script_end - script_start

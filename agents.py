@@ -817,9 +817,9 @@ class Agent():
             # print(f'{direction} pnls:', pnls)
 
             score = 0
-            if  rpnl_df.ema_4.iloc[-1] > 0.1:
+            if  rpnl_df.ema_4.iloc[-1] > 0:
                 score += 5
-            elif rpnl_df.ema_4.iloc[-1] < -0.1:
+            elif rpnl_df.ema_4.iloc[-1] < 0:
                 score -= 5
             if rpnl_df.ema_8.iloc[-1] > 0:
                 score += 4
@@ -918,10 +918,9 @@ class Agent():
         now = datetime.now(timezone.utc).strftime(timestring)
         if fr != fr_prev:
             title = f'{now}'
-            note = f'{self.name} {direction} fixed risk score adjusted from {fr_prev} to {fr}'
+            note = f'{self.name} {direction} fixed risk score adjusted from {fr_prev:.2f} to {fr:.2f}'
             # pb.push_note(title, note)
             print(note)
-            print(f"{self.name} calculated {direction} score: {score}, pnls: {self.pnls}")
 
         o.stop()
         return fr
