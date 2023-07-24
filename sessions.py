@@ -6,7 +6,7 @@ from binance.client import Client
 import binance.enums as be
 import binance.exceptions as bx
 from resources import indicators as ind, keys, features, utility_funcs as uf
-import entry_modelling as em
+import ml_funcs as mlf
 from typing import Tuple, Dict
 from collections import Counter
 import sys
@@ -87,7 +87,7 @@ class TradingSession():
         self.read_records, self.write_records = self.records_path()
         self.ohlc_data = self.ohlc_path()
         self.save_spreads()
-        self.market_ranks = self.load_mkt_ranks()
+        self.load_mkt_ranks()
         self.max_loan_amounts = {}
         self.pairs_set = set()
         self.book_data = {}
@@ -306,7 +306,7 @@ class TradingSession():
 
                 spread = self.spreads.get(pair)
 
-                self.pairs_data[sym.get('symbol')] = dict(
+                self.pairs_data[pair] = dict(
                     base_asset=base_asset,
                     # cg_symbol=cg_symbol,
                     spread=spread,
@@ -318,7 +318,7 @@ class TradingSession():
                     oco_allowed=oco_allowed,
                     qoq_allowed=quote_order_qty_allowed,
                     spot_orders=[],
-                    margin_orders=[]
+                    margin_orders=[],
                 )
 
     def check_fees(self):
@@ -553,7 +553,12 @@ class TradingSession():
     def load_mkt_ranks(self):
         filepath = self.market_data_read / 'market_ranks.parquet'
 
-        return pd.read_parquet(filepath)
+        market_ranks = pd.read_parquet(filepath)
+
+        for pair in market_ranks.index:
+            self.pairs_data[pair]['market_rank_1d'] = market_ranks.at[pair, 'rank_1d']
+            self.pairs_data[pair]['market_rank_1w'] = market_ranks.at[pair, 'rank_1w']
+            self.pairs_data[pair]['market_rank_1m'] = market_ranks.at[pair, 'rank_1m']
 
     def compute_indicators(self, df: pd.DataFrame, tf: str) -> dict:
         '''takes the set of required indicators and the dataframe and applies the
@@ -653,7 +658,7 @@ class TradingSession():
             if f == 'r_pct':
                 continue
             df = features.add_feature(df, f, tf)
-        X, _, cols = em.transform_columns(df, df)
+        X, _, cols = mlf.transform_columns(df, df)
         df = pd.DataFrame(X, columns=cols)
 
         cf.stop()

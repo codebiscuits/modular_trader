@@ -933,20 +933,20 @@ class Agent():
             self.fr_score_spot = self.fixed_risk_score('spot')
             self.fixed_risk_spot = round(self.fr_score_spot * self.fr_max / self.fr_div, 5)
             self.fr_dol_spot = self.fixed_risk_spot * session.spot_bal
-            print(f"{self.name} spot fixed risk score: {self.fr_score_spot} fixed risk: {self.fixed_risk_spot}")
+            print(f"{self.name} spot fixed risk: {self.fixed_risk_spot}")
 
         elif self.mode == 'margin':
             self.fr_score_l = self.fixed_risk_score('long')
             self.fixed_risk_l = round(self.fr_score_l * self.fr_max / self.fr_div, 5)
             self.fixed_risk_dol_l = self.fixed_risk_l * session.margin_bal
             if self.fr_score_l:
-                print(f"{self.name} long fixed risk score: {self.fr_score_l} fixed risk: {self.fixed_risk_l}")
+                print(f"{self.name} long fixed risk: {self.fixed_risk_l}")
 
             self.fr_score_s = self.fixed_risk_score('short')
             self.fixed_risk_s = round(self.fr_score_s * self.fr_max / self.fr_div, 5)
             self.fixed_risk_dol_s = self.fixed_risk_s * session.margin_bal
             if self.fr_score_s:
-                print(f"{self.name} short fixed risk score: {self.fr_score_s} fixed risk: {self.fixed_risk_s}")
+                print(f"{self.name} short fixed risk: {self.fixed_risk_s}")
 
     def test_fixed_risk(self, fr_l: float, fr_s: float) -> None:
         """manually overrides fixed risk settings for testing purposes"""
@@ -3207,6 +3207,9 @@ class TrailFractals(Agent):
         signal_dict['model_age'] = model_age.seconds
         signal_dict['confidence_l'] = long_confidence
         signal_dict['confidence_s'] = short_confidence
+        signal_dict['market_rank_1d'] = session.pairs_data[pair]['market_rank_1d']
+        signal_dict['market_rank_1w'] = session.pairs_data[pair]['market_rank_1w']
+        signal_dict['market_rank_1m'] = session.pairs_data[pair]['market_rank_1m']
 
         sig.stop()
 

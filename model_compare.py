@@ -1,5 +1,6 @@
 import pandas as pd
 import entry_modelling as em
+import ml_funcs as mlf
 import plotly.express as px
 import plotly.graph_objects as go
 from itertools import product
@@ -32,16 +33,16 @@ exit_method = tf_settings[timeframe]
 
 all_res = pd.DataFrame()
 
-pairs = em.rank_pairs()[:num_pairs]
+pairs = mlf.rank_pairs()[:num_pairs]
 for pair in pairs:
-    df = em.get_data(pair, timeframe).tail(data_len + 200).reset_index(drop=True)
-    df = em.add_features(df, timeframe).tail(data_len).reset_index(drop=True)
+    df = mlf.get_data(pair, timeframe).tail(data_len + 200).reset_index(drop=True)
+    df = mlf.add_features(df, timeframe).tail(data_len).reset_index(drop=True)
     res_df = em.project_pnl(df, side, exit_method)
     all_res = pd.concat([all_res, res_df], axis=0)
 
-X, y, z = em.features_labels_split(all_res)
-X_train, X_test, y_train, y_test, z_test = em.tt_split_rand(X, y, z, 0.9)
-X_train, X_test, cols = em.transform_columns(X_train, X_test)
+X, y, z = mlf.features_labels_split(all_res)
+X_train, X_test, y_train, y_test, z_test = mlf.tt_split_rand(X, y, z, 0.9)
+X_train, X_test, cols = mlf.transform_columns(X_train, X_test)
 
 imp_df = pd.DataFrame()
 
@@ -67,7 +68,7 @@ for model, rus in product([xgb], [0, 1]):
     y_pred = model.predict(X_test)
     y_prob = model.predict_proba(X_test)[:, 1]
 
-    bt_results = em.backtest(y_test, y_pred, y_prob, z_test)
+    bt_results = mlf.backtest(y_test, y_pred, y_prob, z_test)
     trades_taken = bt_results.in_trade.sum()
     winners = len(bt_results.loc[bt_results.trades > 0])
     if trades_taken:

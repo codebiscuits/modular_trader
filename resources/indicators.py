@@ -242,8 +242,8 @@ def williams_fractals(df: pd.DataFrame, frac_width: int = 5, atr_spacing: int = 
         df['fractal_high'] = np.where(df.high == df.high.rolling(frac_width, center=True).max(), df.high, np.nan)
         df['fractal_low'] = np.where(df.low == df.low.rolling(frac_width, center=True).min(), df.low, np.nan)
 
-    df['frac_high'] = df.fractal_high.interpolate('pad').shift(1)
-    df['frac_low'] = df.fractal_low.interpolate('pad').shift(1)
+    df['frac_high'] = df.fractal_high.interpolate('pad').shift(int((frac_width-1)/2)+1)
+    df['frac_low'] = df.fractal_low.interpolate('pad').shift(int((frac_width-1)/2)+1)
 
     return df
 

@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import entry_modelling as em
+import ml_funcs as mlf
 import plotly.express as px
 import plotly.graph_objects as go
 import time
@@ -50,8 +51,8 @@ def gbc_selector(model, X, y, z, cols):
 
     scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
     selector = SFS(estimator=model, k_features=15, forward=True, floating=False, verbose=2, scoring=scorer, n_jobs=-1)
-    X_pre, X_main, y_pre, y_main, z_main = em.tt_split_bifurcate(X, y, z, 0.05)
-    X_pre, _, cols = em.transform_columns(X_pre, X_main) # i don't want to apply feature scaling to the main data set here
+    X_pre, X_main, y_pre, y_main, z_main = mlf.tt_split_bifurcate(X, y, z, 0.05)
+    X_pre, _, cols = mlf.transform_columns(X_pre, X_main) # i don't want to apply feature scaling to the main data set here
     selector = selector.fit(X_pre, y_pre)
     X_main = selector.transform(X_main)
 
@@ -83,13 +84,13 @@ data_len = 3000
 num_pairs = 10
 start_pair = 0
 exit_method = tf_settings[timeframe]
-pairs = em.rank_pairs()[start_pair:start_pair + num_pairs]
+pairs = mlf.rank_pairs()[start_pair:start_pair + num_pairs]
 
 all_res = pd.DataFrame()
 
 for pair in pairs:
-    df = em.get_data(pair, timeframe).tail(data_len + 200).reset_index(drop=True)
-    df = em.add_features(df, timeframe).tail(data_len).reset_index(drop=True)
+    df = mlf.get_data(pair, timeframe).tail(data_len + 200).reset_index(drop=True)
+    df = mlf.add_features(df, timeframe).tail(data_len).reset_index(drop=True)
     res_df = em.project_pnl(df, side, exit_method)
     all_res = pd.concat([all_res, res_df], axis=0, ignore_index=True)
 
@@ -98,7 +99,7 @@ all_res = all_res.sort_values('timestamp').reset_index(drop=True)
 model = GradientBoostingClassifier(random_state=42, n_estimators=1000, validation_fraction=0.1, n_iter_no_change=5,
                                    subsample=0.5, min_samples_split=8, max_depth=12, learning_rate=0.1)
 
-X_0, y_0, z_0 = em.features_labels_split(all_res)
+X_0, y_0, z_0 = mlf.features_labels_split(all_res)
 cols = X_0.columns
 
 # Walk-forward Tests
@@ -128,7 +129,7 @@ for i, g in enumerate(day_idxs):
     train_idxs = [day_idxs[i][0], day_idxs[i + train_days - 1][1]]
     test_idxs = [day_idxs[i + train_days][0], day_idxs[i + train_days][1]]
 
-    X_train, X_test, y_train, y_test, z_test = em.tt_split_idx(X, y, z, train_idxs, test_idxs)
+    X_train, X_test, y_train, y_test, z_test = mlf.tt_split_idx(X, y, z, train_idxs, test_idxs)
 
     if X_test.shape[0] < 1:
         break
@@ -161,7 +162,7 @@ for i, g in enumerate(day_idxs):
 
 for thresh in np.linspace(0.5, 0.9, num=20):
     thresh = round(thresh, 2)
-    bt_results = em.backtest(test_results['y_test'],
+    bt_results = mlf.backtest(test_results['y_test'],
                              test_results['y_pred'],
                              test_results['y_prob'],
                              test_results['z_test'],
