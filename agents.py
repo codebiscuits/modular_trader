@@ -1781,7 +1781,7 @@ class Agent():
                 repay_size = tp_order.get('base_size')
                 session.update_usdt_m(repay=float(repay_size))
             elif direction == 'short':
-                usdt_size = round(order_size * price, 5)
+                usdt_size = round(float(order_size) * price, 5)
                 session.update_usdt_m(down=usdt_size)
         else:
             self.real_pos[asset].update(self.update_non_live_tp(session, asset, pct, 'real'))
