@@ -3170,8 +3170,9 @@ class TrailFractals(Agent):
 
         # print(f"{self.name} {pair} {self.tf} long conf: {long_confidence:.1%} short conf: {short_confidence:.1%}")
 
-        combined_long = long_confidence - short_confidence
-        combined_short = short_confidence - long_confidence
+        # these are deliberately back-to-front because my analysis showed they were actually inversely correlated to pnl
+        combined_long = short_confidence - long_confidence
+        combined_short = long_confidence - short_confidence
 
         if (price > df.frac_low.iloc[-1]) and (combined_long > 0):
             signal_dict['confidence'] = combined_long
