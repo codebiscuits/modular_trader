@@ -19,7 +19,7 @@ import traceback
 import joblib
 
 # client = Client(keys.bPkey, keys.bSkey)
-pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
+pb = uf.init_pb()
 ctx = getcontext()
 ctx.prec = 12
 timestring = '%d/%m/%y %H:%M'
@@ -268,7 +268,7 @@ class Agent():
     def find_order(self, session, pair, sid):
         if sid == 'not live':
             return None
-        print('get_margin_order')
+        # print('get_margin_order')
         session.track_weights(10)
         abc = Timer('all binance calls')
         abc.start()
@@ -543,12 +543,12 @@ class Agent():
                     print(f"problem loading {pair} ohlc")
                     print(e)
                     filepath.unlink()
-                    df = funcs.get_ohlc(session, pair, session.ohlc_tf, '2 years ago UTC')
+                    df = funcs.get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
                     source = 'exchange'
                     print(f'downloaded {pair} from scratch')
             else:
                 print(f"{filepath} doesn't exist")
-                df = funcs.get_ohlc(session, pair, session.ohlc_tf, '2 years ago UTC')
+                df = funcs.get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
                 source = 'exchange'
                 print(f'downloaded {pair} from scratch')
 
@@ -781,9 +781,11 @@ class Agent():
         return max((fr_prev - reduce), 0)
 
 
-    def score_accum(self, direction: str):
-        '''calculates perf score from recent performance. also saves the
-        instance property open_pnl_changes dictionary'''
+    def get_pnls(self, direction: str) -> dict:
+        """ retrieves the pnls of all closed (real and wanted sim) trades for the agent, then collates the pnls into a
+        dataframe, linearly transforms them (with clipping) to a scale of 0-1 where zero is any pnl <= -1R and 1 is any
+        pnl >= 1R, and calculates several moving averages on them. it then returns a dictionary of the latest row of
+        those moving averages"""
 
         all_rpnls = []
         for a, b in self.closed_trades.items():
@@ -805,163 +807,201 @@ class Agent():
                         rpnl += float(t['rpnl'])
                 all_rpnls.append((int(a), rpnl))
         rpnl_df = pd.DataFrame(all_rpnls, columns=['timestamp', 'rpnl'])
+        rpnl_df['scaled_rpnl'] = ((rpnl_df.rpnl + 1) / 2).clip(lower=0.0, upper=1.0)
         rpnl_df = rpnl_df.sort_values('timestamp').reset_index(drop=True)
-        rpnl_df['ema_4'] = rpnl_df.rpnl.ewm(4).mean()
-        rpnl_df['ema_8'] = rpnl_df.rpnl.ewm(8).mean()
-        rpnl_df['ema_16'] = rpnl_df.rpnl.ewm(16).mean()
-        rpnl_df['ema_32'] = rpnl_df.rpnl.ewm(32).mean()
-        rpnl_df['ema_64'] = rpnl_df.rpnl.ewm(64).mean()
+        rpnl_df['ema_4'] = rpnl_df.scaled_rpnl.ewm(4).mean()
+        rpnl_df['ema_8'] = rpnl_df.scaled_rpnl.ewm(8).mean()
+        rpnl_df['ema_16'] = rpnl_df.scaled_rpnl.ewm(16).mean()
+        rpnl_df['ema_32'] = rpnl_df.scaled_rpnl.ewm(32).mean()
+        rpnl_df['ema_64'] = rpnl_df.scaled_rpnl.ewm(64).mean()
 
         if len(rpnl_df) >= 4:
-            pnls = rpnl_df.to_dict(orient='records')[-1]
-            # print(f'{direction} pnls:', pnls)
-
-            score = 0
-            if  rpnl_df.ema_4.iloc[-1] > 0:
-                score += 5
-            elif rpnl_df.ema_4.iloc[-1] < 0:
-                score -= 5
-            if rpnl_df.ema_8.iloc[-1] > 0:
-                score += 4
-            elif rpnl_df.ema_8.iloc[-1] < 0:
-                score -= 4
-            if rpnl_df.ema_16.iloc[-1] > 0:
-                score += 3
-            elif rpnl_df.ema_16.iloc[-1] < 0:
-                score -= 3
-            if rpnl_df.ema_32.iloc[-1] > 0:
-                score += 2
-            elif rpnl_df.ema_32.iloc[-1] < 0:
-                score -= 2
-            if rpnl_df.ema_64.iloc[-1] > 0:
-                score += 1
-            elif rpnl_df.ema_64.iloc[-1] < 0:
-                score -= 1
-
+            return rpnl_df.to_dict(orient='records')[-1]
         else:
-            score = 0
-            pnls = {'ema_4': 0, 'ema_8': 0, 'ema_16': 0, 'ema_32': 0, 'ema_64': 0}
-
-        return score, pnls
+            return {'ema_4': 0, 'ema_8': 0, 'ema_16': 0, 'ema_32': 0, 'ema_64': 0}
 
 
-    def score_accum_old(self, direction: str):
-        '''calculates perf score from recent performance. also saves the
-        instance property open_pnl_changes dictionary'''
+    # def score_accum(self, direction: str):
+    #     '''calculates perf score from recent performance. also saves the
+    #     instance property open_pnl_changes dictionary'''
+    #
+    #     all_rpnls = []
+    #     for a, b in self.closed_trades.items():
+    #         wanted = (b['trade'][0]['state'] == 'real') or (b['trade'][0]['wanted'])
+    #         right_direction = b['trade'][0]['direction'] == direction
+    #         if wanted and right_direction:
+    #             rpnl = 0
+    #             for t in b['trade']:
+    #                 if t.get('rpnl'):
+    #                     rpnl += float(t['rpnl'])
+    #             all_rpnls.append((int(a), rpnl))
+    #     for a, b in self.closed_sim_trades.items():
+    #         wanted = b['trade'][0]['wanted']
+    #         right_direction = b['trade'][0]['direction'] == direction
+    #         if wanted and right_direction:
+    #             rpnl = 0
+    #             for t in b['trade']:
+    #                 if t.get('rpnl'):
+    #                     rpnl += float(t['rpnl'])
+    #             all_rpnls.append((int(a), rpnl))
+    #     rpnl_df = pd.DataFrame(all_rpnls, columns=['timestamp', 'rpnl'])
+    #     rpnl_df = rpnl_df.sort_values('timestamp').reset_index(drop=True)
+    #     rpnl_df['ema_4'] = rpnl_df.rpnl.ewm(4).mean()
+    #     rpnl_df['ema_8'] = rpnl_df.rpnl.ewm(8).mean()
+    #     rpnl_df['ema_16'] = rpnl_df.rpnl.ewm(16).mean()
+    #     rpnl_df['ema_32'] = rpnl_df.rpnl.ewm(32).mean()
+    #     rpnl_df['ema_64'] = rpnl_df.rpnl.ewm(64).mean()
+    #
+    #     if len(rpnl_df) >= 4:
+    #         pnls = rpnl_df.to_dict(orient='records')[-1]
+    #         # print(f'{direction} pnls:', pnls)
+    #
+    #         score = 0
+    #         if  rpnl_df.ema_4.iloc[-1] > 0:
+    #             score += 5
+    #         elif rpnl_df.ema_4.iloc[-1] < 0:
+    #             score -= 5
+    #         if rpnl_df.ema_8.iloc[-1] > 0:
+    #             score += 4
+    #         elif rpnl_df.ema_8.iloc[-1] < 0:
+    #             score -= 4
+    #         if rpnl_df.ema_16.iloc[-1] > 0:
+    #             score += 3
+    #         elif rpnl_df.ema_16.iloc[-1] < 0:
+    #             score -= 3
+    #         if rpnl_df.ema_32.iloc[-1] > 0:
+    #             score += 2
+    #         elif rpnl_df.ema_32.iloc[-1] < 0:
+    #             score -= 2
+    #         if rpnl_df.ema_64.iloc[-1] > 0:
+    #             score += 1
+    #         elif rpnl_df.ema_64.iloc[-1] < 0:
+    #             score -= 1
+    #
+    #     else:
+    #         score = 0
+    #         pnls = {'ema_4': 0, 'ema_8': 0, 'ema_16': 0, 'ema_32': 0, 'ema_64': 0}
+    #
+    #     return score, pnls
+    #
 
-        lookup = f'wanted_rpnl_{direction}'
-        pnls = {0: self.realised_pnls[f"wanted_{direction}"]}
-        for i in range(1, 5):
-            if self.perf_log and len(self.perf_log) > 5:
-                pnls[i] = self.perf_log[-1 * i].get(lookup, -1)
-            else:
-                pnls[i] = -1  # if there's no data yet, return -1 instead
+    # def score_accum_old(self, direction: str):
+    #     '''calculates perf score from recent performance. also saves the
+    #     instance property open_pnl_changes dictionary'''
+    #
+    #     lookup = f'wanted_rpnl_{direction}'
+    #     pnls = {0: self.realised_pnls[f"wanted_{direction}"]}
+    #     for i in range(1, 5):
+    #         if self.perf_log and len(self.perf_log) > 5:
+    #             pnls[i] = self.perf_log[-1 * i].get(lookup, -1)
+    #         else:
+    #             pnls[i] = -1  # if there's no data yet, return -1 instead
+    #
+    #     score = 0
+    #     if  pnls.get(0) > 0.1:
+    #         score += 5
+    #     elif pnls.get(0) < -0.1:
+    #         score -= 5
+    #     if pnls.get(1) > 0:
+    #         score += 4
+    #     elif pnls.get(1) < 0:
+    #         score -= 4
+    #     if pnls.get(2) > 0:
+    #         score += 3
+    #     elif pnls.get(2) < 0:
+    #         score -= 3
+    #     if pnls.get(3) > 0:
+    #         score += 2
+    #     elif pnls.get(3) < 0:
+    #         score -= 2
+    #     if pnls.get(4) > 0:
+    #         score += 1
+    #     elif pnls.get(4) < 0:
+    #         score -= 1
+    #
+    #     return score, pnls
+    #
+    #
+    # def fixed_risk_score(self, direction: str) -> float:
+    #     """calculates fixed risk setting for new trades based on recent performance and previous setting. if recent
+    #     performance is very good, fr is increased slightly. if not, fr is decreased by thirds"""
+    #
+    #     o = Timer(f'set_fixed_risk-{direction}')
+    #     o.start()
+    #
+    #     if (
+    #         self.mode == 'spot'
+    #         and direction in {'long', 'short'}
+    #         or (self.mode == 'margin' and direction == 'spot')
+    #     ):
+    #         return 0
+    #
+    #     fr_prev = self.perf_log[-1].get(f'fr_{direction}', 0) if self.perf_log else 0
+    #     score, self.pnls = self.score_accum(direction)
+    #     score_str = f"ema_4: {self.pnls['ema_4']:.2f}, ema_8: {self.pnls['ema_8']:.2f}, ema_16: {self.pnls['ema_16']:.2f}, " \
+    #                 f"ema_32: {self.pnls['ema_32']:.2f}, ema_64: {self.pnls['ema_64']:.2f}"
+    #     print(f"\n{direction} score accum returned score: {score}, pnls: {score_str}")
+    #
+    #     if score == 15:
+    #         fr = min(fr_prev + 2, self.fr_div)
+    #     elif score >= 11:
+    #         fr = min(fr_prev + 1, self.fr_div)
+    #     elif score >= 3:
+    #         fr = fr_prev
+    #     elif score >= -3:
+    #         fr = self.reduce_fr(0.333, fr_prev, 1)
+    #     elif score >= -7:
+    #         fr = self.reduce_fr(0.5, fr_prev, 1)
+    #     else:
+    #         fr = 0
+    #
+    #     now = datetime.now(timezone.utc).strftime(timestring)
+    #     if fr != fr_prev:
+    #         title = f'{now}'
+    #         note = f'{self.name} {direction} fixed risk score adjusted from {fr_prev:.2f} to {fr:.2f}'
+    #         # pb.push_note(title, note)
+    #         print(note)
+    #
+    #     o.stop()
+    #     return fr
+    #
 
-        score = 0
-        if  pnls.get(0) > 0.1:
-            score += 5
-        elif pnls.get(0) < -0.1:
-            score -= 5
-        if pnls.get(1) > 0:
-            score += 4
-        elif pnls.get(1) < 0:
-            score -= 4
-        if pnls.get(2) > 0:
-            score += 3
-        elif pnls.get(2) < 0:
-            score -= 3
-        if pnls.get(3) > 0:
-            score += 2
-        elif pnls.get(3) < 0:
-            score -= 2
-        if pnls.get(4) > 0:
-            score += 1
-        elif pnls.get(4) < 0:
-            score -= 1
+    # def set_fixed_risk(self, session):
+    #     """takes the fr_score calculated by fixed_risk_score and uses it to scale fr_max into the current
+    #     fixed risk setting"""
+    #     if self.mode == 'spot':
+    #         self.fr_score_spot = self.fixed_risk_score('spot')
+    #         self.fixed_risk_spot = round(self.fr_score_spot * self.fr_max / self.fr_div, 5)
+    #         self.fr_dol_spot = self.fixed_risk_spot * session.spot_bal
+    #         print(f"{self.name} spot fixed risk: {self.fixed_risk_spot}")
+    #
+    #     elif self.mode == 'margin':
+    #         self.fr_score_l = self.fixed_risk_score('long')
+    #         self.fixed_risk_l = round(self.fr_score_l * self.fr_max / self.fr_div, 5)
+    #         self.fixed_risk_dol_l = self.fixed_risk_l * session.margin_bal
+    #         if self.fr_score_l:
+    #             print(f"{self.name} long fixed risk: {self.fixed_risk_l}")
+    #
+    #         self.fr_score_s = self.fixed_risk_score('short')
+    #         self.fixed_risk_s = round(self.fr_score_s * self.fr_max / self.fr_div, 5)
+    #         self.fixed_risk_dol_s = self.fixed_risk_s * session.margin_bal
+    #         if self.fr_score_s:
+    #             print(f"{self.name} short fixed risk: {self.fixed_risk_s}")
 
-        return score, pnls
+    # def test_fixed_risk(self, fr_l: float, fr_s: float) -> None:
+    #     """manually overrides fixed risk settings for testing purposes"""
+    #     if not self.live:
+    #         print(f'*** WARNING: FIXED RISK MANUALLY SET to {fr_l} / {fr_s} ***')
+    #         self.fixed_risk_l = fr_l
+    #         self.fixed_risk_s = fr_s
 
-
-    def fixed_risk_score(self, direction: str) -> float:
-        """calculates fixed risk setting for new trades based on recent performance and previous setting. if recent
-        performance is very good, fr is increased slightly. if not, fr is decreased by thirds"""
-
-        o = Timer(f'set_fixed_risk-{direction}')
-        o.start()
-
-        if (
-            self.mode == 'spot'
-            and direction in {'long', 'short'}
-            or (self.mode == 'margin' and direction == 'spot')
-        ):
-            return 0
-
-        fr_prev = self.perf_log[-1].get(f'fr_{direction}', 0) if self.perf_log else 0
-        score, self.pnls = self.score_accum(direction)
-        score_str = f"ema_4: {self.pnls['ema_4']:.2f}, ema_8: {self.pnls['ema_8']:.2f}, ema_16: {self.pnls['ema_16']:.2f}, " \
-                    f"ema_32: {self.pnls['ema_32']:.2f}, ema_64: {self.pnls['ema_64']:.2f}"
-        print(f"\n{direction} score accum returned score: {score}, pnls: {score_str}")
-
-        if score == 15:
-            fr = min(fr_prev + 2, self.fr_div)
-        elif score >= 11:
-            fr = min(fr_prev + 1, self.fr_div)
-        elif score >= 3:
-            fr = fr_prev
-        elif score >= -3:
-            fr = self.reduce_fr(0.333, fr_prev, 1)
-        elif score >= -7:
-            fr = self.reduce_fr(0.5, fr_prev, 1)
-        else:
-            fr = 0
-
-        now = datetime.now(timezone.utc).strftime(timestring)
-        if fr != fr_prev:
-            title = f'{now}'
-            note = f'{self.name} {direction} fixed risk score adjusted from {fr_prev:.2f} to {fr:.2f}'
-            # pb.push_note(title, note)
-            print(note)
-
-        o.stop()
-        return fr
-
-
-    def set_fixed_risk(self, session):
-        """takes the fr_score calculated by fixed_risk_score and uses it to scale fr_max into the current
-        fixed risk setting"""
-        if self.mode == 'spot':
-            self.fr_score_spot = self.fixed_risk_score('spot')
-            self.fixed_risk_spot = round(self.fr_score_spot * self.fr_max / self.fr_div, 5)
-            self.fr_dol_spot = self.fixed_risk_spot * session.spot_bal
-            print(f"{self.name} spot fixed risk: {self.fixed_risk_spot}")
-
-        elif self.mode == 'margin':
-            self.fr_score_l = self.fixed_risk_score('long')
-            self.fixed_risk_l = round(self.fr_score_l * self.fr_max / self.fr_div, 5)
-            self.fixed_risk_dol_l = self.fixed_risk_l * session.margin_bal
-            if self.fr_score_l:
-                print(f"{self.name} long fixed risk: {self.fixed_risk_l}")
-
-            self.fr_score_s = self.fixed_risk_score('short')
-            self.fixed_risk_s = round(self.fr_score_s * self.fr_max / self.fr_div, 5)
-            self.fixed_risk_dol_s = self.fixed_risk_s * session.margin_bal
-            if self.fr_score_s:
-                print(f"{self.name} short fixed risk: {self.fixed_risk_s}")
-
-    def test_fixed_risk(self, fr_l: float, fr_s: float) -> None:
-        """manually overrides fixed risk settings for testing purposes"""
-        if not self.live:
-            print(f'*** WARNING: FIXED RISK MANUALLY SET to {fr_l} / {fr_s} ***')
-            self.fixed_risk_l = fr_l
-            self.fixed_risk_s = fr_s
-
-    def print_fixed_risk(self):
-        if self.mode == 'spot':# and self.fixed_risk_spot:
-            print(f"{self.name} fixed risk: {(self.fixed_risk_spot * 10000):.2f}bps")
-        elif self.mode == 'margin':# and self.fixed_risk_l or self.fixed_risk_s:
-            frl_bps = self.fixed_risk_l * 10000
-            frs_bps = self.fixed_risk_s * 10000
-            print(f"{self.name} fr long: {(frl_bps):.2f}bps, fr short: {(frs_bps):.2f}bps")
+    # def print_fixed_risk(self):
+    #     if self.mode == 'spot':# and self.fixed_risk_spot:
+    #         print(f"{self.name} fixed risk: {(self.fixed_risk_spot * 10000):.2f}bps")
+    #     elif self.mode == 'margin':# and self.fixed_risk_l or self.fixed_risk_s:
+    #         frl_bps = self.fixed_risk_l * 10000
+    #         frs_bps = self.fixed_risk_s * 10000
+    #         print(f"{self.name} fr long: {(frl_bps):.2f}bps, fr short: {(frs_bps):.2f}bps")
 
     def set_max_pos(self) -> int:
         """sets the maximum number of open positions for the agent. if the median
@@ -1421,7 +1461,7 @@ class Agent():
         usdt_size = signal['quote_size']
         price = signal['trig_price']
         stp = signal['inval']
-        score = signal['inval_score']
+        score = signal['score']
         note = f"{self.name} real open {direction} {size:.5} {pair} ({usdt_size:.2f} usdt) @ {price}, stop @ {stp:.5}, " \
                f"score: {score:.1%}"
         print(now, note)
@@ -2292,21 +2332,41 @@ class Agent():
         jn.start()
 
         balance = session.spot_bal if self.mode == 'spot' else session.margin_bal
-        risk = abs(1 - signal['inval_ratio'])
 
         direction = signal['direction']
         price = session.pairs_data[signal['pair']]['price']
-        if direction == 'spot':
-            usdt_size = balance * self.fixed_risk_spot / risk
-        elif direction == 'long':
-            usdt_size = balance * self.fixed_risk_l / risk
-        elif direction == 'short':
-            usdt_size = balance * self.fixed_risk_s / risk
+
+        usdt_size = balance * session.fr_max * signal['risk_scalar']
 
         base_size = float(usdt_size / price)
 
         jn.stop()
         return base_size, usdt_size
+
+    # def get_size_old(self, session, signal) -> tuple[float, float]:
+    #     """calculates the desired position size in base or quote denominations
+    #     using the total account balance, current fixed-risk setting, and the distance
+    #     from current price to stop-loss"""
+    #
+    #     jn = Timer('get_size')
+    #     jn.start()
+    #
+    #     balance = session.spot_bal if self.mode == 'spot' else session.margin_bal
+    #     risk = abs(1 - signal['inval_ratio'])
+    #
+    #     direction = signal['direction']
+    #     price = session.pairs_data[signal['pair']]['price']
+    #     if direction == 'spot':
+    #         usdt_size = balance * self.fixed_risk_spot / risk
+    #     elif direction == 'long':
+    #         usdt_size = balance * self.fixed_risk_l / risk
+    #     elif direction == 'short':
+    #         usdt_size = balance * self.fixed_risk_s / risk
+    #
+    #     base_size = float(usdt_size / price)
+    #
+    #     jn.stop()
+    #     return base_size, usdt_size
 
     def aged_condition(self, signal_age, series_1, series_2):
         """returns True if series_1 has been above series_2 for {signal_age} consecutive periods"""
@@ -3111,12 +3171,12 @@ class TrailFractals(Agent):
         # paths
         folder = Path("/home/ross/coding/modular_trader/machine_learning/models/trail_fractals")
         self.long_model_path = folder / f"trail_fractal_long_{self.tf}_model.sav"
-        short_model_path = folder / f"trail_fractal_short_{self.tf}_model.sav"
+        self.short_model_path = folder / f"trail_fractal_short_{self.tf}_model.sav"
         long_info_path = folder / f"trail_fractal_long_{self.tf}_info.json"
         short_info_path = folder / f"trail_fractal_short_{self.tf}_info.json"
 
         self.long_model = joblib.load(self.long_model_path)
-        self.short_model = joblib.load(short_model_path)
+        self.short_model = joblib.load(self.short_model_path)
         with open(long_info_path, 'r') as ip:
             self.long_info = json.load(ip)
         with open(short_info_path, 'r') as ip:
@@ -3173,11 +3233,16 @@ class TrailFractals(Agent):
         # these are deliberately back-to-front because my analysis showed they were actually inversely correlated to pnl
         combined_long = short_confidence - long_confidence
         combined_short = long_confidence - short_confidence
+        # combined confidence will not be needed at all when the secondary ml model is doing signal scores
 
         if (price > df.frac_low.iloc[-1]) and (combined_long > 0):
             signal_dict['confidence'] = combined_long
             signal_dict['bias'] = 'bullish'
             inval = df.frac_low.iloc[-1]
+            if self.long_info.get('created'):
+                model_created = self.long_info.get('created')
+            else:
+                model_created = self.long_model_path.stat().st_mtime
             note = f"{self.name} Long {self.tf} {pair} @ {df.close.iloc[-1]} confidence: {long_confidence - short_confidence:.1%}\n"
             # print(note)
             self.notes += note
@@ -3185,14 +3250,17 @@ class TrailFractals(Agent):
             signal_dict['confidence'] = combined_short
             signal_dict['bias'] = 'bearish'
             inval = df.frac_high.iloc[-1]
+            if self.short_info.get('created'):
+                model_created = self.short_info.get('created')
+            else:
+                model_created = self.short_model_path.stat().st_mtime
             note = f"{self.name} Short {self.tf} {pair} @ {df.close.iloc[-1]} confidence: {short_confidence - long_confidence:.1%}\n"
             # print(note)
             self.notes += note
-        else:
+        else: # if there is no signal, long or short ratio might still be needed for moving stops
             return {'long_ratio': long_stop / price,
                     'short_ratio': short_stop / price}
 
-        model_created = self.long_model_path.stat().st_mtime
         created_dt = datetime.fromtimestamp(model_created).astimezone(timezone.utc)
         model_age = datetime.now(timezone.utc) - created_dt
 
@@ -3200,6 +3268,7 @@ class TrailFractals(Agent):
         signal_dict['inval'] = stp
         signal_dict['inval_ratio'] = stp / price
         signal_dict['inval_dist'] = abs((stp / price) - 1)
+        # inval score will not be needed after the secondary ml model takes over scoring
         signal_dict['inval_score'] = self.calc_inval_risk_score(abs((price - stp) / price))
         signal_dict['trig_price'] = price
         signal_dict['pct_of_full_pos'] = 1

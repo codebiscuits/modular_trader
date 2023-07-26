@@ -16,7 +16,7 @@ import statistics as stats
 import pandas as pd
 import json
 
-pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
+pb = uf.init_pb()
 
 
 class TradingSession():
@@ -995,17 +995,18 @@ class TradingSession():
         # self.track_weights(40)
         # self.spot_orders = self.client.get_open_orders()
         self.spot_orders = []
+        self.margin_orders = []
 
         if len(self.pairs_set) > 35:
             print("getting open margin orders for all pairs")
-            self.track_weights(
-                len(self.client.get_margin_all_pairs()))  # weighting for this call = number of pairs on exchange
+            self.track_weights(len(self.client.get_margin_all_pairs()))
+            # weighting for this call = number of pairs on exchange
             self.margin_orders = self.client.get_open_margin_orders()
         else:
             for pair in self.pairs_set:
                 print(f"getting open margin orders for {pair}")
                 self.track_weights(10)
-                self.margin_orders = self.client.get_open_margin_orders(symbol=pair)
+                self.margin_orders.extend(self.client.get_open_margin_orders(symbol=pair))
         self.check_open_spot_orders()
         self.check_open_margin_orders()
         self.count_algo_orders()  # kind of redundant since the above two methods create lists which could be counted

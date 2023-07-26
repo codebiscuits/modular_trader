@@ -9,6 +9,7 @@ import sessions
 from resources.timers import Timer
 from pushbullet import Pushbullet
 from collections import Counter
+import statistics as stats
 
 # TODO current (02/04/23) roadmap should be:
 #  * get detailed push notes in all exception handling code so i always know whats going wrong, and change the ss_log
@@ -17,17 +18,13 @@ from collections import Counter
 #  in the same session as everything else
 #  * get spot trading and oco entries and trade adds working so i can use other strats
 
-@uf.retry_on_busy()
-def init_pb():
-    return Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
-
-pb = init_pb()
+pb = uf.init_pb()
 
 print('\n-+-+-+-+-+-+-+-+-+-+-+- Running Setup Scanner -+-+-+-+-+-+-+-+-+-+-+-\n')
 
 ########################################################################################################################
 
-session = sessions.TradingSession(0.001)
+session = sessions.TradingSession(0.1) # this argument is now max position size rather than max fixed risk
 
 print(f"Running setup_scan({session.timeframes})")
 print(f"\nCurrent time: {session.now_start}, {session.name}\n")
@@ -197,19 +194,6 @@ while raw_signals:
     sig_agent = agents[signal['agent']]
     sig_pair = signal['pair']
 
-    # TODO i need to add other scores here
-    inval_score = signal['inval_score']
-    confidence_score = signal['confidence']
-    if signal['tf'] == '1h':
-        rank_score = signal.get('market_rank_1d', 1) if sig_bias == 'bullish' else (1 - signal.get('market_rank_1d', 1))
-    elif signal['tf'] in {'4h', '12h'}:
-        rank_score = signal.get('market_rank_1w', 1) if sig_bias == 'bullish' else (1 - signal.get('market_rank_1w', 1))
-    elif signal['tf'] == '1d':
-        rank_score = signal.get('market_rank_1m', 1) if sig_bias == 'bullish' else (1 - signal.get('market_rank_1m', 1))
-    sig_score = ((2 * confidence_score) + (1 * inval_score) + (1 * rank_score)) / 4
-    signal['score'] = sig_score
-    min_score = 0.5
-
     # find whether i am currently long, short or flat on the agent and pair in this signal
     try:
         real_position = sig_agent.real_pos.get(signal['asset'], {'direction': 'flat'})['direction']
@@ -248,18 +232,10 @@ while raw_signals:
 
         elif real_position == 'short':
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', 'short'))
-            if sig_score >= min_score:
-                processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', 'long'))
-            elif sim_position == 'flat':
-                signal['sim_reasons'] = ['low_score']
-                processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', 'long'))
+            processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', 'long'))
 
         elif real_position == 'flat':
-            if sig_score >= min_score:
-                processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', bullish_pos))
-            elif sim_position == 'flat':
-                signal['sim_reasons'] = ['low_score']
-                processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', bullish_pos))
+            processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', bullish_pos))
         else:
             print("bullish bias didn't produce a tracked outcome, logic needs more work")
 
@@ -303,11 +279,7 @@ while raw_signals:
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', 'spot'))
         elif real_position == 'long':
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', 'long'))
-            if sig_score >= min_score:
-                processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', 'short'))
-            elif sim_position == 'flat':
-                signal['sim_reasons'] = ['low_score']
-                processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', 'short'))
+            processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', 'short'))
         elif real_position == 'short':
             if sig_agent.trail_stop:
                 sig_agent.move_real_stop(session, signal)
@@ -320,11 +292,7 @@ while raw_signals:
             # TODO check for low or and make add signals if so
 
         elif real_position == 'flat':
-            if sig_score >= min_score:
-                processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', 'short'))
-            elif sim_position == 'flat':
-                signal['sim_reasons'] = ['low_score']
-                processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', 'short'))
+            processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', 'short'))
         else:
             print("bearish bias didn't produce a real outcome, logic needs more work")
 
@@ -423,14 +391,67 @@ tp_close_end = time.perf_counter()
 tp_close_took = tp_close_end - tp_close_start
 
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
-# Calculate Fixed Risk
+# Calculate Fixed Risk/Signal Scores
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 # calculate fixed risk for each agent using wanted rpnl
+
+print(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Signal Scores -+-+-+-+-+-+-+-+-+-+-+-+-+-+-")
+
+for agent in agents.values():
+    agent.pnls = dict(
+        spot=agent.get_pnls('spot'),
+        long=agent.get_pnls('long'),
+        short=agent.get_pnls('short'),
+    )
+
+for i, signal in enumerate(processed_signals['unassigned']):
+
+    # when the secondary ml model is ready, it will replace the contents of this for-loop down to sig_score. i will
+    # simply pass the inval distance (0-1, 1 being 100% between entry and init stop), 5 perf_emas, the 3 market_ranks,
+    # and confidence numbers from however many ml models have made a prediction (2 currently), and the model will return
+    # a signal score. i record them all in the signal record, calculate size, and if the score is too low, move the
+    # signal over to sim_opens
+
+    signal['perf_ema4'] = agents[signal['agent']].pnls[signal['direction']]['ema_4']
+    signal['perf_ema8'] = agents[signal['agent']].pnls[signal['direction']]['ema_8']
+    signal['perf_ema16'] = agents[signal['agent']].pnls[signal['direction']]['ema_16']
+    signal['perf_ema32'] = agents[signal['agent']].pnls[signal['direction']]['ema_32']
+    signal['perf_ema64'] = agents[signal['agent']].pnls[signal['direction']]['ema_64']
+
+    if signal['tf'] == '1h':
+        perf_score = ((signal['perf_ema64'] > 0.5) + (signal['perf_ema32'] > 0.5) + (signal['perf_ema16'] > 0.5)) / 3
+        rank_score = signal.get('market_rank_1d', 1) if sig_bias == 'bullish' else (1 - signal.get('market_rank_1d', 1))
+    elif signal['tf'] in {'4h', '12h'}:
+        perf_score = ((signal['perf_ema32'] > 0.5) + (signal['perf_ema16'] > 0.5) + (signal['perf_ema8'] > 0.5)) / 3
+        rank_score = signal.get('market_rank_1w', 1) if sig_bias == 'bullish' else (1 - signal.get('market_rank_1w', 1))
+    elif signal['tf'] == '1d':
+        perf_score = ((signal['perf_ema16'] > 0.5) + (signal['perf_ema8'] > 0.5) + (signal['perf_ema4'] > 0.5)) / 3
+        rank_score = signal.get('market_rank_1m', 1) if sig_bias == 'bullish' else (1 - signal.get('market_rank_1m', 1))
+
+    if not session.live:
+        perf_score = 1.0
+
+    sig_score = signal['confidence'] * rank_score
+    risk_scalar = sig_score * perf_score
+    signal['score'] = sig_score
+    signal['risk_scalar'] = risk_scalar
+    # print(f"\n{signal['pair']}, {signal['tf']}, {signal['direction']}")
+    # print(f"risk scalar: {risk_scalar:.1%}, signal score: {sig_score:.1%}, conf: {signal['confidence']:.1%}, "
+    #       f"rank: {rank_score:.1%}, perf: {perf_score:.1%}")
+
+    signal['base_size'], signal['quote_size'] = agents[signal['agent']].get_size(session, signal)
+
+if signal['score'] < 0.5 and sim_position == 'flat':
+    signal['sim_reasons'] = ['low_score']
+    sig_direction = 'long' if signal['bias'] == 'bullish' else 'short'
+    processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', sig_direction))
+    del processed_signals['unassigned'][i] # remove signal from unassigned list after putting it in sim_opens list
+
 print(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Fixed Risk -+-+-+-+-+-+-+-+-+-+-+-+-+-+-")
 for agent in agents.values():
-    agent.set_fixed_risk(session)
-    agent.test_fixed_risk(0.0002, 0.0002)
-    agent.print_fixed_risk()
+    # agent.set_fixed_risk(session)
+    # agent.test_fixed_risk(0.0002, 0.0002)
+    # agent.print_fixed_risk()
     agent.calc_tor()
 
     wanted_spot = round(agent.realised_pnls['wanted_spot'], 1)
@@ -449,21 +470,12 @@ for agent in agents.values():
     session.urpnl_totals['long'] += unwanted_long
     session.urpnl_totals['short'] += unwanted_short
 
-    # TODO make sure algo_order counts are up to date after tps and closes
     # print(f"{agent.name} {agent.fixed_risk_spot} {agent.fixed_risk_l} {agent.fixed_risk_s}")
 
 print('\n\nwanted rpnl totals:')
 pprint(session.wrpnl_totals)
 print('\n\nunwanted rpnl totals:')
 pprint(session.urpnl_totals)
-
-for signal in processed_signals['unassigned']:
-    signal['base_size'], signal['quote_size'] = agents[signal['agent']].get_size(session, signal)
-    signal['perf_ema4'] = agents[signal['agent']].pnls['ema_4']
-    signal['perf_ema8'] = agents[signal['agent']].pnls['ema_8']
-    signal['perf_ema16'] = agents[signal['agent']].pnls['ema_16']
-    signal['perf_ema32'] = agents[signal['agent']].pnls['ema_32']
-    signal['perf_ema64'] = agents[signal['agent']].pnls['ema_64']
 
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 # Sort and Filter Signals
@@ -475,7 +487,7 @@ session.update_algo_orders()
 
 # next sort the unassigned list by scores. items are popped from the end of the list so i want the best signals to be
 # last so that they get processed first, so i don't use the 'reverse=True' option
-unassigned = sorted(processed_signals['unassigned'], key=lambda x: x['inval_score'])
+unassigned = sorted(processed_signals['unassigned'], key=lambda x: x['score'])
 print(f"\n-*-*-*- Sorting and Filtering {len(unassigned)} Processed Signals for all agents -*-*-*-\n")
 
 # work through the list and check each filter for each signal
@@ -546,7 +558,10 @@ while unassigned:
         s['state'] = 'sim'
         s['pct_of_full_pos'] *= r
         processed_signals['sim_open'].append(s)
+        print(f"{sim_reasons}, {s['quote_size']:.2f}USDT")
     else:
+        # TODO since i'm moving away from fixed risk, i should add a check here which makes sure pfrd isn't too much,
+        #  maybe scale the position down if it is
         or_limits[agent.name] += r
         pos_limits[agent.name] += 1
         algo_limits[s['pair']] -= 2 if s['action'] == 'oco' else 1
@@ -559,6 +574,7 @@ while unassigned:
         s['pct_of_full_pos'] *= r
 
         processed_signals['real_open'].append(s)
+        print(f"{pair} {s['tf']} real open signal, {s['quote_size']:.2f}USDT")
 
 sort_end = time.perf_counter()
 sort_took = sort_end - sort_start

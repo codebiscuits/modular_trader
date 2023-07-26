@@ -16,10 +16,10 @@ from typing import Tuple, Dict, Any
 import sys
 from pycoingecko import CoinGeckoAPI
 from pyarrow import ArrowInvalid
-from resources import indicators as ind
+from resources import indicators as ind, utility_funcs as uf
 
 cg = CoinGeckoAPI()
-pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
+pb = uf.init_pb()
 ctx = getcontext()
 ctx.prec = 12
 
@@ -300,7 +300,7 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
                 print(f"Problem reading {pair} parquet file, downloading from scratch.")
                 print(e)
                 filepath.unlink()
-                df = get_ohlc(None, pair, session.ohlc_tf, '2 years ago UTC')
+                df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC')
 
             # check df is localised to UTC
             try:
