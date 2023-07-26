@@ -11,6 +11,8 @@ from pushbullet import Pushbullet
 from collections import Counter
 import statistics as stats
 
+import update_ohlc
+
 # TODO current (02/04/23) roadmap should be:
 #  * get detailed push notes in all exception handling code so i always know whats going wrong, and change the ss_log
 #  so it creates a new file for each session, named by the date and time they took place
@@ -182,6 +184,7 @@ session.update_algo_orders()
 processed_signals = dict(
     real_sim_tp_close=[],  # all real and sim tps and closes go in here for immediate execution
     unassigned=[],  # all real open signals go in here for further selection
+    scored=[], # once a score has been calculated for the unassigned signals, any with a good score go in here
     sim_open=[],  # nothing will be put in here at first but many real open signals will end up in here
     real_open=[],  # nothing will be put in here at first, real open signals will end up here if they pass all tests
     tracked_close=[],  # can be left until last
@@ -404,7 +407,8 @@ for agent in agents.values():
         short=agent.get_pnls('short'),
     )
 
-for i, signal in enumerate(processed_signals['unassigned']):
+while processed_signals['unassigned']:
+    signal = processed_signals['unassigned'].pop()
 
     # when the secondary ml model is ready, it will replace the contents of this for-loop down to sig_score. i will
     # simply pass the inval distance (0-1, 1 being 100% between entry and init stop), 5 perf_emas, the 3 market_ranks,
@@ -441,12 +445,17 @@ for i, signal in enumerate(processed_signals['unassigned']):
 
     signal['base_size'], signal['quote_size'] = agents[signal['agent']].get_size(session, signal)
 
+    if signal['score'] >= 0.5:
+        processed_signals['scored'].append(signal)
+        print(f"{signal['pair']} {signal['direction']} signal put in scored list")
     # separate unwanted signals
-    if signal['score'] < 0.5 and sim_position == 'flat':
+    elif signal['score'] < 0.5 and sim_position == 'flat':
         signal['sim_reasons'] = ['low_score']
         # sig_direction = 'long' if signal['bias'] == 'bullish' else 'short'
         processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', signal['direction']))
-        del processed_signals['unassigned'][i] # remove signal from unassigned list after putting it in sim_opens list
+        print(f"{signal['pair']} {signal['direction']} signal put in sim list")
+    else:
+        print(f"{signal['pair']} {signal['direction']} signal dropped")
 
 print(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Fixed Risk -+-+-+-+-+-+-+-+-+-+-+-+-+-+-")
 for agent in agents.values():
@@ -488,7 +497,7 @@ session.update_algo_orders()
 
 # next sort the unassigned list by scores. items are popped from the end of the list so i want the best signals to be
 # last so that they get processed first, so i don't use the 'reverse=True' option
-unassigned = sorted(processed_signals['unassigned'], key=lambda x: x['score'])
+unassigned = sorted(processed_signals['scored'], key=lambda x: x['score'])
 print(f"\n-*-*-*- Sorting and Filtering {len(unassigned)} Processed Signals for all agents -*-*-*-\n")
 
 # work through the list and check each filter for each signal
