@@ -11,7 +11,7 @@ from pushbullet import Pushbullet
 from collections import Counter
 import statistics as stats
 
-import update_ohlc
+# import update_ohlc
 
 # TODO current (02/04/23) roadmap should be:
 #  * get detailed push notes in all exception handling code so i always know whats going wrong, and change the ss_log

@@ -3142,12 +3142,10 @@ class EMACrossHMA(Agent):
 class TrailFractals(Agent):
     """Machine learning strategy based around williams fractals trailing stops"""
 
-    # TODO think about how to use the confidence score (and other scores)
     # TODO if i'm only going to use machine learning strats from this point forward, it would be worth  making a
     #  session.valid_pairs set just like the session.features set so i'm not going through hundreds of pairs for no
     #  reason, but make sure things like spreads still get recorded for every pair (maybe it's time to move that to
     #  update_ohlc or something)
-    # TODO need to make sure that model info gets recorded in the logs at the end of the session
 
     def __init__(self, session, tf: str, offset: int, min_conf: float=0.75) -> None:
         t = Timer('TrailFractals init')
