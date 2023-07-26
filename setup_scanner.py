@@ -441,11 +441,12 @@ for i, signal in enumerate(processed_signals['unassigned']):
 
     signal['base_size'], signal['quote_size'] = agents[signal['agent']].get_size(session, signal)
 
-if signal['score'] < 0.5 and sim_position == 'flat':
-    signal['sim_reasons'] = ['low_score']
-    sig_direction = 'long' if signal['bias'] == 'bullish' else 'short'
-    processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', sig_direction))
-    del processed_signals['unassigned'][i] # remove signal from unassigned list after putting it in sim_opens list
+    # separate unwanted signals
+    if signal['score'] < 0.5 and sim_position == 'flat':
+        signal['sim_reasons'] = ['low_score']
+        # sig_direction = 'long' if signal['bias'] == 'bullish' else 'short'
+        processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', signal['direction']))
+        del processed_signals['unassigned'][i] # remove signal from unassigned list after putting it in sim_opens list
 
 print(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Fixed Risk -+-+-+-+-+-+-+-+-+-+-+-+-+-+-")
 for agent in agents.values():
