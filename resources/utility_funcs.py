@@ -18,7 +18,6 @@ from functools import wraps
 from binance.exceptions import BinanceAPIException
 import plotly.express as px
 
-pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 ctx = getcontext()
 ctx.prec = 12
 
@@ -300,7 +299,6 @@ def log(session, agent) -> None:
 
     if agent.mode == 'spot':
         new_record['balance'] = round(session.spot_bal, 2)
-        new_record['fr_spot'] = agent.fr_score_spot
         new_record['model_info'] = agent.long_info
 
         new_record['real_rpnl_spot'] = agent.realised_pnls['real_spot']
@@ -310,8 +308,6 @@ def log(session, agent) -> None:
 
     elif agent.mode == 'margin':
         new_record['balance'] = round(session.margin_bal, 2)
-        new_record['fr_long'] = agent.fr_score_l
-        new_record['fr_short'] = agent.fr_score_s
         new_record['long_model_info'] = agent.long_info
         new_record['short_model_info'] = agent.short_info
 
@@ -449,103 +445,103 @@ def update_liability(trade_record: Dict[str, dict], size: str, operation: str) -
     return str(new_liability)
 
 
-def score_accum(log_path, direction: str) -> Tuple[int, str]:
-    """goes through recent perf logs and uses the wanted pnl"""
-    func_name = sys._getframe().f_code.co_name
-    x12 = Timer(f'{func_name}')
-    x12.start()
-
-    read_path = Path(f"{log_path}/perf_log.json")
-    try:
-        with open(read_path, 'r') as rec_file:
-            bal_data = json.load(rec_file)
-    except (FileNotFoundError, JSONDecodeError):
-        bal_data = {}
-
-    d = -1  # default value
-    pnls = {1: d, 2: d, 3: d, 4: d, 5: d}
-    if bal_data:
-        lookup = f'wanted_pnl_{direction}'
-        max_i = min(6, len(bal_data))
-        for i in range(1, max_i):
-            pnls[i] = json.load(bal_data[-1 * i]).get(lookup, -1)
-
-    score = 0
-    if pnls.get(1) > 0:
-        score += 5
-    elif pnls.get(1) < 0:
-        score -= 5
-    if pnls.get(2) > 0:
-        score += 4
-    elif pnls.get(2) < 0:
-        score -= 4
-    if pnls.get(3) > 0:
-        score += 3
-    elif pnls.get(3) < 0:
-        score -= 3
-    if pnls.get(4) > 0:
-        score += 2
-    elif pnls.get(4) < 0:
-        score -= 2
-    if pnls.get(5) > 0:
-        score += 1
-    elif pnls.get(5) < 0:
-        score -= 1
-
-    if pnls.get(1) > 0:
-        perf_str = '+ |'
-    elif pnls.get(1) < 0:
-        perf_str = '- |'
-    else:
-        perf_str = '0 |'
-
-    for j in range(2, 6):
-        if pnls.get(j, -1) > 0:
-            perf_str += ' +'
-        elif pnls.get(j, -1) < 0:
-            perf_str += ' -'
-        else:
-            perf_str += ' 0'
-
-    x12.stop()
-
-    return score, perf_str
-
-
-def recent_perf_str(session, agent) -> Tuple[str, int, int, int]:
-    '''generates a string of + and - to represent recent strat performance
-    returns the perf string and the relevant long and short perf scores'''
-
-    func_name = sys._getframe().f_code.co_name
-    x13 = Timer(f'{func_name}')
-    x13.start()
-
-    log_path = Path(f"{session.read_records}/{agent.id}")
-    if agent.mode == 'spot':
-        score_spot, perf_str_spot = score_accum(log_path, 'spot')
-    else:
-        score_l, perf_str_l = score_accum(log_path, 'long')
-        score_s, perf_str_s = score_accum(log_path, 'short')
-
-    if agent.open_trades and score_spot:
-        perf_str_spot = perf_str_spot
-        perf_summ_spot = f"real: score {score_spot} rpnl {agent.realised_pnls['wanted_spot']:.1f}"
-
-    if agent.open_trades and score_l:
-        perf_str_l = perf_str_l
-        perf_summ_l = f"real: score {score_l} rpnl {agent.realised_pnls['wanted_long']:.1f}"
-
-    if (agent.open_trades and score_s):
-        perf_str_s = perf_str_s
-        perf_summ_s = f"real: score {score_s} rpnl {agent.realised_pnls['wanted_short']:.1f}"
-
-    full_perf_str = (f'spot: {perf_str_spot}\n{perf_summ_spot}\n'
-                     f'long: {perf_str_l}\n{perf_summ_l}\n'
-                     f'short: {perf_str_s}\n{perf_summ_s}')
-
-    x13.stop()
-
-    return full_perf_str, score_spot, score_l, score_s
+# def score_accum(log_path, direction: str) -> Tuple[int, str]:
+#     """goes through recent perf logs and uses the wanted pnl"""
+#     func_name = sys._getframe().f_code.co_name
+#     x12 = Timer(f'{func_name}')
+#     x12.start()
+#
+#     read_path = Path(f"{log_path}/perf_log.json")
+#     try:
+#         with open(read_path, 'r') as rec_file:
+#             bal_data = json.load(rec_file)
+#     except (FileNotFoundError, JSONDecodeError):
+#         bal_data = {}
+#
+#     d = -1  # default value
+#     pnls = {1: d, 2: d, 3: d, 4: d, 5: d}
+#     if bal_data:
+#         lookup = f'wanted_pnl_{direction}'
+#         max_i = min(6, len(bal_data))
+#         for i in range(1, max_i):
+#             pnls[i] = json.load(bal_data[-1 * i]).get(lookup, -1)
+#
+#     score = 0
+#     if pnls.get(1) > 0:
+#         score += 5
+#     elif pnls.get(1) < 0:
+#         score -= 5
+#     if pnls.get(2) > 0:
+#         score += 4
+#     elif pnls.get(2) < 0:
+#         score -= 4
+#     if pnls.get(3) > 0:
+#         score += 3
+#     elif pnls.get(3) < 0:
+#         score -= 3
+#     if pnls.get(4) > 0:
+#         score += 2
+#     elif pnls.get(4) < 0:
+#         score -= 2
+#     if pnls.get(5) > 0:
+#         score += 1
+#     elif pnls.get(5) < 0:
+#         score -= 1
+#
+#     if pnls.get(1) > 0:
+#         perf_str = '+ |'
+#     elif pnls.get(1) < 0:
+#         perf_str = '- |'
+#     else:
+#         perf_str = '0 |'
+#
+#     for j in range(2, 6):
+#         if pnls.get(j, -1) > 0:
+#             perf_str += ' +'
+#         elif pnls.get(j, -1) < 0:
+#             perf_str += ' -'
+#         else:
+#             perf_str += ' 0'
+#
+#     x12.stop()
+#
+#     return score, perf_str
+#
+#
+# def recent_perf_str(session, agent) -> Tuple[str, int, int, int]:
+#     '''generates a string of + and - to represent recent strat performance
+#     returns the perf string and the relevant long and short perf scores'''
+#
+#     func_name = sys._getframe().f_code.co_name
+#     x13 = Timer(f'{func_name}')
+#     x13.start()
+#
+#     log_path = Path(f"{session.read_records}/{agent.id}")
+#     if agent.mode == 'spot':
+#         score_spot, perf_str_spot = score_accum(log_path, 'spot')
+#     else:
+#         score_l, perf_str_l = score_accum(log_path, 'long')
+#         score_s, perf_str_s = score_accum(log_path, 'short')
+#
+#     if agent.open_trades and score_spot:
+#         perf_str_spot = perf_str_spot
+#         perf_summ_spot = f"real: score {score_spot} rpnl {agent.realised_pnls['wanted_spot']:.1f}"
+#
+#     if agent.open_trades and score_l:
+#         perf_str_l = perf_str_l
+#         perf_summ_l = f"real: score {score_l} rpnl {agent.realised_pnls['wanted_long']:.1f}"
+#
+#     if (agent.open_trades and score_s):
+#         perf_str_s = perf_str_s
+#         perf_summ_s = f"real: score {score_s} rpnl {agent.realised_pnls['wanted_short']:.1f}"
+#
+#     full_perf_str = (f'spot: {perf_str_spot}\n{perf_summ_spot}\n'
+#                      f'long: {perf_str_l}\n{perf_summ_l}\n'
+#                      f'short: {perf_str_s}\n{perf_summ_s}')
+#
+#     x13.stop()
+#
+#     return full_perf_str, score_spot, score_l, score_s
 
 
 def tot_rpnl(agents: list) -> str:
@@ -584,10 +580,6 @@ def scanner_summary(session, agents: list) -> None:
         agent_msg = f'\n{agent.name}'
 
         # spot
-        if (agent.mode == 'spot') and agent.fixed_risk_spot:
-            print_msg = True
-            agent_msg += f"\nfixed risk spot: {agent.fixed_risk_spot * 10000:.1f}Bps"
-
         if (agent.mode == 'spot') and agent.realised_pnls['real_spot']:
             print_msg = True
             agent_msg += f"\nrealised real spot pnl: {agent.realised_pnls['real_spot']:.1f}R"
@@ -596,13 +588,6 @@ def scanner_summary(session, agents: list) -> None:
             agent_msg += f"\nrealised wanted spot pnl: {agent.realised_pnls['wanted_spot']:.1f}R"
 
         # margin
-        if (agent.mode == 'margin') and agent.fixed_risk_l:
-            print_msg = True
-            agent_msg += f"\nfixed risk long: {agent.fixed_risk_l * 10000:.1f}Bps"
-        elif (agent.mode == 'margin') and agent.fixed_risk_s:
-            print_msg = True
-            agent_msg += f"\nfixed risk short: {agent.fixed_risk_s * 10000:.1f}Bps"
-
         if (agent.mode == 'margin') and agent.realised_pnls['real_long']:
             print_msg = True
             agent_msg += f"\nrealised real long pnl: {agent.realised_pnls['real_long']:.1f}R"
@@ -633,6 +618,7 @@ def scanner_summary(session, agents: list) -> None:
             final_msg += agent_msg
 
     if session.live:
+        pb = init_pb()
         pb.push_note(title, final_msg)
     else:
         print(f'-\n{title}\n{final_msg}')
@@ -698,3 +684,8 @@ def retry_on_busy(max_retries=360, delay=5):
             raise Exception("Max retries exceeded. Request still failed after {} attempts.".format(max_retries))
         return wrapper_retry
     return decorator_retry
+
+
+@retry_on_busy()
+def init_pb():
+    return Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
