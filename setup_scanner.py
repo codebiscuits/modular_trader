@@ -445,11 +445,12 @@ while processed_signals['unassigned']:
 
     signal['base_size'], signal['quote_size'] = agents[signal['agent']].get_size(session, signal)
 
-    if signal['score'] >= 0.5:
+    score_threshold = 0.3
+    if signal['score'] >= score_threshold:
         processed_signals['scored'].append(signal)
         print(f"{signal['pair']} {signal['direction']} signal put in scored list")
     # separate unwanted signals
-    elif signal['score'] < 0.5 and sim_position == 'flat':
+    elif signal['score'] < score_threshold and sim_position == 'flat':
         signal['sim_reasons'] = ['low_score']
         # sig_direction = 'long' if signal['bias'] == 'bullish' else 'short'
         processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', signal['direction']))
