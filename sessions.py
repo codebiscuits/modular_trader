@@ -44,6 +44,7 @@ class TradingSession():
         self.client = Client(keys.bPkey, keys.bSkey, testnet=False)
         self.last_price_update = 0
         self.fr_max = fr_max
+        self.leverage = 1.5
         self.name = 'agent names here'
         self.last_price_update = 0
         self.live = self.set_live()
@@ -915,7 +916,7 @@ class TradingSession():
         print(f"Margin level: {self.margin_lvl:.2f}")
 
         net_asset = self.account_bal_m()
-        max_debt = net_asset * 2
+        max_debt = net_asset * (self.leverage - 1) # 3x leverage = net_asset*2, 5x leverage = net_asset*4
         total_debt = self.total_debt()
         remaining = max_debt - total_debt
 
