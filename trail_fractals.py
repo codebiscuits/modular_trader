@@ -3,7 +3,7 @@ week it will also run a sequential floating backwards feature selection to updat
 will do a full search of williams fractal params as well"""
 
 import pandas as pd
-import entry_modelling as em
+import ml_funcs as mlf
 import time
 import itertools
 from pathlib import Path
@@ -17,6 +17,7 @@ if not Path('/pi_2.txt').exists():
 
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.model_selection import GridSearchCV, train_test_split, cross_val_score
+from sklearn.feature_selection import SelectKBest, mutual_info_classif
 from sklearn.metrics import fbeta_score, make_scorer
 from sklearn.calibration import CalibratedClassifierCV
 from mlxtend.feature_selection import SequentialFeatureSelector as SFS
@@ -73,7 +74,7 @@ def load_pairs(side, tf):
     return list(info['pairs'])
 
 
-def fit_gbc(X, y, selected, scorer):
+def fit_gbc(X, y, scorer):
     base_model = GradientBoostingClassifier(random_state=42, n_estimators=10000, validation_fraction=0.1, n_iter_no_change=50)
     params = dict(
         subsample=[0.25, 0.5, 1],
@@ -106,24 +107,24 @@ for side, timeframe in itertools.product(sides, timeframes):
     if running_on_pi:
         pairs = load_pairs(side, timeframe)
     else:
-        pairs = em.rank_pairs()[start_pair:start_pair + num_pairs]
+        pairs = mlf.rank_pairs()[start_pair:start_pair + num_pairs]
 
     # create dataset
     all_res = pd.DataFrame()
     for pair in pairs:
-        df = em.get_data(pair, timeframe).tail(data_len + 200).reset_index(drop=True)
-        df = em.add_features(df, timeframe).tail(data_len).reset_index(drop=True)
-        res_list = em.trail_fractal(df, width, atr_spacing, side)
+        df = mlf.get_data(pair, timeframe).tail(data_len + 200).reset_index(drop=True)
+        df = mlf.add_features(df, timeframe).tail(data_len).reset_index(drop=True)
+        res_list = mlf.trail_fractal(df, width, atr_spacing, side)
         res_df = pd.DataFrame(res_list).dropna(axis=0).reset_index(drop=True)
         all_res = pd.concat([all_res, res_df], axis=0, ignore_index=True)
     all_res = all_res.sort_values('timestamp').reset_index(drop=True)
 
     # split features from labels
-    X, y, z = em.features_labels_split(all_res)
+    X, y, z = mlf.features_labels_split(all_res)
     if running_on_pi:
         selected = load_features(side, timeframe)
         X = X.loc[:, selected]
-    X, _, cols = em.transform_columns(X, X)
+    X, _, cols = mlf.transform_columns(X, X)
 
 
     # random undersampling
@@ -132,6 +133,14 @@ for side, timeframe in itertools.product(sides, timeframes):
 
     # feature selection
     if not running_on_pi:
+        print(f"mutual info began: {datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M')}")
+        selector = SelectKBest(mutual_info_classif, k=50)
+        X_selected = selector.fit_transform(X, y)
+        selector_cols = selector.get_support(indices=True)
+        selected_columns = [col for i, col in enumerate(cols) if i in selector_cols]
+        X = pd.DataFrame(X_selected, columns=selected_columns)
+
+        print(f"sequential feature selection began: {datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M')}")
         X, y, selected = feature_selection(X, y, 1000, quick=False)
 
     # split data for fitting and calibration
@@ -140,7 +149,7 @@ for side, timeframe in itertools.product(sides, timeframes):
     # fit model
     print(f"Training on {X.shape[0]} observations")
     X = pd.DataFrame(X, columns=selected)
-    grid_model = fit_gbc(X, y, selected, scorer)
+    grid_model = fit_gbc(X, y, scorer)
 
     # calibrate model
     print(f"Calibrating on {X_cal.shape[0]} observations")
@@ -159,7 +168,12 @@ for side, timeframe in itertools.product(sides, timeframes):
 
     model_info = folder / f"trail_fractal_{side}_{timeframe}_info.json"
     model_info.touch(exist_ok=True)
-    info_dict = {'features': selected, 'pairs': pairs, 'data_length': data_len, 'frac_width': width, 'atr_spacing': atr_spacing}
+    info_dict = {'features': selected,
+                 'pairs': pairs,
+                 'data_length': data_len,
+                 'frac_width': width,
+                 'atr_spacing': atr_spacing,
+                 'created': int(datetime.now(timezone.utc).timestamp())}
     with open(model_info, 'w') as info:
         json.dump(info_dict, info)
 
