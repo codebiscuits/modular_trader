@@ -1,7 +1,7 @@
 """This is the script that will be run once a day to retrain the model using a grid search on the latest data. once per
 week it will also run a sequential floating backwards feature selection to update the feature list, and once a month it
 will do a full search of williams fractal params as well"""
-
+import numpy as np
 import pandas as pd
 import ml_funcs as mlf
 import time
@@ -10,34 +10,35 @@ from pathlib import Path
 import joblib
 import json
 from datetime import datetime, timezone
+from pprint import pprint
 
 if not Path('/pi_2.txt').exists():
     from sklearnex import get_patch_names, patch_sklearn, unpatch_sklearn
     patch_sklearn()
 
 from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.model_selection import GridSearchCV, train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split, StratifiedKFold
 from sklearn.feature_selection import SelectKBest, mutual_info_classif
-from sklearn.metrics import fbeta_score, make_scorer
+from sklearn.metrics import fbeta_score, make_scorer, log_loss
 from sklearn.calibration import CalibratedClassifierCV
 from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 from imblearn.under_sampling import RandomUnderSampler
+import lightgbm as lgbm
+from optuna import Trial, logging, visualization, integration, pruners, create_study
+from optuna.samplers import TPESampler
 
 all_start = time.perf_counter()
 now = datetime.now().strftime('%Y/%m/%d %H:%M')
 print(f"-:--:--:--:--:--:--:--:--:--:-  {now} UTC Running Trail Fractals Fitting  -:--:--:--:--:--:--:--:--:--:-")
 
-def feature_selection(X, y, limit, quick=False):
-    fs_start = time.perf_counter()
+def feature_selection(X, y, limit, scorer, quick=False):
 
     if X.shape[0] > limit:
         X_train, _, y_train, _ = train_test_split(X, y, train_size=limit, random_state=99)
     else:
         X_train, y_train = X, y
 
-    selector_model = GradientBoostingClassifier(random_state=42, n_estimators=10000, validation_fraction=0.1,
-                                                n_iter_no_change=50,
-                                                subsample=0.5, min_samples_split=8, max_depth=12, learning_rate=0.3)
+    selector_model = lgbm.LGBMClassifier(objective='binary', random_state=42, n_estimators=10000, boosting='gbdt')
     if quick:
         selector = SFS(estimator=selector_model, k_features=10, forward=True, floating=False, verbose=0,
                        scoring=scorer, n_jobs=-1)
@@ -47,11 +48,7 @@ def feature_selection(X, y, limit, quick=False):
     selector = selector.fit(X_train, y_train)
     X_transformed = selector.transform(X)
     selected = [cols[i] for i in selector.k_feature_idx_]
-    print(f"Number of features selected: {len(selected)}")
-
-    fs_end = time.perf_counter()
-    fs_elapsed = fs_end - fs_start
-    print(f"Feature selection time taken: {int(fs_elapsed // 60)}m {fs_elapsed % 60:.1f}s")
+    print(f"Sequential FS selected {len(selected)} features.")
 
     return X_transformed, y, selected
 
@@ -74,22 +71,65 @@ def load_pairs(side, tf):
     return list(info['pairs'])
 
 
-def fit_gbc(X, y, scorer):
-    base_model = GradientBoostingClassifier(random_state=42, n_estimators=10000, validation_fraction=0.1, n_iter_no_change=50)
-    params = dict(
-        subsample=[0.25, 0.5, 1],
-        min_samples_split=[2, 4, 8],
-        max_depth=[5, 10, 15, 20],
-        learning_rate=[0.05, 0.1]
-    )
-    gs = GridSearchCV(estimator=base_model, param_grid=params, scoring=scorer, n_jobs=-1, cv=5, verbose=0)
-    gs.fit(X, y)
-    return gs.best_estimator_
+def fit_lgbm(X, y):
+    X = X.astype('float64')
+    y = y.astype('int32')
+
+    def objective(trial, X, y):
+        params = {
+            'n_estimators': 50000,
+            'lambda_l1': trial.suggest_int('lambda_l1', 0, 100, step=5),
+            'lambda_l2': trial.suggest_int('lambda_l2', 0, 100, step=5),
+            'min_gain_to_split': trial.suggest_float(0.0, 15.0),
+            'bagging_fraction': trial.suggest_float('bagging_fraction', 0.2, 0.95, step=0.1),
+            'bagging_freq': trial.suggest_categorical('bagging_freq', [1]),
+            'feature_fraction': trial.suggest_float('feature_fraction', 0.2, 0.95, step=0.1),
+            'max_depth': trial.suggest_int('max_depth', 3, 12, step=1),
+            'num_leaves': trial.suggest_int('num_leaves', 20, 3000, log=True),
+            'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 5, 50, log=True),
+            'max_bin': trial.suggest_int('max_bin', 200, 300),
+            'learning_rate': trial.suggest_float('learning_rate', 1e-8, 1.0, log=True),
+            'n_thread': -1
+        }
+
+        pruning_callback = integration.XGBoostPruningCallback(trial, 'binary_logloss')
+
+        cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=1234)
+        cv_scores = np.empty(5)
+        for i, (train_idx, test_idx) in enumerate(cv.split(X, y)):
+            X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+            y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+
+            model = lgbm.LGBMClassifier(objective='binary', **params)
+            model.fit(X_train, y_train,
+                      eval_set=[(X_test, y_test)],
+                      eval_metric='binary_logloss',
+                      early_stopping_rounds=50,
+                      callbacks=[pruning_callback])
+            preds = model.predict_proba(X_test)
+            cv_scores[i] = log_loss(y_test, preds)
+
+        return np.mean(cv_scores)
+
+    logging.set_verbosity(logging.WARNING)
+    # pruner = pruners.MedianPruner(n_warmup_steps=5)
+    pruner = pruners.SuccessiveHalvingPruner()
+    sampler = TPESampler(seed=11)
+    study = create_study(sampler=sampler, pruner=pruner, direction='minimize')
+    func = lambda trial: objective(trial, X, y)
+    study.optimize(func, n_trials=100)
+
+    best = study.best_trial
+    print(f"Best trial: {best.value:.1%}")
+    print("Params:")
+    pprint(best.params)
 
 
 running_on_pi = Path('/pi_2.txt').exists()
-if not running_on_pi:
-    import update_ohlc
+# if not running_on_pi:
+#     import update_ohlc
+
+# running_on_pi = True
 
 timeframes = ['1h', '4h', '12h', '1d']
 sides = ['long', 'short']
@@ -98,7 +138,7 @@ num_pairs = 30
 start_pair = 0
 width = 5
 atr_spacing = 2
-scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
+fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
 
 for side, timeframe in itertools.product(sides, timeframes):
     print(f"\nFitting {timeframe} {side} model")
@@ -141,7 +181,7 @@ for side, timeframe in itertools.product(sides, timeframes):
         X = pd.DataFrame(X_selected, columns=selected_columns)
 
         print(f"sequential feature selection began: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
-        X, y, selected = feature_selection(X, y, 1000, quick=False)
+        X, y, selected = feature_selection(X, y, 1000, fb_scorer, quick=True)
 
     # split data for fitting and calibration
     X, X_cal, y, y_cal = train_test_split(X, y, test_size=0.333, random_state=11)
@@ -149,37 +189,37 @@ for side, timeframe in itertools.product(sides, timeframes):
     # fit model
     print(f"Training on {X.shape[0]} observations")
     X = pd.DataFrame(X, columns=selected)
-    grid_model = fit_gbc(X, y, scorer)
+    final_model = fit_lgbm(X, y)
 
-    # calibrate model
-    print(f"Calibrating on {X_cal.shape[0]} observations")
-    X_cal = pd.DataFrame(X_cal, columns=selected)
-    cal_model = CalibratedClassifierCV(estimator=grid_model, cv='prefit', n_jobs=-1)
-    cal_model.fit(X_cal, y_cal)
-    cal_score = cal_model.score(X_cal, y_cal)
-    print(f"Model score after calibration: {cal_score:.1%}")
-
-    # save to files
-    folder = Path("machine_learning/models/trail_fractals")
-    folder.mkdir(parents=True, exist_ok=True)
-
-    model_file = folder / f"trail_fractal_{side}_{timeframe}_model.sav"
-    joblib.dump(cal_model, model_file)
-
-    model_info = folder / f"trail_fractal_{side}_{timeframe}_info.json"
-    model_info.touch(exist_ok=True)
-    info_dict = {'features': selected,
-                 'pairs': pairs,
-                 'data_length': data_len,
-                 'frac_width': width,
-                 'atr_spacing': atr_spacing,
-                 'created': int(datetime.now(timezone.utc).timestamp())}
-    with open(model_info, 'w') as info:
-        json.dump(info_dict, info)
+    # # calibrate model
+    # print(f"Calibrating on {X_cal.shape[0]} observations")
+    # X_cal = pd.DataFrame(X_cal, columns=selected)
+    # cal_model = CalibratedClassifierCV(estimator=final_model, cv='prefit', n_jobs=-1)
+    # cal_model.fit(X_cal, y_cal)
+    # cal_score = cal_model.score(X_cal, y_cal)
+    # print(f"Model score after calibration: {cal_score:.1%}")
+    #
+    # # save to files
+    # folder = Path("machine_learning/models/trail_fractals")
+    # folder.mkdir(parents=True, exist_ok=True)
+    #
+    # model_file = folder / f"trail_fractal_{side}_{timeframe}_xgb_model.json"
+    # final_model.save_model(model_file)
+    #
+    # model_info = folder / f"trail_fractal_{side}_{timeframe}_xgb_info.json"
+    # model_info.touch(exist_ok=True)
+    # info_dict = {'features': selected,
+    #              'pairs': pairs,
+    #              'data_length': data_len,
+    #              'frac_width': width,
+    #              'atr_spacing': atr_spacing,
+    #              'created': int(datetime.now(timezone.utc).timestamp())}
+    # with open(model_info, 'w') as info:
+    #     json.dump(info_dict, info)
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
-    print(f"Thyis test time taken: {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
+    print(f"This test time taken: {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
 
 all_end = time.perf_counter()
 all_elapsed = all_end - all_start
