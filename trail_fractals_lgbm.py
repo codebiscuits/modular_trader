@@ -33,12 +33,13 @@ print(f"-:--:--:--:--:--:--:--:--:--:-  {now} UTC Running Trail Fractals Fitting
 
 def feature_selection(X, y, limit, scorer, quick=False):
 
-    if X.shape[0] > limit:
-        X_train, _, y_train, _ = train_test_split(X, y, train_size=limit, random_state=99)
-    else:
-        X_train, y_train = X, y
+    X_train, X_eval, y_train, y_eval = train_test_split(X, y, train_size=0.9, random_state=99)
 
-    selector_model = lgbm.LGBMClassifier(objective='binary', random_state=42, n_estimators=10000, boosting='gbdt')
+    selector_model = lgbm.LGBMClassifier(objective='binary',
+                                         random_state=42,
+                                         n_estimators=50,
+                                         boosting='gbdt',
+                                         verbosity=-1)
     if quick:
         selector = SFS(estimator=selector_model, k_features=10, forward=True, floating=False, verbose=0,
                        scoring=scorer, n_jobs=-1)
@@ -80,7 +81,7 @@ def fit_lgbm(X, y):
             'n_estimators': 50000,
             'lambda_l1': trial.suggest_int('lambda_l1', 0, 100, step=5),
             'lambda_l2': trial.suggest_int('lambda_l2', 0, 100, step=5),
-            'min_gain_to_split': trial.suggest_float(0.0, 15.0),
+            'min_gain_to_split': trial.suggest_float('min_gain_to_split', 0.0, 15.0),
             'bagging_fraction': trial.suggest_float('bagging_fraction', 0.2, 0.95, step=0.1),
             'bagging_freq': trial.suggest_categorical('bagging_freq', [1]),
             'feature_fraction': trial.suggest_float('feature_fraction', 0.2, 0.95, step=0.1),
@@ -181,13 +182,13 @@ for side, timeframe in itertools.product(sides, timeframes):
         X = pd.DataFrame(X_selected, columns=selected_columns)
 
         print(f"sequential feature selection began: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
-        X, y, selected = feature_selection(X, y, 1000, fb_scorer, quick=True)
+        X, y, selected = feature_selection(X, y, 10000, fb_scorer, quick=True)
 
     # split data for fitting and calibration
     X, X_cal, y, y_cal = train_test_split(X, y, test_size=0.333, random_state=11)
 
     # fit model
-    print(f"Training on {X.shape[0]} observations")
+    print(f"Training on {X.shape[0]} observations bbegan: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
     X = pd.DataFrame(X, columns=selected)
     final_model = fit_lgbm(X, y)
 
