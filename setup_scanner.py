@@ -406,6 +406,8 @@ for agent in agents.values():
         long=agent.get_pnls('long'),
         short=agent.get_pnls('short'),
     )
+    print(f"{agent.tf} scaled pnls")
+    pprint(agent.pnls)
 
 while processed_signals['unassigned']:
     signal = processed_signals['unassigned'].pop()
@@ -569,7 +571,7 @@ while unassigned:
         s['state'] = 'sim'
         s['pct_of_full_pos'] *= r
         processed_signals['sim_open'].append(s)
-        print(f"{sim_reasons}, {s['quote_size']:.2f}USDT")
+        print(f"{s['pair']} {sim_reasons}, {s['quote_size']:.2f}USDT")
     else:
         # TODO since i'm moving away from fixed risk, i should add a check here which makes sure pfrd isn't too much,
         #  maybe scale the position down if it is

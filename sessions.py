@@ -44,7 +44,7 @@ class TradingSession():
         self.client = Client(keys.bPkey, keys.bSkey, testnet=False)
         self.last_price_update = 0
         self.fr_max = fr_max
-        self.leverage = 1.5
+        self.leverage = 3
         self.name = 'agent names here'
         self.last_price_update = 0
         self.live = self.set_live()

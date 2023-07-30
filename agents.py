@@ -1529,9 +1529,9 @@ class Agent():
         stop_size = open_order.get('base_size')  # this is a string, go back to using above line if this causes bugs
 
         if direction == 'long':
-            stop_order = funcs.set_stop_M(session, pair, stop_size, be.SIDE_SELL, stp, stp * 0.8)
+            stop_order = funcs.set_stop_M(session, pair, stop_size, be.SIDE_SELL, stp, stp * 0.91)
         elif direction == 'short':
-            stop_order = funcs.set_stop_M(session, pair, stop_size, be.SIDE_BUY, stp, stp * 1.2)
+            stop_order = funcs.set_stop_M(session, pair, stop_size, be.SIDE_BUY, stp, stp * 1.09)
 
         open_order['stop_id'] = stop_order.get('orderId')
         self.open_trades[pair]['position']['hard_stop'] = str(stp)
@@ -2058,7 +2058,7 @@ class Agent():
         spot_pfrd = (session.fr_max / 2) * session.spot_bal
         margin_pfrd = (session.fr_max / 2) * session.margin_bal
         pfrd = spot_pfrd if self.mode == 'spot' else margin_pfrd
-        usdt_size = pfrd / abs(1 - signal['inval_ratio'])
+        usdt_size = pfrd / signal['score']
         size = f"{usdt_size / price:.8f}"
 
         wanted = 'low_score' not in signal['sim_reasons']
