@@ -1529,9 +1529,11 @@ class Agent():
         stop_size = open_order.get('base_size')  # this is a string, go back to using above line if this causes bugs
 
         if direction == 'long':
-            stop_order = funcs.set_stop_M(session, pair, stop_size, be.SIDE_SELL, stp, open_order['exe_price'] * 0.81)
+            stop_order = funcs.set_stop_M(session, pair, stop_size, be.SIDE_SELL, stp,
+                                          float(open_order['exe_price']) * 0.81)
         elif direction == 'short':
-            stop_order = funcs.set_stop_M(session, pair, stop_size, be.SIDE_BUY, stp, open_order['exe_price'] * 1.19)
+            stop_order = funcs.set_stop_M(session, pair, stop_size, be.SIDE_BUY, stp,
+                                          float(open_order['exe_price']) * 1.19)
 
         open_order['stop_id'] = stop_order.get('orderId')
         self.open_trades[pair]['position']['hard_stop'] = str(stp)
