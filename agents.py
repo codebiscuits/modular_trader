@@ -3149,17 +3149,17 @@ class TrailFractals(Agent):
     #  reason, but make sure things like spreads still get recorded for every pair (maybe it's time to move that to
     #  update_ohlc or something)
 
-    def __init__(self, session, tf: str, offset: int, min_conf: float=0.75) -> None:
+    def __init__(self, session, tf: str, offset: int, training: str) -> None:
         t = Timer('TrailFractals init')
         t.start()
         self.mode = 'margin'
         self.tf = tf
         self.offset = offset
-        self.min_confidence = min_conf
+        self.training = training
         self.load_data(session, tf)
         session.pairs_set.update(self.pairs)
-        self.name = f'{self.tf} trail_fractals {self.width}-{self.spacing}'
-        self.id = f"trail_fractals_{self.tf}_{self.offset}_{self.width}_{self.spacing}"
+        self.name = f'{self.tf} trail_fractals {self.width}-{self.spacing}_{training}'
+        self.id = f"trail_fractals_{self.tf}_{self.offset}_{self.width}_{self.spacing}_{training}"
         self.ohlc_length = 201
         self.trail_stop = True
         self.notes = ''
@@ -3169,7 +3169,7 @@ class TrailFractals(Agent):
 
     def load_data(self, session, tf):
         # paths
-        folder = Path("/home/ross/coding/modular_trader/machine_learning/models/trail_fractals")
+        folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/trail_fractals_{self.training}")
         self.long_model_path = folder / f"trail_fractal_long_{self.tf}_model.sav"
         self.short_model_path = folder / f"trail_fractal_short_{self.tf}_model.sav"
         long_info_path = folder / f"trail_fractal_long_{self.tf}_info.json"

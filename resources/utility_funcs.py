@@ -167,18 +167,14 @@ def market_benchmark(session) -> None:
     eth_1w = None
     eth_1m = None
 
-    # data = session.ohlc_data.glob('*.*')
-
     for x in session.pairs_data.keys():
-        # if x.suffix != '.pkl':
-        #     continue
-        # df = pd.read_pickle(x)
-
-        try:
-            df = session.pairs_data[x]['ohlc_5m']
-        except KeyError as e:
-            print(f"market benchmark: couldn't get any ohlc data for {x}")
-            continue
+        df = session.pairs_data.get(x, {}).get('ohlc_5m')
+        if not isinstance(df, pd.DataFrame):
+            if Path(f"{session.ohlc_data}/{x}.parquet").exists:
+                df = pd.read_parquet(session.ohlc_data / f"{x}.parquet")
+            else:
+                print(f"market benchmark: couldn't get any ohlc data for {x}")
+                continue
 
         if len(df) > 8929:  # 1 month of 5min periods is 31 * 24 * 12 = 8928
             df = df.tail(8929).reset_index()

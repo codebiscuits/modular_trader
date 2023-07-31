@@ -36,25 +36,8 @@ agents = []
 for timeframe, offset in session.timeframes:
     agents.extend(
         [
-            TrailFractals(session, timeframe, offset, min_conf=0.5),
-            # DoubleST(session, timeframe, offset, 3, 1.0),
-            # DoubleST(session, timeframe, offset, 3, 1.4),
-            # DoubleST(session, timeframe, offset, 3, 1.8),
-            # DoubleST(session, timeframe, offset, 5, 2.2),
-            # DoubleST(session, timeframe, offset, 5, 2.8),
-            # DoubleST(session, timeframe, offset, 5, 3.4),
-            # DoubleSTnoEMA(session, timeframe, offset, 3, 1.0),
-            # DoubleSTnoEMA(session, timeframe, offset, 3, 1.4),
-            # DoubleSTnoEMA(session, timeframe, offset, 3, 1.8),
-            # DoubleSTnoEMA(session, timeframe, offset, 5, 2.2),
-            # DoubleSTnoEMA(session, timeframe, offset, 5, 2.8),
-            # DoubleSTnoEMA(session, timeframe, offset, 5, 3.4),
-            # EMACross(session, timeframe, offset, 12, 21, 1.2),
-            # EMACross(session, timeframe, offset, 12, 21, 1.8),
-            # EMACross(session, timeframe, offset, 12, 21, 2.4),
-            # EMACrossHMA(session, timeframe, offset, 12, 21, 1.2),
-            # EMACrossHMA(session, timeframe, offset, 12, 21, 1.8),
-            # EMACrossHMA(session, timeframe, offset, 12, 21, 2.4),
+            TrailFractals(session, timeframe, offset, 'quick'),
+            TrailFractals(session, timeframe, offset, 'slow'),
         ]
     )
 
@@ -73,7 +56,7 @@ for agent in agents.values():
 print("\n-*-*-*- rst and rsst finished for all agents -*-*-*-\n")
 
 # compile and sort list of pairs to loop through ------------------------------
-pairs = [k for k in session.pairs_data.keys()]
+# pairs = [k for k in session.pairs_data.keys()]
 # pairs = pairs[:10] # for testing the loop quickly
 
 init_end = time.perf_counter()
@@ -87,7 +70,7 @@ tech_start = time.perf_counter()
 
 raw_signals = []
 
-for n, pair in enumerate(pairs):
+for n, pair in enumerate(session.pairs_set):
     # print('-' * 100)
     # print('\n', n, pair, '\n')
     # print(n, pair)
@@ -587,7 +570,7 @@ while unassigned:
         s['pct_of_full_pos'] *= r
 
         processed_signals['real_open'].append(s)
-        print(f"{pair} {s['tf']} real open signal, {s['quote_size']:.2f}USDT")
+        print(f"{s['pair']} {s['tf']} real open signal, {s['quote_size']:.2f}USDT")
 
 sort_end = time.perf_counter()
 sort_took = sort_end - sort_start
@@ -726,7 +709,7 @@ for k, v in Timer.timers.items():
         print(k, elapsed)
 
 print('-------------------- Counts --------------------')
-print(f"pairs tested: {len(pairs)}")
+print(f"pairs tested: {len(session.pairs_set)}")
 pprint(Counter(session.counts))
 print('\n-------------------------------------------------------------------------------\n')
 
