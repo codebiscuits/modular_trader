@@ -1,6 +1,5 @@
 from pathlib import Path
 from datetime import datetime, timezone
-from pushbullet import Pushbullet
 from resources.timers import Timer
 from binance.client import Client
 import binance.enums as be
@@ -16,7 +15,7 @@ import statistics as stats
 import pandas as pd
 import json
 
-pb = uf.init_pb()
+# pb = uf.init_pb()
 
 
 class TradingSession():
@@ -185,7 +184,7 @@ class TradingSession():
         if limits != old_limits:
             note = 'binance rate limits have changed, check and adjust session definition'
             print('\n****************\n\n', note, '\n\n****************\n')
-            pb.push_note('*** WARNING ***', note)
+            # pb.push_note('*** WARNING ***', note)
 
         for limit in limits:
             if limit['interval'] == 'MINUTE':
@@ -687,7 +686,7 @@ class TradingSession():
         # top up if needed
         if bnb_value < 10:
             if free_usdt > usdt_size:
-                pb.push_note(now, 'Topping up spot BNB')
+                # pb.push_note(now, 'Topping up spot BNB')
                 # uid weight of 6
                 order = self.client.create_order(
                     symbol='BNBUSDT',
@@ -696,7 +695,8 @@ class TradingSession():
                     quoteOrderQty=usdt_size)
                 # pprint(order)
             else:
-                pb.push_note(now, 'Warning - Spot BNB balance low and not enough USDT to top up')
+                # pb.push_note(now, 'Warning - Spot BNB balance low and not enough USDT to top up')
+                pass
         else:
             order = None
 
@@ -803,7 +803,7 @@ class TradingSession():
         # top up if needed
         if bnb_value < 10:
             if free_usdt > usdt_size:
-                pb.push_note(now, 'Topping up margin BNB')
+                # pb.push_note(now, 'Topping up margin BNB')
                 # uid weight of 6
                 order = self.client.create_margin_order(
                     symbol='BNBUSDT',
@@ -812,7 +812,8 @@ class TradingSession():
                     quoteOrderQty=usdt_size)
                 # pprint(order)
             else:
-                pb.push_note(now, 'Warning - Margin BNB balance low and not enough USDT to top up')
+                # pb.push_note(now, 'Warning - Margin BNB balance low and not enough USDT to top up')
+                pass
         else:
             order = None
 

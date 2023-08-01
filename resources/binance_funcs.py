@@ -1,25 +1,24 @@
-from resources import keys
 import statistics as stats
 import pandas as pd
 import polars as pl
 from binance.client import Client
 import binance.enums as be
 import binance.exceptions as bx
-from pushbullet import Pushbullet
 from decimal import Decimal, getcontext
 from pprint import pprint
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
-from resources import utility_funcs as uf
-from resources.timers import Timer
 from typing import Tuple, Dict, Any
 import sys
 from pycoingecko import CoinGeckoAPI
 from pyarrow import ArrowInvalid
-from resources import indicators as ind, utility_funcs as uf
+from resources import keys
+from resources import indicators as ind
+from resources import utility_funcs as uf
+from resources.timers import Timer
 
 cg = CoinGeckoAPI()
-pb = uf.init_pb()
+# pb = uf.init_pb()
 ctx = getcontext()
 ctx.prec = 12
 
@@ -384,7 +383,7 @@ def create_stop_dict(session, order: dict) -> dict:
                   }
     if order.get('status') != 'FILLED':
         print(f'{pair} order not filled')
-        pb.push_note('Warning', f'{pair} stop-loss hit but not filled')
+        # pb.push_note('Warning', f'{pair} stop-loss hit but not filled')
     yu.stop()
     return trade_dict
 
@@ -418,7 +417,7 @@ def create_trade_dict(order: dict, price: float, live: bool) -> Dict[str, str]:
                       }
         if order.get('status') != 'FILLED':
             print(f'{pair} order not filled')
-            pb.push_note('Warning', f'{pair} order not filled')
+            # pb.push_note('Warning', f'{pair} order not filled')
 
     else:
         trade_dict = {'timestamp': str(order.get('transactTime')),

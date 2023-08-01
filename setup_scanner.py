@@ -7,11 +7,9 @@ from agents import TrailFractals
 from pprint import pprint
 import sessions
 from resources.timers import Timer
-from pushbullet import Pushbullet
 from collections import Counter
-import statistics as stats
 
-# import update_ohlc
+import update_ohlc
 
 # TODO current (02/04/23) roadmap should be:
 #  * get detailed push notes in all exception handling code so i always know whats going wrong, and change the ss_log
@@ -20,7 +18,7 @@ import statistics as stats
 #  in the same session as everything else
 #  * get spot trading and oco entries and trade adds working so i can use other strats
 
-pb = uf.init_pb()
+# pb = uf.init_pb()
 
 print('\n-+-+-+-+-+-+-+-+-+-+-+- Running Setup Scanner -+-+-+-+-+-+-+-+-+-+-+-\n')
 
@@ -36,9 +34,9 @@ agents = []
 for timeframe, offset in session.timeframes:
     agents.extend(
         [
-            TrailFractals(session, timeframe, offset, 'quick', 'volumes'),
-            TrailFractals(session, timeframe, offset, 'quick', 'volatilities'),
-            TrailFractals(session, timeframe, offset, 'slow', 'volumes'),
+            TrailFractals(session, timeframe, offset, 'quick', 'volumes', 30),
+            TrailFractals(session, timeframe, offset, 'quick', 'volatilities', 30),
+            TrailFractals(session, timeframe, offset, 'slow', 'volumes', 30),
         ]
     )
 
@@ -390,7 +388,7 @@ for agent in agents.values():
         long=agent.get_pnls('long'),
         short=agent.get_pnls('short'),
     )
-    print(f"{agent.tf} scaled pnls")
+    print(f"{agent.id} scaled pnls")
     pprint(agent.pnls)
 
 while processed_signals['unassigned']:
@@ -435,15 +433,11 @@ while processed_signals['unassigned']:
     score_threshold = 0.3
     if signal['score'] >= score_threshold:
         processed_signals['scored'].append(signal)
-        print(f"{signal['pair']} {signal['direction']} signal put in scored list")
     # separate unwanted signals
     elif signal['score'] < score_threshold and sim_position == 'flat':
         signal['sim_reasons'] = ['low_score']
         # sig_direction = 'long' if signal['bias'] == 'bullish' else 'short'
         processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', signal['direction']))
-        print(f"{signal['pair']} {signal['direction']} signal put in sim list")
-    else:
-        print(f"{signal['pair']} {signal['direction']} signal dropped")
 
 print(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Fixed Risk -+-+-+-+-+-+-+-+-+-+-+-+-+-+-")
 for agent in agents.values():

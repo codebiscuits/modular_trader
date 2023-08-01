@@ -8,7 +8,6 @@ from resources.timers import Timer
 from typing import Dict
 from resources import indicators as ind, keys, utility_funcs as uf, binance_funcs as funcs
 from datetime import datetime, timezone
-from pushbullet import Pushbullet
 from binance.client import Client
 import binance.enums as be
 from decimal import Decimal, getcontext
@@ -19,7 +18,7 @@ import traceback
 import joblib
 
 # client = Client(keys.bPkey, keys.bSkey)
-pb = uf.init_pb()
+# pb = uf.init_pb()
 ctx = getcontext()
 ctx.prec = 12
 timestring = '%d/%m/%y %H:%M'
@@ -376,7 +375,7 @@ class Agent():
                     value = free_bal * price
                     if (pair == 'BNBUSDT' and value > 15) or (pair != 'BNBUSDT' and value > 10):
                         note = f'{pair} in position with no stop-loss'
-                        pb.push_note(session.now_start, note)
+                        # pb.push_note(session.now_start, note)
             else:  # if direction == 'short'
                 owed = float(session.margin_bals[pair[:-4]].get('borrowed'))
                 if session.live and not owed:
@@ -479,7 +478,7 @@ class Agent():
                     del self.open_trades[pair]
                     del self.real_pos[pair[:-len(self.quote_asset)]]
                     now = datetime.now().strftime(timestring)
-                    pb.push_note(now, f"{self.name} {pair} records deleted, check exchange for remaining position")
+                    # pb.push_note(now, f"{self.name} {pair} records deleted, check exchange for remaining position")
                     self.record_trades(session, 'open')
                     print('\n\n*******************************************\n\n')
             elif order['status'] == 'PARTIALLY_FILLED':
@@ -3149,7 +3148,7 @@ class TrailFractals(Agent):
     #  reason, but make sure things like spreads still get recorded for every pair (maybe it's time to move that to
     #  update_ohlc or something)
 
-    def __init__(self, session, tf: str, offset: int, training_speed: str, training_selection: str) -> None:
+    def __init__(self, session, tf: str, offset: int, training_speed: str, training_selection: str, num_pairs: int) -> None:
         t = Timer('TrailFractals init')
         t.start()
         self.mode = 'margin'
@@ -3157,11 +3156,14 @@ class TrailFractals(Agent):
         self.offset = offset
         self.training_speed = training_speed
         self.training_selection = training_selection
+        self.training_pairs_n = num_pairs
         self.load_data(session, tf)
         session.pairs_set.update(self.pairs)
-        self.name = f'{self.tf} trail_fractals {self.width}-{self.spacing}_{self.training_speed}_{self.training_selection}'
-        self.id = f"trail_fractals_{self.tf}_{self.offset}_{self.width}_{self.spacing}_{self.training_speed}_{self.training_selection}"
-        self.ohlc_length = 201
+        self.name = (f'{self.tf} trail_fractals {self.width}-{self.spacing}_{self.training_speed}_'
+                     f'{self.training_selection}_{self.training_pairs_n}')
+        self.id = (f"trail_fractals_{self.tf}_{self.offset}_{self.width}_{self.spacing}_{self.training_speed}_"
+                   f"{self.training_selection}_{self.training_pairs_n}")
+        self.ohlc_length = 401
         self.trail_stop = True
         self.notes = ''
         Agent.__init__(self, session)
@@ -3170,7 +3172,8 @@ class TrailFractals(Agent):
 
     def load_data(self, session, tf):
         # paths
-        folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/trail_fractals_{self.training_speed}_{self.training_selection}")
+        folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/trail_fractals_{self.training_speed}_"
+                      f"{self.training_selection}_{self.training_pairs_n}")
         self.long_model_path = folder / f"trail_fractal_long_{self.tf}_model.sav"
         self.short_model_path = folder / f"trail_fractal_short_{self.tf}_model.sav"
         long_info_path = folder / f"trail_fractal_long_{self.tf}_info.json"
@@ -3285,6 +3288,7 @@ class TrailFractals(Agent):
         signal_dict['spacing'] = self.spacing
         signal_dict['training_speed'] = self.training_speed
         signal_dict['training_selection'] = self.training_selection
+        signal_dict['training_pairs_n'] = len(self.pairs)
 
         sig.stop()
 

@@ -1,7 +1,6 @@
 import pandas as pd
 import polars as pl
 from resources import binance_funcs as funcs
-from resources import utility_funcs as uf
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,7 +11,7 @@ import json
 pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
 
-pb = uf.init_pb()
+# pb = uf.init_pb()
 
 now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
 
