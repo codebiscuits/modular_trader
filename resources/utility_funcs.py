@@ -614,8 +614,9 @@ def scanner_summary(session, agents: list) -> None:
             final_msg += agent_msg
 
     if session.live:
-        pb = init_pb()
-        pb.push_note(title, final_msg)
+        # pb = init_pb()
+        # pb.push_note(title, final_msg)
+        pass
     else:
         print(f'-\n{title}\n{final_msg}')
 
