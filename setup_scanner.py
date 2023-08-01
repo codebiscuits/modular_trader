@@ -36,8 +36,9 @@ agents = []
 for timeframe, offset in session.timeframes:
     agents.extend(
         [
-            TrailFractals(session, timeframe, offset, 'quick'),
-            TrailFractals(session, timeframe, offset, 'slow'),
+            TrailFractals(session, timeframe, offset, 'quick', 'volumes'),
+            TrailFractals(session, timeframe, offset, 'quick', 'volatilities'),
+            TrailFractals(session, timeframe, offset, 'slow', 'volumes'),
         ]
     )
 
@@ -420,6 +421,7 @@ while processed_signals['unassigned']:
     if not session.live:
         perf_score = 1.0
 
+    # TODO don't forget inval_score
     sig_score = signal['confidence'] * rank_score
     risk_scalar = sig_score * perf_score
     signal['score'] = sig_score

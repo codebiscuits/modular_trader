@@ -24,8 +24,8 @@ from sklearn.inspection import permutation_importance
 from imblearn.under_sampling import RandomUnderSampler
 from xgboost import XGBClassifier
 
-def rank_pairs():
-    with open('recent_1d_volumes.json', 'r') as file:
+def rank_pairs(selection):
+    with open(f'recent_1d_{selection}.json', 'r') as file:
         vols = json.load(file)
 
     return sorted(vols, key=lambda x: vols[x], reverse=True)
@@ -254,7 +254,7 @@ def features_labels_split(df):
                  'taker_buy_base_vol', 'taker_buy_quote_vol', 'vwma', 'r_pct', 'pnl_pct', 'pnl_r', 'pnl_cat',
                  'atr-25', 'atr-50', 'atr-100', 'atr-200', 'ema_12', 'ema_25', 'ema_50', 'ema_100', 'ema_200',
                  'hma_25', 'hma_50', 'hma_100', 'hma_200', 'lifespan', 'frac_high', 'frac_low', 'inval', 'daily_open',
-                 'prev_daily_open', 'prev_daily_high', 'prev_daily_low'],
+                 'prev_daily_open', 'prev_daily_high', 'prev_daily_low', 'bullish_doji', 'bearish_doji'],
                 axis=1, errors='ignore')
     y = df.pnl_cat
     z = df.pnl_r

@@ -1,10 +1,9 @@
 import pandas as pd
 import polars as pl
-from resources import keys, binance_funcs as funcs
+from resources import binance_funcs as funcs
+from resources import utility_funcs as uf
 import time
 from datetime import datetime, timezone
-from binance.client import Client
-from pushbullet import Pushbullet
 from pathlib import Path
 from sessions import LightSession
 from pyarrow import ArrowInvalid
@@ -13,7 +12,7 @@ import json
 pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
 
-pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
+pb = uf.init_pb()
 
 now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
 
@@ -32,7 +31,10 @@ for sym in session.info['symbols']:
 
 pairs = list(session.pairs_data.keys())
 rocs = {}
-volumes = {}
+volumes_1d = {}
+volumes_1w = {}
+volatilities_1d = {}
+volatilities_1w = {}
 
 def from_scratch(session, pair, tf):
     df_start = time.perf_counter()
@@ -96,9 +98,17 @@ def mkt_rank(rocs_dict):
     filepath = session.market_data_write / 'market_ranks.parquet'
     rocs_df.to_parquet(path=filepath)
 
+# TODO maybe combine mkt_rank, volumes and volatilities into one dataframe and save as one parquet file
+def save_volumes(vols, period):
+    vol_path = Path(f'recent_1{period}_volumes.json')
+    vol_path.touch(exist_ok=True)
 
-def save_vols(vols):
-    vol_path = Path('recent_1d_volumes.json')
+    with open(vol_path, 'w') as file:
+        json.dump(vols, file)
+
+
+def save_volatilities(vols, period):
+    vol_path = Path(f'recent_1{period}_volatilities.json')
     vol_path.touch(exist_ok=True)
 
     with open(vol_path, 'w') as file:
@@ -122,10 +132,16 @@ for n, pair in enumerate(pairs):
     rocs[pair]['1w'] = df.close.rolling(84).mean().pct_change(2016).iloc[-1]
     rocs[pair]['1m'] = df.close.rolling(360).mean().pct_change(8640).iloc[-1]
 
-    volumes[pair] = df.quote_vol.sum()
+    volumes_1d[pair] = df.tail(288).quote_vol.sum()
+    volumes_1w[pair] = df.tail(2016).quote_vol.sum()
+    volatilities_1d[pair] = df.tail(288).close.pct_change().std()
+    volatilities_1w[pair] = df.tail(2016).close.pct_change().std()
 
 mkt_rank(rocs)
-save_vols(volumes)
+save_volumes(volumes_1d, 'd')
+save_volumes(volumes_1w, 'w')
+save_volatilities(volatilities_1d, 'd')
+save_volatilities(volatilities_1w, 'w')
 
 end = time.perf_counter()
 all_time = end - start
