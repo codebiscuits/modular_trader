@@ -8,8 +8,9 @@ from pprint import pprint
 import sessions
 from resources.timers import Timer
 from collections import Counter
+import logging
 
-import update_ohlc
+# import update_ohlc
 
 # TODO current (02/04/23) roadmap should be:
 #  * get detailed push notes in all exception handling code so i always know whats going wrong, and change the ss_log
@@ -19,6 +20,7 @@ import update_ohlc
 #  * get spot trading and oco entries and trade adds working so i can use other strats
 
 # pb = uf.init_pb()
+
 
 print('\n-+-+-+-+-+-+-+-+-+-+-+- Running Setup Scanner -+-+-+-+-+-+-+-+-+-+-+-\n')
 

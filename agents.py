@@ -16,12 +16,15 @@ import sys
 from pyarrow import ArrowInvalid
 import traceback
 import joblib
+import logging
 
 # client = Client(keys.bPkey, keys.bSkey)
 # pb = uf.init_pb()
 ctx = getcontext()
 ctx.prec = 12
 timestring = '%d/%m/%y %H:%M'
+
+error_logger = logging.getLogger('errors')
 
 class Agent():
     '''generic agent class for each strategy to inherit from'''
@@ -3163,7 +3166,7 @@ class TrailFractals(Agent):
                      f'{self.training_selection}_{self.training_pairs_n}')
         self.id = (f"trail_fractals_{self.tf}_{self.offset}_{self.width}_{self.spacing}_{self.training_speed}_"
                    f"{self.training_selection}_{self.training_pairs_n}")
-        self.ohlc_length = 401
+        self.ohlc_length = 201
         self.trail_stop = True
         self.notes = ''
         Agent.__init__(self, session)
@@ -3213,7 +3216,6 @@ class TrailFractals(Agent):
         if pair not in self.pairs:
             return {'long_ratio': long_stop / price,
                     'short_ratio': short_stop / price}
-
 
         # Long model
         df['r_pct'] = df.long_r_pct
