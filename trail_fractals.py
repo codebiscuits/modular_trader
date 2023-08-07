@@ -11,10 +11,13 @@ import joblib
 import json
 from datetime import datetime, timezone
 from binance import Client
+import binance.exceptions as bx
 import resources.keys as keys
+from resources.loggers import create_logger
+import requests
 
 if not Path('/pi_2.txt').exists():
-    from sklearnex import get_patch_names, patch_sklearn, unpatch_sklearn
+    from sklearnex import patch_sklearn
     patch_sklearn()
 
 from sklearn.ensemble import GradientBoostingClassifier
@@ -25,7 +28,22 @@ from sklearn.calibration import CalibratedClassifierCV
 from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 from imblearn.under_sampling import RandomUnderSampler
 
-client = Client(keys.bPkey, keys.bSkey)
+def init_client(max_retries: int=360, delay: int=5):
+    for i in range(max_retries):
+        try:
+            client = Client(keys.bPkey, keys.bSkey)
+            print(f'initialising binance client worked on attempt number {i+1}')
+            return client
+        except bx.BinanceAPIException as e:
+            if e.code != -3044:
+                raise e
+            print(f"System busy, retrying in {delay} seconds...")
+            time.sleep(delay)
+    raise Exception(f"Max retries exceeded. Request still failed after {max_retries} attempts.")
+
+client = init_client()
+
+logger = create_logger('trail_fractals')
 
 all_start = time.perf_counter()
 now = datetime.now().strftime('%Y/%m/%d %H:%M')
@@ -124,6 +142,14 @@ atr_spacing = 2
 scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
 configs = [(True, 'volumes'), (True, 'volatilities'), (False, 'volumes')]
 
+for i in range(360):
+    try:
+        exc_info = client.get_exchange_info()
+        logger.info(f"get exchange info worked on attempt number {i+1}")
+        break
+    except requests.exceptions.ConnectionError as e:
+        time.sleep(5)
+
 for side, timeframe, config in itertools.product(sides, timeframes, configs):
     speed = config[0]
     pair_selection = config[1]
@@ -135,8 +161,7 @@ for side, timeframe, config in itertools.product(sides, timeframes, configs):
         pairs = load_pairs(side, timeframe)
     else:
         pairs = mlf.rank_pairs(pair_selection)
-        info = client.get_exchange_info()
-        symbol_margin = {i['symbol']: i['isMarginTradingAllowed'] for i in info['symbols'] if i['quoteAsset'] == 'USDT'}
+        symbol_margin = {i['symbol']: i['isMarginTradingAllowed'] for i in exc_info['symbols'] if i['quoteAsset'] == 'USDT'}
         pairs = [p for p in pairs if symbol_margin[p]]
         pairs = pairs[start_pair:start_pair + num_pairs]
 
@@ -187,22 +212,30 @@ for side, timeframe, config in itertools.product(sides, timeframes, configs):
     quick_str = 'quick' if speed else 'slow'
     folder = Path(f"machine_learning/models/trail_fractals_{quick_str}_{pair_selection}")
     folder.mkdir(parents=True, exist_ok=True)
+    pi2_folder = Path(f"/home/ross/coding/pi2/modular_trader/machine_learning/models/trail_fractals_{quick_str}_{pair_selection}")
+    pi2_folder.mkdir(parents=True, exist_ok=True)
 
-    model_file = folder / f"trail_fractal_{side}_{timeframe}_model.sav"
-    joblib.dump(cal_model, model_file)
+    # save ml model on laptop and pi
+    model_file = Path(f"trail_fractal_{side}_{timeframe}_model.sav")
+    joblib.dump(cal_model, folder / model_file)
+    joblib.dump(cal_model, pi2_folder / model_file)
 
-    model_info = folder / f"trail_fractal_{side}_{timeframe}_info.json"
+    # save info dict on laptop and pi
+    model_info = Path(f"trail_fractal_{side}_{timeframe}_info.json")
     model_info.touch(exist_ok=True)
-    info_dict = {'features': selected,
-                 'pairs': pairs,
-                 'data_length': data_len,
-                 'frac_width': width,
-                 'atr_spacing': atr_spacing,
-                 'created': int(datetime.now(timezone.utc).timestamp()),
-                 'quick': speed,
-                 'pair_selection': pair_selection}
-    with open(model_info, 'w') as info:
-        json.dump(info_dict, info)
+    if not running_on_pi:
+        info_dict = {'features': selected,
+                     'pairs': pairs,
+                     'data_length': data_len,
+                     'frac_width': width,
+                     'atr_spacing': atr_spacing,
+                     'created': int(datetime.now(timezone.utc).timestamp()),
+                     'quick': speed,
+                     'pair_selection': pair_selection}
+        with open(folder / model_info, 'w') as info:
+            json.dump(info_dict, info)
+        with open(pi2_folder / model_info, 'w') as info:
+            json.dump(info_dict, info)
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
