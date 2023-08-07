@@ -150,11 +150,11 @@ class TradingSession():
 
         if raw_limit_exceeded and within_raw_window:
             flag = 0
-            logger.info(
+            logger.debug(
                 f"raw request limit: {raw_limit} per {raw_window}s. currently: {total} in the last {timespan:.1f}s")
-            logger.info(f"track_weights needs {raw_window - timespan:.1f}s of sleep")
-            logger.info(f"used-weight: {self.client.response.headers['x-mbx-used-weight']}")
-            logger.info(f"used-weight-1m: {self.client.response.headers['x-mbx-used-weight-1m']}")
+            logger.debug(f"track_weights needs {raw_window - timespan:.1f}s of sleep")
+            logger.debug(f"used-weight: {self.client.response.headers['x-mbx-used-weight']}")
+            logger.debug(f"used-weight-1m: {self.client.response.headers['x-mbx-used-weight-1m']}")
             time.sleep(raw_window - timespan)
 
         # if flag and rolling_weight:

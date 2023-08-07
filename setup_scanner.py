@@ -490,6 +490,7 @@ algo_limits = {pair: (v['max_algo_orders'] - v['algo_orders']) for pair, v in se
 usdt_bal_s = session.spot_usdt_bal
 
 while unassigned:
+    logger.debug(f"{len(unassigned)} unassigned signals left to process")
     s = unassigned.pop()
 
     # set variables
@@ -499,13 +500,18 @@ while unassigned:
     quote_size = s['quote_size']
     r = 1
 
+    if s['mode'] == 'margin' and not session.pairs_data[s['pair']]['margin_allowed']:
+        sim_reasons.append('not_a_margin_pair')
+
+    if s['direction'] == 'short':
+        max_borrow = funcs.get_max_borrow(session, s['asset'])
+        if float(s['base_size']) > max_borrow * 0.9:
+            sim_reasons.append('not_enough_borrow')
+
     if s['direction'] in {'spot', 'long'}:
         usdt_depth, _ = funcs.get_depth(session, s['pair'])
     elif s['direction'] == 'short':
         _, usdt_depth = funcs.get_depth(session, s['pair'])
-
-    if s['mode'] == 'margin' and not session.pairs_data[s['pair']]['margin_allowed']:
-        sim_reasons.append('not_a_margin_pair')
 
     if usdt_depth == 0:
         sim_reasons.append('too_much_spread')
@@ -533,18 +539,8 @@ while unassigned:
     elif s['mode'] == 'spot' and quote_size > usdt_bal_s:
         sim_reasons.append('not_enough_usdt')
 
-    # if s['mode'] == 'margin' and session.margin_lvl < 3:
-    #     r = session.margin_lvl / 3
-    #     quote_size *= r
-    #
-    # if s['mode'] == 'margin' and session.margin_lvl < 2:
-    #     sim_reasons.append('margin_acct_too_levered')
-
     if quote_size < session.min_size: # this condition must come after all the conditions which could reduce size
         sim_reasons.append('too_small')
-
-    # TODO need to work out how to do 'not_enough_borrow' in this section, or if that fails, a way to switch a real
-    #  trade to sim at the borrowing stage
 
     if sim_reasons:
         s['sim_reasons'] = sim_reasons
@@ -596,9 +592,10 @@ for signal in processed_signals['real_open']:
 
     else:
         logger.info(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
-        agents[signal['agent']].open_real_M(session, signal, 0)
-        remaining_borrow -= signal['quote_size']
-        logger.info(f"remaining_borrow: {remaining_borrow:.2f}\n")
+        successful = agents[signal['agent']].open_real_M(session, signal, 0)
+        if successful:
+            remaining_borrow -= signal['quote_size']
+            logger.info(f"remaining_borrow: {remaining_borrow:.2f}\n")
 
 # when they are all finished, update records once
 

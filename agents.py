@@ -1280,19 +1280,23 @@ class Agent():
         if direction == 'long':
             price = session.pairs_data[pair]['price']
             borrow_size = f"{size * price:.2f}"
-            funcs.borrow_asset_M(session, 'USDT', borrow_size, session.live)
+            borrow_size = funcs.borrow_asset_M(session, 'USDT', borrow_size, session.live)
             self.open_trades[pair]['placeholder']['loan_asset'] = 'USDT'
         elif direction == 'short':
             asset = pair[:-4]
             borrow_size = uf.valid_size(session, pair, size)
-            funcs.borrow_asset_M(session, asset, borrow_size, session.live)
+            borrow_size = funcs.borrow_asset_M(session, asset, borrow_size, session.live)
             self.open_trades[pair]['placeholder']['loan_asset'] = asset
         else:
             logger.warning('*** WARNING open_real_2 given wrong direction argument ***')
 
-        self.open_trades[pair]['position']['liability'] = borrow_size
-        self.open_trades[pair]['placeholder']['liability'] = borrow_size
-        self.open_trades[pair]['placeholder']['completed'] = 'borrow'
+        if borrow_size:
+            self.open_trades[pair]['position']['liability'] = borrow_size
+            self.open_trades[pair]['placeholder']['liability'] = borrow_size
+            self.open_trades[pair]['placeholder']['completed'] = 'borrow'
+            return True
+        else:
+            return False
 
     def increase_position(self, session, pair, size, direction):
         price = session.pairs_data[pair]['price']
@@ -1402,7 +1406,11 @@ class Agent():
 
         if stage == 0:
             self.create_record(signal)
-            self.omf_borrow(session, pair, size, direction)
+            successful = self.omf_borrow(session, pair, size, direction)
+            if not successful:
+                del self.open_trades[pair]
+                return False
+
             api_order = self.increase_position(session, pair, size, direction)
         if stage <= 1:
             open_order = self.open_trade_dict(session, signal, api_order)
@@ -1412,6 +1420,8 @@ class Agent():
             self.open_save_records(session, pair)
             self.open_update_real_pos_usdtM_counts(session, pair, size, inval_ratio, direction)
         k11.stop()
+
+        return True
 
     # real open spot
 

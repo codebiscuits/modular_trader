@@ -44,6 +44,17 @@ tf_dict = {'1m': Client.KLINE_INTERVAL_1MINUTE,
 # -#-#- Market Data Functions
 
 
+def get_max_borrow(session, asset: str) -> float:
+    abc = Timer('all binance calls')
+    abc.start()
+    logger.debug('running get_max_borrow')
+    session.track_weights(50)
+    limits = session.client.get_max_margin_loan(asset=asset)
+    abc.stop()
+
+    return min(float(limits['amount']), float(limits['borrowLimit']))
+
+
 def get_depth(session, pair: str) -> Tuple[float, float]:
     """returns the quantity (in the quote currency) that could be bought/sold
     within the % range of price set by the max_slip param"""
@@ -625,7 +636,15 @@ def borrow_asset_M(session, asset: str, qty: str, live: bool) -> None:
     """calls the binance api function to take out a margin loan"""
 
     if live:
-        session.client.create_margin_loan(asset=asset, amount=qty)
+        try:
+            session.client.create_margin_loan(asset=asset, amount=qty)
+            return qty
+        except bx.BinanceAPIException as e:
+            if e.code == -3045: # the system does not have enough asset now
+                logger.error(f"Problem borrowing {qty} {asset}, not enough to borrow.")
+            logger.exception(e)
+            return 0
+
 
 
 @uf.retry_on_busy()
