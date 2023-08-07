@@ -5,26 +5,25 @@ import json
 from json.decoder import JSONDecodeError
 import statistics as stats
 from resources.timers import Timer
+from resources.loggers import create_logger
 from typing import Dict
 from resources import indicators as ind, keys, utility_funcs as uf, binance_funcs as funcs
 from datetime import datetime, timezone
 from binance.client import Client
 import binance.enums as be
 from decimal import Decimal, getcontext
-from pprint import pprint
+from pprint import pformat
 import sys
 from pyarrow import ArrowInvalid
 import traceback
 import joblib
-import logging
 
 # client = Client(keys.bPkey, keys.bSkey)
 # pb = uf.init_pb()
 ctx = getcontext()
 ctx.prec = 12
 timestring = '%d/%m/%y %H:%M'
-
-error_logger = logging.getLogger('errors')
+logger = create_logger('agents')
 
 class Agent():
     '''generic agent class for each strategy to inherit from'''
@@ -100,7 +99,7 @@ class Agent():
             with open(bal_path, "r") as file:
                 self.perf_log = json.load(file)
         except JSONDecodeError:
-            print(f"{bal_path} was an empty file.")
+            logger.error(f"{bal_path} was an empty file.")
             self.perf_log = None
 
     def sync_test_records(self, session) -> None:
@@ -124,7 +123,7 @@ class Agent():
                 with open(test_bal, "w") as file:
                     json.dump(self.perf_log, file)
             except JSONDecodeError:
-                print(f"{bal_path} was an empty file.")
+                # logger.info(f"{bal_path} was an empty file.")
                 self.perf_log = None
         else:
             self.perf_log = None
@@ -144,7 +143,7 @@ class Agent():
                         with open(test_trades, 'w') as file:
                             json.dump(data, file)
                 except JSONDecodeError:
-                    # print(f'{switch}_trades file empty')
+                    # logger.info(f'{switch}_trades file empty')
                     pass
             w.stop()
 
@@ -173,12 +172,12 @@ class Agent():
                 except JSONDecodeError as e:
                     open_trades = {}
         else:
-            # print("ot_path doesn't exist")
+            # logger.info("ot_path doesn't exist")
             open_trades = {}
             ot_path.touch()
-            # print(f'{ot_path} not found')
+            # logger.info(f'{ot_path} not found')
 
-        # print(f"in read_open_trade_records - {self.name} {state} trades: {open_trades.keys()}")
+        # logger.debug(f"in read_open_trade_records - {self.name} {state} trades: {open_trades.keys()}")
 
         w.stop()
         return open_trades
@@ -203,7 +202,7 @@ class Agent():
                     self.next_id = 0
         else:
             closed_trades = {}
-            # print(f'{ct_path} not found')
+            # logger.info(f'{ct_path} not found')
         e.stop()
         return closed_trades
 
@@ -222,11 +221,11 @@ class Agent():
 
         else:
             cs_trades = {}
-            print(f'{cs_path} not found')
+            # logger.info(f'{cs_path} not found')
 
         limit = 2000
         if len(cs_trades.keys()) > limit:
-            # print(f"{self.name} closed sim trades on record: {len(cs_trades.keys())}")
+            # logger.debug(f"{self.name} closed sim trades on record: {len(cs_trades.keys())}")
             closed_sim_tups = sorted(zip(cs_trades.keys(), cs_trades.values()), key=lambda x: int(x[0]))
             closed_sim_trades = dict(closed_sim_tups[-limit:])
         else:
@@ -270,7 +269,7 @@ class Agent():
     def find_order(self, session, pair, sid):
         if sid == 'not live':
             return None
-        # print('get_margin_order')
+        # logger.info('get_margin_order')
         session.track_weights(10)
         abc = Timer('all binance calls')
         abc.start()
@@ -279,7 +278,7 @@ class Agent():
         session.counts.append('get_margin_order')
 
         if not order:
-            print(f'No orders on binance for {pair}')
+            logger.info(f'No orders on binance for {pair}')
 
         # insert placeholder record
         placeholder = {'action': "stop",
@@ -314,16 +313,12 @@ class Agent():
         stop_dict['reason'] = 'hit hard stop'
         stop_dict['liability'] = uf.update_liability(self.open_trades[pair], stop_size, 'reduce')
         if stop_dict['liability'] not in ['0', '0.0']:
-            print(
+            logger.warning(
                 f"+++ WARNING {self.name} {pair} stop hit, liability record doesn't add up. Recorded value: {stop_dict['liability']} +++")
 
         return stop_dict
 
     def save_records(self, session, pair, stop_dict, order):
-        print("\nstop_dict:")
-        pprint(stop_dict)
-        print('')
-
         self.open_trades[pair]['trade'].append(stop_dict)
         self.open_trades[pair]['trade'][-1]['liability'] = str(Decimal(0) - Decimal(order['executedQty']))
         rpnl = self.realised_pnl(session, self.open_trades[pair])
@@ -343,9 +338,9 @@ class Agent():
 
     def error_print(self, session, pair, stage, e):
         self.record_trades(session, 'all')
-        print(f'{self.name} problem with record_stopped_trades during {pair} {stage}')
-        print(f"code: {e.code}")
-        print(f"message: {e.message}")
+        logger.exception(f'{self.name} problem with record_stopped_trades during {pair} {stage}')
+        logger.error(f"code: {e.code}")
+        logger.error(f"message: {e.message}")
 
     def rst_iteration_m(self, session, pair, order):
         direction = self.open_trades[pair]['position']['direction']
@@ -360,14 +355,14 @@ class Agent():
 
         else:  # if no order can be found, try to close the position
             if session.live:
-                print(f"record_stopped_trades found no stop for {pair} {self.name}")
+                logger.warning(f"record_stopped_trades found no stop for {pair} {self.name}")
             if direction == 'long':
                 free_bal = session.margin_bals[pair[:-4]].get('free')
                 pos_size = self.open_trades[pair]['position']['base_size']
 
                 if Decimal(free_bal) >= Decimal(pos_size):
                     # if the free balance covers the position, close it
-                    print(f'{self.name} record_stopped_trades will close {pair} now')
+                    logger.info(f'{self.name} record_stopped_trades will close {pair} now')
                     try:
                         self.close_real_full(session, pair, direction)
                     except bx.BinanceAPIException as e:
@@ -382,12 +377,12 @@ class Agent():
             else:  # if direction == 'short'
                 owed = float(session.margin_bals[pair[:-4]].get('borrowed'))
                 if session.live and not owed:
-                    print(f'{pair[:-4]} loan already repaid, no action needed')
+                    logger.info(f'{pair[:-4]} loan already repaid, no action needed')
                     del self.open_trades[pair]
                 elif not owed:
                     return
                 else:  # if live and owed
-                    print(f'{self.name} record_stopped_trades will close {pair} now')
+                    logger.info(f'{self.name} record_stopped_trades will close {pair} now')
                     try:
                         size = self.open_trades[pair]['position']['base_size']
                         self.close_real_full(session, pair, direction, size=size, stage=2)
@@ -402,14 +397,14 @@ class Agent():
         # get a list of (pair, stop_id, stop_time) for all open_trades records
         old_ids = list(self.open_trades.items())
 
-        # print(f"{self.name} rst, checking {len(old_ids)} pairs")
+        # logger.debug(f"{self.name} rst, checking {len(old_ids)} pairs")
 
         for pair, v in old_ids:
             sid = v['position']['stop_id']
             direction = v['position']['direction']
             stop_time = v['position']['stop_time']
             if sid == 'not live':
-                # print(f"{pair} record non-live")
+                # logger.info(f"{pair} record non-live")
                 df = self.get_data(session, pair, timeframes, stop_time)
                 stop = float(v['position']['hard_stop'])
                 stopped, overshoot_pct, stop_hit_time = self.check_stop_hit(pair, df, direction, stop)
@@ -418,7 +413,7 @@ class Agent():
                     stop_dt = datetime.fromtimestamp(stop_time).astimezone(timezone.utc)
                     hit_dt = datetime.fromtimestamp(stop_hit_time).astimezone(timezone.utc)
                     entry_price = v['position']['entry_price']
-                    print(f"{self.name} {pair} real {direction} stopped out")
+                    logger.info(f"{self.name} {pair} real {direction} stopped out")
                     base_size = float(v['position']['base_size'])
                     stop_dict = {
                         'timestamp': int(stop_time),
@@ -442,11 +437,13 @@ class Agent():
                     self.save_records(session, pair, stop_dict)
                     self.counts_dict[f'real_stop_{direction}'] += 1
                 else:
-                    # print(f"{self.name} {pair} {direction} still open")
+                    # logger.info(f"{self.name} {pair} {direction} still open")
                     pass
                 continue
 
-            # print('get_margin_order')
+            if sid is None:
+                # TODO repair trade records should be fixing positions without a stop so they don't get this far
+                continue
             session.track_weights(10)
             abc = Timer('all binance calls')
             abc.start()
@@ -455,37 +452,33 @@ class Agent():
             session.counts.append('get_margin_order')
 
             if order['status'] == 'FILLED':
-                print(f"{self.name} {pair} stop order filled")
+                logger.info(f"{self.name} {pair} stop order filled")
                 try:
                     self.rst_iteration_m(session, pair, order)
                 except bx.BinanceAPIException as e:
                     self.record_trades(session, 'all')
-                    print(f'{self.name} problem with record_stopped_trades during {pair}')
-                    print(e)
+                    logger.exception(f'{self.name} problem with record_stopped_trades during {pair}')
+                    logger.error(e)
             elif order['status'] == 'CANCELED':
-                print(f'\nProblem with {self.name} {pair} trade record\n')
+                logger.warning(f'\nProblem with {self.name} {pair} trade record\n')
 
                 # TODO it should be possible to check the placeholder in the trade record and piece together what to do
                 ph = self.open_trades[pair].get('placeholder')
 
                 if ph:
-                    print(f"{self.name} {pair} stop canceled, placeholder found")
-                    print('use this to modify record_stopped_trades with useful behaviour in this scenario')
-                    pprint(self.open_trades[pair])
-                    print('')
-                    pprint(order)
+                    logger.warning(f"{self.name} {pair} stop canceled, placeholder found")
+                    logger.warning('use this to modify record_stopped_trades with useful behaviour in this scenario:')
+                    logger.warning(pformat(self.open_trades[pair]))
+                    logger.warning('')
+                    logger.warning(pformat(order))
                 else:
-                    print('\n\n*******************************************\n\n')
-                    print(f"{self.name} {pair} stop canceled, no placeholder found, deleting record")
-                    pprint(self.open_trades[pair])
+                    logger.warning(f"{self.name} {pair} stop canceled, no placeholder found, deleting record")
+                    logger.warning(pformat(self.open_trades[pair]))
                     del self.open_trades[pair]
                     del self.real_pos[pair[:-len(self.quote_asset)]]
-                    now = datetime.now().strftime(timestring)
-                    # pb.push_note(now, f"{self.name} {pair} records deleted, check exchange for remaining position")
                     self.record_trades(session, 'open')
-                    print('\n\n*******************************************\n\n')
             elif order['status'] == 'PARTIALLY_FILLED':
-                print(f"{self.name} {pair} stop hit and partially filled, recording trade.")
+                logger.info(f"{self.name} {pair} stop hit and partially filled, recording trade.")
 
                 old_size = Decimal(order['origQty'])
                 exe_size = Decimal(order['executedQty'])
@@ -510,7 +503,7 @@ class Agent():
                 # TODO need to repay loan that was partially freed up
 
             else:
-                # print(f"{self.name} {pair} stop order (id {sid}) not filled, status: {order['status']}")
+                # logger.info(f"{self.name} {pair} stop order (id {sid}) not filled, status: {order['status']}")
                 del self.open_trades[pair]['placeholder']
 
         self.record_trades(session, 'closed')
@@ -525,7 +518,7 @@ class Agent():
         rsst_gd = Timer('rsst - get_data')
         rsst_gd.start()
 
-        # print(f"rsst {self.name} {pair}")
+        # logger.debug(f"rsst {self.name} {pair}")
 
         filepath = Path(f'{session.ohlc_data}/{pair}.parquet')
         check_recent = False # flag to decide whether the ohlc needs updating or not
@@ -542,24 +535,21 @@ class Agent():
                     source = 'file'
                     check_recent = True
                 except (ArrowInvalid, OSError) as e:
-                    print(f"problem loading {pair} ohlc")
-                    print(e)
+                    logger.exception(f"problem loading {pair} ohlc")
+                    logger.error(e)
                     filepath.unlink()
                     df = funcs.get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
                     source = 'exchange'
-                    print(f'downloaded {pair} from scratch')
+                    logger.info(f'downloaded {pair} from scratch')
             else:
-                print(f"{filepath} doesn't exist")
                 df = funcs.get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
                 source = 'exchange'
-                print(f'downloaded {pair} from scratch')
 
             session.store_ohlc(df, pair, timeframes)
 
         # check df is localised to UTC
         try:
             df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
-            print(f"rsst get_data - {pair} ohlc data wasn't timezone aware, fixing now.")
         except TypeError:
             pass
 
@@ -574,11 +564,9 @@ class Agent():
         try: # this try/except block can be removed when the problem is solved
             stop_dt = datetime.fromtimestamp(stop_time).astimezone(timezone.utc)
         except ValueError as e:
-            print(f"ValueError for {pair} sim stop time: {e.args}")
-            traceback.print_stack()
-            pprint(self.sim_trades[pair])
+            logger.exception(f"ValueError for {pair} sim stop time: {e.args}")
+            logger.error(pformat(self.sim_trades[pair]))
         df = df.loc[df.timestamp > stop_dt].reset_index(drop=True)
-        # print(f'::: rsst {self.name} get_data {pair} from {source} :::')
 
         rsst_gd.stop()
 
@@ -675,7 +663,7 @@ class Agent():
         session.counts.append('rsst')
 
         check_pairs = list(self.sim_trades.items())
-        # print(f"\n{self.name} rsst, checking {len(check_pairs)} pairs")
+        # logger.debug(f"\n{self.name} rsst, checking {len(check_pairs)} pairs")
         for pair, v in check_pairs:  # can't loop through the dictionary directly because i delete items as i go
             direction = v['position']['direction']
             base_size = float(v['position']['base_size'])
@@ -685,13 +673,11 @@ class Agent():
             df = self.get_data(session, pair, timeframes, stop_time)
             stopped, overshoot_pct, stop_hit_time = self.check_stop_hit(pair, df, direction, stop)
             if stopped:
-                # print(f"{self.name} {pair} {v['position']['open_time'] = }, {stop_hit_time = }, "
+                # logger.debug(f"{self.name} {pair} {v['position']['open_time'] = }, {stop_hit_time = }, "
                 #       f"{v['position']['entry_price'] = }")
                 trade_dict = self.create_trade_dict(pair, direction, stop, base_size, stop_hit_time, overshoot_pct, 'sim')
                 self.sim_to_closed_sim(session, pair, trade_dict, save_file=False)
                 self.counts_dict[f'sim_stop_{direction}'] += 1
-            # else:
-            #     print(f"{pair} still open")
 
         self.record_trades(session, 'closed_sim')
         self.record_trades(session, 'sim')
@@ -730,7 +716,7 @@ class Agent():
         scalar = position['pct_of_full_pos']
         realised_r = trade_r * scalar
 
-        print(f"{position['pair']} rpnl calc: r_val: {r_val:.1%} trade_pnl: {trade_pnl:.1%} trade_r: {trade_r:.2f} "
+        logger.debug(f"{position['pair']} rpnl calc: r_val: {r_val:.1%} trade_pnl: {trade_pnl:.1%} trade_r: {trade_r:.2f} "
               f"{scalar = } realised_r: {realised_r:.2f}")
         k15.stop()
 
@@ -822,188 +808,6 @@ class Agent():
         else:
             return {'ema_4': 0, 'ema_8': 0, 'ema_16': 0, 'ema_32': 0, 'ema_64': 0}
 
-
-    # def score_accum(self, direction: str):
-    #     '''calculates perf score from recent performance. also saves the
-    #     instance property open_pnl_changes dictionary'''
-    #
-    #     all_rpnls = []
-    #     for a, b in self.closed_trades.items():
-    #         wanted = (b['trade'][0]['state'] == 'real') or (b['trade'][0]['wanted'])
-    #         right_direction = b['trade'][0]['direction'] == direction
-    #         if wanted and right_direction:
-    #             rpnl = 0
-    #             for t in b['trade']:
-    #                 if t.get('rpnl'):
-    #                     rpnl += float(t['rpnl'])
-    #             all_rpnls.append((int(a), rpnl))
-    #     for a, b in self.closed_sim_trades.items():
-    #         wanted = b['trade'][0]['wanted']
-    #         right_direction = b['trade'][0]['direction'] == direction
-    #         if wanted and right_direction:
-    #             rpnl = 0
-    #             for t in b['trade']:
-    #                 if t.get('rpnl'):
-    #                     rpnl += float(t['rpnl'])
-    #             all_rpnls.append((int(a), rpnl))
-    #     rpnl_df = pd.DataFrame(all_rpnls, columns=['timestamp', 'rpnl'])
-    #     rpnl_df = rpnl_df.sort_values('timestamp').reset_index(drop=True)
-    #     rpnl_df['ema_4'] = rpnl_df.rpnl.ewm(4).mean()
-    #     rpnl_df['ema_8'] = rpnl_df.rpnl.ewm(8).mean()
-    #     rpnl_df['ema_16'] = rpnl_df.rpnl.ewm(16).mean()
-    #     rpnl_df['ema_32'] = rpnl_df.rpnl.ewm(32).mean()
-    #     rpnl_df['ema_64'] = rpnl_df.rpnl.ewm(64).mean()
-    #
-    #     if len(rpnl_df) >= 4:
-    #         pnls = rpnl_df.to_dict(orient='records')[-1]
-    #         # print(f'{direction} pnls:', pnls)
-    #
-    #         score = 0
-    #         if  rpnl_df.ema_4.iloc[-1] > 0:
-    #             score += 5
-    #         elif rpnl_df.ema_4.iloc[-1] < 0:
-    #             score -= 5
-    #         if rpnl_df.ema_8.iloc[-1] > 0:
-    #             score += 4
-    #         elif rpnl_df.ema_8.iloc[-1] < 0:
-    #             score -= 4
-    #         if rpnl_df.ema_16.iloc[-1] > 0:
-    #             score += 3
-    #         elif rpnl_df.ema_16.iloc[-1] < 0:
-    #             score -= 3
-    #         if rpnl_df.ema_32.iloc[-1] > 0:
-    #             score += 2
-    #         elif rpnl_df.ema_32.iloc[-1] < 0:
-    #             score -= 2
-    #         if rpnl_df.ema_64.iloc[-1] > 0:
-    #             score += 1
-    #         elif rpnl_df.ema_64.iloc[-1] < 0:
-    #             score -= 1
-    #
-    #     else:
-    #         score = 0
-    #         pnls = {'ema_4': 0, 'ema_8': 0, 'ema_16': 0, 'ema_32': 0, 'ema_64': 0}
-    #
-    #     return score, pnls
-    #
-
-    # def score_accum_old(self, direction: str):
-    #     '''calculates perf score from recent performance. also saves the
-    #     instance property open_pnl_changes dictionary'''
-    #
-    #     lookup = f'wanted_rpnl_{direction}'
-    #     pnls = {0: self.realised_pnls[f"wanted_{direction}"]}
-    #     for i in range(1, 5):
-    #         if self.perf_log and len(self.perf_log) > 5:
-    #             pnls[i] = self.perf_log[-1 * i].get(lookup, -1)
-    #         else:
-    #             pnls[i] = -1  # if there's no data yet, return -1 instead
-    #
-    #     score = 0
-    #     if  pnls.get(0) > 0.1:
-    #         score += 5
-    #     elif pnls.get(0) < -0.1:
-    #         score -= 5
-    #     if pnls.get(1) > 0:
-    #         score += 4
-    #     elif pnls.get(1) < 0:
-    #         score -= 4
-    #     if pnls.get(2) > 0:
-    #         score += 3
-    #     elif pnls.get(2) < 0:
-    #         score -= 3
-    #     if pnls.get(3) > 0:
-    #         score += 2
-    #     elif pnls.get(3) < 0:
-    #         score -= 2
-    #     if pnls.get(4) > 0:
-    #         score += 1
-    #     elif pnls.get(4) < 0:
-    #         score -= 1
-    #
-    #     return score, pnls
-    #
-    #
-    # def fixed_risk_score(self, direction: str) -> float:
-    #     """calculates fixed risk setting for new trades based on recent performance and previous setting. if recent
-    #     performance is very good, fr is increased slightly. if not, fr is decreased by thirds"""
-    #
-    #     o = Timer(f'set_fixed_risk-{direction}')
-    #     o.start()
-    #
-    #     if (
-    #         self.mode == 'spot'
-    #         and direction in {'long', 'short'}
-    #         or (self.mode == 'margin' and direction == 'spot')
-    #     ):
-    #         return 0
-    #
-    #     fr_prev = self.perf_log[-1].get(f'fr_{direction}', 0) if self.perf_log else 0
-    #     score, self.pnls = self.score_accum(direction)
-    #     score_str = f"ema_4: {self.pnls['ema_4']:.2f}, ema_8: {self.pnls['ema_8']:.2f}, ema_16: {self.pnls['ema_16']:.2f}, " \
-    #                 f"ema_32: {self.pnls['ema_32']:.2f}, ema_64: {self.pnls['ema_64']:.2f}"
-    #     print(f"\n{direction} score accum returned score: {score}, pnls: {score_str}")
-    #
-    #     if score == 15:
-    #         fr = min(fr_prev + 2, self.fr_div)
-    #     elif score >= 11:
-    #         fr = min(fr_prev + 1, self.fr_div)
-    #     elif score >= 3:
-    #         fr = fr_prev
-    #     elif score >= -3:
-    #         fr = self.reduce_fr(0.333, fr_prev, 1)
-    #     elif score >= -7:
-    #         fr = self.reduce_fr(0.5, fr_prev, 1)
-    #     else:
-    #         fr = 0
-    #
-    #     now = datetime.now(timezone.utc).strftime(timestring)
-    #     if fr != fr_prev:
-    #         title = f'{now}'
-    #         note = f'{self.name} {direction} fixed risk score adjusted from {fr_prev:.2f} to {fr:.2f}'
-    #         # pb.push_note(title, note)
-    #         print(note)
-    #
-    #     o.stop()
-    #     return fr
-    #
-
-    # def set_fixed_risk(self, session):
-    #     """takes the fr_score calculated by fixed_risk_score and uses it to scale fr_max into the current
-    #     fixed risk setting"""
-    #     if self.mode == 'spot':
-    #         self.fr_score_spot = self.fixed_risk_score('spot')
-    #         self.fixed_risk_spot = round(self.fr_score_spot * self.fr_max / self.fr_div, 5)
-    #         self.fr_dol_spot = self.fixed_risk_spot * session.spot_bal
-    #         print(f"{self.name} spot fixed risk: {self.fixed_risk_spot}")
-    #
-    #     elif self.mode == 'margin':
-    #         self.fr_score_l = self.fixed_risk_score('long')
-    #         self.fixed_risk_l = round(self.fr_score_l * self.fr_max / self.fr_div, 5)
-    #         self.fixed_risk_dol_l = self.fixed_risk_l * session.margin_bal
-    #         if self.fr_score_l:
-    #             print(f"{self.name} long fixed risk: {self.fixed_risk_l}")
-    #
-    #         self.fr_score_s = self.fixed_risk_score('short')
-    #         self.fixed_risk_s = round(self.fr_score_s * self.fr_max / self.fr_div, 5)
-    #         self.fixed_risk_dol_s = self.fixed_risk_s * session.margin_bal
-    #         if self.fr_score_s:
-    #             print(f"{self.name} short fixed risk: {self.fixed_risk_s}")
-
-    # def test_fixed_risk(self, fr_l: float, fr_s: float) -> None:
-    #     """manually overrides fixed risk settings for testing purposes"""
-    #     if not self.live:
-    #         print(f'*** WARNING: FIXED RISK MANUALLY SET to {fr_l} / {fr_s} ***')
-    #         self.fixed_risk_l = fr_l
-    #         self.fixed_risk_s = fr_s
-
-    # def print_fixed_risk(self):
-    #     if self.mode == 'spot':# and self.fixed_risk_spot:
-    #         print(f"{self.name} fixed risk: {(self.fixed_risk_spot * 10000):.2f}bps")
-    #     elif self.mode == 'margin':# and self.fixed_risk_l or self.fixed_risk_s:
-    #         frl_bps = self.fixed_risk_l * 10000
-    #         frs_bps = self.fixed_risk_s * 10000
-    #         print(f"{self.name} fr long: {(frl_bps):.2f}bps, fr short: {(frs_bps):.2f}bps")
 
     def set_max_pos(self) -> int:
         """sets the maximum number of open positions for the agent. if the median
@@ -1171,11 +975,11 @@ class Agent():
                 try:
                     size_dict[asset] = self.open_trade_stats(session, total_bal, v)
                 except KeyError as e:
-                    print(f"Problem calling open_trade_stats on {self.name}.{state}_trades, {asset}")
-                    print('KeyError:', e)
-                    print('')
-                    pprint(v)
-                    print('')
+                    logger.exception(f"Problem calling open_trade_stats on {self.name}.{state}_trades, {asset}")
+                    logger.error('KeyError:', e)
+                    logger.error('')
+                    logger.error(pformat(v))
+                    logger.error('')
             else:
                 direction = v['position']['direction']
                 wanted = v['trade'][0].get('wanted', True)
@@ -1224,11 +1028,11 @@ class Agent():
         open_risk_r = (open_risk / float(pfrd)) * pos_scale
 
         # if open_risk_r > self.indiv_r_limit:
-        #     print(f"{state} {pair} update_pos - {value = } inval_ratio: {inval_ratio:.4f} open_risk: ${open_risk:.2f}, "
+        #     logger.debug(f"{state} {pair} update_pos - {value = } inval_ratio: {inval_ratio:.4f} open_risk: ${open_risk:.2f}, "
         #           f"open_risk_r: {open_risk_r:.2f}R")
         # if open_risk_r > 5:
-        #     print(f"excessive open risk on {pair}. current price: ${price}, current inval: ${price / inval_ratio}")
-        #     pprint(trade_record)
+        #     logger.debug(f"excessive open risk on {pair}. current price: ${price}, current inval: ${price / inval_ratio}")
+        #     logger.debug(pformat(trade_record))
 
         jk.stop()
 
@@ -1275,7 +1079,7 @@ class Agent():
     #         for pair, pos in self.real_pos.items():
     #             if pos.get('opnl_R') and (pos['direction'] == direction):
     #                 real_total += pos['opnl_R']
-    #                 # print(f"open_pnl - {pair} {pos['opnl_R']}R")
+    #                 # logger.debug(f"open_pnl - {pair} {pos['opnl_R']}R")
     #         total = real_total
     #
     #     elif state == 'sim':
@@ -1288,7 +1092,7 @@ class Agent():
     #         total = sim_total
     #
     #     else:
-    #         print('open_pnl requires argument real or sim')
+    #         logger.error('open_pnl requires argument real or sim')
     #
     #     h.stop()
     #     return total
@@ -1309,10 +1113,10 @@ class Agent():
     def clear_stop(self, session, pair, pos_record):
         _, base_size = funcs.clear_stop_M(session, pair, pos_record)
         if not base_size:
-            print('--- running move_stop and needed to use position base size')
+            logger.info('--- running move_stop and needed to use position base size')
             base_size = pos_record['base_size']
         # else:
-        #     print("--- running move_stop and DIDN'T need to use position base size")
+        #     logger.info("--- running move_stop and DIDN'T need to use position base size")
 
         return base_size
 
@@ -1338,6 +1142,8 @@ class Agent():
         self.record_trades(session, 'open')
 
     def move_api_stop(self, session, pair, direction, atr, pos_record, stage=0):
+        logger.debug(f"move_api_stop {pair} {direction} {atr = } {stage = }")
+        logger.debug(pformat(pos_record))
         if stage == 0:
             self.create_placeholder(pair, direction, atr)
         if stage <= 1:
@@ -1346,6 +1152,8 @@ class Agent():
             self.update_records_1(session, pair, base_size)
 
         if stage <= 2:
+            if stage == 2:
+                base_size = pos_record['base_size']
             stop_order = self.reset_stop(session, pair, base_size, direction, atr)
 
             self.update_records_2(session, pair, atr, stop_order)
@@ -1365,13 +1173,13 @@ class Agent():
                           or ((direction == 'short') and (inval < (current_stop / 1.001))))
 
         if move_condition:
-            print(f"*** {self.name} {pair} move real {direction} stop from {current_stop:.5} to {inval:.5}")
+            logger.debug(f"*** {self.name} {pair} move real {direction} stop from {current_stop:.5} to {inval:.5}")
             try:
                 self.move_api_stop(session, pair, direction, inval, self.open_trades[pair]['position'])
             except bx.BinanceAPIException as e:
                 self.record_trades(session, 'all')
-                print(f'{self.name} problem with move_stop order for {pair}')
-                print(e)
+                logger.exception(f'{self.name} problem with move_stop order for {pair}')
+                logger.error(e)
 
         asset = signal['pair'][:-len(session.quote_asset)]
         size = self.open_trades[pair]['position']['base_size']
@@ -1466,7 +1274,7 @@ class Agent():
         score = signal['score']
         note = f"{self.name} real open {direction} {size:.5} {pair} ({usdt_size:.2f} usdt) @ {price}, stop @ {stp:.5}, " \
                f"score: {score:.1%}"
-        print(now, note)
+        logger.info(note)
 
     def omf_borrow(self, session, pair, size, direction):
         if direction == 'long':
@@ -1480,7 +1288,7 @@ class Agent():
             funcs.borrow_asset_M(session, asset, borrow_size, session.live)
             self.open_trades[pair]['placeholder']['loan_asset'] = asset
         else:
-            print('*** WARNING open_real_2 given wrong direction argument ***')
+            logger.warning('*** WARNING open_real_2 given wrong direction argument ***')
 
         self.open_trades[pair]['position']['liability'] = borrow_size
         self.open_trades[pair]['placeholder']['liability'] = borrow_size
@@ -1593,7 +1401,6 @@ class Agent():
         inval_ratio = signal['inval_ratio']
 
         if stage == 0:
-            # print('')
             self.create_record(signal)
             self.omf_borrow(session, pair, size, direction)
             api_order = self.increase_position(session, pair, size, direction)
@@ -1614,7 +1421,6 @@ class Agent():
         ros.start()
 
         if stage == 0:
-            print('')
             self.create_record(signal)
 
         ros.stop()
@@ -1672,7 +1478,7 @@ class Agent():
         new_base_size = Decimal(curr_base_size) - Decimal(api_order.get('executedQty'))
         self.open_trades[pair]['position']['base_size'] = str(new_base_size)
         self.open_trades[pair]['position']['pct_of_full_pos'] *= (pct / 100)
-        # print(f"+++ {self.name} {pair} tp {direction} resulted in base qty: {new_base_size}")
+        # logger.debug(f"+++ {self.name} {pair} tp {direction} resulted in base qty: {new_base_size}")
         tp_order = funcs.create_trade_dict(api_order, price, session.live)
 
         self.open_trades[pair]['placeholder']['tp_order'] = tp_order
@@ -1805,9 +1611,8 @@ class Agent():
         self.open_trades[pair]['trade'][-1]['rpnl'] = rpnl
         direction = self.open_trades[pair]['position']['direction']
         self.realised_pnls[f"real_{direction}"] += rpnl
-        print(f"{pair} real tp recorded {rpnl} in real_{direction}")
         self.realised_pnls[f"wanted_{direction}"] += rpnl
-        print(f"{pair} real tp recorded {rpnl} in wanted_{direction}")
+        logger.info(f"{pair} real tp recorded {rpnl} in real_{direction} and wanted_{direction}")
 
         del self.open_trades[pair]['placeholder']
         self.record_trades(session, 'open')
@@ -1845,7 +1650,7 @@ class Agent():
         cleared_size = self.tp_clear_stop(session, pair)
 
         if not cleared_size:
-            print(
+            logger.warning(
                 f'{self.name} {pair} clear_stop returned base_size 0, checking exchange bals before closing {direction}')
             cleared_size = self.set_size_from_free(session, pair)
 
@@ -1853,7 +1658,7 @@ class Agent():
         tp_order = self.tp_reduce_position(session, pair, cleared_size, pct, direction)
 
         note = f"{self.name} real take-profit {pair} {direction} {pct}% @ {price}"
-        print(now, note)
+        logger.info(note)
 
         if pct == 100:
             # repay assets
@@ -1881,7 +1686,7 @@ class Agent():
 
         # temporary check to catch a possible bug, can delete after ive had a few reduce_risk calls with no bugs
         if direction not in ['long', 'short']:
-            print(
+            logger.warning(
                 f'*** WARNING, string "{direction}" being passed to create_close_placeholder, either from close omf or reduce_risk')
 
         # insert placeholder record
@@ -1968,9 +1773,9 @@ class Agent():
         self.realised_pnls[f"wanted_{direction}"] += rpnl
 
         if rpnl <= -1:
-            print(f"*.*.* problem with real trade rpnl ({rpnl:.2f})")
-            print(self.name)
-            pprint(self.open_trades[pair])
+            logger.warning(f"*.*.* problem with real trade rpnl ({rpnl:.2f})")
+            logger.warning(self.name)
+            logger.warning(pformat(self.open_trades[pair]))
 
         trade_id = int(datetime.now().timestamp()*1000)
         del self.open_trades[pair]['position']
@@ -2009,7 +1814,7 @@ class Agent():
         now = datetime.now(timezone.utc).strftime(timestring)
 
         note = f"{self.name} real close {direction} {pair} @ {price}"
-        print(now, note)
+        logger.info(note)
 
         if stage == 0:
             if self.open_trades.get('placeholder'):
@@ -2020,7 +1825,7 @@ class Agent():
             cleared_size = self.close_clear_stop(session, pair)
 
             if not cleared_size:
-                print(
+                logger.warning(
                     f'{self.name} {pair} clear_stop returned base_size 0, checking exchange bals before closing {direction}')
                 cleared_size = self.set_size_from_free(session, pair)
         if stage <= 2:
@@ -2032,7 +1837,7 @@ class Agent():
                 close_order = self.close_position(session, pair, cleared_size, 'close_signal', direction)
             else:
                 # in this case, the trade is closed and the record is ruined, so just delete the record and move on
-                print(f"{self.name} {pair} {direction} position no longer exists, deleting trade record")
+                logger.warning(f"{self.name} {pair} {direction} position no longer exists, deleting trade record")
                 del self.open_trades[pair]
                 return
         if stage <= 3:
@@ -2122,11 +1927,10 @@ class Agent():
         order_size = sim_bal / 2
         usdt_size = f"{order_size * price:.2f}"
 
-        now = datetime.now(timezone.utc)
-        note = f"{self.name} sim take-profit {pair} {direction} @ {price}"
-        print(now.strftime(timestring), note)
+        logger.info(f"{self.name} sim take-profit {pair} {direction} @ {price}")
 
         # execute order
+        now = datetime.now(timezone.utc)
         tp_order = {'pair': pair,
                     'exe_price': str(price),
                     'trig_price': str(price),
@@ -2175,13 +1979,10 @@ class Agent():
         direction = self.sim_trades[pair]['position']['direction']
         self.realised_pnls[f"sim_{direction}"] += rpnl
 
-        # TODO use logging to create a dedicated file for each agent's printouts of trades closed at init inval. that
-        #  will make them much much easier to see and compare
-
         if rpnl < -1:
-            print(f"*.*.* problem with sim trade rpnl ({rpnl:.2f})")
-            print(self.name)
-            pprint(self.sim_trades[pair])
+            logger.warning(f"*.*.* problem with sim trade rpnl ({rpnl:.2f})")
+            logger.warning(self.name)
+            logger.warning(pformat(self.sim_trades[pair]))
 
         if 'low_score' in self.sim_trades[pair]['signal']['sim_reasons']:
             self.realised_pnls[f"unwanted_{direction}"] += rpnl
@@ -2206,11 +2007,10 @@ class Agent():
         price = session.pairs_data[pair]['price']
         sim_bal = float(self.sim_trades[pair]['position']['base_size'])
 
-        now = datetime.now(timezone.utc)
-        note = f"{self.name} sim close {pair} {direction} @ {price}"
-        print(now.strftime(timestring), note)
+        logger.info(f"{self.name} sim close {pair} {direction} @ {price}")
 
         # execute order
+        now = datetime.now(timezone.utc)
         close_order = {'pair': pair,
                        'exe_price': str(price),
                        'trig_price': str(price),
@@ -2236,12 +2036,10 @@ class Agent():
     def tp_tracked(self, session, pair, stp, direction):
         k5 = Timer(f'tp_tracked')
         k5.start()
-        print('')
         price = session.pairs_data[pair]['price']
         now = datetime.now(timezone.utc).strftime(timestring)
 
-        note = f"{self.name} tracked take-profit {pair} {direction} 50% @ {price}"
-        print(now, note)
+        logger.info(f"{self.name} tracked take-profit {pair} {direction} 50% @ {price}")
 
         trade_record = self.tracked_trades[pair]['trade']
         timestamp = round(datetime.now(timezone.utc).timestamp())
@@ -2287,12 +2085,10 @@ class Agent():
         k4 = Timer(f'close_tracked')
         k4.start()
 
-        print('')
         price = session.pairs_data[pair]['price']
-        now = datetime.now(timezone.utc)
-        note = f"{self.name} tracked close {direction} {pair} @ {price}"
-        print(now, note)
+        logger.info(f"{self.name} tracked close {direction} {pair} @ {price}")
 
+        now = datetime.now(timezone.utc)
         close_order = {'pair': pair,
                        'exe_price': str(price),
                        'trig_price': str(price),
@@ -2389,9 +2185,9 @@ class Agent():
         real_bal = Decimal(self.open_trades[pair]['position']['base_size'])
         base_size = Decimal(base_size)
         if base_size and (real_bal != base_size):  # check records match reality
-            print(f"{self.name} {pair} records don't match real balance. {real_bal = }, {base_size = }")
+            logger.warning(f"{self.name} {pair} records don't match real balance. {real_bal = }, {base_size = }")
             mismatch = 100 * abs(base_size - real_bal) / base_size
-            print(f"{mismatch = }%")
+            logger.warning(f"{mismatch = }%")
         elif base_size == 0: # in this case the stop was probably cleared previously
             base_size = real_bal
 
@@ -2461,10 +2257,10 @@ class Agent():
             try:
                 funcs.repay_asset_M(session, ph['loan_asset'], ph['liability'], session.live)
             except bx.BinanceAPIException as e:
-                print('Problem during repair_open')
-                pprint(ph)
-                print(e.status_code)
-                print(e.message)
+                logger.exception('Problem during repair_open')
+                logger.error(pformat(ph))
+                logger.error(e.status_code)
+                logger.error(e.message)
             finally:
                 del self.open_trades[pair]
 
@@ -2614,11 +2410,11 @@ class Agent():
                 elif ph['action'] == 'move_stop':
                     self.repair_move_stop(session, ph)
             except bx.BinanceAPIException as e:
-                print("problem during repair_trade_records")
-                pprint(ph)
+                logger.exception("problem during repair_trade_records")
+                logger.error(pformat(ph))
                 self.record_trades(session, all)
-                print(e.status_code)
-                print(e.message)
+                logger.error(e.status_code)
+                logger.error(e.message)
         k1.stop()
 
 
@@ -3220,21 +3016,29 @@ class TrailFractals(Agent):
         # Long model
         df['r_pct'] = df.long_r_pct
         long_features = df[self.long_info['features']].iloc[-1]
-        # print(f"{self.name} {self.tf} long inputs:")
-        # print(long_features)
         long_X = pd.DataFrame(long_features).transpose()
-        long_confidence = self.long_model.predict_proba(long_X)[0, 1]
+        try:
+            long_confidence = self.long_model.predict_proba(long_X)[0, 1]
+        except ValueError as e:
+            logger.exception('NaN in prediction set')
+            logger.error(e)
+            logger.error(long_X)
+            long_confidence = 0
 
         # Short model
         df = df.drop('long_r_pct', axis=1)
         df['r_pct'] = df.short_r_pct
         short_features = df[self.short_info['features']].iloc[-1]
-        # print(f"{self.name} {self.tf} short inputs:")
-        # print(short_features)
         short_X = pd.DataFrame(short_features).transpose()
-        short_confidence = self.short_model.predict_proba(short_X)[0, 1]
+        try:
+            short_confidence = self.short_model.predict_proba(short_X)[0, 1]
+        except ValueError as e:
+            logger.exception('NaN in prediction set')
+            logger.error(e)
+            logger.error(short_X)
+            short_confidence = 0
 
-        # print(f"{self.name} {pair} {self.tf} long conf: {long_confidence:.1%} short conf: {short_confidence:.1%}")
+        # logger.debug(f"{self.name} {pair} {self.tf} long conf: {long_confidence:.1%} short conf: {short_confidence:.1%}")
 
         # these are deliberately back-to-front because my analysis showed they were actually inversely correlated to pnl
         combined_long = short_confidence - long_confidence
@@ -3249,9 +3053,6 @@ class TrailFractals(Agent):
                 model_created = self.long_info.get('created')
             else:
                 model_created = self.long_model_path.stat().st_mtime
-            note = f"{self.name} Long {self.tf} {pair} @ {df.close.iloc[-1]} confidence: {long_confidence - short_confidence:.1%}\n"
-            # print(note)
-            self.notes += note
         elif (price < df.frac_high.iloc[-1]) and (combined_short > 0):
             signal_dict['confidence'] = combined_short
             signal_dict['bias'] = 'bearish'
@@ -3260,9 +3061,6 @@ class TrailFractals(Agent):
                 model_created = self.short_info.get('created')
             else:
                 model_created = self.short_model_path.stat().st_mtime
-            note = f"{self.name} Short {self.tf} {pair} @ {df.close.iloc[-1]} confidence: {short_confidence - long_confidence:.1%}\n"
-            # print(note)
-            self.notes += note
         else: # if there is no signal, long or short ratio might still be needed for moving stops
             return {'long_ratio': long_stop / price,
                     'short_ratio': short_stop / price}

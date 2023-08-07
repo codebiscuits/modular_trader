@@ -1,6 +1,7 @@
 from pathlib import Path
 from datetime import datetime, timezone
 from resources.timers import Timer
+from resources.loggers import create_logger
 from binance.client import Client
 import binance.enums as be
 import binance.exceptions as bx
@@ -16,6 +17,7 @@ import pandas as pd
 import json
 
 # pb = uf.init_pb()
+logger = create_logger('sessions')
 
 
 class TradingSession():
@@ -70,10 +72,10 @@ class TradingSession():
         self.get_asset_bals_s()
         self.get_asset_bals_m()
         self.spot_bal: float = self.account_bal_s()
-        print(f"Spot balance: {self.spot_bal}")
+        logger.info(f"Spot balance: {self.spot_bal}")
         self.spot_usdt_bal: dict = self.get_usdt_s()
         self.margin_bal: float = self.account_bal_m()
-        print(f"Margin balance: {self.margin_bal}")
+        logger.info(f"Margin balance: {self.margin_bal}")
         self.margin_usdt_bal: dict = self.get_usdt_m()
         self.check_fees()
         # self.check_margin_lvl()
@@ -116,7 +118,7 @@ class TradingSession():
         weight_limit = self.request_weight[1]
         raw_window = self.raw_requests[0]
         raw_limit = self.raw_requests[1]
-        # print(f"{window = } {weight_limit = } {raw_window = } {raw_limit = }")
+        # logger.debug(f"{window = } {weight_limit = } {raw_window = } {raw_limit = }")
 
         total = 0
         flag = 1
@@ -134,16 +136,13 @@ class TradingSession():
                 rolling_time = round(now - self.weights_count[n][0])
             if request_limit_exceeded and within_window:
                 flag = 0
-                print(f"request weight limit: {weight_limit} per {window}s. currently: {total} in the last {timespan:.1f}s")
-                print(f"track_weights needs {window - timespan:.1f}s of sleep")
-                print(f"used-weight-1m: {self.client.response.headers.get('x-mbx-used-weight-1m')}")
+                logger.info(f"request weight limit: {weight_limit} per {window}s. currently: {total} in the last {timespan:.1f}s")
+                logger.info(f"track_weights needs {window - timespan:.1f}s of sleep")
+                logger.info(f"used-weight-1m: {self.client.response.headers.get('x-mbx-used-weight-1m')}")
                 time.sleep(window - timespan)
             if timespan > max(window, raw_window):
                 flag = 0
-                # print(self.weights_count[0])
-                # print(self.weights_count[n])
                 self.weights_count = self.weights_count[n:]
-                # print(self.weights_count[0])
                 break
 
         raw_limit_exceeded = len(self.weights_count) > raw_limit
@@ -151,19 +150,19 @@ class TradingSession():
 
         if raw_limit_exceeded and within_raw_window:
             flag = 0
-            print(
+            logger.info(
                 f"raw request limit: {raw_limit} per {raw_window}s. currently: {total} in the last {timespan:.1f}s")
-            print(f"track_weights needs {raw_window - timespan:.1f}s of sleep")
-            print(f"used-weight: {self.client.response.headers['x-mbx-used-weight']}")
-            print(f"used-weight-1m: {self.client.response.headers['x-mbx-used-weight-1m']}")
+            logger.info(f"track_weights needs {raw_window - timespan:.1f}s of sleep")
+            logger.info(f"used-weight: {self.client.response.headers['x-mbx-used-weight']}")
+            logger.info(f"used-weight-1m: {self.client.response.headers['x-mbx-used-weight-1m']}")
             time.sleep(raw_window - timespan)
 
         # if flag and rolling_weight:
-        #     print(f"Current request weight: {rolling_weight} over {rolling_time}s, raw count: {len(self.weights_count)}")
+        #     logger.info(f"Current request weight: {rolling_weight} over {rolling_time}s, raw count: {len(self.weights_count)}")
         # elif flag:
         #     pre_roll_w = sum([w[1] for w in self.weights_count[n:]])
         #     pre_roll_t = round(now - self.weights_count[n][0])
-        #     print(f"Current request weight: {pre_roll_w} over {pre_roll_t}s, raw count: {len(self.weights_count)}")
+        #     logger.info(f"Current request weight: {pre_roll_w} over {pre_roll_t}s, raw count: {len(self.weights_count)}")
 
         tw.stop()
 
@@ -183,7 +182,9 @@ class TradingSession():
 
         if limits != old_limits:
             note = 'binance rate limits have changed, check and adjust session definition'
-            print('\n****************\n\n', note, '\n\n****************\n')
+            logger.debug('\n****************\n\n', note, '\n\n****************\n')
+            logger.info('\n****************\n\n', note, '\n\n****************\n')
+            logger.warning('\n****************\n\n', note, '\n\n****************\n')
             # pb.push_note('*** WARNING ***', note)
 
         for limit in limits:
@@ -353,8 +354,10 @@ class TradingSession():
         y.start()
         live = Path('/pi_downstairs.txt').exists() or Path('/pi_2.txt').exists()
 
-        if not live:
-            print('*** Warning: Not Live ***')
+        if live:
+            logger.debug('*** Warning: Live ***')
+        else:
+            logger.info('*** Warning: Not Live ***')
         y.stop()
         return live
 
@@ -410,8 +413,8 @@ class TradingSession():
             read_records = Path(f'/home/ross/coding/modular_trader/records')
             write_records = Path(f'/home/ross/coding/modular_trader/records')
 
-        print(f"{read_records = }")
-        print(f"{write_records = }")
+        logger.debug(f"{read_records = }")
+        logger.debug(f"{write_records = }")
 
         write_records.mkdir(exist_ok=True)
 
@@ -437,7 +440,7 @@ class TradingSession():
                 break
         if not ohlc_data:
             note = 'none of the paths for ohlc_data are available'
-            print(note)
+            logger.debug(note)
         v.stop()
         return ohlc_data
 
@@ -451,7 +454,7 @@ class TradingSession():
 
         info = self.symbol_info.get(pair)
         if not info:
-            print('get_exchange_info')
+            logger.debug('get_exchange_info')
             self.track_weights(10)
             abc = Timer('all binance calls')
             abc.start()
@@ -474,13 +477,13 @@ class TradingSession():
         margin_symbols = [d['symbol'] for d in self.margin_orders if d['type'] in algo_types]
         order_symbols = spot_symbols + margin_symbols
 
-        print('algo order counts:')
+        logger.info('algo order counts:')
         counted = Counter(order_symbols)
         for p, v in self.pairs_data.items():
             v['algo_orders'] = 0 if p not in counted else counted[p]
 
             if counted[p]:
-                print(p, counted[p])
+                logger.info(f"{p}: {counted[p]}")
 
         x7.stop()
 
@@ -531,7 +534,7 @@ class TradingSession():
 
         df = df.tail(enough).reset_index(drop=True)
         self.pairs_data[pair]['ohlc_5m'] = df
-        # print(f"{pair} ohlc stored in session")
+        # logger.debug(f"{pair} ohlc stored in session")
 
     def save_spreads(self):
         spreads_path = self.market_data_write / 'spreads.json'
@@ -548,7 +551,7 @@ class TradingSession():
         with open(spreads_path, 'w') as file:
             json.dump(spreads_data, file)
 
-        print(f'\nsaved spreads to {spreads_path}\n')
+        logger.info(f'\nsaved spreads to {spreads_path}\n')
 
     def load_mkt_ranks(self):
         filepath = self.market_data_read / 'market_ranks.parquet'
@@ -653,8 +656,6 @@ class TradingSession():
         cf.start()
 
         for f in self.features[tf]:
-            # print(f"processing {f}")
-            # print(len(df))
             if f == 'r_pct':
                 continue
             df = features.add_feature(df, f, tf)
@@ -693,7 +694,7 @@ class TradingSession():
                     side=be.SIDE_BUY,
                     type=be.ORDER_TYPE_MARKET,
                     quoteOrderQty=usdt_size)
-                # pprint(order)
+                # logger.debug(pformat(order))
             else:
                 # pb.push_note(now, 'Warning - Spot BNB balance low and not enough USDT to top up')
                 pass
@@ -734,7 +735,7 @@ class TradingSession():
             pct = round((100 * value / self.spot_bal), 5)
         else:
             pct = 0
-        # print(f'spot usdt stats: qty = {bal.get("free")}, {value = }, {pct = }, {self.spot_bal = }')
+        # logger.debug(f'spot usdt stats: qty = {bal.get("free")}, {value = }, {pct = }, {self.spot_bal = }')
 
         return {'qty': free, 'value': value, 'pf%': pct}
 
@@ -795,7 +796,7 @@ class TradingSession():
         net_bnb = free_bnb - interest
 
         if interest:
-            print(f'BNB interest: {interest}')
+            logger.info(f'BNB interest: {interest}')
 
         # calculate value
         bnb_value = net_bnb * self.pairs_data['BNBUSDT']['price']
@@ -810,7 +811,7 @@ class TradingSession():
                     side=be.SIDE_BUY,
                     type=be.ORDER_TYPE_MARKET,
                     quoteOrderQty=usdt_size)
-                # pprint(order)
+                # logger.debug(pformat(order))
             else:
                 # pb.push_note(now, 'Warning - Margin BNB balance low and not enough USDT to top up')
                 pass
@@ -824,7 +825,7 @@ class TradingSession():
                 self.client.repay_margin_loan(asset='BNB', amount='0.001')
         except bx.BinanceAPIException as e:
             if e.code == -3015:
-                print(" Top up BNB caused an exception trying to repay interest")
+                logger.exception(" Top up BNB caused an exception trying to repay interest")
                 return order
             else:
                 raise e
@@ -880,7 +881,7 @@ class TradingSession():
             pct = round((100 * value / self.margin_bal), 5)
         else:
             pct = 0
-        # print(f'margin usdt stats: qty = {bal.get("free")}, owed = {bal.get("borrowed")}, {value = }, {pct = }, {self.margin_bal = }')
+        # logger.debug(f'margin usdt stats: qty = {bal.get("free")}, owed = {bal.get("borrowed")}, {value = }, {pct = }, {self.margin_bal = }')
         um.stop()
         return {'qty': qty, 'owed': owed, 'value': value, 'pf%': pct}
 
@@ -900,7 +901,7 @@ class TradingSession():
         else:
             pct = 0
 
-        # print(f'usdt stats: {qty = }, {owed = }, {value = }, {pct = }, {self.margin_bal = }')
+        # logger.debug(f'usdt stats: {qty = }, {owed = }, {value = }, {pct = }, {self.margin_bal = }')
         self.margin_usdt_bal = {'qty': float(qty), 'owed': float(owed), 'value': float(value), 'pf%': float(pct)}
         hj.stop()
 
@@ -914,7 +915,7 @@ class TradingSession():
 
         self.m_acct = self.client.get_margin_account()
         self.margin_lvl = float(self.m_acct.get('marginLevel'))
-        print(f"Margin level: {self.margin_lvl:.2f}")
+        logger.info(f"Margin level: {self.margin_lvl:.2f}")
 
         net_asset = self.account_bal_m()
         max_debt = net_asset * (self.leverage - 1) # 3x leverage = net_asset*2, 5x leverage = net_asset*4
@@ -1000,13 +1001,13 @@ class TradingSession():
         self.margin_orders = []
 
         if len(self.pairs_set) > 35:
-            print("getting open margin orders for all pairs")
+            logger.info("getting open margin orders for all pairs")
             self.track_weights(len(self.client.get_margin_all_pairs()))
             # weighting for this call = number of pairs on exchange
             self.margin_orders = self.client.get_open_margin_orders()
         else:
             for pair in self.pairs_set:
-                print(f"getting open margin orders for {pair}")
+                logger.info(f"getting open margin orders for {pair}")
                 self.track_weights(10)
                 self.margin_orders.extend(self.client.get_open_margin_orders(symbol=pair))
         self.check_open_spot_orders()

@@ -5,7 +5,7 @@ from binance.client import Client
 import binance.enums as be
 import binance.exceptions as bx
 from decimal import Decimal, getcontext
-from pprint import pprint
+from pprint import pformat
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from typing import Tuple, Dict, Any
@@ -16,11 +16,13 @@ from resources import keys
 from resources import indicators as ind
 from resources import utility_funcs as uf
 from resources.timers import Timer
+from resources.loggers import create_logger
 
 cg = CoinGeckoAPI()
 # pb = uf.init_pb()
 ctx = getcontext()
 ctx.prec = 12
+logger = create_logger('binance_funcs')
 
 tf_dict = {'1m': Client.KLINE_INTERVAL_1MINUTE,
            '5m': Client.KLINE_INTERVAL_5MINUTE,
@@ -137,48 +139,12 @@ def get_bin_ohlc(pair: str, timeframe: str, span: str = "2 years ago UTC", sessi
     # check df is localised to UTC
     try:
         df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
-        print(f"funcs get_bin_ohlc - {pair} ohlc data wasn't timezone aware, fixed now.")
     except TypeError:
         pass
 
     df = df.drop(['close_time', 'ignore'], axis=1)
 
     return df
-
-
-# def get_all_cg_data(session, pair, tf, df_first, df_last):
-#     timespan = df_last - df_first
-#
-#     cg_data = get_cg_data(session.pairs_data[pair]['cg_symbol'], 1)
-#     print(cg_data)
-#
-#     if timespan.days > 1:
-#         short_start = cg_data.indexc[0]
-#         med_cg_data = get_cg_data(session.pairs_data[pair]['cg_symbol'], min(timespan.days + 1, 90))
-#         med_cg_data = med_cg_data.loc[med_cg_data.index < short_start]
-#         cg_data = pd.concat([cg_data, med_cg_data]).sort_index()
-#
-#     if timespan.days > 90:
-#         med_start = cg_data.index[0]
-#         long_cg_data = get_cg_data(session.pairs_data[pair]['cg_symbol'], timespan.days + 1)
-#         long_cg_data = long_cg_data.loc[long_cg_data.index < med_start]
-#         cg_data = pd.concat([cg_data, long_cg_data]).sort_index()
-#
-#     if tf == '5m':
-#         pass
-#     elif tf == '1m':
-#         cg_data = cg_data.resample('1T').interpolate()
-#     else:
-#         cg_data = resample(cg_data, tf)
-#
-#     if cg_data.index[0] < df_first:
-#         cg_data = cg_data.loc[cg_data.index >= df_first]
-#
-#     if cg_data.index[-1] > df_last:
-#         print('cg data was actually longer than binance data')
-#         cg_data = cg_data.loc[cg_data.index <= df_last]
-#
-#     return cg_data.reset_index(drop=True)
 
 
 def get_ohlc(pair: str, timeframe: str, span: str = "2 years ago UTC", session=None) -> pd.DataFrame:
@@ -202,7 +168,6 @@ def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame, session=None) -
     abc = Timer('all binance calls')
     abc.start()
 
-    # print('get_klines')
     if session:
         session.track_weights(1)
         client = session.client
@@ -212,20 +177,16 @@ def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame, session=None) -
     # check old_df is localised to UTC
     try:
         old_df['timestamp'] = old_df.timestamp.dt.tz_localize('UTC')
-        # print(f"funcs update_ohlc - {pair} ohlc data wasn't timezone aware, fixed now.")
     except TypeError:
         pass
 
     # get_klines is quicker than get_historical_klines but will only download 500 periods, calculate which to use
     deltas = {'1m': timedelta(minutes=1), '5m': timedelta(minutes=5), '15m': timedelta(minutes=15)}
     span_periods = (datetime.now(timezone.utc) - old_df.timestamp.iloc[-1]) / deltas[timeframe]
-    # print(f"{span_periods = }")
     if span_periods >= 500:
-        # print('used get_historical_klines')
         old_end = str(old_df.timestamp.iloc[-1])
         klines = client.get_historical_klines(symbol=pair, interval=tf_dict.get(timeframe), start_str=old_end)
     else:
-        # print('used get_klines')
         old_end = int(old_df.timestamp.iloc[-1].timestamp()) * 1000
         klines = client.get_klines(symbol=pair, interval=tf_dict.get(timeframe), startTime=old_end)
 
@@ -240,7 +201,6 @@ def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame, session=None) -
     # check df is localised to UTC
     try:
         df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
-        # print(f"funcs update_ohlc - {pair} ohlc data wasn't timezone aware, fixed now.")
     except TypeError:
         pass
 
@@ -285,53 +245,45 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
 
     if session.pairs_data[pair].get('ohlc_5m', None) is not None:
         df = session.pairs_data[pair]['ohlc_5m']
-        # print('got df from session.pairs_data')
 
     else:
         filepath = Path(f'{session.ohlc_data}/{pair}.parquet')
 
         if filepath.exists():
-            # df = pd.read_parquet(filepath)
             try:
                 pldf = pl.read_parquet(source=filepath, use_pyarrow=True)
                 df = pldf.to_pandas()
             except (ArrowInvalid, OSError) as e:
-                print(f"Problem reading {pair} parquet file, downloading from scratch.")
-                print(e)
+                logger.exception(f"Problem reading {pair} parquet file, downloading from scratch.")
                 filepath.unlink()
                 df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC')
 
             # check df is localised to UTC
             try:
                 df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
-                # print(f"funcs prepare_ohlc - {pair} ohlc data wasn't timezone aware, fixed now.")
             except TypeError:
                 pass
 
             last_timestamp = df.timestamp.iloc[-1].timestamp()
             now = datetime.now(timezone.utc).timestamp()
             data_age_mins = (now - last_timestamp) / 60
-            # print(f"\n{pair} ohlc data ends: {(now - last_timestamp) / 60:.1f} minutes ago")
+            logger.debug(f"\n{pair} ohlc data ends: {(now - last_timestamp) / 60:.1f} minutes ago")
             if (data_age_mins < 15) and (len(df) > 2):
                 # update last close price with current price
-                # print(f"{pair} ohlc data less than 15 mins old, adjusting last close")
+                logger.debug(f"{pair} ohlc data less than 15 mins old, adjusting last close")
                 last_idx = df.index[-1]
                 df.at[last_idx, 'close'] = session.pairs_data[pair]['price']
             elif len(df) > 2:
                 df = update_ohlc(pair, session.ohlc_tf, df, session)
-                # print('updated ohlc')
             else:
                 df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
-                # print(f'{pair} ohlc too short to update, downloaded from scratch')
 
         else:
             df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
-            print(f'downloaded {pair} from scratch')
 
         # check df is localised to UTC
         try:
             df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
-            # print(f"funcs prepare_ohlc - {pair} ohlc data wasn't timezone aware, fixed now.")
         except TypeError:
             pass
 
@@ -361,7 +313,7 @@ def create_stop_dict(session, order: dict) -> dict:
     yu = Timer('create_stop-dict')
     yu.start()
 
-    pprint(order)
+    logger.debug(pformat(order))
 
     pair = order.get('symbol')
     quote_qty = order.get('cummulativeQuoteQty')
@@ -382,7 +334,7 @@ def create_stop_dict(session, order: dict) -> dict:
                   'fee_currency': 'BNB'
                   }
     if order.get('status') != 'FILLED':
-        print(f'{pair} order not filled')
+        logger.warning(f'{pair} order not filled')
         # pb.push_note('Warning', f'{pair} stop-loss hit but not filled')
     yu.stop()
     return trade_dict
@@ -416,7 +368,7 @@ def create_trade_dict(order: dict, price: float, live: bool) -> Dict[str, str]:
                       'fee_currency': fills[0].get('commissionAsset')
                       }
         if order.get('status') != 'FILLED':
-            print(f'{pair} order not filled')
+            logger.warning(f'{pair} order not filled')
             # pb.push_note('Warning', f'{pair} order not filled')
 
     else:
@@ -520,7 +472,7 @@ def set_stop_s(session, pair, trigger, limit, size):
     trigger = uf.valid_price(session, pair, trigger)
     limit = uf.valid_price(session, pair, limit)
     stop_size = uf.valid_size(session, pair, size)
-    print(f"setting {pair} stop: {stop_size = } {trigger = } {limit = }")
+    logger.info(f"setting {pair} stop: {stop_size = } {trigger = } {limit = }")
     if session.live:
         stop_sell_order = session.client.create_order(symbol=pair,
                                               side=be.SIDE_SELL,
@@ -557,12 +509,12 @@ def clear_stop_s(session, pair: str, position: dict) -> Tuple[Any, Decimal]:
                 clear = session.client.cancel_order(symbol=pair, orderId=str(stop_id))
                 base_size = clear.get('origQty')
             except bx.BinanceAPIException as e:
-                print(f"Exception during clear_stop_s on {pair}. If it's 'unknown order sent' then it was probably "
+                logger.exception(f"Exception during clear_stop_s on {pair}. If it's 'unknown order sent' then it was probably "
                       f"trying to cancel a stop-loss that had already been cancelled")
-                print(e.status_code)
-                print(e.message)
+                logger.error(e.status_code)
+                logger.error(e.message)
         else:
-            print(f'no recorded stop id for {pair}')
+            logger.warning(f'no recorded stop id for {pair}')
     else:
         base_size = position['base_size']
 
@@ -601,9 +553,9 @@ def buy_asset_M(session, pair: str, size: float, is_base: bool, live: bool) -> d
             usdt_size = f"{float(size) * price:.2f}"
         else:
             base_size = uf.valid_size(session, pair, size / price)
-            print(f'buy_asset_M {size = }, {base_size = }')
+            logger.info(f'buy_asset_M {size = }, {base_size = }')
             if not float(base_size):  # if size == 0, valid_size will output None
-                print(f'*problem* non-live buy {pair}: {base_size = }')
+                logger.warning(f'*problem* non-live buy {pair}: {base_size = }')
                 base_size = 0
             usdt_size = str(size)
         buy_order = {'clientOrderId': '111111',
@@ -685,10 +637,10 @@ def repay_asset_M(session, asset: str, qty: str, live: bool) -> bool:
             session.client.repay_margin_loan(asset=asset, amount=qty)
             return True
         except bx.BinanceAPIException as e:
-            print(f"*** Exception whilst trying to repay {qty} {asset}. If it says 'repay amount larger than loan "
+            logger.exception(f"*** Exception whilst trying to repay {qty} {asset}. If it says 'repay amount larger than loan "
                   f"amount, it's most likely no loan to be repayed.")
-            print(e.code)
-            print(e.message)
+            logger.error(e.code)
+            logger.error(e.message)
             return False
 
 
@@ -705,7 +657,7 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit
     limit = uf.valid_price(session, pair, limit)
     stop_size = uf.valid_size(session, pair, size)
 
-    print(f"setting {pair} stop: {stop_size = } {side = } {trigger = } {limit = }")
+    logger.info(f"setting {pair} stop: {stop_size = } {side = } {trigger = } {limit = }")
     if session.live:
         try:
             stop_sell_order = session.client.create_margin_order(symbol=pair,
@@ -717,6 +669,7 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit
                                                          price=limit)
         except bx.BinanceAPIException as e:
             if e.code == -2010:
+                logger.exception(e)
                 if side == 'long':
                     trigger = uf.valid_price(session, pair, float(trigger) * 0.99)
                 else:
@@ -756,12 +709,12 @@ def clear_stop_M(session, pair: str, position: dict) -> Tuple[Any, Decimal]:
                 base_size = clear.get('origQty')
                 session.pairs_data[pair]['algo_orders'] -= 1
             except bx.BinanceAPIException as e:
-                print(f"Exception during clear_stop_M on {pair}. If it's 'unknown order sent' then it was probably "
+                logger.exception(f"Exception during clear_stop_M on {pair}. If it's 'unknown order sent' then it was probably "
                       f"trying to cancel a stop-loss that had already been cancelled")
-                print(e.status_code)
-                print(e.message)
+                logger.error(e.status_code)
+                logger.error(e.message)
         else:
-            print(f'no recorded stop id for {pair}')
+            logger.warning(f'no recorded stop id for {pair}')
     else:
         base_size = position['base_size']
 
