@@ -8,7 +8,7 @@ from resources import keys
 def create_logger(source):
     today = datetime.now(timezone.utc).strftime('%-d_%m_%y')
     hour = datetime.now(timezone.utc).hour
-    folder = Path(f"logs/{today}")
+    folder = Path(f"/home/ross/coding/modular_trader/logs/{today}")
     folder.mkdir(parents=True, exist_ok=True)
 
     def filter_maker(levels):

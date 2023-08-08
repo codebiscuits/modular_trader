@@ -460,7 +460,7 @@ class Agent():
                     logger.exception(f'{self.name} problem with record_stopped_trades during {pair}')
                     logger.error(e)
             elif order['status'] == 'CANCELED':
-                logger.warning(f'\nProblem with {self.name} {pair} trade record\n')
+                logger.warning(f'Problem with {self.name} {pair} trade record')
 
                 # TODO it should be possible to check the placeholder in the trade record and piece together what to do
                 ph = self.open_trades[pair].get('placeholder')
@@ -663,7 +663,7 @@ class Agent():
         session.counts.append('rsst')
 
         check_pairs = list(self.sim_trades.items())
-        # logger.debug(f"\n{self.name} rsst, checking {len(check_pairs)} pairs")
+        # logger.debug(f"{self.name} rsst, checking {len(check_pairs)} pairs")
         for pair, v in check_pairs:  # can't loop through the dictionary directly because i delete items as i go
             direction = v['position']['direction']
             base_size = float(v['position']['base_size'])
