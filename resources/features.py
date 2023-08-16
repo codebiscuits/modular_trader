@@ -80,11 +80,39 @@ def add_feature(df, name, timeframe):
         'recent_vd_div_2': {'call': vol_delta_div, 'params': (df, 2)},
         'recent_vd_div_3': {'call': vol_delta_div, 'params': (df, 3)},
         'recent_vd_div_4': {'call': vol_delta_div, 'params': (df, 4)},
+        'round_num_prox': {'call': round_numbers_proximity, 'params': (df,)},
+        'big_round_num_prox': {'call': big_round_nums_proximity, 'params': (df,)},
+        'spooky_num_prox': {'call': spooky_nums_proximity, 'params': (df,)},
+        'round_nums_close_1': {'call': round_numbers_close, 'params': (df, 1)},
+        'round_nums_close_2': {'call': round_numbers_close, 'params': (df, 2)},
+        'round_nums_close_3': {'call': round_numbers_close, 'params': (df, 3)},
+        'round_nums_close_4': {'call': round_numbers_close, 'params': (df, 4)},
+        'round_nums_close_5': {'call': round_numbers_close, 'params': (df, 5)},
+        'big_round_nums_close_1': {'call': big_round_nums_close, 'params': (df, 1)},
+        'big_round_nums_close_5': {'call': big_round_nums_close, 'params': (df, 5)},
+        'big_round_nums_close_10': {'call': big_round_nums_close, 'params': (df, 10)},
+        'big_round_nums_close_15': {'call': big_round_nums_close, 'params': (df, 15)},
+        'big_round_nums_close_20': {'call': big_round_nums_close, 'params': (df, 20)},
         'rsi_14': {'call': rsi, 'params': (df, 14)},
         'rsi_25': {'call': rsi, 'params': (df, 25)},
         'rsi_50': {'call': rsi, 'params': (df, 50)},
         'rsi_100': {'call': rsi, 'params': (df, 100)},
         'rsi_200': {'call': rsi, 'params': (df, 200)},
+        'rsi_14_above_30': {'call': rsi_above, 'params': (df, 14, 30)},
+        'rsi_25_above_30': {'call': rsi_above, 'params': (df, 25, 30)},
+        'rsi_50_above_30': {'call': rsi_above, 'params': (df, 50, 30)},
+        'rsi_100_above_30': {'call': rsi_above, 'params': (df, 100, 30)},
+        'rsi_200_above_30': {'call': rsi_above, 'params': (df, 200, 30)},
+        'rsi_14_above_50': {'call': rsi_above, 'params': (df, 14, 50)},
+        'rsi_25_above_50': {'call': rsi_above, 'params': (df, 25, 50)},
+        'rsi_50_above_50': {'call': rsi_above, 'params': (df, 50, 50)},
+        'rsi_100_above_50': {'call': rsi_above, 'params': (df, 100, 50)},
+        'rsi_200_above_50': {'call': rsi_above, 'params': (df, 200, 50)},
+        'rsi_14_above_70': {'call': rsi_above, 'params': (df, 14, 70)},
+        'rsi_25_above_70': {'call': rsi_above, 'params': (df, 25, 70)},
+        'rsi_50_above_70': {'call': rsi_above, 'params': (df, 50, 70)},
+        'rsi_100_above_70': {'call': rsi_above, 'params': (df, 100, 70)},
+        'rsi_200_above_70': {'call': rsi_above, 'params': (df, 200, 70)},
         'skew_6': {'call': skew, 'params': (df, 6)},
         'skew_12': {'call': skew, 'params': (df, 12)},
         'skew_25': {'call': skew, 'params': (df, 25)},
@@ -104,6 +132,18 @@ def add_feature(df, name, timeframe):
         'stoch_vwma_ratio_100': {'call': stoch_vwma_ratio, 'params': (df, 100)},
         'fractal_trend_age_long': {'call': fractal_trend_age, 'params': (df, )},
         'fractal_trend_age_short': {'call': fractal_trend_age, 'params': (df, )},
+        'volume_climax_up_12': {'call': volume_climax_up, 'params': (df, 12)},
+        'volume_climax_up_25': {'call': volume_climax_up, 'params': (df, 25)},
+        'volume_climax_up_50': {'call': volume_climax_up, 'params': (df, 50)},
+        'volume_climax_dn_12': {'call': volume_climax_down, 'params': (df, 12)},
+        'volume_climax_dn_25': {'call': volume_climax_down, 'params': (df, 25)},
+        'volume_climax_dn_50': {'call': volume_climax_down, 'params': (df, 50)},
+        'high_volume_churn_12': {'call': high_volume_churn, 'params': (df, 12)},
+        'high_volume_churn_25': {'call': high_volume_churn, 'params': (df, 25)},
+        'high_volume_churn_50': {'call': high_volume_churn, 'params': (df, 50)},
+        'low_volume_12': {'call': low_volume_bar, 'params': (df, 12)},
+        'low_volume_25': {'call': low_volume_bar, 'params': (df, 25)},
+        'low_volume_50': {'call': low_volume_bar, 'params': (df, 50)},
         'vol_delta': {'call': vol_delta, 'params': (df,)},
         'vol_delta_pct': {'call': vol_delta_pct, 'params': (df,)},
         'vol_denom_roc_2': {'call': vol_denom_roc, 'params': (df, 2, 25)},
@@ -117,17 +157,95 @@ def add_feature(df, name, timeframe):
 
     return df
 
-# new features: round_numbers_proximity (powers of 10, single digit integer multiples of powers of 10,
-# numerology numbers, numerology multiples of powers of 10
+
+def vol_doji(df: pd.DataFrame, thresh: float, lookback: int, weighted: bool) -> pd.DataFrame:
+    """same as doji, but the wicks are measured in terms of recent atr volatility, so """
+    pass
 
 
-def htf_fractals_proximity(df: pd.DataFrame, orig_tf: str, htf: str='W', frac_width: int=5) -> pd.DataFrame:
+def volume_climax_up(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
+    bar_range = (df.close - df.open) / ((df.close + df.open) / 2)
+    volume_up_bar = df.taker_buy_base_vol * bar_range
+    df[f'volume_climax_up_{lookback}'] = volume_up_bar == volume_up_bar.rolling(lookback).max()
+
+    return df
+
+def volume_climax_down(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
+    bar_range = (df.close - df.open) / ((df.close + df.open) / 2)
+    volume_dn_bar = (df.base_vol - df.taker_buy_base_vol) * (1 - bar_range)
+    df[f'volume_climax_dn_{lookback}'] = volume_dn_bar == volume_dn_bar.rolling(lookback).max()
+
+    return df
+
+def high_volume_churn(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
+    wick_range = (df.high - df.low) / ((df.high + df.low) / 2)
+    churn = df.base_vol / wick_range
+    df[f'high_volume_churn_{lookback}'] = churn == churn.rolling(lookback).max()
+
+    return df
+
+def low_volume_bar(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
+    df[f'low_volume_{lookback}'] = df.base_vol == df.base_vol.rolling(lookback).min()
+
+    return df
+
+
+def rsi_timing_long(df: pd.DataFrame, periods: int, rsi_length: int=14) -> pd.DataFrame:
+    if f"rsi_{rsi_length}" not in df.columns:
+        df[f"rsi_{rsi_length}"] = ind.rsi(df.close, rsi_length)
+
+    df[f"rsi_timing_{periods}_{rsi_length}"] = (((df[f"rsi_{rsi_length}"].pct_change(3) < 0).rolling(periods).sum() +
+                                                 (df[f"rsi_{rsi_length}"] < 30)) == periods + 1)
+
+    return df
+
+
+def round_numbers_proximity(df: pd.DataFrame) -> pd.DataFrame:
+    nums = [x*y for x in range(1, 10) for y in [10**z for z in range(-4, 6)]]
+    df['round_num_prox'] = df.vwma.map(lambda x: min([abs(x - value) / ((x + value) / 2) for value in nums]))
+
+    return df
+
+
+def round_numbers_close(df: pd.DataFrame, threshold) -> pd.DataFrame:
+    nums = [x*y for x in range(1, 10) for y in [10**z for z in range(-4, 6)]]
+    round_num_prox = df.vwma.map(lambda x: min([abs(x - value) / ((x + value) / 2) for value in nums]))
+    df[f"round_nums_close_{threshold}"] = (round_num_prox * 100) < threshold
+
+    return df
+
+
+def big_round_nums_proximity(df: pd.DataFrame) -> pd.DataFrame:
+    big_nums = [10**z for z in range(-4, 6)]
+    df['big_round_num_prox'] = df.vwma.map(lambda x: min([abs(x - value) / ((x + value) / 2) for value in big_nums]))
+
+    return df
+
+
+def big_round_nums_close(df: pd.DataFrame, threshold) -> pd.DataFrame:
+    big_nums = [10**z for z in range(-4, 6)]
+    big_round_num_prox = df.vwma.map(lambda x: min([abs(x - value) / ((x + value) / 2) for value in big_nums]))
+    df[f"big_round_nums_close_{threshold}"] = (big_round_num_prox * 100) < threshold
+
+    return df
+
+
+def spooky_nums_proximity(df: pd.DataFrame) -> pd.DataFrame:
+    spooky_nums = [8, 13, 39, 69, 88, 420, 666, 888]
+    nums = [x * y for x in spooky_nums for y in [10 ** z for z in range(-4, 6)]]
+    df['spooky_num_prox'] = df.vwma.map(lambda x: min([abs(x - value) / ((x + value) / 2) for value in nums]))
+
+    return df
+
+
+def htf_fractals_proximity(df: pd.DataFrame, orig_tf: str, htf: str='W', frac_width: int=3) -> pd.DataFrame:
     """resamples to weekly or monthly timeframe, calculates williams fractals on that, works out which is closest to the
     current price and returns the pct difference"""
-
-    closes = df.close.resample(htf).shift(1) # make sure the close price for each week is recorded on the following week
+    # TODO this isn't finished yet
 
     # only need to resample close column
+    closes = df.close.resample(htf).shift(1) # make sure the close price for each week is recorded on the following week
+
     fractal_high = np.where(closes == closes.rolling(frac_width, center=True).max(), closes, np.nan)
     fractal_low = np.where(closes == closes.rolling(frac_width, center=True).min(), closes, np.nan)
 
@@ -233,11 +351,6 @@ def doji(df: pd.DataFrame, thresh: float, lookback: int, weighted: bool) -> pd.D
     df[f'{w}_bear_doji'] = bear_bool_window
 
     return df
-
-
-def vol_doji(df: pd.DataFrame, thresh: float, lookback: int, weighted: bool) -> pd.DataFrame:
-    """same as doji, but the wicks are measured in terms of recent atr volatility, so """
-    pass
 
 
 def bull_bear_bar(df) -> pd.DataFrame:
@@ -404,6 +517,11 @@ def inside_bar(df: pd.DataFrame) -> pd.DataFrame:
 
 def rsi(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
     df[f"rsi_{lookback}"] = ind.rsi(df.close, lookback)
+    return df
+
+
+def rsi_above(df: pd.DataFrame, lookback: int, thresh: int) -> pd.DataFrame:
+    df[f"rsi_{lookback}_above_{thresh}"] = ind.rsi(df.close, lookback) > thresh
     return df
 
 

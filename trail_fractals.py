@@ -22,9 +22,9 @@ if not Path('/pi_2.txt').exists():
 
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.model_selection import GridSearchCV, train_test_split, cross_val_score
-from sklearn.feature_selection import SelectKBest, mutual_info_classif
 from sklearn.metrics import fbeta_score, make_scorer
 from sklearn.calibration import CalibratedClassifierCV
+from sklearn.feature_selection import SelectKBest, mutual_info_classif
 from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 from imblearn.under_sampling import RandomUnderSampler
 
@@ -43,7 +43,7 @@ def init_client(max_retries: int=360, delay: int=5):
 
 client = init_client()
 
-logger = create_logger('trail_fractals')
+logger = create_logger('trail_fractals', 'trail_fractals')
 
 all_start = time.perf_counter()
 now = datetime.now().strftime('%Y/%m/%d %H:%M')
@@ -55,7 +55,7 @@ def feature_selection(X, y, limit, quick=False):
     if quick:
         selector = SelectKBest(mutual_info_classif, k=15)
     else:
-        selector = SelectKBest(mutual_info_classif, k=36)
+        selector = SelectKBest(mutual_info_classif, k=136)
     X_selected = selector.fit_transform(X, y)
     selector_cols = selector.get_support(indices=True)
     selected_columns = [col for i, col in enumerate(cols) if i in selector_cols]
@@ -134,13 +134,17 @@ timeframes = ['1h',
 sides = ['long',
          'short'
          ]
-data_len = 200
+data_len = 500
 num_pairs = 30
 start_pair = 0
 width = 5
 atr_spacing = 2
 scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
-configs = [(True, 'volumes'), (True, 'volatilities'), (False, 'volumes')]
+configs = [
+    (True, 'volumes'),
+    (True, 'volatilities'),
+    (False, 'volumes')
+]
 
 for i in range(360):
     try:
@@ -191,6 +195,7 @@ for side, timeframe, config in itertools.product(sides, timeframes, configs):
     if not running_on_pi:
         print(f"feature selection began: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
         X, y, selected = feature_selection(X, y, 1000, quick=speed)
+        print(selected)
 
     # split data for fitting and calibration
     X, X_cal, y, y_cal = train_test_split(X, y, test_size=0.333, random_state=11)
@@ -210,9 +215,10 @@ for side, timeframe, config in itertools.product(sides, timeframes, configs):
 
     # save to files
     quick_str = 'quick' if speed else 'slow'
-    folder = Path(f"machine_learning/models/trail_fractals_{quick_str}_{pair_selection}")
+    folder = Path(f"machine_learning/models/trail_fractals_{quick_str}_{pair_selection}_{num_pairs}")
     folder.mkdir(parents=True, exist_ok=True)
-    pi2_folder = Path(f"/home/ross/coding/pi2/modular_trader/machine_learning/models/trail_fractals_{quick_str}_{pair_selection}")
+    pi2_folder = Path(f"/home/ross/coding/pi_2/modular_trader/machine_learning/"
+                      f"models/trail_fractals_{quick_str}_{pair_selection}_{num_pairs}")
     pi2_folder.mkdir(parents=True, exist_ok=True)
 
     # save ml model on laptop and pi

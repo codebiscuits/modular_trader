@@ -400,7 +400,8 @@ def vol_delta_div(df: pd.DataFrame) -> bool:
     return (roc.iloc[-1] > 0 > df.vol_delta.iloc[-1]) or (roc.iloc[-1] < 0 < df.vol_delta.iloc[-1])
 
 
-def rsi(s: pd.Series, lookback: int = 14) -> pd.Series:
+def rsi(s: pd.Series, lookback: int=14) -> pd.Series:
+    #TODO this calculation is all wrong, i need to completely rewrite it
     avg_up = s.pct_change().clip(lower=0).rolling(lookback).mean()
     avg_dn = s.pct_change().clip(upper=0).abs().rolling(lookback).mean()
 

@@ -7,17 +7,18 @@ from pathlib import Path
 from sessions import LightSession
 from pyarrow import ArrowInvalid
 import json
+from resources.loggers import create_logger
 
 pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
 
-# pb = uf.init_pb()
+logger = create_logger('update_ohlc', 'update_ohlc')
 
 now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
 
 session = LightSession()
 
-print('-:-' * 10, f' {now} UTC running update_ohlc ', '-:-' * 10)
+logger.debug(f"{'-:-' * 10} {now} UTC running update_ohlc {'-:-' * 10}")
 
 start = time.perf_counter()
 
@@ -40,7 +41,7 @@ def from_scratch(session, pair, tf):
     df = funcs.get_ohlc(pair, tf, '2 years ago UTC', session)
     df_end = time.perf_counter()
     elapsed = df_end - df_start
-    print(f'downloaded {pair} from scratch, took {int(elapsed // 60)}m {elapsed % 60:.1f}s')
+    logger.info(f'downloaded {pair} from scratch, took {int(elapsed // 60)}m {elapsed % 60:.1f}s')
     return df
 
 
@@ -58,8 +59,9 @@ def iterations(n, session, pair, tf):
             df = pldf.to_pandas()
 
         except (ArrowInvalid, OSError) as e:
-            print('Error:\n', e)
-            print(f"Problem reading {pair} parquet file, downloading from scratch.")
+            logger.error('Error:\n', e)
+            logger.error(f"Problem reading {pair} parquet file, downloading from scratch.")
+            logger.exception(e)
             filepath.unlink()
             df = from_scratch(session, pair, tf)
 
@@ -122,8 +124,8 @@ for n, pair in enumerate(pairs):
     try:
         df = iterations(n, session, pair, '5m')
     except Exception as e:
-        print(f"*** {pair} exception during download, data not downloaded ***")
-        print(e)
+        logger.error(f"*** {pair} exception during download, data not downloaded ***")
+        logger.exception(e)
         continue
 
     rocs[pair] = {}
@@ -146,5 +148,5 @@ end = time.perf_counter()
 all_time = end - start
 elapsed_str = f'Time taken: {round(all_time // 60)}m {round(all_time % 60)}s'
 
-print(f"used-weight-1m: {session.client.response.headers['x-mbx-used-weight-1m']}")
-print(f'update_ohlc complete, {elapsed_str}')
+logger.info(f"used-weight-1m: {session.client.response.headers['x-mbx-used-weight-1m']}")
+logger.info(f'update_ohlc complete, {elapsed_str}')

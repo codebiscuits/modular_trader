@@ -5,7 +5,7 @@ from pathlib import Path
 from logging import handlers
 from resources import keys
 
-def create_logger(source):
+def create_logger(source, other_path=None):
     today = datetime.now(timezone.utc).strftime('%-d_%m_%y')
     hour = datetime.now(timezone.utc).hour
     folder = Path(f"/home/ross/coding/modular_trader/logs/{today}")
@@ -31,7 +31,8 @@ def create_logger(source):
     logger.addHandler(debug_handler)
 
     info_formatter = logging.Formatter(fmt='%(message)s')
-    info_handler = logging.FileHandler(folder / f'{hour}_info.log')
+    info_path = f'{hour}_{other_path}_info.log' if other_path else f'{hour}_info.log'
+    info_handler = logging.FileHandler(folder / info_path)
     info_handler.setFormatter(info_formatter)
     info_handler.setLevel(logging.INFO)
     info_filter = filter_maker(['INFO'])
@@ -39,7 +40,8 @@ def create_logger(source):
     logger.addHandler(info_handler)
 
     error_formatter = logging.Formatter(fmt='%(asctime)s | %(name)s line %(lineno)d | %(message)s', datefmt='%H:%M %d-%m-%Y')
-    error_handler = logging.FileHandler(folder / f'{hour}_error.log')
+    error_path = f'{hour}_{other_path}_error.log' if other_path else f'{hour}_error.log'
+    error_handler = logging.FileHandler(folder / error_path)
     error_handler.setFormatter(error_formatter)
     error_handler.setLevel(logging.ERROR) # no filter so this means ERROR and above
     logger.addHandler(error_handler)
