@@ -24,13 +24,13 @@ from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.model_selection import GridSearchCV, train_test_split, cross_val_score
 from sklearn.metrics import fbeta_score, make_scorer
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.feature_selection import SelectKBest, mutual_info_classif
+from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif, chi2
 from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 from imblearn.under_sampling import RandomUnderSampler
 
 running_on_pi = Path('/pi_2.txt').exists()
-if not running_on_pi:
-    import update_ohlc
+# if not running_on_pi:
+#     import update_ohlc
 
 def init_client(max_retries: int=360, delay: int=5):
     for i in range(max_retries):
@@ -53,17 +53,47 @@ all_start = time.perf_counter()
 now = datetime.now().strftime('%Y/%m/%d %H:%M')
 print(f"-:--:--:--:--:--:--:--:--:--:-  {now} Running Trail Fractals Fitting  -:--:--:--:--:--:--:--:--:--:-")
 
-def feature_selection(X, y, limit, quick=False):
+def feature_selection(X, y, limit):
     fs_start = time.perf_counter()
 
-    if quick:
-        selector = SelectKBest(mutual_info_classif, k=15)
-    else:
-        selector = SelectKBest(mutual_info_classif, k=36)
-    X_selected = selector.fit_transform(X, y)
-    selector_cols = selector.get_support(indices=True)
-    selected_columns = [col for i, col in enumerate(cols) if i in selector_cols]
-    X = pd.DataFrame(X_selected, columns=selected_columns)
+    pre_selector_model = GradientBoostingClassifier(random_state=42,
+                                                n_estimators=10000,
+                                                validation_fraction=0.1,
+                                                n_iter_no_change=50,
+                                                subsample=0.5,
+                                                min_samples_split=8,
+                                                max_depth=12,
+                                                learning_rate=0.3)
+
+    selector_1 = SFS(estimator=pre_selector_model, k_features=10, forward=True,
+                     floating=False, verbose=0, scoring=scorer, n_jobs=-1)
+    selector_2 = SelectKBest(f_classif, k=10)
+    selector_3 = SelectKBest(mutual_info_classif, k=10)
+
+    print(f"Forward sfs started {now}")
+    selector_1 = selector_1.fit(X, y)
+    print(f"f_classif k_best started {now}")
+    selector_2.fit(X, y)
+    print(f"mutual_info k_best started {now}")
+    selector_3.fit(X, y)
+    print(f"pre-selection finished {now}")
+
+    cols_1 = list(selector_1.k_feature_idx_)
+    cols_2 = list(selector_2.get_support(indices=True))
+    cols_3 = list(selector_3.get_support(indices=True))
+    all_cols = list(set(cols_1 + cols_2 + cols_3))
+
+    print(cols_1)
+    print(cols_2)
+    print(cols_3)
+    print(all_cols)
+    print(f"{len(cols) = }")
+
+    # selected_columns = [cols[i] for i in all_cols]
+    selected_columns = [col for i, col in enumerate(cols) if i in all_cols]
+    print(selected_columns)
+
+    X = pd.DataFrame(X[:, all_cols], columns=selected_columns)
 
     if X.shape[0] > limit:
         X_train, _, y_train, _ = train_test_split(X, y, train_size=limit, random_state=99)
@@ -140,11 +170,6 @@ start_pair = 0
 width = 5
 atr_spacing = 2
 scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
-configs = [
-    (True, 'volumes'),
-    (True, 'volatilities'),
-    (False, 'volumes')
-]
 
 for i in range(360):
     try:
@@ -154,17 +179,15 @@ for i in range(360):
     except requests.exceptions.ConnectionError as e:
         time.sleep(5)
 
-for side, timeframe, config in itertools.product(sides, timeframes, configs):
-    speed = config[0]
-    pair_selection = config[1]
+for side, timeframe in itertools.product(sides, timeframes):
 
-    print(f"\nFitting {timeframe} {side}, {speed}, {pair_selection} model")
+    print(f"\nFitting {timeframe} {side} model")
     loop_start = time.perf_counter()
 
     if running_on_pi:
         pairs = load_pairs(side, timeframe)
     else:
-        pairs = mlf.rank_pairs(pair_selection)
+        pairs = mlf.rank_pairs('volumes')
         symbol_margin = {i['symbol']: i['isMarginTradingAllowed'] for i in exc_info['symbols'] if i['quoteAsset'] == 'USDT'}
         pairs = [p for p in pairs if symbol_margin[p]]
         pairs = pairs[start_pair:start_pair + num_pairs]
@@ -194,7 +217,7 @@ for side, timeframe, config in itertools.product(sides, timeframes, configs):
     # feature selection
     if not running_on_pi:
         print(f"feature selection began: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
-        X, y, selected = feature_selection(X, y, 1000, quick=speed)
+        X, y, selected = feature_selection(X, y, 1000)
         print(selected)
 
     # split data for fitting and calibration
@@ -250,3 +273,4 @@ for side, timeframe, config in itertools.product(sides, timeframes, configs):
 all_end = time.perf_counter()
 all_elapsed = all_end - all_start
 print(f"\nTotal time taken: {int(all_elapsed // 3600)}h {int(all_elapsed // 60) % 60}m {all_elapsed % 60:.1f}s")
+
