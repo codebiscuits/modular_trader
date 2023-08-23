@@ -13,6 +13,8 @@ def load_all(folder: Path, types: list[str]):
                 data = json.load(file)
         except json.decoder.JSONDecodeError as e:
             data = None
+        except FileNotFoundError as e:
+            data = None
 
         if data:
             if all_data.get(agent.parts[7]):

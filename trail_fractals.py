@@ -55,7 +55,7 @@ def feature_selection(X, y, limit, quick=False):
     if quick:
         selector = SelectKBest(mutual_info_classif, k=15)
     else:
-        selector = SelectKBest(mutual_info_classif, k=136)
+        selector = SelectKBest(mutual_info_classif, k=36)
     X_selected = selector.fit_transform(X, y)
     selector_cols = selector.get_support(indices=True)
     selected_columns = [col for i, col in enumerate(cols) if i in selector_cols]
@@ -236,7 +236,7 @@ for side, timeframe, config in itertools.product(sides, timeframes, configs):
                      'frac_width': width,
                      'atr_spacing': atr_spacing,
                      'created': int(datetime.now(timezone.utc).timestamp()),
-                     'quick': speed,
+                     'feature_selection': speed,
                      'pair_selection': pair_selection}
         with open(folder / model_info, 'w') as info:
             json.dump(info_dict, info)

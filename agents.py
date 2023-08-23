@@ -2952,26 +2952,22 @@ class EMACrossHMA(Agent):
 class TrailFractals(Agent):
     """Machine learning strategy based around williams fractals trailing stops"""
 
-    # TODO if i'm only going to use machine learning strats from this point forward, it would be worth  making a
-    #  session.valid_pairs set just like the session.features set so i'm not going through hundreds of pairs for no
-    #  reason, but make sure things like spreads still get recorded for every pair (maybe it's time to move that to
-    #  update_ohlc or something)
-
-    def __init__(self, session, tf: str, offset: int, training_speed: str, training_selection: str, num_pairs: int) -> None:
+    def __init__(self, session, tf: str, offset: int, training_feature_selection: str,
+                 training_pair_selection: str, num_pairs: int) -> None:
         t = Timer('TrailFractals init')
         t.start()
         self.mode = 'margin'
         self.tf = tf
         self.offset = offset
-        self.training_speed = training_speed
-        self.training_selection = training_selection
+        self.training_feature_selection = training_feature_selection
+        self.training_pair_selection = training_pair_selection
         self.training_pairs_n = num_pairs
         self.load_data(session, tf)
         session.pairs_set.update(self.pairs)
-        self.name = (f'{self.tf} trail_fractals {self.width}-{self.spacing}_{self.training_speed}_'
-                     f'{self.training_selection}_{self.training_pairs_n}')
-        self.id = (f"trail_fractals_{self.tf}_{self.offset}_{self.width}_{self.spacing}_{self.training_speed}_"
-                   f"{self.training_selection}_{self.training_pairs_n}")
+        self.name = (f'{self.tf} trail_fractals {self.width}-{self.spacing}_{self.training_feature_selection}_'
+                     f'{self.training_pair_selection}_{self.training_pairs_n}')
+        self.id = (f"trail_fractals_{self.tf}_{self.offset}_{self.width}_{self.spacing}_{self.training_feature_selection}_"
+                   f"{self.training_pair_selection}_{self.training_pairs_n}")
         self.ohlc_length = 201
         self.trail_stop = True
         self.notes = ''
@@ -2981,8 +2977,8 @@ class TrailFractals(Agent):
 
     def load_data(self, session, tf):
         # paths
-        folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/trail_fractals_{self.training_speed}_"
-                      f"{self.training_selection}_{self.training_pairs_n}")
+        folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/trail_fractals_{self.training_feature_selection}_"
+                      f"{self.training_pair_selection}_{self.training_pairs_n}")
         self.long_model_path = folder / f"trail_fractal_long_{self.tf}_model.sav"
         self.short_model_path = folder / f"trail_fractal_short_{self.tf}_model.sav"
         long_info_path = folder / f"trail_fractal_long_{self.tf}_info.json"
@@ -3096,8 +3092,8 @@ class TrailFractals(Agent):
         signal_dict['market_rank_1m'] = session.pairs_data[pair]['market_rank_1m']
         signal_dict['width'] = self.width
         signal_dict['spacing'] = self.spacing
-        signal_dict['training_speed'] = self.training_speed
-        signal_dict['training_selection'] = self.training_selection
+        signal_dict['training_feature_selection'] = self.training_feature_selection
+        signal_dict['training_pair_selection'] = self.training_pair_selection
         signal_dict['training_pairs_n'] = len(self.pairs)
 
         sig.stop()

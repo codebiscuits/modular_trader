@@ -10,19 +10,18 @@ from resources.timers import Timer
 from collections import Counter
 from resources.loggers import create_logger
 
-# import update_ohlc
+import update_ohlc
 
 # TODO current (02/04/23) roadmap should be:
 #  * start integrating polars and doing anything else i can to speed things up enough to run 3day and 1week timeframes
 #  in the same session as everything else
 #  * get oco entries and trade adds working so i can use other strats
 
-# pb = uf.init_pb()
 logger = create_logger('setup_scanner')
 
 ########################################################################################################################
 
-session = sessions.TradingSession(0.1) # this argument is now max position size rather than max fixed risk
+session = sessions.TradingSession(0.01) # this argument is now max position size rather than max fixed risk
 
 logger.debug(f'-+-+-+-+-+-+-+-+ {session.now_start} Running Setup Scanner ({session.timeframes}) +-+-+-+-+-+-+-+-')
 
@@ -373,7 +372,7 @@ tp_close_took = tp_close_end - tp_close_start
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 # calculate fixed risk for each agent using wanted rpnl
 
-logger.debug(f"-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Signal Scores -+-+-+-+-+-+-+-+-+-+-+-+-+-+-")
+logger.info(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Signal Scores -+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n")
 
 for agent in agents.values():
     agent.pnls = dict(
@@ -381,13 +380,26 @@ for agent in agents.values():
         long=agent.get_pnls('long'),
         short=agent.get_pnls('short'),
     )
-    logger.info(f"{agent.id} scaled pnls")
-    logger.info(pformat(agent.pnls))
+    logger.info(f"\n{agent.id} scaled pnls")
+    if agent.mode == 'margin':
+        logger.info("Long:")
+        logger.info(f"EMA4: {agent.pnls['long']['ema_4']:.2f}, EMA8: {agent.pnls['long']['ema_8']:.2f}, "
+                    f"EMA16: {agent.pnls['long']['ema_16']:.2f}, EMA32: {agent.pnls['long']['ema_32']:.2f}, "
+                    f"EMA64: {agent.pnls['long']['ema_64']:.2f}")
+        logger.info("Short:")
+        logger.info(f"EMA4: {agent.pnls['short']['ema_4']:.2f}, EMA8: {agent.pnls['short']['ema_8']:.2f}, "
+                    f"EMA16: {agent.pnls['short']['ema_16']:.2f}, EMA32: {agent.pnls['short']['ema_32']:.2f}, "
+                    f"EMA64: {agent.pnls['short']['ema_64']:.2f}")
+    else:
+        logger.info("Spot:")
+        logger.info(f"EMA4: {agent.pnls['spot']['ema_4']:.2f}, EMA8: {agent.pnls['spot']['ema_8']:.2f}, "
+                    f"EMA16: {agent.pnls['spot']['ema_16']:.2f}, EMA32: {agent.pnls['spot']['ema_32']:.2f}, "
+                    f"EMA64: {agent.pnls['spot']['ema_64']:.2f}")
 
 while processed_signals['unassigned']:
     signal = processed_signals['unassigned'].pop()
 
-    # when the secondary ml model is ready, it will replace the contents of this for-loop down to sig_score. i will
+    # when the secondary ml model is ready, it will replace the contents of this while-loop down to sig_score. i will
     # simply pass the inval distance (0-1, 1 being 100% between entry and init stop), 5 perf_emas, the 3 market_ranks,
     # and confidence numbers from however many ml models have made a prediction (2 currently), and the model will return
     # a signal score. i record them all in the signal record, calculate size, and if the score is too low, move the
