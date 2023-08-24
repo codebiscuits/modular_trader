@@ -17,6 +17,7 @@ import sys
 from pyarrow import ArrowInvalid
 import traceback
 import joblib
+import ml_funcs as mlf
 
 # client = Client(keys.bPkey, keys.bSkey)
 # pb = uf.init_pb()
@@ -2952,21 +2953,19 @@ class EMACrossHMA(Agent):
 class TrailFractals(Agent):
     """Machine learning strategy based around williams fractals trailing stops"""
 
-    def __init__(self, session, tf: str, offset: int, training_feature_selection: str,
-                 training_pair_selection: str, num_pairs: int) -> None:
+    def __init__(self, session, tf: str, offset: int, training_pair_selection: str, num_pairs: int) -> None:
         t = Timer('TrailFractals init')
         t.start()
         self.mode = 'margin'
         self.tf = tf
         self.offset = offset
-        self.training_feature_selection = training_feature_selection
         self.training_pair_selection = training_pair_selection
         self.training_pairs_n = num_pairs
         self.load_data(session, tf)
         session.pairs_set.update(self.pairs)
-        self.name = (f'{self.tf} trail_fractals {self.width}-{self.spacing}_{self.training_feature_selection}_'
+        self.name = (f'{self.tf} trail_fractals {self.width}-{self.spacing}_'
                      f'{self.training_pair_selection}_{self.training_pairs_n}')
-        self.id = (f"trail_fractals_{self.tf}_{self.offset}_{self.width}_{self.spacing}_{self.training_feature_selection}_"
+        self.id = (f"trail_fractals_{self.tf}_{self.offset}_{self.width}_{self.spacing}_"
                    f"{self.training_pair_selection}_{self.training_pairs_n}")
         self.ohlc_length = 201
         self.trail_stop = True
@@ -2977,7 +2976,7 @@ class TrailFractals(Agent):
 
     def load_data(self, session, tf):
         # paths
-        folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/trail_fractals_{self.training_feature_selection}_"
+        folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/trail_fractals_"
                       f"{self.training_pair_selection}_{self.training_pairs_n}")
         self.long_model_path = folder / f"trail_fractal_long_{self.tf}_model.sav"
         self.short_model_path = folder / f"trail_fractal_short_{self.tf}_model.sav"
@@ -3021,7 +3020,11 @@ class TrailFractals(Agent):
 
         # Long model
         df['r_pct'] = df.long_r_pct
-        long_features = df[self.long_info['features']].iloc[-1]
+        long_features = df[self.long_info['features']]
+        long_features, _, cols = mlf.transform_columns(long_features, long_features)
+        long_features = pd.DataFrame(long_features, columns=cols)
+        long_features = long_features.iloc[-1]
+
         long_X = pd.DataFrame(long_features).transpose()
         try:
             long_confidence = self.long_model.predict_proba(long_X)[0, 1]
@@ -3034,7 +3037,11 @@ class TrailFractals(Agent):
         # Short model
         df = df.drop('long_r_pct', axis=1)
         df['r_pct'] = df.short_r_pct
-        short_features = df[self.short_info['features']].iloc[-1]
+        short_features = df[self.short_info['features']]
+        short_features, _, cols = mlf.transform_columns(short_features, short_features)
+        short_features = pd.DataFrame(short_features, columns=cols)
+        short_features = short_features.iloc[-1]
+
         short_X = pd.DataFrame(short_features).transpose()
         try:
             short_confidence = self.short_model.predict_proba(short_X)[0, 1]
@@ -3092,7 +3099,6 @@ class TrailFractals(Agent):
         signal_dict['market_rank_1m'] = session.pairs_data[pair]['market_rank_1m']
         signal_dict['width'] = self.width
         signal_dict['spacing'] = self.spacing
-        signal_dict['training_feature_selection'] = self.training_feature_selection
         signal_dict['training_pair_selection'] = self.training_pair_selection
         signal_dict['training_pairs_n'] = len(self.pairs)
 

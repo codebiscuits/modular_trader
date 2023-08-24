@@ -10,7 +10,7 @@ from resources.timers import Timer
 from collections import Counter
 from resources.loggers import create_logger
 
-import update_ohlc
+# import update_ohlc
 
 # TODO current (02/04/23) roadmap should be:
 #  * start integrating polars and doing anything else i can to speed things up enough to run 3day and 1week timeframes
@@ -30,9 +30,7 @@ agents = []
 for timeframe, offset in session.timeframes:
     agents.extend(
         [
-            TrailFractals(session, timeframe, offset, 'quick', 'volumes', 30),
-            TrailFractals(session, timeframe, offset, 'quick', 'volatilities', 30),
-            TrailFractals(session, timeframe, offset, 'slow', 'volumes', 30),
+            TrailFractals(session, timeframe, offset, 'volumes', 30),
         ]
     )
 
@@ -425,7 +423,7 @@ while processed_signals['unassigned']:
         perf_score = 1.0
 
     # TODO don't forget inval_score
-    inval_scalar = 1 + abs(1 - inval_ratio)
+    inval_scalar = 1 + abs(1 - signal['inval_ratio'])
     sig_score = signal['confidence'] * rank_score
     risk_scalar = (sig_score * perf_score) / inval_scalar
     signal['score'] = sig_score

@@ -1,7 +1,3 @@
-"""This is the script that will be run once a day to retrain the model using a grid search on the latest data. once per
-week it will also run a sequential floating backwards feature selection to update the feature list, and once a month it
-will do a full search of williams fractal params as well"""
-
 import pandas as pd
 import ml_funcs as mlf
 import time
@@ -70,28 +66,17 @@ def feature_selection(X, y, limit):
     selector_2 = SelectKBest(f_classif, k=10)
     selector_3 = SelectKBest(mutual_info_classif, k=10)
 
-    print(f"Forward sfs started {now}")
     selector_1 = selector_1.fit(X, y)
-    print(f"f_classif k_best started {now}")
     selector_2.fit(X, y)
-    print(f"mutual_info k_best started {now}")
     selector_3.fit(X, y)
-    print(f"pre-selection finished {now}")
 
     cols_1 = list(selector_1.k_feature_idx_)
     cols_2 = list(selector_2.get_support(indices=True))
     cols_3 = list(selector_3.get_support(indices=True))
     all_cols = list(set(cols_1 + cols_2 + cols_3))
 
-    print(cols_1)
-    print(cols_2)
-    print(cols_3)
-    print(all_cols)
-    print(f"{len(cols) = }")
-
     # selected_columns = [cols[i] for i in all_cols]
     selected_columns = [col for i, col in enumerate(cols) if i in all_cols]
-    print(selected_columns)
 
     X = pd.DataFrame(X[:, all_cols], columns=selected_columns)
 
@@ -170,6 +155,7 @@ start_pair = 0
 width = 5
 atr_spacing = 2
 scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
+pair_selection = 'volumes'
 
 for i in range(360):
     try:
@@ -187,7 +173,7 @@ for side, timeframe in itertools.product(sides, timeframes):
     if running_on_pi:
         pairs = load_pairs(side, timeframe)
     else:
-        pairs = mlf.rank_pairs('volumes')
+        pairs = mlf.rank_pairs(pair_selection)
         symbol_margin = {i['symbol']: i['isMarginTradingAllowed'] for i in exc_info['symbols'] if i['quoteAsset'] == 'USDT'}
         pairs = [p for p in pairs if symbol_margin[p]]
         pairs = pairs[start_pair:start_pair + num_pairs]
@@ -204,15 +190,17 @@ for side, timeframe in itertools.product(sides, timeframes):
 
     # split features from labels
     X, y, z = mlf.features_labels_split(all_res)
-    if running_on_pi:
-        selected = load_features(side, timeframe)
-        X = X.loc[:, selected]
-    X, _, cols = mlf.transform_columns(X, X)
-
 
     # random undersampling
     rus = RandomUnderSampler(random_state=0)
     X, y = rus.fit_resample(X, y)
+
+    if running_on_pi:
+        selected = load_features(side, timeframe)
+        X = X.loc[:, selected]
+
+    # TODO when i refactor this into a pipeline, i will need to remove the equivalent step from the agent definition
+    X, _, cols = mlf.transform_columns(X, X)
 
     # feature selection
     if not running_on_pi:
@@ -237,11 +225,10 @@ for side, timeframe in itertools.product(sides, timeframes):
     print(f"Model score after calibration: {cal_score:.1%}")
 
     # save to files
-    quick_str = 'quick' if speed else 'slow'
-    folder = Path(f"machine_learning/models/trail_fractals_{quick_str}_{pair_selection}_{num_pairs}")
+    folder = Path(f"machine_learning/models/trail_fractals_{pair_selection}_{num_pairs}")
     folder.mkdir(parents=True, exist_ok=True)
     pi2_folder = Path(f"/home/ross/coding/pi_2/modular_trader/machine_learning/"
-                      f"models/trail_fractals_{quick_str}_{pair_selection}_{num_pairs}")
+                      f"models/trail_fractals_{pair_selection}_{num_pairs}")
     pi2_folder.mkdir(parents=True, exist_ok=True)
 
     # save ml model on laptop and pi
@@ -259,7 +246,6 @@ for side, timeframe in itertools.product(sides, timeframes):
                      'frac_width': width,
                      'atr_spacing': atr_spacing,
                      'created': int(datetime.now(timezone.utc).timestamp()),
-                     'feature_selection': speed,
                      'pair_selection': pair_selection}
         with open(folder / model_info, 'w') as info:
             json.dump(info_dict, info)

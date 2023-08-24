@@ -140,11 +140,7 @@ start_pair = 0
 width = 5
 atr_spacing = 2
 scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
-configs = [
-    (True, 'volumes'),
-    (True, 'volatilities'),
-    (False, 'volumes')
-]
+pair_selection = 'volumes'
 
 for i in range(360):
     try:
@@ -154,11 +150,9 @@ for i in range(360):
     except requests.exceptions.ConnectionError as e:
         time.sleep(5)
 
-for side, timeframe, config in itertools.product(sides, timeframes, configs):
-    speed = config[0]
-    pair_selection = config[1]
+for side, timeframe in itertools.product(sides, timeframes):
 
-    print(f"\nFitting {timeframe} {side}, {speed}, {pair_selection} model")
+    print(f"\nFitting {timeframe} {side}, {pair_selection} model")
     loop_start = time.perf_counter()
 
     if running_on_pi:
@@ -194,7 +188,7 @@ for side, timeframe, config in itertools.product(sides, timeframes, configs):
     # feature selection
     if not running_on_pi:
         print(f"feature selection began: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
-        X, y, selected = feature_selection(X, y, 1000, quick=speed)
+        X, y, selected = feature_selection(X, y, 1000)
         print(selected)
 
     # split data for fitting and calibration
@@ -214,11 +208,10 @@ for side, timeframe, config in itertools.product(sides, timeframes, configs):
     print(f"Model score after calibration: {cal_score:.1%}")
 
     # save to files
-    quick_str = 'quick' if speed else 'slow'
-    folder = Path(f"machine_learning/models/trail_fractals_{quick_str}_{pair_selection}_{num_pairs}")
+    folder = Path(f"machine_learning/models/trail_fractals_{pair_selection}_{num_pairs}")
     folder.mkdir(parents=True, exist_ok=True)
     pi2_folder = Path(f"/home/ross/coding/pi_2/modular_trader/machine_learning/"
-                      f"models/trail_fractals_{quick_str}_{pair_selection}_{num_pairs}")
+                      f"models/trail_fractals_{pair_selection}_{num_pairs}")
     pi2_folder.mkdir(parents=True, exist_ok=True)
 
     # save ml model on laptop and pi
@@ -236,7 +229,6 @@ for side, timeframe, config in itertools.product(sides, timeframes, configs):
                      'frac_width': width,
                      'atr_spacing': atr_spacing,
                      'created': int(datetime.now(timezone.utc).timestamp()),
-                     'feature_selection': speed,
                      'pair_selection': pair_selection}
         with open(folder / model_info, 'w') as info:
             json.dump(info_dict, info)
