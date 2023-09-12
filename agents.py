@@ -789,19 +789,21 @@ class Agent():
         for pair, pos in positions:
             direction = pos['position']['direction']
             price = session.pairs_data[pair]['price']
-            current_value = price * float(pos['position']['base_size'])
+            current_size = float(pos['position']['base_size'])
+            current_value = price * current_size
             exe_price = float(pos['trade'][0]['exe_price'])
             init_stop = float(pos['trade'][0]['hard_stop'])
             init_r = (exe_price - init_stop) / exe_price
             if direction == 'short':
                 init_r *= -1
 
+            pos_pct = pos['position']['pct_of_full_pos']
             current_stop = float(pos['position']['hard_stop'])
             open_risk_pct = (((price - current_stop) / price)
                              if direction == 'long'
                              else ((current_stop - price) / price))
             open_risk_usdt = current_value * open_risk_pct
-            open_risk_r = open_risk_pct / init_r
+            open_risk_r = open_risk_pct * pos_pct / init_r
 
             if open_risk_r < self.indiv_r_limit:
                 continue
