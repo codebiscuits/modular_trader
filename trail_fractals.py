@@ -1,7 +1,3 @@
-"""This is the script that will be run once a day to retrain the model using a grid search on the latest data. once per
-week it will also run a sequential floating backwards feature selection to update the feature list, and once a month it
-will do a full search of williams fractal params as well"""
-
 import pandas as pd
 import ml_funcs as mlf
 import time
@@ -24,7 +20,7 @@ from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.model_selection import GridSearchCV, train_test_split, cross_val_score
 from sklearn.metrics import fbeta_score, make_scorer
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.feature_selection import SelectKBest, mutual_info_classif
+from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif, chi2
 from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 from imblearn.under_sampling import RandomUnderSampler
 
@@ -53,17 +49,36 @@ all_start = time.perf_counter()
 now = datetime.now().strftime('%Y/%m/%d %H:%M')
 print(f"-:--:--:--:--:--:--:--:--:--:-  {now} Running Trail Fractals Fitting  -:--:--:--:--:--:--:--:--:--:-")
 
-def feature_selection(X, y, limit, quick=False):
+def feature_selection(X, y, limit):
     fs_start = time.perf_counter()
 
-    if quick:
-        selector = SelectKBest(mutual_info_classif, k=15)
-    else:
-        selector = SelectKBest(mutual_info_classif, k=36)
-    X_selected = selector.fit_transform(X, y)
-    selector_cols = selector.get_support(indices=True)
-    selected_columns = [col for i, col in enumerate(cols) if i in selector_cols]
-    X = pd.DataFrame(X_selected, columns=selected_columns)
+    pre_selector_model = GradientBoostingClassifier(random_state=42,
+                                                n_estimators=10000,
+                                                validation_fraction=0.1,
+                                                n_iter_no_change=50,
+                                                subsample=0.5,
+                                                min_samples_split=8,
+                                                max_depth=12,
+                                                learning_rate=0.3)
+
+    selector_1 = SFS(estimator=pre_selector_model, k_features=10, forward=True,
+                     floating=False, verbose=0, scoring=scorer, n_jobs=-1)
+    selector_2 = SelectKBest(f_classif, k=10)
+    selector_3 = SelectKBest(mutual_info_classif, k=10)
+
+    selector_1 = selector_1.fit(X, y)
+    selector_2.fit(X, y)
+    selector_3.fit(X, y)
+
+    cols_1 = list(selector_1.k_feature_idx_)
+    cols_2 = list(selector_2.get_support(indices=True))
+    cols_3 = list(selector_3.get_support(indices=True))
+    all_cols = list(set(cols_1 + cols_2 + cols_3))
+
+    # selected_columns = [cols[i] for i in all_cols]
+    selected_columns = [col for i, col in enumerate(cols) if i in all_cols]
+
+    X = pd.DataFrame(X[:, all_cols], columns=selected_columns)
 
     if X.shape[0] > limit:
         X_train, _, y_train, _ = train_test_split(X, y, train_size=limit, random_state=99)
@@ -89,6 +104,9 @@ def feature_selection(X, y, limit, quick=False):
     X_transformed = selector.transform(X)
     selected = [cols[i] for i in selector.k_feature_idx_]
     print(f"Number of features selected: {len(selected)}")
+
+    # sel_score = selector.score(X_train, y_train)
+    # print(f"Model score after feature selection: {sel_score:.1%}")
 
     fs_end = time.perf_counter()
     fs_elapsed = fs_end - fs_start
@@ -152,7 +170,7 @@ for i in range(360):
 
 for side, timeframe in itertools.product(sides, timeframes):
 
-    print(f"\nFitting {timeframe} {side}, {pair_selection} model")
+    print(f"\nFitting {timeframe} {side} model")
     loop_start = time.perf_counter()
 
     if running_on_pi:
@@ -175,15 +193,17 @@ for side, timeframe in itertools.product(sides, timeframes):
 
     # split features from labels
     X, y, z = mlf.features_labels_split(all_res)
-    if running_on_pi:
-        selected = load_features(side, timeframe)
-        X = X.loc[:, selected]
-    X, _, cols = mlf.transform_columns(X, X)
-
 
     # random undersampling
     rus = RandomUnderSampler(random_state=0)
     X, y = rus.fit_resample(X, y)
+
+    if running_on_pi:
+        selected = load_features(side, timeframe)
+        X = X.loc[:, selected]
+
+    # TODO when i refactor this into a pipeline, i will need to remove the equivalent step from the agent definition
+    X, _, cols = mlf.transform_columns(X, X)
 
     # feature selection
     if not running_on_pi:
@@ -192,12 +212,14 @@ for side, timeframe in itertools.product(sides, timeframes):
         print(selected)
 
     # split data for fitting and calibration
-    X, X_cal, y, y_cal = train_test_split(X, y, test_size=0.333, random_state=11)
+    X, X_cal, y, y_cal = train_test_split(X, y, test_size=0.333, random_state=11, stratify=y)
 
     # fit model
     print(f"Training on {X.shape[0]} observations: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
     X = pd.DataFrame(X, columns=selected)
     grid_model = fit_gbc(X, y, scorer)
+    grid_score = grid_model.score(X, y)
+    print(f"Model score after grid search: {grid_score:.1%}")
 
     # calibrate model
     print(f"Calibrating on {X_cal.shape[0]} observations: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
@@ -242,3 +264,4 @@ for side, timeframe in itertools.product(sides, timeframes):
 all_end = time.perf_counter()
 all_elapsed = all_end - all_start
 print(f"\nTotal time taken: {int(all_elapsed // 3600)}h {int(all_elapsed // 60) % 60}m {all_elapsed % 60:.1f}s")
+
