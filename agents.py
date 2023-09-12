@@ -422,9 +422,9 @@ class Agent():
                 stop = float(v['position']['hard_stop'])
                 stopped, overshoot_pct, stop_hit_time = self.check_stop_hit(pair, df, direction, stop)
                 if stopped:
-                    open_dt = datetime.fromtimestamp(v['position']['open_time']).astimezone(timezone.utc)
-                    stop_dt = datetime.fromtimestamp(stop_time).astimezone(timezone.utc)
-                    hit_dt = datetime.fromtimestamp(stop_hit_time).astimezone(timezone.utc)
+                    open_dt = datetime.fromtimestamp(v['position']['open_time']/1000).astimezone(timezone.utc)
+                    stop_dt = datetime.fromtimestamp(stop_time/1000).astimezone(timezone.utc)
+                    hit_dt = datetime.fromtimestamp(stop_hit_time/1000).astimezone(timezone.utc)
                     entry_price = v['position']['entry_price']
                     logger.info(f"{self.name} {pair} real {direction} stopped out")
                     base_size = float(v['position']['base_size'])
@@ -575,7 +575,7 @@ class Agent():
                 session.store_ohlc(df, pair, timeframes)
 
         try: # this try/except block can be removed when the problem is solved
-            stop_dt = datetime.fromtimestamp(stop_time).astimezone(timezone.utc)
+            stop_dt = datetime.fromtimestamp(stop_time/1000).astimezone(timezone.utc)
         except ValueError as e:
             logger.exception(f"ValueError for {pair} sim stop time: {e.args}")
             logger.error(pformat(self.sim_trades[pair]))
@@ -823,6 +823,8 @@ class Agent():
 
             signals.append(signal)
             logger.debug(f"{pair} open risk over threshold, or: {open_risk_r:.1f}R. "
+                         f"Size: {current_value:.2f}USDT so action is {signal['action']}")
+            logger.info(f"{pair} open risk over threshold, or: {open_risk_r:.1f}R. "
                          f"Size: {current_value:.2f}USDT so action is {signal['action']}")
 
         return signals

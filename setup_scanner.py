@@ -41,6 +41,7 @@ logger.info(pformat(session.features))
 # session.name = ' | '.join([n.name for n in agents.values()])
 
 logger.debug("-*-*-*- Checking all positions for stops and open-risk -*-*-*-")
+logger.info("-*-*-*- Checking all positions for stops and open-risk -*-*-*-")
 
 real_sim_tps_closes = []
 for agent in agents.values():
@@ -55,6 +56,7 @@ init_elapsed = init_end - script_start
 # Generate Technical Signals
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 logger.debug("-*-*-*- Generating Technical Signals for all agents -*-*-*-")
+logger.info("-*-*-*- Generating Technical Signals for all agents -*-*-*-")
 tech_start = time.perf_counter()
 
 raw_signals = []
@@ -148,6 +150,7 @@ tech_took = tech_end - tech_start
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 process_start = time.perf_counter()
 logger.debug(f"-*-*-*- Processing {len(raw_signals)} Raw Signals for all agents -*-*-*-")
+logger.info(f"-*-*-*- Processing {len(raw_signals)} Raw Signals for all agents -*-*-*-")
 
 # gather data on current algo orders
 session.update_algo_orders()
@@ -347,12 +350,14 @@ process_took = process_end - process_start
 tp_close_start = time.perf_counter()
 # execute any real and sim technical close and tp signals
 logger.debug(f"-+-+-+-+-+-+-+- Executing {len(processed_signals['real_sim_tp_close'])} Real/Sim TPs/Closes -+-+-+-+-+-+-+-")
+logger.info(f"-+-+-+-+-+-+-+- Executing {len(processed_signals['real_sim_tp_close'])} Real/Sim TPs/Closes -+-+-+-+-+-+-+-")
 
 checked_signals = uf.remove_duplicates(processed_signals['real_sim_tp_close'])
 logger.debug(f"{len(checked_signals) = }")
 
 for signal in checked_signals:
     logger.debug(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
+    logger.info(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
     if signal['action'] == 'close':
         agents[signal['agent']].close_pos(session, signal)
     elif signal['action'] == 'tp':
@@ -446,6 +451,7 @@ while processed_signals['unassigned']:
         processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', signal['direction']))
 
 logger.debug(f"-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Fixed Risk -+-+-+-+-+-+-+-+-+-+-+-+-+-+-")
+logger.info(f"-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Fixed Risk -+-+-+-+-+-+-+-+-+-+-+-+-+-+-")
 for agent in agents.values():
     agent.calc_tor()
 
@@ -480,6 +486,7 @@ session.update_algo_orders()
 # last so that they get processed first, so i don't use the 'reverse=True' option
 unassigned = sorted(processed_signals['scored'], key=lambda x: x['score'])
 logger.debug(f"-*-*-*- Sorting and Filtering {len(unassigned)} Processed Signals for all agents -*-*-*-")
+logger.info(f"-*-*-*- Sorting and Filtering {len(unassigned)} Processed Signals for all agents -*-*-*-")
 
 # work through the list and check each filter for each signal
 or_limits = {agent.name: agent.total_open_risk for agent in agents.values()}
@@ -573,6 +580,7 @@ sort_took = sort_end - sort_start
 real_open_start = time.perf_counter()
 
 logger.debug(f"-+-+-+-+-+-+-+-+-+- Executing {len(processed_signals['real_open'])} Real Opens -+-+-+-+-+-+-+-+-+-")
+logger.info(f"-+-+-+-+-+-+-+-+-+- Executing {len(processed_signals['real_open'])} Real Opens -+-+-+-+-+-+-+-+-+-")
 
 remaining_borrow = session.check_margin_lvl()
 
@@ -609,6 +617,7 @@ sim_opens = [sig for sig in processed_signals['sim_open'] # discard signals for 
              if sig['asset'] not in agents[sig['agent']].sim_pos.keys()]
 
 logger.debug(f"-+-+-+-+-+-+-+-+-+-+-+- Executing {len(sim_opens)} Sim Opens -+-+-+-+-+-+-+-+-+-+-+-")
+logger.info(f"-+-+-+-+-+-+-+-+-+-+-+- Executing {len(sim_opens)} Sim Opens -+-+-+-+-+-+-+-+-+-+-+-")
 
 for signal in sim_opens:
 
@@ -704,6 +713,7 @@ logger.info(pformat(Counter(session.counts)))
 logger.info(f"used-weight: {session.client.response.headers.get('x-mbx-used-weight')}")
 logger.info(f"used-weight-1m: {session.client.response.headers.get('x-mbx-used-weight-1m')}")
 logger.debug('-----------------------------------------------')
+logger.info('-----------------------------------------------')
 
 script_end = time.perf_counter()
 total_time = script_end - script_start

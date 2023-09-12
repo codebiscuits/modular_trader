@@ -49,10 +49,16 @@ def get_max_borrow(session, asset: str) -> float:
     abc.start()
     logger.debug('running get_max_borrow')
     session.track_weights(50)
-    limits = session.client.get_max_margin_loan(asset=asset)
+    try:
+        limits = session.client.get_max_margin_loan(asset=asset)
+        borrow = min(float(limits['amount']), float(limits['borrowLimit']))
+    except bx.BinanceAPIException as e:
+        borrow = 0
+        logger.error(f"No borrow available for {asset}")
+        logger.exception(e)
     abc.stop()
 
-    return min(float(limits['amount']), float(limits['borrowLimit']))
+    return borrow
 
 
 def get_depth(session, pair: str) -> Tuple[float, float]:
