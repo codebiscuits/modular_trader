@@ -21,7 +21,7 @@ logger = create_logger('setup_scanner')
 
 ########################################################################################################################
 
-session = sessions.TradingSession(0.01) # this argument is now max position size rather than max fixed risk
+session = sessions.TradingSession(0.1) # this argument is now max position size rather than max fixed risk
 
 logger.debug(f'-+-+-+-+-+-+-+-+ {session.now_start} Running Setup Scanner ({session.timeframes}) +-+-+-+-+-+-+-+-')
 
@@ -40,14 +40,13 @@ logger.info(pformat(session.features))
 
 # session.name = ' | '.join([n.name for n in agents.values()])
 
-logger.debug("-*-*-*- Running rst and rsst for all agents -*-*-*-")
+logger.debug("-*-*-*- Checking all positions for stops and open-risk -*-*-*-")
+
+real_sim_tps_closes = []
 for agent in agents.values():
     agent.record_stopped_trades(session, session.timeframes)
     agent.record_stopped_sim_trades(session, session.timeframes)
-
-# compile and sort list of pairs to loop through ------------------------------
-# pairs = [k for k in session.pairs_data.keys()]
-# pairs = pairs[:10] # for testing the loop quickly
+    real_sim_tps_closes.extend(agent.check_open_risk(session))
 
 init_end = time.perf_counter()
 init_elapsed = init_end - script_start
@@ -154,7 +153,7 @@ logger.debug(f"-*-*-*- Processing {len(raw_signals)} Raw Signals for all agents 
 session.update_algo_orders()
 
 processed_signals = dict(
-    real_sim_tp_close=[],  # all real and sim tps and closes go in here for immediate execution
+    real_sim_tp_close=real_sim_tps_closes,  # all real and sim tps and closes go in here for immediate execution
     unassigned=[],  # all real open signals go in here for further selection
     scored=[], # once a score has been calculated for the unassigned signals, any with a good score go in here
     sim_open=[],  # nothing will be put in here at first but many real open signals will end up in here
@@ -199,7 +198,7 @@ while raw_signals:
                 sig_agent.move_real_stop(session, signal)
             # check if tp is necessary
             if sig_agent.real_pos[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
-                logger.info(f"{sig_agent} Real {sig_pair} or_R: {sig_agent.real_pos[signal['asset']]['or_R']}")
+                logger.info(f"{sig_agent} Real {sig_pair} long or_R: {sig_agent.real_pos[signal['asset']]['or_R']}")
                 processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'real', 'long'))
 
             # check if add is necessary
@@ -260,7 +259,7 @@ while raw_signals:
                 sig_agent.move_real_stop(session, signal)
             # check if tp is necessary
             if sig_agent.real_pos[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
-                logger.info(f"{sig_agent} Real {sig_pair} or_R: {sig_agent.real_pos[signal['asset']]['or_R']}")
+                logger.info(f"{sig_agent} Real {sig_pair} short or_R: {sig_agent.real_pos[signal['asset']]['or_R']}")
                 processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'real', 'short'))
 
             # check if add is necessary

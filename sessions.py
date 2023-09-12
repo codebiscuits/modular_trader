@@ -17,7 +17,7 @@ import pandas as pd
 import json
 
 # pb = uf.init_pb()
-logger = create_logger('sessions')
+logger = create_logger('  sessions   ')
 
 
 class TradingSession():
@@ -175,10 +175,10 @@ class TradingSession():
 
         limits = self.info['rateLimits']
 
-        old_limits = [{'rateLimitType': 'REQUEST_WEIGHT', 'interval': 'MINUTE', 'intervalNum': 1, 'limit': 1200},
+        old_limits = [{'rateLimitType': 'REQUEST_WEIGHT', 'interval': 'MINUTE', 'intervalNum': 1, 'limit': 6000},
                       {'rateLimitType': 'ORDERS', 'interval': 'SECOND', 'intervalNum': 10, 'limit': 50},
                       {'rateLimitType': 'ORDERS', 'interval': 'DAY', 'intervalNum': 1, 'limit': 160000},
-                      {'rateLimitType': 'RAW_REQUESTS', 'interval': 'MINUTE', 'intervalNum': 5, 'limit': 6100}]
+                      {'rateLimitType': 'RAW_REQUESTS', 'interval': 'MINUTE', 'intervalNum': 5, 'limit': 61000}]
 
         if limits != old_limits:
             note = 'binance rate limits have changed, check and adjust session definition'

@@ -6,9 +6,11 @@ from logging import handlers
 from resources import keys
 
 def create_logger(source, other_path=None):
-    today = datetime.now(timezone.utc).strftime('%-d_%m_%y')
+    day = datetime.now(timezone.utc).strftime('%-d')
+    month = datetime.now(timezone.utc).strftime('%m')
+    year = datetime.now(timezone.utc).strftime('%y')
     hour = datetime.now(timezone.utc).hour
-    folder = Path(f"/home/ross/coding/modular_trader/logs/{today}")
+    folder = Path(f"/home/ross/coding/modular_trader/logs/{year}/{month}/{day}")
     folder.mkdir(parents=True, exist_ok=True)
 
     def filter_maker(levels):

@@ -72,7 +72,10 @@ def get_data(pair, timeframe, vwma_periods=24):
     return df
 
 
-def trail_fractal(df_0, width, spacing, side, trim_ohlc=1000):
+def trail_fractal(df_0: pd.DataFrame, width: int, spacing: int, side: str, trim_ohlc: int=1000, r_threshold: float=0.5):
+    """r_threshold is how much pnl a trade must make for the model to consider it a profitable trade.
+    higher values will train the model to target only the trades which produce higher profits, but will also limit
+    the number of true positives to train the model on """
     df_0 = ind.williams_fractals(df_0, width, spacing)
     df_0 = df_0.drop(['fractal_high', 'fractal_low', f"atr-{spacing}", f"atr_{spacing}_pct"], axis=1).dropna(
         axis=0).reset_index(drop=True)
@@ -105,7 +108,8 @@ def trail_fractal(df_0, width, spacing, side, trim_ohlc=1000):
 
         pnl_pct = (trade_diff - 1.003) if side == 'long' else (0.997 - trade_diff)  # accounting for 15bps fees and 15bps slippage
         pnl_r = pnl_pct / r_pct
-        pnl_cat = 0 if (pnl_r <= 0) else 1
+
+        pnl_cat = 0 if (pnl_r <= r_threshold) else 1
 
         row_data = df_0.iloc[row-1].to_dict()
 
@@ -120,9 +124,9 @@ def trail_fractal(df_0, width, spacing, side, trim_ohlc=1000):
 
         results.append(row_data | row_res)
 
+        msg = f"trade lifespans getting close to trimmed ohlc length ({lifespan / trim_ohlc:.1%}), increase trim ohlc"
         if lifespan / trim_ohlc > 0.5:
-            print(
-                f"warning: trade lifespans getting close to trimmed ohlc length ({lifespan / trim_ohlc:.1%}), increase trim ohlc")
+            print(msg)
 
     return results
 
@@ -174,6 +178,11 @@ def add_features(df, tf):
     df = features.daily_roc(df, tf)
     df = features.day_of_week(df)
     df = features.day_of_week_180(df)
+    df = features.dd_zscore(df, 12)
+    df = features.dd_zscore(df, 25)
+    df = features.dd_zscore(df, 50)
+    df = features.dd_zscore(df, 100)
+    df = features.dd_zscore(df, 200)
     df = features.doji(df, 0.5, 2, weighted=True)
     df = features.doji(df, 1, 2, weighted=True)
     df = features.doji(df, 1.5, 2, weighted=True)

@@ -278,7 +278,7 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
             last_timestamp = df.timestamp.iloc[-1].timestamp()
             now = datetime.now(timezone.utc).timestamp()
             data_age_mins = (now - last_timestamp) / 60
-            logger.debug(f"\n{pair} ohlc data ends: {(now - last_timestamp) / 60:.1f} minutes ago")
+            logger.debug(f"{pair} ohlc data ends: {(now - last_timestamp) / 60:.1f} minutes ago")
             if (data_age_mins < 15) and (len(df) > 2):
                 # update last close price with current price
                 logger.debug(f"{pair} ohlc data less than 15 mins old, adjusting last close")
@@ -334,7 +334,7 @@ def create_stop_dict(session, order: dict) -> dict:
     bnb_fee = float(quote_qty) * float(session.fees['margin_taker']) / session.pairs_data['BNBUSDT']['price']
 
     # TODO when i'm getting real responses from binance, i must check if this / 1000 is still appropriate
-    trade_dict = {'timestamp': int(order.get('updateTime') / 1000),
+    trade_dict = {'timestamp': int(order.get('updateTime')),
                   'pair': pair,
                   'trig_price': order.get('stopPrice'),
                   'limit_price': order.get('price'),
@@ -370,7 +370,7 @@ def create_trade_dict(order: dict, price: float, live: bool) -> Dict[str, str]:
         else:
             quote_qty = str(qty * avg_price)
 
-        trade_dict = {'timestamp': int(float(order.get('transactTime')) / 1000),
+        trade_dict = {'timestamp': int(order.get('transactTime')),
                       'trig_price': str(price),
                       'exe_price': str(avg_price),
                       'base_size': str(order.get('executedQty')),
@@ -383,7 +383,7 @@ def create_trade_dict(order: dict, price: float, live: bool) -> Dict[str, str]:
             # pb.push_note('Warning', f'{pair} order not filled')
 
     else:
-        trade_dict = {'timestamp': str(order.get('transactTime')),
+        trade_dict = {'timestamp': int(order.get('transactTime')),
                       "trig_price": str(price),
                       "exe_price": str(price),
                       "base_size": str(order.get('executedQty')),

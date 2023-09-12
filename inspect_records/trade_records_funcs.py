@@ -24,5 +24,7 @@ def load_all(folder: Path, types: list[str]):
 
     return all_data
 
-
+def duration(trade):
+    d = trade[-1]['timestamp'] - trade[0]['timestamp']
+    return f"{int(d // 3600)}h {int(d // 60 % 60)}m {int(d % 60)}s"
 

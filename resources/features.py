@@ -40,6 +40,11 @@ def add_feature(df, name, timeframe):
         'roc_1d': {'call': daily_roc, 'params': (df, timeframe)},
         'day_of_week': {'call': day_of_week, 'params': (df,)},
         'day_of_week_180': {'call': day_of_week_180, 'params': (df,)},
+        'dd_z_12': {'call': dd_zscore, 'params': (df, 12)},
+        'dd_z_25': {'call': dd_zscore, 'params': (df, 25)},
+        'dd_z_50': {'call': dd_zscore, 'params': (df, 50)},
+        'dd_z_100': {'call': dd_zscore, 'params': (df, 100)},
+        'dd_z_200': {'call': dd_zscore, 'params': (df, 200)},
         'ema_12_break_up': {'call': ema_breakout, 'params': (df, 12, 25)},
         'ema_12_break_down': {'call': ema_breakout, 'params': (df, 12, 25)},
         'ema_25_break_up': {'call': ema_breakout, 'params': (df, 25, 50)},
@@ -159,8 +164,27 @@ def add_feature(df, name, timeframe):
 
 
 def vol_doji(df: pd.DataFrame, thresh: float, lookback: int, weighted: bool) -> pd.DataFrame:
-    """same as doji, but the wicks are measured in terms of recent atr volatility, so """
+    """same as doji, but the wicks are measured in terms of recent atr volatility"""
     pass
+
+
+def atr_zscore(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
+    atr = ind.atr(df, lookback)[f'atr_{lookback}_pct']
+    atr_mean = atr.rolling(lookback).mean()
+    atr_std = atr.rolling(lookback).std()
+    df[f'atr_zscore_{lookback}'] = (atr - atr_mean) / atr_std
+
+    return df
+
+
+def dd_zscore(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
+    highest_close = df.close.rolling(lookback).max()
+    pct_dd = (highest_close - df.close) / highest_close
+    dd_mean = pct_dd.rolling(lookback).mean()
+    dd_std = pct_dd.rolling(lookback).std()
+    df[f'dd_zscore_{lookback}'] = (pct_dd - dd_mean) / dd_std
+
+    return df
 
 
 def volume_climax_up(df: pd.DataFrame, lookback: int) -> pd.DataFrame:

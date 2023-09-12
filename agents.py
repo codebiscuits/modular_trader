@@ -24,7 +24,7 @@ import ml_funcs as mlf
 ctx = getcontext()
 ctx.prec = 12
 timestring = '%d/%m/%y %H:%M'
-logger = create_logger('agents')
+logger = create_logger('   agents    ')
 
 class Agent():
     '''generic agent class for each strategy to inherit from'''
@@ -48,20 +48,15 @@ class Agent():
             unwanted_long=0,
             unwanted_short=0)
         self.target_risk = 0.1
-        self.counts_dict = {'real_stop_spot': 0, 'real_open_spot': 0, 'real_add_spot': 0, 'real_tp_spot': 0,
-                            'real_close_spot': 0,
-                            'sim_stop_spot': 0, 'sim_open_spot': 0, 'sim_add_spot': 0, 'sim_tp_spot': 0,
-                            'sim_close_spot': 0,
-                            'real_stop_long': 0, 'real_open_long': 0, 'real_add_long': 0, 'real_tp_long': 0,
-                            'real_close_long': 0,
-                            'sim_stop_long': 0, 'sim_open_long': 0, 'sim_add_long': 0, 'sim_tp_long': 0,
-                            'sim_close_long': 0,
-                            'real_stop_short': 0, 'real_open_short': 0, 'real_add_short': 0, 'real_tp_short': 0,
-                            'real_close_short': 0,
-                            'sim_stop_short': 0, 'sim_open_short': 0, 'sim_add_short': 0, 'sim_tp_short': 0,
-                            'sim_close_short': 0,
-                            'too_small': 0, 'low_score': 0, 'too_many_pos': 0, 'too_much_or': 0, 'algo_order_limit': 0,
-                            'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0, 'reduce_risk': 0}
+        self.counts_dict = {
+            'real_stop_spot': 0, 'real_open_spot': 0, 'real_add_spot': 0, 'real_tp_spot': 0, 'real_close_spot': 0,
+            'sim_stop_spot': 0, 'sim_open_spot': 0, 'sim_add_spot': 0, 'sim_tp_spot': 0, 'sim_close_spot': 0,
+            'real_stop_long': 0, 'real_open_long': 0, 'real_add_long': 0, 'real_tp_long': 0, 'real_close_long': 0,
+            'sim_stop_long': 0, 'sim_open_long': 0, 'sim_add_long': 0, 'sim_tp_long': 0, 'sim_close_long': 0,
+            'real_stop_short': 0, 'real_open_short': 0, 'real_add_short': 0, 'real_tp_short': 0, 'real_close_short': 0,
+            'sim_stop_short': 0, 'sim_open_short': 0, 'sim_add_short': 0, 'sim_tp_short': 0, 'sim_close_short': 0,
+            'too_small': 0, 'low_score': 0, 'too_many_pos': 0, 'too_much_or': 0, 'algo_order_limit': 0,
+            'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0, 'reduce_risk': 0}
         if self.live:
             self.load_perf_log(session)
         else:
@@ -76,6 +71,7 @@ class Agent():
         self.real_pos = self.current_positions(session, 'open')
         self.sim_pos = self.current_positions(session, 'sim')
         self.tracked = self.current_positions(session, 'tracked')
+        self.check_valid_open(session)
         # self.calc_init_opnl(session)
         # self.open_pnl_changes = {}
         self.max_positions = self.set_max_pos()
@@ -263,6 +259,22 @@ class Agent():
                 json.dump(self.closed_sim_trades, cs_file)
 
         y.stop()
+
+    def check_valid_open(self, session) -> None:
+        """checks all currently open real positions to make sure binance hasn't messed up the stop-loss execution. if a
+        position is the wrong side of its stop-loss order and hasn't been automatically closed, this function will
+        manually close it and record it as a stop"""
+
+        for pair, pos in self.open_trades.items():
+            position = pos['position']
+            if position['direction'] in ['long', 'spot']:
+                valid = position['hard_stop'] < session.pairs_data[pair]['price']
+            else:
+                valid = position['hard_stop'] > session.pairs_data[pair]['price']
+
+            if not valid:
+                logger.warning(f"{self.id} {pair} {pos['direction']} position somehow passed its stop-loss without closing")
+                # TODO close position and record as stopped
 
     # record stopped trades ------------------------------------------------
 
@@ -763,6 +775,58 @@ class Agent():
 
         b.stop()
 
+    def check_open_risk(self, session):
+        """goes through all trades in the open_trades and sim_trades dictionaries and checks their open risk, then adds
+        them to the list of tp/close signals if necessary"""
+
+        n = Timer('check_open_risk')
+        n.start()
+
+        signals = []
+
+        positions = list(self.open_trades.items()) + list(self.sim_trades.items())
+
+        for pair, pos in positions:
+            direction = pos['position']['direction']
+            price = session.pairs_data[pair]['price']
+            current_value = price * float(pos['position']['base_size'])
+            exe_price = float(pos['trade'][0]['exe_price'])
+            init_stop = float(pos['trade'][0]['hard_stop'])
+            init_r = (exe_price - init_stop) / exe_price
+            if direction == 'short':
+                init_r *= -1
+
+            current_stop = float(pos['position']['hard_stop'])
+            open_risk_pct = (((price - current_stop) / price)
+                             if direction == 'long'
+                             else ((current_stop - price) / price))
+            open_risk_usdt = current_value * open_risk_pct
+            open_risk_r = open_risk_pct / init_r
+
+            if open_risk_r < self.indiv_r_limit:
+                continue
+
+            signal = {
+                'agent': self.id,
+                'mode': self.mode,
+                'tf': self.tf,
+                'pair': pair,
+                'asset': pair[:-len(session.quote_asset)],
+                'action': 'tp',
+                'direction': direction,
+                'state': pos['position']['state'],
+                'inval': current_stop
+            }
+
+            if current_value < session.min_size:
+                signal['action'] = 'close'
+
+            signals.append(signal)
+            logger.debug(f"{pair} open risk over threshold, or: {open_risk_r:.1f}R. "
+                         f"Size: {current_value:.2f}USDT so action is {signal['action']}")
+
+        return signals
+
     def reduce_fr(self, factor: float, fr_prev: float, fr_inc: float):
         """reduces fixed_risk by factor (with the floor value being 0)"""
         ideal = fr_prev * factor
@@ -907,7 +971,7 @@ class Agent():
 
         open_time = int(v['position']['open_time'])
         now = datetime.now(timezone.utc)
-        duration = round((now.timestamp() - open_time) / 3600, 1)
+        duration = round((now.timestamp()*1000 - open_time) / 3600, 1)
 
         direction = v['position']['direction']
 
@@ -915,8 +979,8 @@ class Agent():
         long = v['position']['direction'] == 'long'
         pos_scale = v['position']['pct_of_full_pos']
         trig = float(v['position']['entry_price'])
-        sl = float(v['position']['init_hard_stop'])
-        r = 100 * abs(trig - sl) / sl
+        init_sl = float(v['position']['init_hard_stop'])
+        r = 100 * abs(trig - init_sl) / init_sl
         if long:
             pnl = 100 * (curr_price - entry_price) / entry_price
             pnl_r = round((pnl / r) * pos_scale, 5)
@@ -1894,8 +1958,8 @@ class Agent():
             'base_size': size,
             'quote_size': usdt_size,
             'hard_stop': str(signal['inval']),
-            'stop_time': int(now.timestamp()),
-            'timestamp': int(now.timestamp()),
+            'stop_time': int(now.timestamp()*1000),
+            'timestamp': int(now.timestamp()*1000),
             'utc_datetime': now.strftime(timestring),
             'state': 'sim',
             'fee': '0',
@@ -1911,11 +1975,11 @@ class Agent():
             'entry_price': str(price),
             'hard_stop': str(signal['inval']),
             'init_hard_stop': str(signal['inval']),
-            'open_time': int(now.timestamp()),
+            'open_time': int(now.timestamp()*1000),
             'pair': pair,
             'liability': '0',
             'stop_id': 'not live',
-            'stop_time': int(now.timestamp()),
+            'stop_time': int(now.timestamp()*1000),
             'state': 'sim',
             'pfrd': pfrd,
             'pct_of_full_pos': signal['pct_of_full_pos']}
@@ -1948,9 +2012,9 @@ class Agent():
                     'base_size': str(order_size),
                     'quote_size': usdt_size,
                     'hard_stop': str(stp),
-                    'stop_time': int(now.timestamp()),
+                    'stop_time': int(now.timestamp()*1000),
                     'reason': 'trade over-extended',
-                    'timestamp': int(now.timestamp()),
+                    'timestamp': int(now.timestamp()*1000),
                     'utc_datetime': now.strftime(timestring),
                     'action': 'tp',
                     'direction': direction,
@@ -1961,7 +2025,7 @@ class Agent():
 
         self.sim_trades[pair]['position']['base_size'] = str(order_size)
         self.sim_trades[pair]['position']['hard_stop'] = str(stp)
-        self.sim_trades[pair]['position']['stop_time'] = now.timestamp()
+        self.sim_trades[pair]['position']['stop_time'] = int(now.timestamp()*1000)
         self.sim_trades[pair]['position']['pct_of_full_pos'] /= 2
 
         rpnl = self.realised_pnl(session, self.sim_trades[pair])
@@ -2028,7 +2092,7 @@ class Agent():
                        'base_size': str(sim_bal),
                        'quote_size': f"{sim_bal * price:.2f}",
                        'reason': 'close_signal',
-                       'timestamp': int(now.timestamp()),
+                       'timestamp': int(now.timestamp()*1000),
                        'utc_datetime': now.strftime(timestring),
                        'action': 'close',
                        'direction': direction,
@@ -2106,7 +2170,7 @@ class Agent():
                        'base_size': '0',
                        'quote_size': '0',
                        'reason': 'close_signal',
-                       'timestamp': int(now.timestamp()),
+                       'timestamp': int(now.timestamp()*1000),
                        'utc_datetime': now.strftime(timestring),
                        'action': 'close',
                        'direction': direction,
@@ -3062,18 +3126,12 @@ class TrailFractals(Agent):
             signal_dict['confidence'] = combined_long
             signal_dict['bias'] = 'bullish'
             inval = df.frac_low.iloc[-1]
-            if self.long_info.get('created'):
-                model_created = self.long_info.get('created')
-            else:
-                model_created = self.long_model_path.stat().st_mtime
+            model_created = self.long_info.get('created')
         elif (price < df.frac_high.iloc[-1]) and (combined_short > 0):
             signal_dict['confidence'] = combined_short
             signal_dict['bias'] = 'bearish'
             inval = df.frac_high.iloc[-1]
-            if self.short_info.get('created'):
-                model_created = self.short_info.get('created')
-            else:
-                model_created = self.short_model_path.stat().st_mtime
+            model_created = self.short_info.get('created')
         else: # if there is no signal, long or short ratio might still be needed for moving stops
             return {'long_ratio': long_stop / price,
                     'short_ratio': short_stop / price}
