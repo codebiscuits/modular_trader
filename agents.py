@@ -1096,6 +1096,24 @@ class Agent():
         open_risk = float(value) * abs(1 - inval_ratio)
         open_risk_r = (open_risk / float(pfrd)) * pos_scale
 
+        logger.debug('')
+        logger.debug(pair)
+        logger.debug(f"update_pos calculates or_R as {open_risk_r:.1f}; (price {price} * size {float(new_bal)} * inval "
+                    f"dist {abs(1-inval_ratio)} * pct_of_full_pos {pos_scale} / pfrd {float(pfrd):.2f})")
+
+        direction = trade_record['position']['direction']
+        exe_price = float(trade_record['trade'][0]['exe_price'])
+        init_stop = float(trade_record['trade'][0]['hard_stop'])
+        init_r = abs(exe_price - init_stop) / exe_price
+        current_stop = float(trade_record['position']['hard_stop'])
+        open_risk_pct = (((price - current_stop) / price)
+                         if direction == 'long'
+                         else ((current_stop - price) / price))
+        open_risk_r = open_risk_pct * pos_scale / init_r
+        or_pct_str = "((price - current_stop) / price)" if direction == 'long' else "((current_stop - price) / price)"
+        logger.debug(f"check_open_risk would calculate this as {open_risk_r}; {or_pct_str} {open_risk_pct:.3f} "
+                    f"* pct_of_full_pos {pos_scale} / init_r ({exe_price} - {init_stop} / {exe_price})")
+
         # if open_risk_r > self.indiv_r_limit:
         #     logger.debug(f"{state} {pair} update_pos - {value = } inval_ratio: {inval_ratio:.4f} open_risk: ${open_risk:.2f}, "
         #           f"open_risk_r: {open_risk_r:.2f}R")
@@ -1943,10 +1961,10 @@ class Agent():
         direction = signal['direction']
         price = signal['trig_price']
 
-        spot_pfrd = (session.fr_max / 2) * session.spot_bal
-        margin_pfrd = (session.fr_max / 2) * session.margin_bal
-        pfrd = spot_pfrd if self.mode == 'spot' else margin_pfrd
-        usdt_size = pfrd / signal['score']
+        spot_usdt_size = session.fr_max * session.spot_bal * signal['score']
+        margin_usdt_size = session.fr_max * session.margin_bal * signal['score']
+        usdt_size = spot_usdt_size if self.mode == 'spot' else margin_usdt_size
+        pfrd = usdt_size * signal['inval_dist']
         size = f"{usdt_size / price:.8f}"
 
         wanted = 'low_score' not in signal['sim_reasons']
@@ -3146,7 +3164,7 @@ class TrailFractals(Agent):
         stp = self.calc_stop(inval, session.pairs_data[pair]['spread'], price)
         signal_dict['inval'] = stp
         signal_dict['inval_ratio'] = stp / price
-        signal_dict['inval_dist'] = abs((stp / price) - 1)
+        signal_dict['inval_dist'] = abs(stp - price) / price
         # inval score will not be needed after the secondary ml model takes over scoring
         signal_dict['inval_score'] = self.calc_inval_risk_score(abs((price - stp) / price))
         signal_dict['trig_price'] = price

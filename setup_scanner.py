@@ -106,6 +106,10 @@ for n, pair in enumerate(session.pairs_set):
         if not sim_match:
             logger.error(f"{pair} sim pos doesn't match sim trades")
 
+        # TODO in the block below, i call agent.update_pos, which calculates open risk among other things for each
+        #  position. i want to make a function specifically to calculate open risk and call it earlier on, when i'm
+        #  doing rst and rsst, now that i've realised i don't need indicators to calculate open risk
+
         if pair in agent.open_trades:
             if signal.get('inval_ratio'):
                 inval_ratio = signal['inval_ratio']
@@ -200,9 +204,9 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_real_stop(session, signal)
             # check if tp is necessary
-            if sig_agent.real_pos[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
-                logger.info(f"{sig_agent} Real {sig_pair} long or_R: {sig_agent.real_pos[signal['asset']]['or_R']}")
-                processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'real', 'long'))
+            # if sig_agent.real_pos[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
+            #     logger.info(f"{sig_agent} Real {sig_pair} long or_R: {sig_agent.real_pos[signal['asset']]['or_R']}")
+            #     processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'real', 'long'))
 
             # check if add is necessary
             # TODO check for low or and make add signals if so
@@ -220,9 +224,9 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'sim')
             # check if tp is necessary
-            if sig_agent.sim_pos[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
-                logger.info(f"{sig_agent} Sim {sig_pair} or_R: {sig_agent.sim_pos[signal['asset']]['or_R']}")
-                processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'sim', 'long'))
+            # if sig_agent.sim_pos[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
+            #     logger.info(f"{sig_agent} Sim {sig_pair} or_R: {sig_agent.sim_pos[signal['asset']]['or_R']}")
+            #     processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'sim', 'long'))
 
             # check if add is necessary
             # TODO check for low or and make add signals if so
@@ -238,9 +242,9 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'tracked')
             # check if tp is necessary
-            if sig_agent.tracked[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
-                logger.info(f"{sig_agent} Tracked {sig_pair} or_R: {sig_agent.tracked[signal['asset']]['or_R']}")
-                processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'tracked', 'long'))
+            # if sig_agent.tracked[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
+            #     logger.info(f"{sig_agent} Tracked {sig_pair} or_R: {sig_agent.tracked[signal['asset']]['or_R']}")
+            #     processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'tracked', 'long'))
 
         elif tracked_position == 'short':
             processed_signals['tracked_close'].append(uf.transform_signal(signal, 'close', 'tracked', 'short'))
@@ -261,9 +265,9 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_real_stop(session, signal)
             # check if tp is necessary
-            if sig_agent.real_pos[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
-                logger.info(f"{sig_agent} Real {sig_pair} short or_R: {sig_agent.real_pos[signal['asset']]['or_R']}")
-                processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'real', 'short'))
+            # if sig_agent.real_pos[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
+            #     logger.info(f"{sig_agent} Real {sig_pair} short or_R: {sig_agent.real_pos[signal['asset']]['or_R']}")
+            #     processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'real', 'short'))
 
             # check if add is necessary
             # TODO check for low or and make add signals if so
@@ -279,9 +283,9 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'sim')
             # check if tp is necessary
-            if sig_agent.sim_pos[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
-                logger.info(f"{sig_agent} Sim {sig_pair} or_R: {sig_agent.sim_pos[signal['asset']]['or_R']}")
-                processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'sim', 'short'))
+            # if sig_agent.sim_pos[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
+            #     logger.info(f"{sig_agent} Sim {sig_pair} or_R: {sig_agent.sim_pos[signal['asset']]['or_R']}")
+            #     processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'sim', 'short'))
 
             # check if add is necessary
             # TODO check for low or and make add signals if so
@@ -297,9 +301,9 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'tracked')
             # check if tp is necessary
-            if sig_agent.tracked[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
-                logger.info(f"{sig_agent} Tracked {sig_pair} or_R: {sig_agent.tracked[signal['asset']]['or_R']}")
-                processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'tracked', 'short'))
+            # if sig_agent.tracked[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
+            #     logger.info(f"{sig_agent} Tracked {sig_pair} or_R: {sig_agent.tracked[signal['asset']]['or_R']}")
+            #     processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'tracked', 'short'))
 
 
         elif tracked_position == 'flat':
