@@ -805,6 +805,22 @@ class Agent():
             open_risk_usdt = current_value * open_risk_pct
             open_risk_r = open_risk_pct * pos_pct / init_r
 
+            bal = session.spot_bal if self.mode == 'spot' else session.margin_bal
+            pct = round(100 * float(current_value) / bal, 2)
+
+            asset = pair[:-len(session.quote_asset)]
+            state = pos['position']['state']
+            if state == 'real':
+                self.real_pos[asset]['value'] = current_value
+                self.real_pos[asset]['pf%'] = pct
+                self.real_pos[asset]['or_$'] = open_risk_usdt
+                self.real_pos[asset]['or_R'] = open_risk_r
+            elif state == 'sim':
+                self.sim_pos[asset]['value'] = current_value
+                self.sim_pos[asset]['pf%'] = pct
+                self.sim_pos[asset]['or_$'] = open_risk_usdt
+                self.sim_pos[asset]['or_R'] = open_risk_r
+
             if open_risk_r < self.indiv_r_limit:
                 continue
 
@@ -813,10 +829,10 @@ class Agent():
                 'mode': self.mode,
                 'tf': self.tf,
                 'pair': pair,
-                'asset': pair[:-len(session.quote_asset)],
+                'asset': asset,
                 'action': 'tp',
                 'direction': direction,
-                'state': pos['position']['state'],
+                'state': state,
                 'inval': current_stop
             }
 
@@ -1123,7 +1139,9 @@ class Agent():
 
         jk.stop()
 
-        return {'value': value, 'pf%': pct, 'or_R': open_risk_r, 'or_$': open_risk}
+        return {'value': value, 'pf%': pct,
+                'or_R': open_risk_r,
+                'or_$': open_risk}
 
     def update_non_live_tp(self, session, asset: str, tp_pct: int, state: str) -> dict:  # dict[str, float | str | Any]:
         """updates sizing dictionaries (real/sim) with new open trade stats when
@@ -1254,7 +1272,12 @@ class Agent():
         direction = 'long' if (signal['bias'] == 'bullish') else 'short'
         inval = signal['inval']
 
-        current_stop = float(self.open_trades[pair]['position']['hard_stop'])
+        try:
+            current_stop = float(self.open_trades[pair]['position']['hard_stop'])
+        except TypeError as e:
+            logger.error(f"move_real_stop encountered an error on {self.id} {pair}")
+            logger.error(pformat(self.open_trades[pair]['position']))
+            logger.exception(e)
 
         move_condition = (((direction in ['long', 'spot']) and (inval > (current_stop * 1.001)))
                           or ((direction == 'short') and (inval < (current_stop / 1.001))))

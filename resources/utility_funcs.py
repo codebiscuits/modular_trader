@@ -107,50 +107,6 @@ def adjust_max_positions(max_pos: int, sizing: dict) -> int:
     pass
 
 
-def get_market_state(session, agent, pair, data: pd.DataFrame) -> dict[str, float]:
-
-    ema_200_ratio = data.close.iloc[-1] / data.ema_200.iloc[-1]
-    ema_100_ratio = data.close.iloc[-1] / data.ema_100.iloc[-1]
-    ema_50_ratio = data.close.iloc[-1] / data.ema_50.iloc[-1]
-    ema_25_ratio = data.close.iloc[-1] / data.ema_25.iloc[-1]
-
-    try:
-        market_rank_1d = session.market_ranks.at[pair, 'rank_1d']
-        market_rank_1w = session.market_ranks.at[pair, 'rank_1w']
-        market_rank_1m = session.market_ranks.at[pair, 'rank_1m']
-    except KeyError:
-        market_rank_1d = 1
-        market_rank_1w = 1
-        market_rank_1m = 1
-
-    if hasattr(agent, 'cross_age_name'):
-        cross_age = int(data[agent.cross_age_name].iloc[-1])
-    else:
-        cross_age = None
-
-
-    return dict(
-        ema_200=data.ema_200.iloc[-1],
-        ema_100=data.ema_100.iloc[-1],
-        ema_50=data.ema_50.iloc[-1],
-        ema_25=data.ema_25.iloc[-1],
-        ema_200_ratio=ema_200_ratio,
-        ema_100_ratio=ema_100_ratio,
-        ema_50_ratio=ema_50_ratio,
-        ema_25_ratio=ema_25_ratio,
-        vol_delta=data.vol_delta.iloc[-1],
-        vol_delta_div=bool(data.vol_delta_div.iloc[-1]),
-        vwma_24=data.vwma_24.iloc[-1],
-        roc_1d=data.roc_1d.iloc[-1],
-        roc_1w=data.roc_1w.iloc[-1],
-        roc_1m=data.roc_1m.iloc[-1],
-        market_rank_1d=market_rank_1d,
-        market_rank_1w=market_rank_1w,
-        market_rank_1m=market_rank_1m,
-        cross_age=cross_age
-    )
-
-
 def market_benchmark(session) -> None:
     '''calculates daily, weekly and monthly returns for btc, eth and the median 
     altcoin on binance'''
@@ -441,105 +397,6 @@ def update_liability(trade_record: Dict[str, dict], size: str, operation: str) -
     return str(new_liability)
 
 
-# def score_accum(log_path, direction: str) -> Tuple[int, str]:
-#     """goes through recent perf logs and uses the wanted pnl"""
-#     func_name = sys._getframe().f_code.co_name
-#     x12 = Timer(f'{func_name}')
-#     x12.start()
-#
-#     read_path = Path(f"{log_path}/perf_log.json")
-#     try:
-#         with open(read_path, 'r') as rec_file:
-#             bal_data = json.load(rec_file)
-#     except (FileNotFoundError, JSONDecodeError):
-#         bal_data = {}
-#
-#     d = -1  # default value
-#     pnls = {1: d, 2: d, 3: d, 4: d, 5: d}
-#     if bal_data:
-#         lookup = f'wanted_pnl_{direction}'
-#         max_i = min(6, len(bal_data))
-#         for i in range(1, max_i):
-#             pnls[i] = json.load(bal_data[-1 * i]).get(lookup, -1)
-#
-#     score = 0
-#     if pnls.get(1) > 0:
-#         score += 5
-#     elif pnls.get(1) < 0:
-#         score -= 5
-#     if pnls.get(2) > 0:
-#         score += 4
-#     elif pnls.get(2) < 0:
-#         score -= 4
-#     if pnls.get(3) > 0:
-#         score += 3
-#     elif pnls.get(3) < 0:
-#         score -= 3
-#     if pnls.get(4) > 0:
-#         score += 2
-#     elif pnls.get(4) < 0:
-#         score -= 2
-#     if pnls.get(5) > 0:
-#         score += 1
-#     elif pnls.get(5) < 0:
-#         score -= 1
-#
-#     if pnls.get(1) > 0:
-#         perf_str = '+ |'
-#     elif pnls.get(1) < 0:
-#         perf_str = '- |'
-#     else:
-#         perf_str = '0 |'
-#
-#     for j in range(2, 6):
-#         if pnls.get(j, -1) > 0:
-#             perf_str += ' +'
-#         elif pnls.get(j, -1) < 0:
-#             perf_str += ' -'
-#         else:
-#             perf_str += ' 0'
-#
-#     x12.stop()
-#
-#     return score, perf_str
-#
-#
-# def recent_perf_str(session, agent) -> Tuple[str, int, int, int]:
-#     '''generates a string of + and - to represent recent strat performance
-#     returns the perf string and the relevant long and short perf scores'''
-#
-#     func_name = sys._getframe().f_code.co_name
-#     x13 = Timer(f'{func_name}')
-#     x13.start()
-#
-#     log_path = Path(f"{session.read_records}/{agent.id}")
-#     if agent.mode == 'spot':
-#         score_spot, perf_str_spot = score_accum(log_path, 'spot')
-#     else:
-#         score_l, perf_str_l = score_accum(log_path, 'long')
-#         score_s, perf_str_s = score_accum(log_path, 'short')
-#
-#     if agent.open_trades and score_spot:
-#         perf_str_spot = perf_str_spot
-#         perf_summ_spot = f"real: score {score_spot} rpnl {agent.realised_pnls['wanted_spot']:.1f}"
-#
-#     if agent.open_trades and score_l:
-#         perf_str_l = perf_str_l
-#         perf_summ_l = f"real: score {score_l} rpnl {agent.realised_pnls['wanted_long']:.1f}"
-#
-#     if (agent.open_trades and score_s):
-#         perf_str_s = perf_str_s
-#         perf_summ_s = f"real: score {score_s} rpnl {agent.realised_pnls['wanted_short']:.1f}"
-#
-#     full_perf_str = (f'spot: {perf_str_spot}\n{perf_summ_spot}\n'
-#                      f'long: {perf_str_l}\n{perf_summ_l}\n'
-#                      f'short: {perf_str_s}\n{perf_summ_s}')
-#
-#     x13.stop()
-#
-#     return full_perf_str, score_spot, score_l, score_s
-
-
 def tot_rpnl(agents: list) -> str:
     total = 0
 
@@ -613,14 +470,10 @@ def scanner_summary(session, agents: list) -> None:
         if print_msg:
             final_msg += agent_msg
 
-    if session.live:
-        # pb = init_pb()
-        # pb.push_note(title, final_msg)
-        pass
-    else:
-        logger.info(f'-\n{title}\n{final_msg}')
+    logger.info(f'-\n{title}\n{final_msg}')
 
     x14.stop()
+
 
 def remove_duplicates(signals: list[dict]) -> list[dict]:
     close_sigs = [sig for sig in signals if sig['action'] == 'close']
@@ -682,7 +535,3 @@ def retry_on_busy(max_retries=360, delay=5):
         return wrapper_retry
     return decorator_retry
 
-
-# @retry_on_busy()
-# def init_pb():
-#     return Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')

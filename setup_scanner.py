@@ -454,8 +454,9 @@ while processed_signals['unassigned']:
         # sig_direction = 'long' if signal['bias'] == 'bullish' else 'short'
         processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', signal['direction']))
 
+logger.info(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Fixed Risk -+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n")
 logger.debug(f"-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Fixed Risk -+-+-+-+-+-+-+-+-+-+-+-+-+-+-")
-logger.info(f"-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Fixed Risk -+-+-+-+-+-+-+-+-+-+-+-+-+-+-")
+
 for agent in agents.values():
     agent.calc_tor()
 
@@ -489,8 +490,8 @@ session.update_algo_orders()
 # next sort the unassigned list by scores. items are popped from the end of the list so i want the best signals to be
 # last so that they get processed first, so i don't use the 'reverse=True' option
 unassigned = sorted(processed_signals['scored'], key=lambda x: x['score'])
+logger.info(f"\n-*-*-*- Sorting and Filtering {len(unassigned)} Processed Signals for all agents -*-*-*-\n")
 logger.debug(f"-*-*-*- Sorting and Filtering {len(unassigned)} Processed Signals for all agents -*-*-*-")
-logger.info(f"-*-*-*- Sorting and Filtering {len(unassigned)} Processed Signals for all agents -*-*-*-")
 
 # work through the list and check each filter for each signal
 or_limits = {agent.name: agent.total_open_risk for agent in agents.values()}
@@ -583,8 +584,8 @@ sort_took = sort_end - sort_start
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 real_open_start = time.perf_counter()
 
+logger.info(f"\n-+-+-+-+-+-+-+-+-+- Executing {len(processed_signals['real_open'])} Real Opens -+-+-+-+-+-+-+-+-+-\n")
 logger.debug(f"-+-+-+-+-+-+-+-+-+- Executing {len(processed_signals['real_open'])} Real Opens -+-+-+-+-+-+-+-+-+-")
-logger.info(f"-+-+-+-+-+-+-+-+-+- Executing {len(processed_signals['real_open'])} Real Opens -+-+-+-+-+-+-+-+-+-")
 
 remaining_borrow = session.check_margin_lvl()
 
@@ -620,8 +621,8 @@ sim_open_start = time.perf_counter()
 sim_opens = [sig for sig in processed_signals['sim_open'] # discard signals for existing sim positions
              if sig['asset'] not in agents[sig['agent']].sim_pos.keys()]
 
+logger.info(f"\n-+-+-+-+-+-+-+-+-+-+-+- Executing {len(sim_opens)} Sim Opens -+-+-+-+-+-+-+-+-+-+-+-\n")
 logger.debug(f"-+-+-+-+-+-+-+-+-+-+-+- Executing {len(sim_opens)} Sim Opens -+-+-+-+-+-+-+-+-+-+-+-")
-logger.info(f"-+-+-+-+-+-+-+-+-+-+-+- Executing {len(sim_opens)} Sim Opens -+-+-+-+-+-+-+-+-+-+-+-")
 
 for signal in sim_opens:
 
@@ -658,26 +659,24 @@ for agent in agents.values():
 
     #################################
 
-    if not session.live:
-        logger.info('')
-        logger.info(f"{agent.name.upper()} SUMMARY")
+    logger.info(f"\n{agent.name.upper()} SUMMARY")
 
-        logger.info(f"{len(agent.real_pos.keys())} real positions, {len(agent.sim_pos.keys())} sim positions")
+    logger.info(f"\n{len(agent.real_pos.keys())} real positions, {len(agent.sim_pos.keys())} sim positions\n")
 
-        if agent.realised_pnls['real_spot'] or agent.realised_pnls['sim_spot']:
-            logger.info(f"realised real spot pnl: {agent.realised_pnls['real_spot']:.1f}R, "
-                  f"realised sim spot pnl: {agent.agent.realised_pnls['sim_spot']:.1f}R")
+    if agent.realised_pnls['real_spot'] or agent.realised_pnls['sim_spot']:
+        logger.info(f"realised real spot pnl: {agent.realised_pnls['real_spot']:.1f}R, "
+              f"realised sim spot pnl: {agent.agent.realised_pnls['sim_spot']:.1f}R")
 
-        if agent.realised_pnls['real_long'] or agent.realised_pnls['sim_long']:
-            logger.info(f"realised real long pnl: {agent.realised_pnls['real_long']:.1f}R, "
-                  f"realised sim long pnl: {agent.realised_pnls['sim_long']:.1f}R")
+    if agent.realised_pnls['real_long'] or agent.realised_pnls['sim_long']:
+        logger.info(f"realised real long pnl: {agent.realised_pnls['real_long']:.1f}R, "
+              f"realised sim long pnl: {agent.realised_pnls['sim_long']:.1f}R")
 
-        if agent.realised_pnls['real_short'] or agent.realised_pnls['sim_short']:
-            logger.info(f"realised real short pnl: {agent.realised_pnls['real_short']:.1f}R, "
-                  f"realised sim short pnl: {agent.realised_pnls['sim_short']:.1f}R")
-        logger.info(f'tor: {agent.total_open_risk:.1f}')
+    if agent.realised_pnls['real_short'] or agent.realised_pnls['sim_short']:
+        logger.info(f"realised real short pnl: {agent.realised_pnls['real_short']:.1f}R, "
+              f"realised sim short pnl: {agent.realised_pnls['sim_short']:.1f}R")
+    logger.info(f'tor: {agent.total_open_risk:.1f}')
 
-    logger.info(f'{agent.name} Counts:')
+    logger.info(f'\n{agent.name} Counts:')
     logger.info(pformat({f"{k}: {v}" for k, v in agent.counts_dict.items() if v}))
     logger.info('-:-' * 20)
 
@@ -690,7 +689,7 @@ if not session.live:
     logger.warning('warning: logging directed to test_records')
 
 for tf in session.timeframes:
-    logger.info(f"{tf[0]} market bias: {session.market_bias[tf[0]]:.2f} range from 1 (bullish) to -1 (bearish)")
+    logger.info(f"\n{tf[0]} market bias: {session.market_bias[tf[0]]:.2f} range from 1 (bullish) to -1 (bearish)")
 
 uf.market_benchmark(session)
 for agent in agents.values():
@@ -705,19 +704,19 @@ log_elapsed = log_end - log_start
 # End
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 
-logger.info('-------------------- Timers --------------------')
+logger.info('\n-------------------- Timers --------------------\n')
 for k, v in Timer.timers.items():
     if v > 10:
         elapsed = f"{k}: {int(v // 60)}m {v % 60:.1f}s"
         logger.info(elapsed)
 
-logger.info('-------------------- Counts --------------------')
+logger.info('\n-------------------- Counts --------------------\n')
 logger.info(f"pairs tested: {len(session.pairs_set)}")
 logger.info(pformat(Counter(session.counts)))
 logger.info(f"used-weight: {session.client.response.headers.get('x-mbx-used-weight')}")
 logger.info(f"used-weight-1m: {session.client.response.headers.get('x-mbx-used-weight-1m')}")
-logger.debug('-----------------------------------------------')
-logger.info('-----------------------------------------------')
+logger.debug('-----------------------------------------------\n')
+logger.info('\n-----------------------------------------------\n')
 
 script_end = time.perf_counter()
 total_time = script_end - script_start
@@ -737,5 +736,5 @@ section_times()
 
 # uf.plot_call_weights(session)
 
+logger.info('\n<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>\n\n')
 logger.debug('<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>\n\n')
-logger.info('<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>\n\n')
