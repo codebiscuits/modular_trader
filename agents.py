@@ -775,6 +775,11 @@ class Agent():
 
         b.stop()
 
+
+    def check_failed_stops(self, session):
+        """loop through open real positions and check if price has gone past hard stop. if it has, call close position,
+        then overwrite the record so it says the close type was stop instead of close"""
+
     def check_open_risk(self, session):
         """goes through all trades in the open_trades and sim_trades dictionaries and checks their open risk, then adds
         them to the list of tp/close signals if necessary"""
@@ -787,42 +792,43 @@ class Agent():
         positions = list(self.open_trades.items()) + list(self.sim_trades.items())
 
         for pair, pos in positions:
+
+            # TODO from here down to the open risk condition might be the exact functionality of update_pos. maybe i
+            #  could redefine update_pos as these lines and then just call update_pos here
+
             direction = pos['position']['direction']
             price = session.pairs_data[pair]['price']
             current_size = float(pos['position']['base_size'])
             current_value = price * current_size
-            exe_price = float(pos['trade'][0]['exe_price'])
-            init_stop = float(pos['trade'][0]['hard_stop'])
-            init_r = (exe_price - init_stop) / exe_price
-            if direction == 'short':
-                init_r *= -1
-
-            pos_pct = pos['position']['pct_of_full_pos']
-            current_stop = float(pos['position']['hard_stop'])
-            open_risk_pct = (((price - current_stop) / price)
-                             if direction == 'long'
-                             else ((current_stop - price) / price))
-            open_risk_usdt = current_value * open_risk_pct
-            open_risk_r = open_risk_pct * pos_pct / init_r
-
             bal = session.spot_bal if self.mode == 'spot' else session.margin_bal
             pct = round(100 * float(current_value) / bal, 2)
+
+            ep = float(pos['position']['entry_price'])
+            price_delta = (price - ep) / ep
+
+            open_risk = uf.open_risk_calc(session, pos, 'all')
 
             asset = pair[:-len(session.quote_asset)]
             state = pos['position']['state']
             if state == 'real':
                 self.real_pos[asset]['value'] = current_value
                 self.real_pos[asset]['pf%'] = pct
-                self.real_pos[asset]['or_$'] = open_risk_usdt
-                self.real_pos[asset]['or_R'] = open_risk_r
+                self.real_pos[asset]['or_$'] = open_risk['usdt']
+                self.real_pos[asset]['or_R'] = open_risk['r']
+                self.real_pos[asset]['price_delta'] = price_delta
             elif state == 'sim':
                 self.sim_pos[asset]['value'] = current_value
                 self.sim_pos[asset]['pf%'] = pct
-                self.sim_pos[asset]['or_$'] = open_risk_usdt
-                self.sim_pos[asset]['or_R'] = open_risk_r
+                self.sim_pos[asset]['or_$'] = open_risk['usdt']
+                self.sim_pos[asset]['or_R'] = open_risk['r']
+                self.sim_pos[asset]['price_delta'] = price_delta
 
-            if open_risk_r < self.indiv_r_limit:
+            if 0 <= open_risk['r'] < self.indiv_r_limit:
                 continue
+
+            # TODO i could check for failed stops here too by simply looking for positions with negative open risk.
+            #  in these cases, perhaps i could create a signal with 'stop' as the action, then arrange for those signals
+            #  to be sent to the close_position omf
 
             signal = {
                 'agent': self.id,
@@ -833,16 +839,18 @@ class Agent():
                 'action': 'tp',
                 'direction': direction,
                 'state': state,
-                'inval': current_stop
+                'inval': pos['position']['hard_stop']
             }
 
             if current_value < session.min_size:
                 signal['action'] = 'close'
+            if open_risk['r'] < 0:
+                signal['action'] = 'stop'
 
             signals.append(signal)
-            logger.debug(f"{pair} open risk over threshold, or: {open_risk_r:.1f}R. "
+            logger.debug(f"{pair} open risk over threshold, or: {open_risk['r']:.1f}R. "
                          f"Size: {current_value:.2f}USDT so action is {signal['action']}")
-            logger.info(f"{pair} open risk over threshold, or: {open_risk_r:.1f}R. "
+            logger.info(f"{pair} open risk over threshold, or: {open_risk['r']:.1f}R. "
                          f"Size: {current_value:.2f}USDT so action is {signal['action']}")
 
         return signals
@@ -911,37 +919,6 @@ class Agent():
             max_pos = 6 if avg_open_pnl <= 0 else 12
         p.stop()
         return max_pos
-
-    # def calc_init_opnl(self, session):
-    #     if self.mode == 'spot':
-    #         self.real_pos['USDT'] = session.spot_usdt_bal
-    #
-    #         ropnl_spot = self.open_pnl('spot', 'real')
-    #         wanted_spot, unwanted_spot = self.open_pnl('spot', 'sim')
-    #
-    #         self.starting_ropnl_spot = ropnl_spot
-    #         self.starting_sopnl_spot = wanted_spot + unwanted_spot
-    #         self.starting_wopnl_spot = ropnl_spot + wanted_spot
-    #         self.starting_uopnl_spot = unwanted_spot
-    #
-    #     elif self.mode == 'margin':
-    #         self.real_pos['USDT'] = session.margin_usdt_bal
-    #
-    #         ropnl_long = self.open_pnl('long', 'real')
-    #         wanted_long, unwanted_long = self.open_pnl('long', 'sim')
-    #
-    #         self.starting_ropnl_l = ropnl_long
-    #         self.starting_sopnl_l = wanted_long + unwanted_long
-    #         self.starting_wopnl_l = ropnl_long + wanted_long
-    #         self.starting_uopnl_l = unwanted_long
-    #
-    #         ropnl_short = self.open_pnl('short', 'real')
-    #         wanted_short, unwanted_short = self.open_pnl('short', 'sim')
-    #
-    #         self.starting_ropnl_s = ropnl_short
-    #         self.starting_sopnl_s = wanted_short + unwanted_short
-    #         self.starting_wopnl_s = ropnl_short + wanted_short
-    #         self.starting_uopnl_s = unwanted_short
 
     def calc_tor(self) -> None:
         '''collects all the open risk values from real_pos into a list and
@@ -1103,45 +1080,20 @@ class Agent():
         elif state == 'sim':
             trade_record = self.sim_trades[pair]
 
-        pfrd = trade_record['position']['pfrd']
-        pos_scale = trade_record['position']['pct_of_full_pos']
         value = f"{price * float(new_bal):.2f}"
         bal = session.spot_bal if self.mode == 'spot' else session.margin_bal
         pct = round(100 * float(value) / bal, 2)
 
-        open_risk = float(value) * abs(1 - inval_ratio)
-        open_risk_r = (open_risk / float(pfrd)) * pos_scale
-
+        or_dict = uf.open_risk_calc(session, trade_record, 'all')
         logger.debug('')
         logger.debug(pair)
-        logger.debug(f"update_pos calculates or_R as {open_risk_r:.1f}; (price {price} * size {float(new_bal)} * inval "
-                    f"dist {abs(1-inval_ratio)} * pct_of_full_pos {pos_scale} / pfrd {float(pfrd):.2f})")
-
-        direction = trade_record['position']['direction']
-        exe_price = float(trade_record['trade'][0]['exe_price'])
-        init_stop = float(trade_record['trade'][0]['hard_stop'])
-        init_r = abs(exe_price - init_stop) / exe_price
-        current_stop = float(trade_record['position']['hard_stop'])
-        open_risk_pct = (((price - current_stop) / price)
-                         if direction == 'long'
-                         else ((current_stop - price) / price))
-        open_risk_r = open_risk_pct * pos_scale / init_r
-        or_pct_str = "((price - current_stop) / price)" if direction == 'long' else "((current_stop - price) / price)"
-        logger.debug(f"check_open_risk would calculate this as {open_risk_r}; {or_pct_str} {open_risk_pct:.3f} "
-                    f"* pct_of_full_pos {pos_scale} / init_r ({exe_price} - {init_stop} / {exe_price})")
-
-        # if open_risk_r > self.indiv_r_limit:
-        #     logger.debug(f"{state} {pair} update_pos - {value = } inval_ratio: {inval_ratio:.4f} open_risk: ${open_risk:.2f}, "
-        #           f"open_risk_r: {open_risk_r:.2f}R")
-        # if open_risk_r > 5:
-        #     logger.debug(f"excessive open risk on {pair}. current price: ${price}, current inval: ${price / inval_ratio}")
-        #     logger.debug(pformat(trade_record))
+        logger.debug(f"new calculator function returns: {or_dict}")
 
         jk.stop()
 
         return {'value': value, 'pf%': pct,
-                'or_R': open_risk_r,
-                'or_$': open_risk}
+                'or_R': or_dict['r'],
+                'or_$': or_dict['usdt']}
 
     def update_non_live_tp(self, session, asset: str, tp_pct: int, state: str) -> dict:  # dict[str, float | str | Any]:
         """updates sizing dictionaries (real/sim) with new open trade stats when
@@ -1172,37 +1124,7 @@ class Agent():
 
         return {'value': f"{val:.2f}", 'pf%': pf, 'or_R': or_R, 'or_$': or_dol}
 
-    # def open_pnl(self, direction: str, state: str) -> Union[float, list[float]]:
-    #     '''adds up the pnls of all open positions for a given state. if the state is real, the real total opnl is
-    #     returned, if the state is sim, the wanted sim total and the unwanted sim total are returned in a list'''
-    #
-    #     h = Timer(f'open_pnl {state}')
-    #     h.start()
-    #     real_total = 0.0
-    #     sim_total = [0, 0] # [wanted, unwanted]
-    #     if state == 'real':
-    #         for pair, pos in self.real_pos.items():
-    #             if pos.get('opnl_R') and (pos['direction'] == direction):
-    #                 real_total += pos['opnl_R']
-    #                 # logger.debug(f"open_pnl - {pair} {pos['opnl_R']}R")
-    #         total = real_total
-    #
-    #     elif state == 'sim':
-    #         for pos in self.sim_pos.values():
-    #             wanted = pos.get('wanted') or 1
-    #             if pos.get('opnl_R') and (pos['direction'] == direction) and wanted:
-    #                 sim_total[0] += pos['pnl_R']
-    #             elif pos.get('opnl_R') and (pos['direction'] == direction) and not wanted:
-    #                 sim_total[1] += pos['opnl_R']
-    #         total = sim_total
-    #
-    #     else:
-    #         logger.error('open_pnl requires argument real or sim')
-    #
-    #     h.stop()
-    #     return total
-
-    # move_stop
+    # move_stop -----------------------------------------------------------------
     def create_placeholder(self, pair, direction, atr):
         now = datetime.now(timezone.utc).strftime(timestring)
         placeholder = {'action': 'move_stop',
@@ -1312,7 +1234,12 @@ class Agent():
         elif state == 'tracked':
             trade_record = self.tracked_trades[pair]
 
-        current_stop = float(trade_record['position']['hard_stop'])
+        try:
+            current_stop = float(trade_record['position']['hard_stop'])
+        except TypeError as e:
+            logger.error(f"Error while trying to move {state} stop on {self.id} {pair}")
+            logger.error(pformat(trade_record['position']))
+            logger.exception(e)
 
         move_condition = (((direction in ['long', 'spot']) and (inval > current_stop))
                           or ((direction == 'short') and (inval < current_stop)))

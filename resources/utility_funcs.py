@@ -24,6 +24,38 @@ ctx.prec = 12
 logger = create_logger('utility_funcs')
 
 
+def open_risk_calc(session, record: dict, metric: str) -> dict|float:
+    """calculates what would be lost from the current value if the position ended up getting stopped out, denomianted
+    in percent, USDT and R where percent is the percentage of the position's current value that would be lost and R is
+    proportional to the initial amount that would have been lost if the position had been immediately invalidated.
+    possible values for the 'metric' argument are 'pct', 'usdt', 'r' or 'all'. if 'all' is passed, the whole dictionary
+    of all three values is returned"""
+
+    pair = record['position']['pair']
+    direction = record['position']['direction']
+    pos_scale = record['position']['pct_of_full_pos']
+
+    init_price = float(record['trade'][0]['exe_price'])
+    init_stop = float(record['trade'][0]['hard_stop'])
+    init_risk_pct = (init_price - init_stop) / init_price
+
+    current_price = session.pairs_data[pair]['price']
+    current_stop = float(record['position']['hard_stop'])
+    current_risk_pct = (current_price - current_stop) / current_price
+
+    base_size = float(record['position']['base_size'])
+    current_risk_usdt = base_size * current_price * current_risk_pct
+    current_risk_r = current_risk_pct * pos_scale / init_risk_pct
+
+    risk_dict = {'pct': current_risk_pct if direction == 'long' else current_risk_pct * -1,
+                 'usdt': current_risk_usdt if direction == 'long' else current_risk_usdt * -1,
+                 'r': current_risk_r}
+
+    if metric == 'all':
+        return risk_dict
+    else:
+        return risk_dict[metric]
+
 def transform_signal(signal: dict, type: str, state: str, direction: str) -> dict:
     """takes a raw signal as input, returns a 'processed' signal ready to be scored and passed to an omf"""
 

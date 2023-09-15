@@ -87,11 +87,8 @@ for n, pair in enumerate(session.pairs_set):
         df_2 = df_dict[agent.tf].copy()
         # logger.debug(f"{pair} {tf} {len(df_2)}")
 
-        # market_state = uf.get_market_state(session, agent, pair, df_2)
-
         signal = agent.signals(session, df_2, pair)
         if signal.get('bias'):
-            # signal.update(market_state)
             raw_signals.append(signal)
 
         # if this agent is in position with this pair, calculate open risk and related metrics here
@@ -105,35 +102,6 @@ for n, pair in enumerate(session.pairs_set):
             logger.error(f"{pair} real pos doesn't match real trades")
         if not sim_match:
             logger.error(f"{pair} sim pos doesn't match sim trades")
-
-        # TODO in the block below, i call agent.update_pos, which calculates open risk among other things for each
-        #  position. i want to make a function specifically to calculate open risk and call it earlier on, when i'm
-        #  doing rst and rsst, now that i've realised i don't need indicators to calculate open risk
-
-        if pair in agent.open_trades:
-            if signal.get('inval_ratio'):
-                inval_ratio = signal['inval_ratio']
-            elif agent.open_trades[pair]['position']['direction'] in ['spot', 'long']:
-                inval_ratio = signal['long_ratio']
-            elif agent.open_trades[pair]['position']['direction'] == 'short':
-                inval_ratio = signal['short_ratio']
-            real_qty = float(agent.open_trades[pair]['position']['base_size'])
-            new_stats = agent.update_pos(session, pair, real_qty, inval_ratio, 'real')
-            agent.real_pos[asset].update(new_stats)
-            real_ep = float(agent.open_trades[pair]['position']['entry_price'])
-            agent.real_pos[asset]['price_delta'] = (price - real_ep) / real_ep
-        if pair in agent.sim_trades:
-            if signal.get('inval_ratio'):
-                inval_ratio = signal['inval_ratio']
-            elif agent.sim_trades[pair]['position']['direction'] in ['spot', 'long']:
-                inval_ratio = signal['long_ratio']
-            elif agent.sim_trades[pair]['position']['direction'] == 'short':
-                inval_ratio = signal['short_ratio']
-            sim_qty = float(agent.sim_trades[pair]['position']['base_size'])
-            new_stats = agent.update_pos(session, pair, sim_qty, inval_ratio, 'sim')
-            agent.sim_pos[asset].update(new_stats)
-            sim_ep = float(agent.sim_trades[pair]['position']['entry_price'])
-            agent.sim_pos[asset]['price_delta'] = (price - sim_ep) / sim_ep
 
 signal_counts = Counter([f"{signal['tf']}_{signal['bias']}" for signal in raw_signals])
 for tf in session.timeframes:
@@ -203,10 +171,6 @@ while raw_signals:
         if real_position in ['long', 'spot']:
             if sig_agent.trail_stop:
                 sig_agent.move_real_stop(session, signal)
-            # check if tp is necessary
-            # if sig_agent.real_pos[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
-            #     logger.info(f"{sig_agent} Real {sig_pair} long or_R: {sig_agent.real_pos[signal['asset']]['or_R']}")
-            #     processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'real', 'long'))
 
             # check if add is necessary
             # TODO check for low or and make add signals if so
@@ -223,10 +187,6 @@ while raw_signals:
         if sim_position in ['long', 'spot']:
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'sim')
-            # check if tp is necessary
-            # if sig_agent.sim_pos[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
-            #     logger.info(f"{sig_agent} Sim {sig_pair} or_R: {sig_agent.sim_pos[signal['asset']]['or_R']}")
-            #     processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'sim', 'long'))
 
             # check if add is necessary
             # TODO check for low or and make add signals if so
@@ -241,10 +201,6 @@ while raw_signals:
         if tracked_position in ['long', 'spot']:
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'tracked')
-            # check if tp is necessary
-            # if sig_agent.tracked[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
-            #     logger.info(f"{sig_agent} Tracked {sig_pair} or_R: {sig_agent.tracked[signal['asset']]['or_R']}")
-            #     processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'tracked', 'long'))
 
         elif tracked_position == 'short':
             processed_signals['tracked_close'].append(uf.transform_signal(signal, 'close', 'tracked', 'short'))
@@ -264,10 +220,6 @@ while raw_signals:
         elif real_position == 'short':
             if sig_agent.trail_stop:
                 sig_agent.move_real_stop(session, signal)
-            # check if tp is necessary
-            # if sig_agent.real_pos[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
-            #     logger.info(f"{sig_agent} Real {sig_pair} short or_R: {sig_agent.real_pos[signal['asset']]['or_R']}")
-            #     processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'real', 'short'))
 
             # check if add is necessary
             # TODO check for low or and make add signals if so
@@ -282,10 +234,6 @@ while raw_signals:
         elif sim_position == 'short':
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'sim')
-            # check if tp is necessary
-            # if sig_agent.sim_pos[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
-            #     logger.info(f"{sig_agent} Sim {sig_pair} or_R: {sig_agent.sim_pos[signal['asset']]['or_R']}")
-            #     processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'sim', 'short'))
 
             # check if add is necessary
             # TODO check for low or and make add signals if so
@@ -300,10 +248,6 @@ while raw_signals:
         elif tracked_position == 'short':
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'tracked')
-            # check if tp is necessary
-            # if sig_agent.tracked[signal['asset']]['or_R'] > sig_agent.indiv_r_limit:
-            #     logger.info(f"{sig_agent} Tracked {sig_pair} or_R: {sig_agent.tracked[signal['asset']]['or_R']}")
-            #     processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'tp', 'tracked', 'short'))
 
 
         elif tracked_position == 'flat':
