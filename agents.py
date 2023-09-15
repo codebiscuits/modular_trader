@@ -169,12 +169,8 @@ class Agent():
                 except JSONDecodeError as e:
                     open_trades = {}
         else:
-            # logger.info("ot_path doesn't exist")
             open_trades = {}
             ot_path.touch()
-            # logger.info(f'{ot_path} not found')
-
-        # logger.debug(f"in read_open_trade_records - {self.name} {state} trades: {open_trades.keys()}")
 
         w.stop()
         return open_trades
@@ -222,7 +218,7 @@ class Agent():
 
         limit = 2000
         if len(cs_trades.keys()) > limit:
-            # logger.debug(f"{self.name} closed sim trades on record: {len(cs_trades.keys())}")
+            logger.info(f"{self.name} closed sim trades on record: {len(cs_trades.keys())}")
             closed_sim_tups = sorted(zip(cs_trades.keys(), cs_trades.values()), key=lambda x: int(x[0]))
             closed_sim_trades = dict(closed_sim_tups[-limit:])
         else:
@@ -409,8 +405,6 @@ class Agent():
 
         # get a list of (pair, stop_id, stop_time) for all open_trades records
         old_ids = list(self.open_trades.items())
-
-        # logger.debug(f"{self.name} rst, checking {len(old_ids)} pairs")
 
         for pair, v in old_ids:
             sid = v['position']['stop_id']
@@ -676,7 +670,6 @@ class Agent():
         session.counts.append('rsst')
 
         check_pairs = list(self.sim_trades.items())
-        # logger.debug(f"{self.name} rsst, checking {len(check_pairs)} pairs")
         for pair, v in check_pairs:  # can't loop through the dictionary directly because i delete items as i go
             direction = v['position']['direction']
             base_size = float(v['position']['base_size'])
@@ -686,8 +679,6 @@ class Agent():
             df = self.get_data(session, pair, timeframes, stop_time)
             stopped, overshoot_pct, stop_hit_time = self.check_stop_hit(pair, df, direction, stop)
             if stopped:
-                # logger.debug(f"{self.name} {pair} {v['position']['open_time'] = }, {stop_hit_time = }, "
-                #       f"{v['position']['entry_price'] = }")
                 trade_dict = self.create_trade_dict(pair, direction, stop, base_size, stop_hit_time, overshoot_pct, 'sim')
                 self.sim_to_closed_sim(session, pair, trade_dict, save_file=False)
                 self.counts_dict[f'sim_stop_{direction}'] += 1
@@ -720,15 +711,13 @@ class Agent():
         final_exit = float(trades[-1].get('exe_price'))
         final_size = float(trades[-1].get('base_size'))
 
-        r_val = abs((entry - init_stop) / entry)
-        if side in ['spot', 'long']:
-            trade_pnl = (final_exit - entry) / entry
-        else:
-            trade_pnl = (entry - final_exit) / entry
+        r_val = (entry - init_stop) / entry
+        trade_pnl = (final_exit - entry) / entry
         trade_r = round(trade_pnl / r_val, 3)
         scalar = position['pct_of_full_pos']
         realised_r = trade_r * scalar
 
+        logger.debug('')
         logger.debug(f"{position['pair']} rpnl calc: r_val: {r_val:.1%} trade_pnl: {trade_pnl:.1%} trade_r: {trade_r:.2f} "
               f"{scalar = } realised_r: {realised_r:.2f}")
         k15.stop()
@@ -848,6 +837,7 @@ class Agent():
                 signal['action'] = 'stop'
 
             signals.append(signal)
+
             logger.debug(f"{pair} open risk over threshold, or: {open_risk['r']:.1f}R. "
                          f"Size: {current_value:.2f}USDT so action is {signal['action']}")
             logger.info(f"{pair} open risk over threshold, or: {open_risk['r']:.1f}R. "
