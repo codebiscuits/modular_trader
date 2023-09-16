@@ -48,6 +48,8 @@ for agent in agents.values():
     agent.record_stopped_trades(session, session.timeframes)
     agent.record_stopped_sim_trades(session, session.timeframes)
     real_sim_tps_closes.extend(agent.check_open_risk(session))
+    agent.max_positions = agent.set_max_pos()
+    agent.total_r_limit = agent.max_positions * 1.7 # TODO need to update reduce_risk and run it before/after set_fixed_risk
 
 init_end = time.perf_counter()
 init_elapsed = init_end - script_start

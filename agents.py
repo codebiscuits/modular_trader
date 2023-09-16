@@ -18,6 +18,7 @@ from pyarrow import ArrowInvalid
 import traceback
 import joblib
 import ml_funcs as mlf
+from pprint import pprint
 
 # client = Client(keys.bPkey, keys.bSkey)
 # pb = uf.init_pb()
@@ -74,8 +75,6 @@ class Agent():
         self.check_valid_open(session)
         # self.calc_init_opnl(session)
         # self.open_pnl_changes = {}
-        self.max_positions = self.set_max_pos()
-        self.total_r_limit = self.max_positions * 1.7 # TODO need to update reduce_risk and run it before/after set_fixed_risk
         self.indiv_r_limit = 1.8
         self.fr_div = 10
         self.next_id = int(datetime.now(timezone.utc).timestamp())
@@ -896,14 +895,14 @@ class Agent():
 
         p = Timer('set_max_pos')
         p.start()
-        max_pos = 12
-        if self.real_pos:
-            open_pnls = [v.get('pnl') for v in self.real_pos.values() if v.get('pnl')]
-            if open_pnls:
-                avg_open_pnl = stats.median(open_pnls)
-            else:
-                avg_open_pnl = 0
-            max_pos = 6 if avg_open_pnl <= 0 else 12
+        avg_open_pnl = 0
+        real_pos = self.real_pos
+        del real_pos['USDT']
+        if real_pos:
+            opnls = [v.get('pnl_R') for v in self.real_pos.values()]
+            avg_open_pnl = stats.median(opnls)
+        logger.debug(f"set_max_pos calculates {avg_open_pnl = }")
+        max_pos = 6 if avg_open_pnl <= 0 else 12
         p.stop()
         return max_pos
 
