@@ -1552,8 +1552,9 @@ class Agent():
 
         return tp_order
 
-    def open_to_tracked(self, session, pair, close_order, direction):
+    def open_to_tracked(self, session, pair, stp, close_order, direction):
         asset = pair[:-4]
+        now = datetime.now().timestamp()
         self.open_trades[pair]['trade'].append(close_order)
         self.open_trades[pair]['trade'][-1]['utc_datetime'] = self.open_trades[pair]['placeholder']['utc_datetime']
 
@@ -1563,8 +1564,11 @@ class Agent():
         self.realised_pnls[f"wanted_{direction}"] += rpnl
 
         del self.open_trades[pair]['placeholder']
-        self.tracked_trades[pair] = self.open_trades[pair]
         self.open_trades[pair]['position']['state'] = 'tracked'
+        self.open_trades[pair]['position']['hard_stop'] = str(stp)
+        self.open_trades[pair]['position']['stop_time'] = int(now.timestamp()*1000)
+
+        self.tracked_trades[pair] = self.open_trades[pair]
         self.record_trades(session, 'tracked')
 
         del self.open_trades[pair]
@@ -1701,7 +1705,7 @@ class Agent():
             # repay assets
             tp_order = self.tp_repay_100(session, pair, tp_order, direction)
             # update records
-            self.open_to_tracked(session, pair, tp_order, direction)
+            self.open_to_tracked(session, pair, stp, tp_order, direction)
             self.tp_update_records_100(session, pair, cleared_size, direction)
 
         else:  # if pct < 100%
