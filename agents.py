@@ -765,10 +765,6 @@ class Agent():
         b.stop()
 
 
-    def check_failed_stops(self, session):
-        """loop through open real positions and check if price has gone past hard stop. if it has, call close position,
-        then overwrite the record so it says the close type was stop instead of close"""
-
     def check_open_risk(self, session):
         """goes through all trades in the open_trades and sim_trades dictionaries and checks their open risk, then adds
         them to the list of tp/close signals if necessary"""
@@ -813,6 +809,7 @@ class Agent():
                 self.sim_pos[asset]['price_delta'] = price_delta
 
             if 0 <= open_risk['r'] < self.indiv_r_limit:
+                # logger.debug(f"{self.id} {pair} {direction} open risk: {open_risk['r']:.3f}R, within limits (0-{self.indiv_r_limit})")
                 continue
 
             # TODO i could check for failed stops here too by simply looking for positions with negative open risk.

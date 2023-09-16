@@ -54,8 +54,8 @@ def get_max_borrow(session, asset: str) -> float:
         borrow = min(float(limits['amount']), float(limits['borrowLimit']))
     except bx.BinanceAPIException as e:
         borrow = 0
-        logger.error(f"No borrow available for {asset}")
-        logger.exception(e)
+        logger.info(f"No borrow available for {asset}")
+        # logger.exception(e)
     abc.stop()
 
     return borrow
