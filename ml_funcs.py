@@ -322,9 +322,9 @@ def features_labels_split(df):
                  'atr-25', 'atr-50', 'atr-100', 'atr-200', 'ema_12', 'ema_25', 'ema_50', 'ema_100', 'ema_200',
                  'hma_25', 'hma_50', 'hma_100', 'hma_200', 'lifespan', 'frac_high', 'frac_low', 'inval', 'daily_open',
                  'prev_daily_open', 'prev_daily_high', 'prev_daily_low', 'bullish_doji', 'bearish_doji'],
-                axis=1, errors='ignore')
-    y = df.pnl_cat.shift(-1)
-    z = df.pnl_r.shift(-1)
+                axis=1, errors='ignore').drop(index=df.index[-1], axis=0)
+    y = df.pnl_cat.shift(-1).drop(index=df.index[-1], axis=0)
+    z = df.pnl_r.shift(-1).drop(index=df.index[-1], axis=0)
 
     return X, y, z
 
