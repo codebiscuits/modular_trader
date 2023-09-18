@@ -344,21 +344,6 @@ def trend_consec_bars(df, bars):
     return df
 
 
-def ema_breakout(df: pd.DataFrame, length: int, lookback: int) -> pd.DataFrame:
-    """creates two columns 'ema_break_up' and 'ema_break_down' which represent whether the ema of close prices is above or below the
-    range it occupied over the lookback period. if both are false, it is within the range."""
-
-    if f"ema_{length}" not in df.columns:
-        df[f"ema_{length}"] = df.close.ewm(length).mean()
-    df['ema_high'] = df[f"ema_{length}"].shift(1).rolling(lookback).max()
-    df['ema_low'] = df[f"ema_{length}"].shift(1).rolling(lookback).min()
-
-    df[f'ema_{length}_break_up'] = df[f"ema_{length}"] > df.ema_high
-    df[f'ema_{length}_break_down'] = df[f"ema_{length}"] < df.ema_low
-
-    return df.drop(['ema_high', 'ema_low'], axis=1)
-
-
 def ema_trend(df: pd.DataFrame, length: int) -> pd.DataFrame:
     lookback = max(1, int(length / 100))
 
@@ -508,6 +493,57 @@ def prev_daily_low(df: pd.DataFrame, timeframe: str='5T') -> pd.Series:
         .interpolate(method='pad')
     )
     df_2['prev_daily_low'] = df_2.prev_daily_low.ffill()
+    return df_2.reset_index()
+
+
+def weekly_open(df: pd.DataFrame, timeframe: str='5T') -> pd.Series:
+    df_2 = df.set_index('timestamp', drop=True)
+    df_2['weekly_open'] = (
+        df_2.open
+        .resample('W').agg('first')
+        .resample(timeframe)
+        .interpolate(method='pad')
+    )
+    df_2['weekly_open'] = df_2.weekly_open.ffill()
+    return df_2.reset_index()
+
+
+def prev_weekly_open(df: pd.DataFrame, timeframe: str='5T') -> pd.Series:
+    df_2 = df.set_index('timestamp', drop=True)
+    df_2['prev_weekly_open'] = (
+        df_2.open
+        .resample('W').agg('first')
+        .shift()
+        .resample(timeframe)
+        .interpolate(method='pad')
+    )
+    df_2['prev_weekly_open'] = df_2.prev_weekly_open.ffill()
+    return df_2.reset_index()
+
+
+def prev_weekly_high(df: pd.DataFrame, timeframe: str='5T') -> pd.Series:
+    df_2 = df.set_index('timestamp', drop=True)
+    df_2['prev_weekly_high'] = (
+        df_2.high
+        .resample('W').agg('max')
+        .shift()
+        .resample(timeframe)
+        .interpolate(method='pad')
+    )
+    df_2['prev_weekly_high'] = df_2.prev_weekly_high.ffill()
+    return df_2.reset_index()
+
+
+def prev_weekly_low(df: pd.DataFrame, timeframe: str='5T') -> pd.Series:
+    df_2 = df.set_index('timestamp', drop=True)
+    df_2['prev_weekly_low'] = (
+        df_2.low
+        .resample('W').agg('min')
+        .shift()
+        .resample(timeframe)
+        .interpolate(method='pad')
+    )
+    df_2['prev_weekly_low'] = df_2.prev_weekly_low.ffill()
     return df_2.reset_index()
 
 

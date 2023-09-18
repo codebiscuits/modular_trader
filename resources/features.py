@@ -2,8 +2,24 @@ from resources import indicators as ind
 import pandas as pd
 import numpy as np
 
+"""
+Process for adding new features:
+1 - Define the feature as a function which takes the dataframe as the first argument and returns the dataframe with any 
+    new columns included.
+2 - insert all variations of the feature into the add_feature function below, with the following format: 
+    'column name created by the feature': {'call': name of feature function, 'params': (df, param_1, param_2, etc)},
+    if there are no parameters other than the dataframe, just put (df, ) as the params value. This is how the modular 
+    trading system accesses each individual feature it needs.
+3 - add the same variations of the call to the 'add_features' function in ml_funcs so that all the training and analysis
+    scripts have access to the feature when developing and training models
+"""
+
 def add_feature(df, name, timeframe):
     feature_lookup = {
+        'atr_z_25': {'call': atr_zscore, 'params': (df, 25)},
+        'atr_z_50': {'call': atr_zscore, 'params': (df, 50)},
+        'atr_z_100': {'call': atr_zscore, 'params': (df, 100)},
+        'atr_z_200': {'call': atr_zscore, 'params': (df, 200)},
         'atr_5_pct': {'call': atr_pct, 'params': (df, 5)},
         'atr_10_pct': {'call': atr_pct, 'params': (df, 10)},
         'atr_25_pct': {'call': atr_pct, 'params': (df, 25)},
@@ -81,6 +97,9 @@ def add_feature(df, name, timeframe):
         'prev_daily_open_ratio': {'call': prev_daily_open_ratio, 'params': (df,)},
         'prev_daily_high_ratio': {'call': prev_daily_high_ratio, 'params': (df,)},
         'prev_daily_low_ratio': {'call': prev_daily_low_ratio, 'params': (df,)},
+        'prev_weekly_open_ratio': {'call': prev_weekly_open_ratio, 'params': (df,)},
+        'prev_weekly_high_ratio': {'call': prev_weekly_high_ratio, 'params': (df,)},
+        'prev_weekly_low_ratio': {'call': prev_weekly_low_ratio, 'params': (df,)},
         'recent_vd_div_1': {'call': vol_delta_div, 'params': (df, 1)},
         'recent_vd_div_2': {'call': vol_delta_div, 'params': (df, 2)},
         'recent_vd_div_3': {'call': vol_delta_div, 'params': (df, 3)},
@@ -118,6 +137,14 @@ def add_feature(df, name, timeframe):
         'rsi_50_above_70': {'call': rsi_above, 'params': (df, 50, 70)},
         'rsi_100_above_70': {'call': rsi_above, 'params': (df, 100, 70)},
         'rsi_200_above_70': {'call': rsi_above, 'params': (df, 200, 70)},
+        'rsi_timing_l_3_14': {'call': rsi_timing_long, 'params': (df, 3)},
+        'rsi_timing_l_5_14': {'call': rsi_timing_long, 'params': (df, 5)},
+        'rsi_timing_l_7_14': {'call': rsi_timing_long, 'params': (df, 7)},
+        'rsi_timing_l_9_14': {'call': rsi_timing_long, 'params': (df, 9)},
+        'rsi_timing_s_3_14': {'call': rsi_timing_short, 'params': (df, 3)},
+        'rsi_timing_s_5_14': {'call': rsi_timing_short, 'params': (df, 5)},
+        'rsi_timing_s_7_14': {'call': rsi_timing_short, 'params': (df, 7)},
+        'rsi_timing_s_9_14': {'call': rsi_timing_short, 'params': (df, 9)},
         'skew_6': {'call': skew, 'params': (df, 6)},
         'skew_12': {'call': skew, 'params': (df, 12)},
         'skew_25': {'call': skew, 'params': (df, 25)},
@@ -155,6 +182,7 @@ def add_feature(df, name, timeframe):
         'vol_denom_roc_5': {'call': vol_denom_roc, 'params': (df, 5, 50)},
         'week_of_year': {'call': week_of_year, 'params': (df,)},
         'week_of_year_180': {'call': week_of_year_180, 'params': (df,)},
+        'weekly_open_ratio': {'call': weekly_open_ratio, 'params': (df,)},
         'roc_1w': {'call': weekly_roc, 'params': (df, timeframe)}
     }
     feature = feature_lookup[name]
@@ -168,11 +196,64 @@ def vol_doji(df: pd.DataFrame, thresh: float, lookback: int, weighted: bool) -> 
     pass
 
 
+def htf_fractals_proximity(df: pd.DataFrame, orig_tf: str, htf: str='W', frac_width: int=3) -> pd.DataFrame:
+    """resamples to weekly or monthly timeframe, calculates williams fractals on that, works out which is closest to the
+    current price and returns the pct difference"""
+    # TODO this isn't finished yet
+
+    # only need to resample close column
+    closes = df.close.resample(htf).shift(1) # make sure the close price for each week is recorded on the following week
+
+    fractal_high = np.where(closes == closes.rolling(frac_width, center=True).max(), closes, np.nan)
+    fractal_low = np.where(closes == closes.rolling(frac_width, center=True).min(), closes, np.nan)
+
+    # make a list of all the levels with their timestamps (they are only valid levels after they have been established)
+
+    # for each period in the original df, record which is the closest VALID level, then create a column that represents
+    # how far those prices are from the open price or vwma
+
+    return df
+
+
+def daily_sfp(df: pd.DataFrame):
+    # group by day (not day of week or day of year but every unique day) and calculate for each period whether the price
+    # has started on one side of the open and then crossed to the other side.
+    # maybe include a volume filter to ignore when a tiny percentage of normal volume was one one side to avoid falsly
+    # classifying a retest as a cross
+    pass
+
+
+def rsi_timing_long(df: pd.DataFrame, lookback: int, rsi_length: int=14) -> pd.DataFrame:
+    """returns True if all rsi values in the lookback window are less than the value 3 periods earlier, and the
+    current value is less than 30"""
+    if f"rsi_{rsi_length}" not in df.columns:
+        df[f"rsi_{rsi_length}"] = ind.rsi(df.close, rsi_length)
+
+    df[f"rsi_timing_l_{lookback}_{rsi_length}"] = (((df[f"rsi_{rsi_length}"].pct_change(3) < 0)
+                                                 .rolling(lookback).sum() + (df[f"rsi_{rsi_length}"] < 30))
+                                                == lookback + 1)
+
+    return df
+
+
+def rsi_timing_short(df: pd.DataFrame, lookback: int, rsi_length: int=14) -> pd.DataFrame:
+    """returns True if all rsi values in the lookback window are greater than the value 3 periods earlier, and the
+    current value is greater than 70"""
+    if f"rsi_{rsi_length}" not in df.columns:
+        df[f"rsi_{rsi_length}"] = ind.rsi(df.close, rsi_length)
+
+    df[f"rsi_timing_s_{lookback}_{rsi_length}"] = (((df[f"rsi_{rsi_length}"].pct_change(3) > 0)
+                                                 .rolling(lookback).sum() + (df[f"rsi_{rsi_length}"] > 70))
+                                                == lookback + 1)
+
+    return df
+
+
 def atr_zscore(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
     atr = ind.atr(df, lookback)[f'atr_{lookback}_pct']
     atr_mean = atr.rolling(lookback).mean()
     atr_std = atr.rolling(lookback).std()
-    df[f'atr_zscore_{lookback}'] = (atr - atr_mean) / atr_std
+    df[f'atr_z_{lookback}'] = (atr - atr_mean) / atr_std
 
     return df
 
@@ -182,7 +263,7 @@ def dd_zscore(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
     pct_dd = (highest_close - df.close) / highest_close
     dd_mean = pct_dd.rolling(lookback).mean()
     dd_std = pct_dd.rolling(lookback).std()
-    df[f'dd_zscore_{lookback}'] = (pct_dd - dd_mean) / dd_std
+    df[f'dd_z_{lookback}'] = (pct_dd - dd_mean) / dd_std
 
     return df
 
@@ -194,12 +275,14 @@ def volume_climax_up(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
 
     return df
 
+
 def volume_climax_down(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
     bar_range = (df.close - df.open) / ((df.close + df.open) / 2)
     volume_dn_bar = (df.base_vol - df.taker_buy_base_vol) * (1 - bar_range)
     df[f'volume_climax_dn_{lookback}'] = volume_dn_bar == volume_dn_bar.rolling(lookback).max()
 
     return df
+
 
 def high_volume_churn(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
     wick_range = (df.high - df.low) / ((df.high + df.low) / 2)
@@ -208,18 +291,9 @@ def high_volume_churn(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
 
     return df
 
+
 def low_volume_bar(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
     df[f'low_volume_{lookback}'] = df.base_vol == df.base_vol.rolling(lookback).min()
-
-    return df
-
-
-def rsi_timing_long(df: pd.DataFrame, periods: int, rsi_length: int=14) -> pd.DataFrame:
-    if f"rsi_{rsi_length}" not in df.columns:
-        df[f"rsi_{rsi_length}"] = ind.rsi(df.close, rsi_length)
-
-    df[f"rsi_timing_{periods}_{rsi_length}"] = (((df[f"rsi_{rsi_length}"].pct_change(3) < 0).rolling(periods).sum() +
-                                                 (df[f"rsi_{rsi_length}"] < 30)) == periods + 1)
 
     return df
 
@@ -262,35 +336,8 @@ def spooky_nums_proximity(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def htf_fractals_proximity(df: pd.DataFrame, orig_tf: str, htf: str='W', frac_width: int=3) -> pd.DataFrame:
-    """resamples to weekly or monthly timeframe, calculates williams fractals on that, works out which is closest to the
-    current price and returns the pct difference"""
-    # TODO this isn't finished yet
-
-    # only need to resample close column
-    closes = df.close.resample(htf).shift(1) # make sure the close price for each week is recorded on the following week
-
-    fractal_high = np.where(closes == closes.rolling(frac_width, center=True).max(), closes, np.nan)
-    fractal_low = np.where(closes == closes.rolling(frac_width, center=True).min(), closes, np.nan)
-
-    # make a list of all the levels with their timestamps (they are only valid levels after they have been established)
-
-    # for each period in the original df, record which is the closest VALID level, then create a column that represents
-    # how far those prices are from the open price or vwma
-
-    return df
-
-
 def daily_open_ratio(df: pd.DataFrame):
     # for each period in the df, find the daily open, then divide each period's close price by that daily open
-    pass
-
-
-def daily_sfp(df: pd.DataFrame):
-    # group by day (not day of week or day of year but every unique day) and calculate for each period whether the price
-    # has started on one side of the open and then crossed to the other side.
-    # maybe include a volume filter to ignore when a tiny percentage of normal volume was one one side to avoid falsly
-    # classifying a retest as a cross
     pass
 
 
@@ -499,7 +546,7 @@ def prev_daily_open_ratio(df: pd.DataFrame) -> pd.DataFrame:
     if 'prev_daily_open' not in df.columns:
         df = ind.prev_daily_open(df)
 
-    df['prev_daily_open_ratio'] = (df.close / df.prev_daily_open).shift()
+    df['prev_daily_open_ratio'] = (df.close / df.prev_daily_open)
     return df
 
 
@@ -516,6 +563,38 @@ def prev_daily_low_ratio(df: pd.DataFrame) -> pd.DataFrame:
         df = ind.prev_daily_low(df)
 
     df['prev_daily_low_ratio'] = (df.close / df.prev_daily_low)
+    return df
+
+
+def weekly_open_ratio(df: pd.DataFrame) -> pd.DataFrame:
+    if 'weekly_open' not in df.columns:
+        df = ind.weekly_open(df)
+
+    df['weekly_open_ratio'] = (df.close / df.weekly_open)
+    return df
+
+
+def prev_weekly_open_ratio(df: pd.DataFrame) -> pd.DataFrame:
+    if 'prev_weekly_open' not in df.columns:
+        df = ind.prev_weekly_open(df)
+
+    df['prev_weekly_open_ratio'] = (df.close / df.prev_weekly_open)
+    return df
+
+
+def prev_weekly_high_ratio(df: pd.DataFrame) -> pd.DataFrame:
+    if 'prev_weekly_high' not in df.columns:
+        df = ind.prev_weekly_high(df)
+
+    df['prev_weekly_high_ratio'] = (df.close / df.prev_weekly_high)
+    return df
+
+
+def prev_weekly_low_ratio(df: pd.DataFrame) -> pd.DataFrame:
+    if 'prev_weekly_low' not in df.columns:
+        df = ind.prev_weekly_low(df)
+
+    df['prev_weekly_low_ratio'] = (df.close / df.prev_weekly_low)
     return df
 
 
@@ -601,4 +680,44 @@ def fractal_trend_age(df: pd.DataFrame, width: int=5, spacing: int=2) -> pd.Data
     df['fractal_trend_age_short'] = ind.consec_condition(short_trend_condition)
 
     return df
+
+
+def stoch_w(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
+    """
+    stochastic W returns True on any row which meets the following conditions;
+    a 'W' pattern (high, low, high, low, high) has formed on the stochastic oscillator,
+    each point in the pattern is below the midline of the oscillator
+    the close price at the end of the pattern is lower than the close price at the start of the pattern
+    """
+
+    stoch = ind.stochastic(df.close, lookback)
+
+    cond_1 = stoch.iloc[-2] < stoch.iloc[-1] < 0.5
+    cond_2 = stoch.iloc[-2] < stoch.iloc[-3] < 0.5
+    cond_3 = stoch.iloc[-4] < stoch.iloc[-3]
+    cond_4 = stoch.iloc[-4] < stoch.iloc[-5] < 0.5
+    cond_5 = df.close.iloc[-1] < df.close.iloc[-5]
+
+    df[f"stoch_w_{lookback}"] = cond_1 & cond_2 & cond_3 & cond_4 & cond_5
+
+
+def stoch_m(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
+    """
+    stochastic M returns True on any row which meets the following conditions;
+    an 'M' pattern (low, high, low, high, low) has formed on the stochastic oscillator,
+    each point in the pattern is above the midline of the oscillator
+    the close price at the end of the pattern is higher than the close price at the start of the pattern
+    """
+
+    stoch = ind.stochastic(df.close, lookback)
+
+    cond_1 = stoch.iloc[-2] > stoch.iloc[-1] > 0.5
+    cond_2 = stoch.iloc[-2] > stoch.iloc[-3] > 0.5
+    cond_3 = stoch.iloc[-4] > stoch.iloc[-3]
+    cond_4 = stoch.iloc[-4] > stoch.iloc[-5] > 0.5
+    cond_5 = df.close.iloc[-1] > df.close.iloc[-5]
+
+    df[f"stoch_m_{lookback}"] = cond_1 & cond_2 & cond_3 & cond_4 & cond_5
+
+
 

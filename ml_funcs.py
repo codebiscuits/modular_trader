@@ -157,6 +157,10 @@ def oco(df, r_mult, inval_lb, side):
 
 
 def add_features(df, tf):
+    df = features.atr_zscore(df, 25)
+    df = features.atr_zscore(df, 50)
+    df = features.atr_zscore(df, 100)
+    df = features.atr_zscore(df, 200)
     df = features.atr_pct(df, 5)
     df = features.atr_pct(df, 10)
     df = features.atr_pct(df, 25)
@@ -223,6 +227,9 @@ def add_features(df, tf):
     df = features.prev_daily_open_ratio(df)
     df = features.prev_daily_high_ratio(df)
     df = features.prev_daily_low_ratio(df)
+    df = features.prev_weekly_open_ratio(df)
+    df = features.prev_weekly_high_ratio(df)
+    df = features.prev_weekly_low_ratio(df)
     df = features.round_numbers_proximity(df)
     df = features.big_round_nums_proximity(df)
     df = features.spooky_nums_proximity(df)
@@ -256,6 +263,14 @@ def add_features(df, tf):
     df = features.rsi_above(df, 50, 70)
     df = features.rsi_above(df, 100, 70)
     df = features.rsi_above(df, 200, 70)
+    df = features.rsi_timing_long(df, 3)
+    df = features.rsi_timing_long(df, 5)
+    df = features.rsi_timing_long(df, 7)
+    df = features.rsi_timing_long(df, 9)
+    df = features.rsi_timing_short(df, 3)
+    df = features.rsi_timing_short(df, 5)
+    df = features.rsi_timing_short(df, 7)
+    df = features.rsi_timing_short(df, 9)
     df = features.skew(df, 6)
     df = features.skew(df, 12)
     df = features.skew(df, 25)
@@ -296,6 +311,7 @@ def add_features(df, tf):
     # df = features.week_of_year(df)
     # df = features.week_of_year_180(df)
     df = features.weekly_roc(df, tf)
+    df = features.weekly_open_ratio(df)
 
     return df
 
@@ -307,8 +323,8 @@ def features_labels_split(df):
                  'hma_25', 'hma_50', 'hma_100', 'hma_200', 'lifespan', 'frac_high', 'frac_low', 'inval', 'daily_open',
                  'prev_daily_open', 'prev_daily_high', 'prev_daily_low', 'bullish_doji', 'bearish_doji'],
                 axis=1, errors='ignore')
-    y = df.pnl_cat
-    z = df.pnl_r
+    y = df.pnl_cat.shift(-1)
+    z = df.pnl_r.shift(-1)
 
     return X, y, z
 
