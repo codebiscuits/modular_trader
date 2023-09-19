@@ -233,14 +233,14 @@ for side, timeframe, pair_sel in itertools.product(sides, timeframes, pair_selec
     # save to files
     folder = Path(f"machine_learning/models/trail_fractals_{selection_method}_{num_pairs}")
     folder.mkdir(parents=True, exist_ok=True)
-    # pi2_folder = Path(f"/home/ross/coding/pi_2/modular_trader/machine_learning/"
-    #                   f"models/trail_fractals_{pair_selection}_{num_pairs}")
-    # pi2_folder.mkdir(parents=True, exist_ok=True)
+    pi2_folder = Path(f"/home/ross/coding/pi_2/modular_trader/machine_learning/"
+                      f"models/trail_fractals_{pair_selection}_{num_pairs}")
+    pi2_folder.mkdir(parents=True, exist_ok=True)
 
     # save ml model on laptop and pi
     model_file = Path(f"trail_fractal_{side}_{timeframe}_model.sav")
     joblib.dump(cal_model, folder / model_file)
-    # joblib.dump(cal_model, pi2_folder / model_file)
+    joblib.dump(cal_model, pi2_folder / model_file)
 
     # save info dict on laptop and pi
     model_info = Path(f"trail_fractal_{side}_{timeframe}_info.json")
@@ -255,8 +255,8 @@ for side, timeframe, pair_sel in itertools.product(sides, timeframes, pair_selec
                      'pair_selection': selection_method}
         with open(folder / model_info, 'w') as info:
             json.dump(info_dict, info)
-        # with open(pi2_folder / model_info, 'w') as info:
-        #     json.dump(info_dict, info)
+        with open(pi2_folder / model_info, 'w') as info:
+            json.dump(info_dict, info)
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
