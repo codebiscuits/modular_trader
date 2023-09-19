@@ -824,7 +824,7 @@ class Agent():
                 'action': 'tp',
                 'direction': direction,
                 'state': state,
-                'inval': pos['position']['hard_stop']
+                'inval': float(pos['position']['hard_stop'])
             }
 
             if current_value < session.min_size:
