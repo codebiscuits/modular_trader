@@ -1468,7 +1468,7 @@ class Agent():
                        'pair': pair,
                        'trig_price': price,
                        'stop_price': stp,
-                       'inval': price / stp,
+                       'inval': price / float(stp),
                        'utc_datetime': now,
                        'completed': None
                        }
@@ -1657,7 +1657,7 @@ class Agent():
         new_size = self.open_trades[pair]['position']['base_size']
 
         pfrd = float(self.open_trades[pair]['position']['pfrd'])
-        inval_ratio = price / stp
+        inval_ratio = price / float(stp)
         if session.live:
             self.real_pos[asset].update(
                 self.update_pos(session, pair, new_size, inval_ratio, 'real'))
