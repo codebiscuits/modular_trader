@@ -1679,6 +1679,14 @@ class Agent():
         price = session.pairs_data[pair]['price']
         now = datetime.now(timezone.utc).strftime(timestring)
 
+        # check stop is within 20% of current price
+        if direction == 'long':
+            min_stp = price * 0.81
+            stp = max(stp, min_stp)
+        else:
+            max_stp = price * 1.19
+            stp = min(stp, max_stp)
+
         self.create_tp_placeholder(session, pair, stp, direction)
         pct = self.tp_set_pct(pair)
         # clear stop
