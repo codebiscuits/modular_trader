@@ -552,3 +552,16 @@ def z_score(s: pd.Series, lookback) -> pd.Series:
     s_std = s.ewm(lookback).std()
 
     return (s - s_mean) / s_std
+
+
+def vol_profile_poc(df: pd.DataFrame, bins: int=100) -> float:
+    """takes a dataframe and creates a numpy histogram of volume using the bins argument, then returns the mid-price of
+    the bin with the most volume"""
+
+    price_buckets = np.linspace(df[:, 4].min(), df[:, 4].max(), bins)
+    bin_mids = pd.Series(price_buckets).rolling(2).mean().dropna()
+
+    vol_bars = np.histogram(df[:, 4], bins=price_buckets, weights=df[:, 5])[0]
+
+    return bin_mids.iloc[np.argmax(vol_bars)]
+

@@ -153,12 +153,11 @@ sides = ['long',
          'short'
          ]
 data_len = 500
-pairs = [30, 100]
+pair_selection = [(30, '1d_volumes'), (100, '1w_volumes')] # choose the top _ pairs ranked by _
 start_pair = 0
 width = 5
 atr_spacing = 2
 scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
-pair_selection = '1d_volumes'
 
 for i in range(360):
     try:
@@ -168,15 +167,17 @@ for i in range(360):
     except requests.exceptions.ConnectionError as e:
         time.sleep(5)
 
-for side, timeframe, num_pairs in itertools.product(sides, timeframes, pairs):
+for side, timeframe, pair_sel in itertools.product(sides, timeframes, pair_selection):
 
     print(f"\nFitting {timeframe} {side} model")
     loop_start = time.perf_counter()
+    num_pairs = pair_sel[0]
+    selection_method = pair_sel[1]
 
     if running_on_pi:
         pairs = load_pairs(side, timeframe)
     else:
-        pairs = mlf.rank_pairs(pair_selection)
+        pairs = mlf.rank_pairs(selection_method)
         symbol_margin = {i['symbol']: i['isMarginTradingAllowed'] for i in exc_info['symbols'] if i['quoteAsset'] == 'USDT'}
         pairs = [p for p in pairs if symbol_margin[p]]
         pairs = pairs[start_pair:start_pair + num_pairs]
@@ -230,7 +231,7 @@ for side, timeframe, num_pairs in itertools.product(sides, timeframes, pairs):
     print(f"Model score after calibration: {cal_score:.1%}")
 
     # save to files
-    folder = Path(f"machine_learning/models/trail_fractals_{pair_selection}_{num_pairs}")
+    folder = Path(f"machine_learning/models/trail_fractals_{selection_method}_{num_pairs}")
     folder.mkdir(parents=True, exist_ok=True)
     # pi2_folder = Path(f"/home/ross/coding/pi_2/modular_trader/machine_learning/"
     #                   f"models/trail_fractals_{pair_selection}_{num_pairs}")
@@ -251,7 +252,7 @@ for side, timeframe, num_pairs in itertools.product(sides, timeframes, pairs):
                      'frac_width': width,
                      'atr_spacing': atr_spacing,
                      'created': int(datetime.now(timezone.utc).timestamp()),
-                     'pair_selection': pair_selection}
+                     'pair_selection': selection_method}
         with open(folder / model_info, 'w') as info:
             json.dump(info_dict, info)
         # with open(pi2_folder / model_info, 'w') as info:

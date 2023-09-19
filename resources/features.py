@@ -61,6 +61,18 @@ def add_feature(df, name, timeframe):
         'dd_z_50': {'call': dd_zscore, 'params': (df, 50)},
         'dd_z_100': {'call': dd_zscore, 'params': (df, 100)},
         'dd_z_200': {'call': dd_zscore, 'params': (df, 200)},
+        'ema_12_above_24': {'call': two_emas, 'params': (df, 12, 24)},
+        'ema_12_above_48': {'call': two_emas, 'params': (df, 12, 48)},
+        'ema_24_above_96': {'call': two_emas, 'params': (df, 24, 96)},
+        'ema_48_above_192': {'call': two_emas, 'params': (df, 48, 192)},
+        'ema_cross_up_12_24': {'call': two_emas, 'params': (df, 12, 24)},
+        'ema_cross_up_12_48': {'call': two_emas, 'params': (df, 12, 48)},
+        'ema_cross_up_24_96': {'call': two_emas, 'params': (df, 24, 96)},
+        'ema_cross_up_48_192': {'call': two_emas, 'params': (df, 48, 192)},
+        'ema_cross_down_12_24': {'call': two_emas, 'params': (df, 12, 24)},
+        'ema_cross_down_12_48': {'call': two_emas, 'params': (df, 12, 48)},
+        'ema_cross_down_24_96': {'call': two_emas, 'params': (df, 24, 96)},
+        'ema_cross_down_48_192': {'call': two_emas, 'params': (df, 48, 192)},
         'ema_12_break_up': {'call': ema_breakout, 'params': (df, 12, 25)},
         'ema_12_break_down': {'call': ema_breakout, 'params': (df, 12, 25)},
         'ema_25_break_up': {'call': ema_breakout, 'params': (df, 25, 50)},
@@ -155,6 +167,14 @@ def add_feature(df, name, timeframe):
         'stoch_base_vol_50': {'call': stoch_base_vol, 'params': (df, 50)},
         'stoch_base_vol_100': {'call': stoch_base_vol, 'params': (df, 100)},
         'stoch_base_vol_200': {'call': stoch_base_vol, 'params': (df, 200)},
+        'stoch_m_12': {'call': stoch_m, 'params': (df, 12)},
+        'stoch_m_25': {'call': stoch_m, 'params': (df, 25)},
+        'stoch_m_50': {'call': stoch_m, 'params': (df, 50)},
+        'stoch_m_100': {'call': stoch_m, 'params': (df, 100)},
+        'stoch_w_12': {'call': stoch_w, 'params': (df, 12)},
+        'stoch_w_25': {'call': stoch_w, 'params': (df, 25)},
+        'stoch_w_50': {'call': stoch_w, 'params': (df, 50)},
+        'stoch_w_100': {'call': stoch_w, 'params': (df, 100)},
         'stoch_num_trades_25': {'call': stoch_num_trades, 'params': (df, 25)},
         'stoch_num_trades_50': {'call': stoch_num_trades, 'params': (df, 50)},
         'stoch_num_trades_100': {'call': stoch_num_trades, 'params': (df, 100)},
@@ -221,6 +241,17 @@ def daily_sfp(df: pd.DataFrame):
     # maybe include a volume filter to ignore when a tiny percentage of normal volume was one one side to avoid falsly
     # classifying a retest as a cross
     pass
+
+
+def two_emas(df: pd.DataFrame, a: int, b: int) -> pd.DataFrame:
+    fast = df.close.ewm(a).mean()
+    slow = df.close.ewm(b).mean()
+
+    df[f"ema_cross_up_{a}_{b}"] = (fast > slow) & (fast.shift() < slow.shift())
+    df[f"ema_cross_down_{a}_{b}"] = (fast < slow) & (fast.shift() > slow.shift())
+    df[f"ema_{a}_above_{b}"] = fast > slow
+
+    return df
 
 
 def rsi_timing_long(df: pd.DataFrame, lookback: int, rsi_length: int=14) -> pd.DataFrame:
@@ -700,6 +731,8 @@ def stoch_w(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
 
     df[f"stoch_w_{lookback}"] = cond_1 & cond_2 & cond_3 & cond_4 & cond_5
 
+    return df
+
 
 def stoch_m(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
     """
@@ -719,5 +752,10 @@ def stoch_m(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
 
     df[f"stoch_m_{lookback}"] = cond_1 & cond_2 & cond_3 & cond_4 & cond_5
 
+    return df
 
 
+def rolling_poc(df: pd.DataFrame, lookback: int=24) -> pd.DataFrame:
+    df[f"rolling_poc_{lookback}"] = df.rolling(lookback, method='table').apply(ind.vol_profile_poc, engine='numba')
+
+    return df
