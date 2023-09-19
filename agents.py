@@ -329,7 +329,7 @@ class Agent():
     def save_records(self, session, pair, stop_dict, order):
         self.open_trades[pair]['trade'].append(stop_dict)
         self.open_trades[pair]['trade'][-1]['liability'] = str(Decimal(0) - Decimal(order['executedQty']))
-        rpnl = self.realised_pnl(session, self.open_trades[pair])
+        rpnl = self.realised_pnl(self.open_trades[pair])
         self.open_trades[pair]['trade'][-1]['rpnl'] = rpnl
         direction = self.open_trades[pair]['position']['direction']
         self.realised_pnls[f"real_{direction}"] += rpnl
@@ -689,7 +689,7 @@ class Agent():
 
     # risk ----------------------------------------------------------------------
 
-    def realised_pnl(self, session, trade_record: dict) -> float:
+    def realised_pnl(self, trade_record: dict) -> float:
         '''calculates realised pnl of a tp or close denominated in the trade's
         own R value'''
 
@@ -701,14 +701,11 @@ class Agent():
         k15.start()
 
         position = trade_record['position']
-        side = position['direction']
 
         trades = trade_record['trade']
         entry = float(position['entry_price'])
         init_stop = float(position['init_hard_stop'])
-        init_size = float(position['init_base_size'])
         final_exit = float(trades[-1].get('exe_price'))
-        final_size = float(trades[-1].get('base_size'))
 
         r_val = (entry - init_stop) / entry
         trade_pnl = (final_exit - entry) / entry
@@ -716,9 +713,7 @@ class Agent():
         scalar = position['pct_of_full_pos']
         realised_r = trade_r * scalar
 
-        logger.debug('')
-        logger.debug(f"{position['pair']} rpnl calc: r_val: {r_val:.1%} trade_pnl: {trade_pnl:.1%} trade_r: {trade_r:.2f} "
-              f"{scalar = } realised_r: {realised_r:.2f}")
+        logger.debug(f"{position['pair']} realised_r: {realised_r:.2f}")
         k15.stop()
 
         return realised_r
@@ -834,9 +829,9 @@ class Agent():
 
             signals.append(signal)
 
-            logger.debug(f"{pair} open risk over threshold, or: {open_risk['r']:.1f}R. "
+            logger.debug(f"{state} {pair} open risk over threshold, or: {open_risk['r']:.1f}R. "
                          f"Size: {current_value:.2f}USDT so action is {signal['action']}")
-            logger.info(f"{pair} open risk over threshold, or: {open_risk['r']:.1f}R. "
+            logger.info(f"{state} {pair} open risk over threshold, or: {open_risk['r']:.1f}R. "
                          f"Size: {current_value:.2f}USDT so action is {signal['action']}")
 
         return signals
@@ -1551,7 +1546,7 @@ class Agent():
         self.open_trades[pair]['trade'].append(close_order)
         self.open_trades[pair]['trade'][-1]['utc_datetime'] = self.open_trades[pair]['placeholder']['utc_datetime']
 
-        rpnl = self.realised_pnl(session, self.open_trades[pair])
+        rpnl = self.realised_pnl(self.open_trades[pair])
         self.open_trades[pair]['trade'][-1]['rpnl'] = rpnl
         self.realised_pnls[f"real_{direction}"] += rpnl
         self.realised_pnls[f"wanted_{direction}"] += rpnl
@@ -1641,7 +1636,7 @@ class Agent():
         self.open_trades[pair]['trade'].append(tp_order)
         self.open_trades[pair]['trade'][-1]['utc_datetime'] = self.open_trades[pair]['placeholder']['utc_datetime']
 
-        rpnl = self.realised_pnl(session, self.open_trades[pair])
+        rpnl = self.realised_pnl(self.open_trades[pair])
         self.open_trades[pair]['trade'][-1]['rpnl'] = rpnl
         direction = self.open_trades[pair]['position']['direction']
         self.realised_pnls[f"real_{direction}"] += rpnl
@@ -1809,7 +1804,7 @@ class Agent():
         self.open_trades[pair]['trade'][-1]['liability'] = str(Decimal(0) - Decimal(repay_size))
         self.open_trades[pair]['trade'][-1]['utc_datetime'] = self.open_trades[pair]['placeholder']['utc_datetime']
 
-        rpnl = self.realised_pnl(session, self.open_trades[pair])
+        rpnl = self.realised_pnl(self.open_trades[pair])
         self.open_trades[pair]['trade'][-1]['rpnl'] = rpnl
         direction = self.open_trades[pair]['position']['direction']
         self.realised_pnls[f"real_{direction}"] += rpnl
@@ -1996,7 +1991,7 @@ class Agent():
         self.sim_trades[pair]['position']['stop_time'] = int(now.timestamp()*1000)
         self.sim_trades[pair]['position']['pct_of_full_pos'] /= 2
 
-        rpnl = self.realised_pnl(session, self.sim_trades[pair])
+        rpnl = self.realised_pnl(self.sim_trades[pair])
         self.sim_trades[pair]['trade'][-1]['rpnl'] = rpnl
         self.realised_pnls[f"sim_{direction}"] += rpnl
         if 'low_score' in self.sim_trades[pair]['signal']['sim_reasons']:
@@ -2017,7 +2012,7 @@ class Agent():
 
         self.sim_trades[pair]['trade'].append(close_order)
 
-        rpnl = self.realised_pnl(session, self.sim_trades[pair])
+        rpnl = self.realised_pnl(self.sim_trades[pair])
         self.sim_trades[pair]['trade'][-1]['rpnl'] = rpnl
         direction = self.sim_trades[pair]['position']['direction']
         self.realised_pnls[f"sim_{direction}"] += rpnl

@@ -306,8 +306,9 @@ checked_signals = uf.remove_duplicates(processed_signals['real_sim_tp_close'])
 logger.debug(f"{len(checked_signals) = }")
 
 for signal in checked_signals:
-    logger.debug(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
-    logger.info(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
+    logger.debug('')
+    logger.debug(f"Executing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
+    logger.info(f"\nExecuting {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
     if signal['action'] == 'close': # TODO stop signals could be added in here
         agents[signal['agent']].close_pos(session, signal)
     elif signal['action'] == 'tp':
