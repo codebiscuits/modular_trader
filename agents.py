@@ -263,9 +263,9 @@ class Agent():
         for pair, pos in self.open_trades.items():
             position = pos['position']
             if position['direction'] in ['long', 'spot']:
-                valid = position['hard_stop'] < session.pairs_data[pair]['price']
+                valid = float(position['hard_stop']) < session.pairs_data[pair]['price']
             else:
-                valid = position['hard_stop'] > session.pairs_data[pair]['price']
+                valid = float(position['hard_stop']) > session.pairs_data[pair]['price']
 
             if not valid:
                 logger.warning(f"{self.id} {pair} {pos['direction']} position somehow passed its stop-loss without closing")
