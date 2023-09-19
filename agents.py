@@ -1071,9 +1071,6 @@ class Agent():
         pct = round(100 * float(value) / bal, 2)
 
         or_dict = uf.open_risk_calc(session, trade_record, 'all')
-        logger.debug('')
-        logger.debug(pair)
-        logger.debug(f"new calculator function returns: {or_dict}")
 
         jk.stop()
 

@@ -30,7 +30,7 @@ agents = []
 for timeframe, offset in session.timeframes:
     agents.extend(
         [
-            TrailFractals(session, timeframe, offset, 'volumes', 30),
+            TrailFractals(session, timeframe, offset, '1d_volumes', 30),
         ]
     )
 

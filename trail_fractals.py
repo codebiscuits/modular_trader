@@ -153,12 +153,12 @@ sides = ['long',
          'short'
          ]
 data_len = 500
-num_pairs = 30
+pairs = [30, 100]
 start_pair = 0
 width = 5
 atr_spacing = 2
 scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
-pair_selection = 'volumes'
+pair_selection = '1d_volumes'
 
 for i in range(360):
     try:
@@ -168,7 +168,7 @@ for i in range(360):
     except requests.exceptions.ConnectionError as e:
         time.sleep(5)
 
-for side, timeframe in itertools.product(sides, timeframes):
+for side, timeframe, num_pairs in itertools.product(sides, timeframes, pairs):
 
     print(f"\nFitting {timeframe} {side} model")
     loop_start = time.perf_counter()
@@ -232,14 +232,14 @@ for side, timeframe in itertools.product(sides, timeframes):
     # save to files
     folder = Path(f"machine_learning/models/trail_fractals_{pair_selection}_{num_pairs}")
     folder.mkdir(parents=True, exist_ok=True)
-    pi2_folder = Path(f"/home/ross/coding/pi_2/modular_trader/machine_learning/"
-                      f"models/trail_fractals_{pair_selection}_{num_pairs}")
-    pi2_folder.mkdir(parents=True, exist_ok=True)
+    # pi2_folder = Path(f"/home/ross/coding/pi_2/modular_trader/machine_learning/"
+    #                   f"models/trail_fractals_{pair_selection}_{num_pairs}")
+    # pi2_folder.mkdir(parents=True, exist_ok=True)
 
     # save ml model on laptop and pi
     model_file = Path(f"trail_fractal_{side}_{timeframe}_model.sav")
     joblib.dump(cal_model, folder / model_file)
-    joblib.dump(cal_model, pi2_folder / model_file)
+    # joblib.dump(cal_model, pi2_folder / model_file)
 
     # save info dict on laptop and pi
     model_info = Path(f"trail_fractal_{side}_{timeframe}_info.json")
@@ -254,8 +254,8 @@ for side, timeframe in itertools.product(sides, timeframes):
                      'pair_selection': pair_selection}
         with open(folder / model_info, 'w') as info:
             json.dump(info_dict, info)
-        with open(pi2_folder / model_info, 'w') as info:
-            json.dump(info_dict, info)
+        # with open(pi2_folder / model_info, 'w') as info:
+        #     json.dump(info_dict, info)
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start

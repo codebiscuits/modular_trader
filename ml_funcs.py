@@ -25,7 +25,7 @@ from imblearn.under_sampling import RandomUnderSampler
 from xgboost import XGBClassifier
 
 def rank_pairs(selection):
-    with open(f'recent_1d_{selection}.json', 'r') as file:
+    with open(f'recent_{selection}.json', 'r') as file:
         vols = json.load(file)
 
     return sorted(vols, key=lambda x: vols[x], reverse=True)
