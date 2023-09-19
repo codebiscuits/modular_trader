@@ -308,7 +308,7 @@ logger.debug(f"{len(checked_signals) = }")
 for signal in checked_signals:
     logger.debug(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
     logger.info(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
-    if signal['action'] == 'close':
+    if signal['action'] == 'close': # TODO stop signals could be added in here
         agents[signal['agent']].close_pos(session, signal)
     elif signal['action'] == 'tp':
         agents[signal['agent']].tp_pos(session, signal)

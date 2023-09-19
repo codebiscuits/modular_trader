@@ -1248,10 +1248,10 @@ class Agent():
 
     def tp_pos(self, session, signal):
         if signal['state'] == 'real' and signal['mode'] == 'margin':
-            self.tp_real_full_M(session, signal['pair'], signal['inval'], signal['inval_ratio'], signal['direction'])
+            self.tp_real_full_M(session, signal['pair'], signal['inval'], signal['direction'])
 
         elif signal['state'] == 'real' and signal['mode'] == 'spot':
-            self.tp_real_full_s(session, signal['pair'], signal['inval'], signal['inval_ratio'])
+            self.tp_real_full_s(session, signal['pair'], signal['inval'])
 
         elif signal['state'] == 'sim':
             self.tp_sim(session, signal['pair'], signal['inval'], signal['direction'])
@@ -1457,7 +1457,7 @@ class Agent():
 
     # real tp
 
-    def create_tp_placeholder(self, session, pair, stp, inval_ratio, direction):
+    def create_tp_placeholder(self, session, pair, stp, direction):
         price = session.pairs_data[pair]['price']
         now = datetime.now(timezone.utc).strftime(timestring)
 
@@ -1468,7 +1468,7 @@ class Agent():
                        'pair': pair,
                        'trig_price': price,
                        'stop_price': stp,
-                       'inval': inval_ratio,
+                       'inval': price / stp,
                        'utc_datetime': now,
                        'completed': None
                        }
@@ -1651,12 +1651,13 @@ class Agent():
         del self.open_trades[pair]['placeholder']
         self.record_trades(session, 'open')
 
-    def tp_update_records_partial(self, session, pair, pct, inval_ratio, order_size, tp_order, direction):
+    def tp_update_records_partial(self, session, pair, pct, stp, order_size, tp_order, direction):
         asset = pair[:-len(session.quote_asset)]
         price = session.pairs_data[pair]['price']
         new_size = self.open_trades[pair]['position']['base_size']
 
         pfrd = float(self.open_trades[pair]['position']['pfrd'])
+        inval_ratio = price / stp
         if session.live:
             self.real_pos[asset].update(
                 self.update_pos(session, pair, new_size, inval_ratio, 'real'))
@@ -1671,14 +1672,14 @@ class Agent():
 
         self.counts_dict[f'real_tp_{direction}'] += 1
 
-    def tp_real_full_M(self, session, pair, stp, inval_ratio, direction):
+    def tp_real_full_M(self, session, pair, stp, direction):
         k10 = Timer(f'tp_real_full')
         k10.start()
 
         price = session.pairs_data[pair]['price']
         now = datetime.now(timezone.utc).strftime(timestring)
 
-        self.create_tp_placeholder(session, pair, stp, inval_ratio, direction)
+        self.create_tp_placeholder(session, pair, stp, direction)
         pct = self.tp_set_pct(pair)
         # clear stop
         cleared_size = self.tp_clear_stop(session, pair)
@@ -1708,7 +1709,7 @@ class Agent():
             tp_order = self.tp_reset_stop(session, pair, stp, tp_order, direction)
             # update records
             self.open_to_open(session, pair, tp_order)
-            self.tp_update_records_partial(session, pair, pct, inval_ratio, cleared_size, tp_order, direction)
+            self.tp_update_records_partial(session, pair, pct, stp, cleared_size, tp_order, direction)
 
         k10.stop()
 
