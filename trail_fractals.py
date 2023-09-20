@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import ml_funcs as mlf
 import time
@@ -49,9 +50,14 @@ all_start = time.perf_counter()
 now = datetime.now().strftime('%Y/%m/%d %H:%M')
 print(f"-:--:--:--:--:--:--:--:--:--:-  {now} Running Trail Fractals Fitting  -:--:--:--:--:--:--:--:--:--:-")
 
-def feature_selection(X, y, limit):
+def feature_selection(X: np.ndarray, y, limit):
     fs_start = time.perf_counter()
 
+    # drop any columns with the same value in every row
+    keep_cols = np.array(-1*(np.all(X == X[0,:], axis = 0))+1, dtype=bool)
+    X = X[:, keep_cols]
+
+    # Selection stage 1
     pre_selector_model = GradientBoostingClassifier(random_state=42,
                                                 n_estimators=10000,
                                                 validation_fraction=0.1,
@@ -85,6 +91,7 @@ def feature_selection(X, y, limit):
     else:
         X_train, y_train = X, y
 
+    # Selection stage 2
     selector_model = GradientBoostingClassifier(random_state=42,
                                                 n_estimators=10000,
                                                 validation_fraction=0.1,
@@ -167,9 +174,12 @@ for i in range(360):
     except requests.exceptions.ConnectionError as e:
         time.sleep(5)
 
-for side, timeframe, pair_sel in itertools.product(sides, timeframes, pair_selection):
+fits = itertools.product(sides, timeframes, pair_selection)
 
-    print(f"\nFitting {timeframe} {side} model")
+for n, fit in enumerate(fits):
+    side, timeframe, pair_sel = fit[0], fit[1], fit[2]
+
+    print(f"\nFit {n} of {len(list(fits))}, Fitting {timeframe} {side} {pair_sel} model")
     loop_start = time.perf_counter()
     num_pairs = pair_sel[0]
     selection_method = pair_sel[1]

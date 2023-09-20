@@ -263,6 +263,7 @@ def add_features(df, tf):
     df = features.rsi_above(df, 50, 70)
     df = features.rsi_above(df, 100, 70)
     df = features.rsi_above(df, 200, 70)
+    df = df.copy()
     df = features.rsi_timing_long(df, 3)
     df = features.rsi_timing_long(df, 5)
     df = features.rsi_timing_long(df, 7)
@@ -325,7 +326,7 @@ def add_features(df, tf):
     df = features.weekly_roc(df, tf)
     df = features.weekly_open_ratio(df)
 
-    return df
+    return df.copy()
 
 
 def features_labels_split(df):
