@@ -220,7 +220,7 @@ def market_benchmark(session) -> None:
                          'valid': valid}
 
 
-def strat_benchmark(session, agent) -> None:
+def strat_benchmark(session, agent) -> dict:
     '''calculates daily, weekly and monthly returns for the agent in question'''
 
     bal_now = session.spot_bal if agent.mode == 'spot' else session.margin_bal

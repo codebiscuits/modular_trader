@@ -124,6 +124,7 @@ class TradingSession():
         flag = 1
         rolling_weight = 0
         rolling_time = 0
+        timespan = 0
         for n, w in list(enumerate(self.weights_count))[::-1]:
             total += w[1]
             timespan = now - w[0]
@@ -361,12 +362,7 @@ class TradingSession():
         y.stop()
         return live
 
-    def set_local_path(self) -> Path:
-        if Path('/pi_downstairs.txt').exists():
-            local_path = Path('/home/pi/coding/modular_trader')
-
-
-    def mkt_data_path(self) -> Path:
+    def mkt_data_path(self) -> tuple[Path, Path]:
         '''automatically sets the absolute path for the market_data folder'''
 
         u = Timer('mkt_data_path in session')
@@ -563,91 +559,91 @@ class TradingSession():
             self.pairs_data[pair]['market_rank_1w'] = market_ranks.at[pair, 'rank_1w']
             self.pairs_data[pair]['market_rank_1m'] = market_ranks.at[pair, 'rank_1m']
 
-    def compute_indicators(self, df: pd.DataFrame, tf: str) -> dict:
-        '''takes the set of required indicators and the dataframe and applies the
-        indicator functions as necessary'''
-
-        ci = Timer('compute_indicators')
-        ci.start()
-
-        # indicator specs:
-        # {'indicator': 'ema', 'length': lb, 'nans': 0}
-        # {'indicator': 'hma', 'length': lb, 'nans': 0}
-        # {'indicator': 'ema_ratio', 'length': lb, 'nans': 0}
-        # {'indicator': 'vol_delta', 'length': 1, 'nans': 0}
-        # {'indicator': 'vol_delta_div', 'length': 2, 'nans': 1}
-        # {'indicator': 'atr', 'length': lb, 'lookback': lb, 'multiplier': 3, 'nans': 0}
-        # {'indicator': 'supertrend', 'lookback': lb, 'multiplier': mult, 'length': lb*mult, 'nans': 1}
-        # {'indicator': 'atsz', 'length': lb, 'nans': 1}
-        # {'indicator': 'rsi', 'length': lb+1, 'nans': lb}
-        # {'indicator': 'stoch_rsi', 'lookback': lb1, 'stoch_lookback': lb2, 'length': lb1+lb2+1, 'nans': lb1+lb2}
-        # {'indicator': 'inside', 'length': 2, 'nans': 1}
-        # {'indicator': 'doji', 'length': 1, 'nans': 0}
-        # {'indicator': 'engulfing', 'length': lb+1, 'nans': lb}
-        # {'indicator': 'bull_bear_bar', 'length': 1, 'nans': 0}
-        # {'indicator': 'roc_1d', 'length': 2, 'nans': 1}
-        # {'indicator': 'roc_1w', 'length': 2, 'nans': 1}
-        # {'indicator': 'roc_1m', 'length': 2, 'nans': 1}
-        # {'indicator': 'vwma', 'length': lb+1, 'nans': lb}
-        # {'indicator': 'cross_age', 'series_1': s1, 'series_2': s2, 'length': lb, 'nans': 0}
-
-        for i in self.indicators:
-            vals = i.split('-')
-            if vals[0] == 'ema':
-                df[f"ema_{vals[1]}"] = df.close.ewm(int(vals[1])).mean()
-            elif vals[0] == 'hma':
-                df[f"hma_{vals[1]}"] = ind.hma(df.close, int(vals[1]))
-            elif vals[0] == 'ema_ratio':
-                df[f"ema_{vals[1]}_ratio"] = ind.ema_ratio(df.close, int(vals[1]))
-            elif vals[0] == 'vol_delta':
-                df['vol_delta'] = ind.vol_delta(df)
-            elif vals[0] == 'vol_delta_div':
-                df['vol_delta_div'] = ind.vol_delta_div(df)
-            elif vals[0] == 'atr':
-                df = ind.atr_bands(df, int(vals[1]), float(vals[2]))
-            elif vals[0] == 'supertrend':
-                df = ind.supertrend(df, int(vals[1]), float(vals[2]))
-            elif vals[0] == 'atsz':
-                df = ind.ats_z(df, int(vals[1]))
-            elif vals[0] == 'rsi':
-                df['rsi'] = ind.rsi(df.close, int(vals[1]))
-            elif vals[0] == 'stoch_rsi':
-                df['stoch_rsi'] = ind.stoch_rsi(df.close, int(vals[1]), int(vals[2]))
-            elif vals[0] == 'inside':
-                df = ind.inside_bars(df)
-            elif vals[0] == 'doji':
-                df = ind.doji(df)
-            elif vals[0] == 'engulfing':
-                df = ind.engulfing(df, int(vals[1]))
-            elif vals[0] == 'bbb':
-                df = ind.bull_bear_bar(df)
-            elif vals[0] == 'roc_1d':
-                df['roc_1d'] = ind.roc_1d(df.close, tf)
-            elif vals[0] == 'roc_1w':
-                df['roc_1w'] = ind.roc_1w(df.close, tf)
-            elif vals[0] == 'roc_1m':
-                df['roc_1m'] = ind.roc_1m(df.close, tf)
-            elif vals[0] == 'vwma':
-                df[f'vwma_{vals[1]}'] = ind.vwma(df, int(vals[1]))
-            elif vals[0] == 'cross_age':
-                if vals[1] == 'st':
-                    s1 = f"st-{int(vals[2])}-{float(vals[3]/10):.1f}"
-                    if s1 not in df.columns:
-                        df = ind.supertrend(df, int(vals[2]), float(vals[3]/10))
-                    s2 = f"st-{int(vals[4])}-{float(vals[5]/10):.1f}"
-                    if s2 not in df.columns:
-                        df = ind.supertrend(df, int(vals[4]), float(vals[5]/10))
-                elif vals[1] == 'ema':
-                    s1 = f"ema_{vals[2]}"
-                    if s1 not in df.columns:
-                        df[f"ema_{vals[2]}"] = df.close.ewm(int(vals[2])).mean()
-                    s2 = f"{vals[1]}_{vals[3]}"
-                    if s2 not in df.columns:
-                        df[f"ema_{vals[3]}"] = df.close.ewm(int(vals[3])).mean()
-                df[i] = ind.consec_condition(df[s1] > df[s2])
-
-        ci.stop()
-        return df
+    # def compute_indicators(self, df: pd.DataFrame, tf: str) -> dict:
+    #     '''takes the set of required indicators and the dataframe and applies the
+    #     indicator functions as necessary'''
+    #
+    #     ci = Timer('compute_indicators')
+    #     ci.start()
+    #
+    #     # indicator specs:
+    #     # {'indicator': 'ema', 'length': lb, 'nans': 0}
+    #     # {'indicator': 'hma', 'length': lb, 'nans': 0}
+    #     # {'indicator': 'ema_ratio', 'length': lb, 'nans': 0}
+    #     # {'indicator': 'vol_delta', 'length': 1, 'nans': 0}
+    #     # {'indicator': 'vol_delta_div', 'length': 2, 'nans': 1}
+    #     # {'indicator': 'atr', 'length': lb, 'lookback': lb, 'multiplier': 3, 'nans': 0}
+    #     # {'indicator': 'supertrend', 'lookback': lb, 'multiplier': mult, 'length': lb*mult, 'nans': 1}
+    #     # {'indicator': 'atsz', 'length': lb, 'nans': 1}
+    #     # {'indicator': 'rsi', 'length': lb+1, 'nans': lb}
+    #     # {'indicator': 'stoch_rsi', 'lookback': lb1, 'stoch_lookback': lb2, 'length': lb1+lb2+1, 'nans': lb1+lb2}
+    #     # {'indicator': 'inside', 'length': 2, 'nans': 1}
+    #     # {'indicator': 'doji', 'length': 1, 'nans': 0}
+    #     # {'indicator': 'engulfing', 'length': lb+1, 'nans': lb}
+    #     # {'indicator': 'bull_bear_bar', 'length': 1, 'nans': 0}
+    #     # {'indicator': 'roc_1d', 'length': 2, 'nans': 1}
+    #     # {'indicator': 'roc_1w', 'length': 2, 'nans': 1}
+    #     # {'indicator': 'roc_1m', 'length': 2, 'nans': 1}
+    #     # {'indicator': 'vwma', 'length': lb+1, 'nans': lb}
+    #     # {'indicator': 'cross_age', 'series_1': s1, 'series_2': s2, 'length': lb, 'nans': 0}
+    #
+    #     for i in self.indicators:
+    #         vals = i.split('-')
+    #         if vals[0] == 'ema':
+    #             df[f"ema_{vals[1]}"] = df.close.ewm(int(vals[1])).mean()
+    #         elif vals[0] == 'hma':
+    #             df[f"hma_{vals[1]}"] = ind.hma(df.close, int(vals[1]))
+    #         elif vals[0] == 'ema_ratio':
+    #             df[f"ema_{vals[1]}_ratio"] = ind.ema_ratio(df.close, int(vals[1]))
+    #         elif vals[0] == 'vol_delta':
+    #             df['vol_delta'] = ind.vol_delta(df)
+    #         elif vals[0] == 'vol_delta_div':
+    #             df['vol_delta_div'] = ind.vol_delta_div(df)
+    #         elif vals[0] == 'atr':
+    #             df = ind.atr_bands(df, int(vals[1]), float(vals[2]))
+    #         elif vals[0] == 'supertrend':
+    #             df = ind.supertrend(df, int(vals[1]), float(vals[2]))
+    #         elif vals[0] == 'atsz':
+    #             df = ind.ats_z(df, int(vals[1]))
+    #         elif vals[0] == 'rsi':
+    #             df['rsi'] = ind.rsi(df.close, int(vals[1]))
+    #         elif vals[0] == 'stoch_rsi':
+    #             df['stoch_rsi'] = ind.stoch_rsi(df.close, int(vals[1]), int(vals[2]))
+    #         elif vals[0] == 'inside':
+    #             df = ind.inside_bars(df)
+    #         elif vals[0] == 'doji':
+    #             df = ind.doji(df)
+    #         elif vals[0] == 'engulfing':
+    #             df = ind.engulfing(df, int(vals[1]))
+    #         elif vals[0] == 'bbb':
+    #             df = ind.bull_bear_bar(df)
+    #         elif vals[0] == 'roc_1d':
+    #             df['roc_1d'] = ind.roc_1d(df.close, tf)
+    #         elif vals[0] == 'roc_1w':
+    #             df['roc_1w'] = ind.roc_1w(df.close, tf)
+    #         elif vals[0] == 'roc_1m':
+    #             df['roc_1m'] = ind.roc_1m(df.close, tf)
+    #         elif vals[0] == 'vwma':
+    #             df[f'vwma_{vals[1]}'] = ind.vwma(df, int(vals[1]))
+    #         elif vals[0] == 'cross_age':
+    #             if vals[1] == 'st':
+    #                 s1 = f"st-{int(vals[2])}-{float(vals[3]/10):.1f}"
+    #                 if s1 not in df.columns:
+    #                     df = ind.supertrend(df, int(vals[2]), float(vals[3]/10))
+    #                 s2 = f"st-{int(vals[4])}-{float(vals[5]/10):.1f}"
+    #                 if s2 not in df.columns:
+    #                     df = ind.supertrend(df, int(vals[4]), float(vals[5]/10))
+    #             elif vals[1] == 'ema':
+    #                 s1 = f"ema_{vals[2]}"
+    #                 if s1 not in df.columns:
+    #                     df[f"ema_{vals[2]}"] = df.close.ewm(int(vals[2])).mean()
+    #                 s2 = f"{vals[1]}_{vals[3]}"
+    #                 if s2 not in df.columns:
+    #                     df[f"ema_{vals[3]}"] = df.close.ewm(int(vals[3])).mean()
+    #             df[i] = ind.consec_condition(df[s1] > df[s2])
+    #
+    #     ci.stop()
+    #     return df
 
     def compute_features(self, df: pd.DataFrame, tf: str) -> pd.DataFrame:
         """takes the set of features that need to be calculated and applies them to the dataframe"""
@@ -696,8 +692,8 @@ class TradingSession():
                     quoteOrderQty=usdt_size)
                 # logger.debug(pformat(order))
             else:
-                # pb.push_note(now, 'Warning - Spot BNB balance low and not enough USDT to top up')
-                pass
+                logger.warning('Warning - Spot BNB balance low and not enough USDT to top up')
+                order = None
         else:
             order = None
 
@@ -751,9 +747,9 @@ class TradingSession():
         if self.spot_bal:
             pct = round((100 * value / self.spot_bal), 5)
         else:
-            pct = 0
+            pct = 0.0
 
-        self.spot_bals['USDT'] = {'qty': float(qty), 'value': float(value), 'pf%': float(pct)}
+        self.spot_bals['USDT'] = {'qty': qty, 'value': value, 'pf%': pct}
 
         uus.stop()
         return
@@ -813,8 +809,8 @@ class TradingSession():
                     quoteOrderQty=usdt_size)
                 # logger.debug(pformat(order))
             else:
-                # pb.push_note(now, 'Warning - Margin BNB balance low and not enough USDT to top up')
-                pass
+                logger.warning('Warning - Margin BNB balance low and not enough USDT to top up')
+                order = None
         else:
             order = None
 
@@ -905,7 +901,7 @@ class TradingSession():
         self.margin_usdt_bal = {'qty': float(qty), 'owed': float(owed), 'value': float(value), 'pf%': float(pct)}
         hj.stop()
 
-    def check_margin_lvl(self) -> None:
+    def check_margin_lvl(self) -> float:
         '''checks how leveraged the account is and sends a warning push note if
         leverage is getting too high'''
 

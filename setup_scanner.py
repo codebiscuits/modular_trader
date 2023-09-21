@@ -1,6 +1,4 @@
 import time
-script_start = time.perf_counter()
-
 from resources import utility_funcs as uf, binance_funcs as funcs
 from datetime import datetime, timezone
 from agents import TrailFractals
@@ -9,6 +7,8 @@ import sessions
 from resources.timers import Timer
 from collections import Counter
 from resources.loggers import create_logger
+
+script_start = time.perf_counter()
 
 # import update_ohlc
 
@@ -21,7 +21,7 @@ logger = create_logger('setup_scanner')
 
 ########################################################################################################################
 
-session = sessions.TradingSession(0.1) # this argument is now max position size rather than max fixed risk
+session = sessions.TradingSession(0.1)  # this argument is now max position size rather than max fixed risk
 
 logger.debug(f'-+-+-+-+-+-+-+-+ {session.now_start} Running Setup Scanner ({session.timeframes}) +-+-+-+-+-+-+-+-')
 
@@ -31,6 +31,7 @@ for timeframe, offset in session.timeframes:
     agents.extend(
         [
             TrailFractals(session, timeframe, offset, '1d_volumes', 30),
+            TrailFractals(session, timeframe, offset, '1w_volumes', 100),
         ]
     )
 
@@ -49,7 +50,7 @@ for agent in agents.values():
     agent.record_stopped_sim_trades(session, session.timeframes)
     real_sim_tps_closes.extend(agent.check_open_risk(session))
     agent.max_positions = agent.set_max_pos()
-    agent.total_r_limit = agent.max_positions * 1.7 # TODO need to update reduce_risk and run it before/after set_fixed_risk
+    agent.total_r_limit = agent.max_positions * 1.7  # TODO need to update reduce_risk and run it before/after set_fixed_risk
 
 init_end = time.perf_counter()
 init_elapsed = init_end - script_start
@@ -79,11 +80,11 @@ for n, pair in enumerate(session.pairs_set):
         continue
 
     for tf, df in df_dict.items():
-        df_dict[tf] = session.compute_indicators(df, tf)
+        # df_dict[tf] = session.compute_indicators(df, tf)
         df_dict[tf] = session.compute_features(df, tf)
 
     for agent in agents.values():
-        if agent.tf not in df_dict: # some pairs will not have all required timeframes for the session
+        if agent.tf not in df_dict:  # some pairs will not have all required timeframes for the session
             continue
         # logger.debug(f"{agent.name}")
         df_2 = df_dict[agent.tf].copy()
@@ -132,7 +133,7 @@ session.update_algo_orders()
 processed_signals = dict(
     real_sim_tp_close=real_sim_tps_closes,  # all real and sim tps and closes go in here for immediate execution
     unassigned=[],  # all real open signals go in here for further selection
-    scored=[], # once a score has been calculated for the unassigned signals, any with a good score go in here
+    scored=[],  # once a score has been calculated for the unassigned signals, any with a good score go in here
     sim_open=[],  # nothing will be put in here at first but many real open signals will end up in here
     real_open=[],  # nothing will be put in here at first, real open signals will end up here if they pass all tests
     tracked_close=[],  # can be left until last
@@ -145,16 +146,16 @@ while raw_signals:
     sig_agent = agents[signal['agent']]
     sig_pair = signal['pair']
 
-    # find whether i am currently long, short or flat on the agent and pair in this signal
-    try:
-        real_position = sig_agent.real_pos.get(signal['asset'], {'direction': 'flat'})['direction']
-        sim_position = sig_agent.sim_pos.get(signal['asset'], {'direction': 'flat'})['direction']  # returns 'flat' if no position
-        tracked_position = sig_agent.tracked.get(signal['asset'], {'direction': 'flat'})['direction']
-    except KeyError as e:
-        logger.error('KeyError')
-        logger.errorpformat(pformat(signal))
-        logger.error(pformat(sig_agent.tracked))
-        logger.exception(e)
+    # find whether I am currently long, short or flat on the agent and pair in this signal
+    # try:
+    real_position = sig_agent.real_pos.get(signal['asset'], {'direction': 'flat'})['direction']
+    sim_position = sig_agent.sim_pos.get(signal['asset'], {'direction': 'flat'})['direction']  # returns 'flat' if none
+    tracked_position = sig_agent.tracked.get(signal['asset'], {'direction': 'flat'})['direction']
+    # except KeyError as e:
+    #     logger.error('KeyError')
+    #     logger.error(pformat(signal))
+    #     logger.error(pformat(sig_agent.tracked))
+    #     logger.exception(e)
 
     bullish_pos = 'spot' if (sig_agent.mode == 'spot') else 'long'
 
@@ -163,7 +164,8 @@ while raw_signals:
 
     # TODO i need to add conditions so that strategies which trail stops don't have their positions closed by a bias
     #  flip, only new positions will be opened on  signals. so i might end up with long and short positions open
-    #  simultaneously, but that's ok because each position will be managed and the price will decide which should stay open
+    #  simultaneously, but that's ok because each position will be managed and the price will decide which should stay
+    #  open
 
     # TODO perhaps there should be a flag in each signal that says whether that agent's positions should be closed with
     #  signals or not, because oco orders should never be managed by signals but trailing stop strategies sometimes have
@@ -251,7 +253,6 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'tracked')
 
-
         elif tracked_position == 'flat':
             pass
         else:
@@ -299,17 +300,19 @@ process_took = process_end - process_start
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 tp_close_start = time.perf_counter()
 # execute any real and sim technical close and tp signals
-logger.debug(f"-+-+-+-+-+-+-+- Executing {len(processed_signals['real_sim_tp_close'])} Real/Sim TPs/Closes -+-+-+-+-+-+-+-")
-logger.info(f"-+-+-+-+-+-+-+- Executing {len(processed_signals['real_sim_tp_close'])} Real/Sim TPs/Closes -+-+-+-+-+-+-+-")
+logger.debug(f"-+-+-+-+-+-+- Executing {len(processed_signals['real_sim_tp_close'])} Real/Sim TPs/Closes -+-+-+-+-+-+-")
+logger.info(f"-+-+-+-+-+-+- Executing {len(processed_signals['real_sim_tp_close'])} Real/Sim TPs/Closes -+-+-+-+-+-+-")
 
 checked_signals = uf.remove_duplicates(processed_signals['real_sim_tp_close'])
 logger.debug(f"{len(checked_signals) = }")
 
 for signal in checked_signals:
     logger.debug('')
-    logger.debug(f"Executing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
-    logger.info(f"\nExecuting {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
-    if signal['action'] == 'close': # TODO stop signals could be added in here
+    logger.debug(f"Executing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} "
+                 f"{signal['direction']}")
+    logger.info(f"\nExecuting {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} "
+                f"{signal['direction']}")
+    if signal['action'] in ['close', 'stop']:  # TODO stop signals could be added in here
         agents[signal['agent']].close_pos(session, signal)
     elif signal['action'] == 'tp':
         agents[signal['agent']].tp_pos(session, signal)
@@ -325,7 +328,9 @@ tp_close_took = tp_close_end - tp_close_start
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 # calculate fixed risk for each agent using wanted rpnl
 
-logger.info(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Signal Scores -+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n")
+logger.info(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Risk Scalars -+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n")
+logger.info("these values have been clipped and normalised, so 0.5 is equivalent to break-even, 0 is the lowest "
+            "possible value and 1 is the highest possible value")
 
 for agent in agents.values():
     agent.pnls = dict(
@@ -352,10 +357,10 @@ for agent in agents.values():
 while processed_signals['unassigned']:
     signal = processed_signals['unassigned'].pop()
 
-    # when the secondary ml model is ready, it will replace the contents of this while-loop down to sig_score. i will
+    # when the secondary ml model is ready, it will replace the contents of this while-loop down to sig_score. I will
     # simply pass the inval distance (0-1, 1 being 100% between entry and init stop), 5 perf_emas, the 3 market_ranks,
     # and confidence numbers from however many ml models have made a prediction (2 currently), and the model will return
-    # a signal score. i record them all in the signal record, calculate size, and if the score is too low, move the
+    # a signal score. I record them all in the signal record, calculate size, and if the score is too low, move the
     # signal over to sim_opens
 
     signal['perf_ema4'] = agents[signal['agent']].pnls[signal['direction']]['ema_4']
@@ -364,6 +369,9 @@ while processed_signals['unassigned']:
     signal['perf_ema32'] = agents[signal['agent']].pnls[signal['direction']]['ema_32']
     signal['perf_ema64'] = agents[signal['agent']].pnls[signal['direction']]['ema_64']
 
+    sig_bias = signal['bias']
+
+    perf_score, rank_score = 0, 0
     if signal['tf'] == '1h':
         perf_score = ((signal['perf_ema64'] > 0.5) + (signal['perf_ema32'] > 0.5) + (signal['perf_ema16'] > 0.5)) / 3
         rank_score = signal.get('market_rank_1d', 1) if sig_bias == 'bullish' else (1 - signal.get('market_rank_1d', 1))
@@ -393,6 +401,13 @@ while processed_signals['unassigned']:
 
     signal['base_size'], signal['quote_size'] = agents[signal['agent']].get_size(session, signal)
 
+    try:
+        sim_position = agents[signal['agent']].sim_pos.get(signal['asset'], {'direction': 'flat'})['direction']
+    except KeyError:
+        logger.debug('signal:')
+        logger.debug(pformat(signal))
+        logger.debug('position:')
+        logger.debug(pformat(agents[signal['agent']].sim_pos.get(signal['asset'])))
     if signal['score'] >= score_threshold:
         processed_signals['scored'].append(signal)
     # separate unwanted signals
@@ -434,8 +449,8 @@ sort_start = time.perf_counter()
 # gather data on current algo orders
 session.update_algo_orders()
 
-# next sort the unassigned list by scores. items are popped from the end of the list so i want the best signals to be
-# last so that they get processed first, so i don't use the 'reverse=True' option
+# next sort the unassigned list by scores. items are popped from the end of the list, so I want the best signals to be
+# last so that they get processed first, so I don't use the 'reverse=True' option
 unassigned = sorted(processed_signals['scored'], key=lambda x: x['score'])
 logger.info(f"\n-*-*-*- Sorting and Filtering {len(unassigned)} Processed Signals for all agents -*-*-*-\n")
 logger.debug(f"-*-*-*- Sorting and Filtering {len(unassigned)} Processed Signals for all agents -*-*-*-")
@@ -444,7 +459,7 @@ logger.debug(f"-*-*-*- Sorting and Filtering {len(unassigned)} Processed Signals
 or_limits = {agent.name: agent.total_open_risk for agent in agents.values()}
 pos_limits = {agent.name: agent.num_open_positions for agent in agents.values()}
 algo_limits = {pair: (v['max_algo_orders'] - v['algo_orders']) for pair, v in session.pairs_data.items()}
-usdt_bal_s = session.spot_usdt_bal
+usdt_bal_s = session.spot_usdt_bal['qty']
 
 while unassigned:
     logger.debug(f"{len(unassigned)} unassigned signals left to process")
@@ -462,7 +477,7 @@ while unassigned:
 
     if s['direction'] in {'spot', 'long'}:
         usdt_depth, _ = funcs.get_depth(session, s['pair'])
-    elif s['direction'] == 'short':
+    else:
         _, usdt_depth = funcs.get_depth(session, s['pair'])
 
     if usdt_depth == 0:
@@ -472,7 +487,7 @@ while unassigned:
     elif quote_size > usdt_depth >= (quote_size / 2):  # only trim size if books are a bit too thin
         r = usdt_depth / quote_size
         quote_size = usdt_depth
-        logger.info(f"{now} {s['pair']} books too thin, reducing size from {quote_size:.3} to {usdt_depth:.3}")
+        logger.info(f"{s['pair']} books too thin, reducing size from {quote_size:.3} to {usdt_depth:.3}")
 
     if quote_size > (balance * 0.1):
         r = (balance * 0.1) / quote_size
@@ -491,7 +506,7 @@ while unassigned:
     elif s['mode'] == 'spot' and quote_size > usdt_bal_s:
         sim_reasons.append('not_enough_usdt')
 
-    if quote_size < session.min_size: # this condition must come after all the conditions which could reduce size
+    if quote_size < session.min_size:  # this condition must come after all the conditions which could reduce size
         sim_reasons.append('too_small')
 
     if s['direction'] == 'short' and not sim_reasons:
@@ -516,7 +531,7 @@ while unassigned:
             logger.info(f"{s['agent']} {s['pair']} {r = }, size adjusted:")
             logger.info(f"orig: {s['quote_size']:.2f}, {s['base_size']}. new: {quote_size:.2f}, {s['base_size'] * r}")
         s['quote_size'] = quote_size
-        s['base_size'] = s['base_size'] * r # the value of r is equivalent to the change in size, if any.
+        s['base_size'] = s['base_size'] * r  # the value of r is equivalent to the change in size, if any.
         s['pct_of_full_pos'] *= r
 
         processed_signals['real_open'].append(s)
@@ -541,7 +556,7 @@ for signal in processed_signals['real_open']:
         agents[signal['agent']].open_real_s(session, signal, 0)
 
     elif signal['quote_size'] > (remaining_borrow - 100):
-        signal['state'] == 'sim'
+        signal['state'] = 'sim'
         signal['sim_reasons'] = ['too_much_leverage']
         processed_signals['sim_open'].append(signal)
         logger.info("changed real open signal to sim, borrow limit reached")
@@ -549,7 +564,8 @@ for signal in processed_signals['real_open']:
         # pb.push_note(now, 'Margin limit reached, maybe add collateral')
 
     else:
-        logger.info(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
+        logger.info(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} "
+                    f"{signal['direction']}")
         successful = agents[signal['agent']].open_real_M(session, signal, 0)
         if successful:
             remaining_borrow -= signal['quote_size']
@@ -565,15 +581,15 @@ real_open_took = real_open_end - real_open_start
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 sim_open_start = time.perf_counter()
 
-sim_opens = [sig for sig in processed_signals['sim_open'] # discard signals for existing sim positions
+sim_opens = [sig for sig in processed_signals['sim_open']  # discard signals for existing sim positions
              if sig['asset'] not in agents[sig['agent']].sim_pos.keys()]
 
 logger.info(f"\n-+-+-+-+-+-+-+-+-+-+-+- Executing {len(sim_opens)} Sim Opens -+-+-+-+-+-+-+-+-+-+-+-\n")
 logger.debug(f"-+-+-+-+-+-+-+-+-+-+-+- Executing {len(sim_opens)} Sim Opens -+-+-+-+-+-+-+-+-+-+-+-")
 
 for signal in sim_opens:
-
-    # logger.debug(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} {signal['direction']}")
+    # logger.debug(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} "
+    #              f"{signal['direction']}")
     # logger.debug(f"Sim reason: {signal['sim_reasons']}, score: {signal['score']}")
     agents[signal['agent']].open_sim(session, signal)
 
@@ -586,7 +602,7 @@ sim_open_took = sim_open_end - sim_open_start
 # Execute Tracked Close Signals
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 
-# probably won't need anything too clever since i don't think these come up very often
+# probably won't need anything too clever since I don't think these come up very often
 
 # when they are all finished, update records once
 
@@ -612,15 +628,15 @@ for agent in agents.values():
 
     if agent.realised_pnls['real_spot'] or agent.realised_pnls['sim_spot']:
         logger.info(f"realised real spot pnl: {agent.realised_pnls['real_spot']:.1f}R, "
-              f"realised sim spot pnl: {agent.agent.realised_pnls['sim_spot']:.1f}R")
+                    f"realised sim spot pnl: {agent.agent.realised_pnls['sim_spot']:.1f}R")
 
     if agent.realised_pnls['real_long'] or agent.realised_pnls['sim_long']:
         logger.info(f"realised real long pnl: {agent.realised_pnls['real_long']:.1f}R, "
-              f"realised sim long pnl: {agent.realised_pnls['sim_long']:.1f}R")
+                    f"realised sim long pnl: {agent.realised_pnls['sim_long']:.1f}R")
 
     if agent.realised_pnls['real_short'] or agent.realised_pnls['sim_short']:
         logger.info(f"realised real short pnl: {agent.realised_pnls['real_short']:.1f}R, "
-              f"realised sim short pnl: {agent.realised_pnls['sim_short']:.1f}R")
+                    f"realised sim short pnl: {agent.realised_pnls['sim_short']:.1f}R")
     logger.info(f'tor: {agent.total_open_risk:.1f}')
 
     logger.info(f'\n{agent.name} Counts:')
@@ -642,7 +658,7 @@ uf.market_benchmark(session)
 for agent in agents.values():
     uf.log(session, agent)
     agent.benchmark = uf.strat_benchmark(session, agent)
-uf.scanner_summary(session, agents.values())
+uf.scanner_summary(session, list(agents.values()))
 
 log_end = time.perf_counter()
 log_elapsed = log_end - log_start
@@ -668,6 +684,7 @@ logger.info('\n-----------------------------------------------\n')
 script_end = time.perf_counter()
 total_time = script_end - script_start
 
+
 def section_times():
     logger.info('Scanner finished')
     logger.info(f"Initialisation took: {int(init_elapsed // 60)}m {int(init_elapsed % 60)}s")
@@ -679,9 +696,13 @@ def section_times():
     logger.info(f"Executing Sim Open Signals took: {int(sim_open_took // 60)}m {int(sim_open_took % 60)}s")
     logger.info(f"Logging took: {int(log_elapsed // 60)}m {int(log_elapsed % 60)}s")
     logger.info(f"Total time taken: {int(total_time // 60)}m {int(total_time % 60)}s")
+
+
 section_times()
 
 # uf.plot_call_weights(session)
 
-logger.info('\n<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>\n\n')
-logger.debug('<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>\n\n')
+logger.info(
+    '\n<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>\n\n')
+logger.debug(
+    '<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>\n\n')

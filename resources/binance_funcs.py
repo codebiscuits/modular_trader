@@ -39,8 +39,6 @@ tf_dict = {'1m': Client.KLINE_INTERVAL_1MINUTE,
            }
 
 
-
-
 # -#-#- Market Data Functions
 
 
@@ -52,7 +50,7 @@ def get_max_borrow(session, asset: str) -> float:
     try:
         limits = session.client.get_max_margin_loan(asset=asset)
         borrow = min(float(limits['amount']), float(limits['borrowLimit']))
-    except bx.BinanceAPIException as e:
+    except bx.BinanceAPIException:
         borrow = 0
         logger.info(f"No borrow available for {asset}")
         # logger.exception(e)
@@ -270,7 +268,7 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
             try:
                 pldf = pl.read_parquet(source=filepath, use_pyarrow=True)
                 df = pldf.to_pandas()
-            except (ArrowInvalid, OSError) as e:
+            except (ArrowInvalid, OSError):
                 logger.exception(f"Problem reading {pair} parquet file, downloading from scratch.")
                 filepath.unlink()
                 df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC')
@@ -325,7 +323,7 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
 # -#-#- Trading Functions
 
 def create_stop_dict(session, order: dict) -> dict:
-    '''collects and returns the details of filled stop-loss order in a dictionary'''
+    """collects and returns the details of filled stop-loss order in a dictionary"""
 
     yu = Timer('create_stop-dict')
     yu.start()
@@ -492,12 +490,12 @@ def set_stop_s(session, pair, trigger, limit, size):
     logger.info(f"setting {pair} stop: {stop_size = } {trigger = } {limit = }")
     if session.live:
         stop_sell_order = session.client.create_order(symbol=pair,
-                                              side=be.SIDE_SELL,
-                                              type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
-                                              timeInForce=be.TIME_IN_FORCE_GTC,
-                                              stopPrice=trigger,
-                                              quantity=stop_size,
-                                              price=limit)
+                                                      side=be.SIDE_SELL,
+                                                      type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
+                                                      timeInForce=be.TIME_IN_FORCE_GTC,
+                                                      stopPrice=trigger,
+                                                      quantity=stop_size,
+                                                      price=limit)
     else:
         stop_sell_order = {'orderId': 'not live',
                            'transactTime': now}
@@ -526,8 +524,9 @@ def clear_stop_s(session, pair: str, position: dict) -> Tuple[Any, Decimal]:
                 clear = session.client.cancel_order(symbol=pair, orderId=str(stop_id))
                 base_size = clear.get('origQty')
             except bx.BinanceAPIException as e:
-                logger.exception(f"Exception during clear_stop_s on {pair}. If it's 'unknown order sent' then it was probably "
-                      f"trying to cancel a stop-loss that had already been cancelled")
+                logger.exception(
+                    f"Exception during clear_stop_s on {pair}. If it's 'unknown order sent' then it was probably "
+                    f"trying to cancel a stop-loss that had already been cancelled")
                 logger.error(e.status_code)
                 logger.error(e.message)
         else:
@@ -554,14 +553,14 @@ def buy_asset_M(session, pair: str, size: float, is_base: bool, live: bool) -> d
     if live and is_base:
         base_size = uf.valid_size(session, pair, size)
         buy_order = session.client.create_margin_order(symbol=pair,
-                                               side=be.SIDE_BUY,
-                                               type=be.ORDER_TYPE_MARKET,
-                                               quantity=base_size)
+                                                       side=be.SIDE_BUY,
+                                                       type=be.ORDER_TYPE_MARKET,
+                                                       quantity=base_size)
     elif live and not is_base:
         buy_order = session.client.create_margin_order(symbol=pair,
-                                               side=be.SIDE_BUY,
-                                               type=be.ORDER_TYPE_MARKET,
-                                               quoteOrderQty=size)
+                                                       side=be.SIDE_BUY,
+                                                       type=be.ORDER_TYPE_MARKET,
+                                                       quoteOrderQty=size)
     else:
         now = int(datetime.now(timezone.utc).timestamp())
         price = session.pairs_data[pair]['price']
@@ -608,7 +607,7 @@ def sell_asset_M(session, pair: str, base_size: float, live: bool) -> dict:
         base_size = 0
     if live:
         sell_order = session.client.create_margin_order(symbol=pair, side=be.SIDE_SELL, type=be.ORDER_TYPE_MARKET,
-                                                quantity=base_size)
+                                                        quantity=base_size)
     else:
         now = int(datetime.now(timezone.utc).timestamp())
         price = session.pairs_data[pair]['price']
@@ -638,19 +637,19 @@ def sell_asset_M(session, pair: str, base_size: float, live: bool) -> dict:
 
 
 @uf.retry_on_busy()
-def borrow_asset_M(session, asset: str, qty: str, live: bool) -> None:
+def borrow_asset_M(session, asset: str, qty: str, live: bool) -> str:
     """calls the binance api function to take out a margin loan"""
 
     if live:
         try:
             session.client.create_margin_loan(asset=asset, amount=qty)
-            return qty
         except bx.BinanceAPIException as e:
-            if e.code == -3045: # the system does not have enough asset now
+            if e.code == -3045:  # the system does not have enough asset now
                 logger.error(f"Problem borrowing {qty} {asset}, not enough to borrow.")
             logger.exception(e)
-            return 0
+            return '0'
 
+    return qty
 
 
 @uf.retry_on_busy()
@@ -662,8 +661,9 @@ def repay_asset_M(session, asset: str, qty: str, live: bool) -> bool:
             session.client.repay_margin_loan(asset=asset, amount=qty)
             return True
         except bx.BinanceAPIException as e:
-            logger.exception(f"*** Exception whilst trying to repay {qty} {asset}. If it says 'repay amount larger than loan "
-                  f"amount, it's most likely no loan to be repayed.")
+            logger.exception(
+                f"*** Exception whilst trying to repay {qty} {asset}. If it says 'repay amount larger than loan "
+                f"amount, it's most likely no loan to be repayed.")
             logger.error(e.code)
             logger.error(e.message)
             return False
@@ -686,12 +686,12 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit
     if session.live:
         try:
             stop_sell_order = session.client.create_margin_order(symbol=pair,
-                                                         side=side,
-                                                         type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
-                                                         timeInForce=be.TIME_IN_FORCE_GTC,
-                                                         stopPrice=trigger,
-                                                         quantity=stop_size,
-                                                         price=limit)
+                                                                 side=side,
+                                                                 type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
+                                                                 timeInForce=be.TIME_IN_FORCE_GTC,
+                                                                 stopPrice=trigger,
+                                                                 quantity=stop_size,
+                                                                 price=limit)
         except bx.BinanceAPIException as e:
             if e.code in [-2010, 51113]:
                 logger.exception(e)
@@ -711,7 +711,6 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit
     else:
         stop_sell_order = {'orderId': 'not live',
                            'transactTime': now}
-
 
     sd.stop()
     return stop_sell_order
@@ -735,15 +734,15 @@ def clear_stop_M(session, pair: str, position: dict) -> Tuple[Any, Decimal]:
                 base_size = clear.get('origQty')
                 session.pairs_data[pair]['algo_orders'] -= 1
             except bx.BinanceAPIException as e:
-                logger.exception(f"Exception during clear_stop_M on {pair}. If it's 'unknown order sent' then it was probably "
-                      f"trying to cancel a stop-loss that had already been cancelled")
+                logger.exception(
+                    f"Exception during clear_stop_M on {pair}. If it's 'unknown order sent' then it was probably "
+                    f"trying to cancel a stop-loss that had already been cancelled")
                 logger.error(e.status_code)
                 logger.error(e.message)
         else:
             logger.warning(f'no recorded stop id for {pair}')
     else:
         base_size = position['base_size']
-
 
     fc.stop()
     return clear, base_size
