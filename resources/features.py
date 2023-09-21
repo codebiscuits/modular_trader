@@ -755,7 +755,9 @@ def stoch_m(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
     return df
 
 
-def rolling_poc(df: pd.DataFrame, lookback: int=24) -> pd.DataFrame:
-    df[f"rolling_poc_{lookback}"] = df.rolling(lookback, method='table').apply(ind.vol_profile_poc, engine='numba')
-
-    return df
+# def rolling_poc(df: pd.DataFrame, lookback: int=24) -> pd.DataFrame:
+#     data = df.loc[:, ['close', 'base_vol']]
+#     df[f"rolling_poc_{lookback}"] = (data.rolling(lookback, method='table')
+#                                      .apply(ind.vol_profile_poc, raw=True, engine='numba'))
+#
+#     return df

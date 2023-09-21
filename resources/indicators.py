@@ -554,14 +554,26 @@ def z_score(s: pd.Series, lookback) -> pd.Series:
     return (s - s_mean) / s_std
 
 
+def numpy_moving_average(arr: np.array, lookback: int) -> np.array:
+    """takes a 1d numpy array and calculates a simple moving average along it"""
+    ret = np.cumsum(arr, dtype=float)
+    ret[lookback:] = ret[lookback:] - ret[:-lookback]
+
+    return ret[lookback - 1:] / lookback
+
+
 def vol_profile_poc(df: pd.DataFrame, bins: int=100) -> float:
     """takes a dataframe and creates a numpy histogram of volume using the bins argument, then returns the mid-price of
     the bin with the most volume"""
 
-    price_buckets = np.linspace(df[:, 4].min(), df[:, 4].max(), bins)
-    bin_mids = pd.Series(price_buckets).rolling(2).mean().dropna()
+    price_buckets = np.linspace(df[:, 0].min(), df[:, 0].max(), bins)
 
-    vol_bars = np.histogram(df[:, 4], bins=price_buckets, weights=df[:, 5])[0]
+    # calc bin mids by doing a 2-period moving average on the bin edges
+    ret = np.cumsum(price_buckets, dtype=float)
+    ret[2:] = ret[2:] - ret[:-2]
+    bin_mids = ret[2 - 1:] / 2
+
+    vol_bars = np.histogram(df[:, 0], bins=price_buckets, weights=df[:, 1])[0]
 
     return bin_mids.iloc[np.argmax(vol_bars)]
 

@@ -26,8 +26,8 @@ from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 from imblearn.under_sampling import RandomUnderSampler
 
 running_on_pi = Path('/pi_2.txt').exists()
-if not running_on_pi:
-    import update_ohlc
+# if not running_on_pi:
+#     import update_ohlc
 
 def init_client(max_retries: int=360, delay: int=5):
     for i in range(max_retries):
@@ -174,15 +174,16 @@ for i in range(360):
     except requests.exceptions.ConnectionError as e:
         time.sleep(5)
 
-fits = itertools.product(sides, timeframes, pair_selection)
+fits = list(enumerate(itertools.product(sides, timeframes, pair_selection)))
+print(fits)
 
-for n, fit in enumerate(fits):
+for n, fit in fits:
     side, timeframe, pair_sel = fit[0], fit[1], fit[2]
+    num_pairs = pair_sel[0]
+    selection_method = pair_sel[1]
 
     print(f"\nFit {n} of {len(list(fits))}, Fitting {timeframe} {side} {pair_sel} model")
     loop_start = time.perf_counter()
-    num_pairs = pair_sel[0]
-    selection_method = pair_sel[1]
 
     if running_on_pi:
         pairs = load_pairs(side, timeframe)
