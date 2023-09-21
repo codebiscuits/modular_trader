@@ -245,7 +245,7 @@ for n, fit in fits:
     folder = Path(f"machine_learning/models/trail_fractals_{selection_method}_{num_pairs}")
     folder.mkdir(parents=True, exist_ok=True)
     pi2_folder = Path(f"/home/ross/coding/pi_2/modular_trader/machine_learning/"
-                      f"models/trail_fractals_{pair_selection}_{num_pairs}")
+                      f"models/trail_fractals_{selection_method}_{num_pairs}")
     pi2_folder.mkdir(parents=True, exist_ok=True)
 
     # save ml model on laptop and pi
