@@ -80,6 +80,7 @@ class Agent:
         self.real_pos = self.current_positions(session, 'open')
         self.sim_pos = self.current_positions(session, 'sim')
         self.tracked = self.current_positions(session, 'tracked')
+        logger.debug(pformat(self.real_pos))
         self.check_valid_open(session)
         # self.calc_init_opnl(session)
         # self.open_pnl_changes = {}
@@ -274,7 +275,7 @@ class Agent:
                 valid = float(position['hard_stop']) > session.pairs_data[pair]['price']
 
             if not valid:
-                logger.warning(f"{self.id} {pair} {pos['direction']} position somehow passed its stop-loss without "
+                logger.warning(f"{self.id} {pair} {position['direction']} position somehow passed its stop-loss without "
                                f"closing")
                 # TODO close position and record as stopped
 
@@ -1408,7 +1409,8 @@ class Agent:
         asset = pair[:-4]
 
         if session.live:
-            self.real_pos[asset].update(self.update_pos(session, pair, size, 'real'))
+            # self.real_pos[asset] = self.update_pos(session, pair, size, 'real')
+            self.real_pos[asset] = self.open_trade_stats(session, session.margin_bal, self.open_trades[pair])
             self.real_pos[asset]['pnl_R'] = 0
             if direction == 'long':
                 session.update_usdt_m(borrow=float(usdt_size))
@@ -1850,8 +1852,9 @@ class Agent:
         del self.real_pos[asset]
 
     def close_real_7(self, session, pair, close_size, direction):
-        asset = pair[:-4]
         price = session.pairs_data[pair]['price']
+
+        logger.debug(pformat(self.real_pos))
 
         if direction == 'long' and session.live:
             session.update_usdt_m(repay=float(close_size))
@@ -1976,7 +1979,9 @@ class Agent:
 
         self.sim_trades[pair] = {'trade': [sim_order], 'position': pos_record, 'signal': signal}
 
-        self.sim_pos[asset].update(self.update_pos(session, pair, size, 'sim'))
+        # self.sim_pos[asset].update(self.update_pos(session, pair, size, 'sim'))
+        bal = session.spot_bal if self.mode == 'spot' else session.margin_bal
+        self.sim_pos[asset] = self.open_trade_stats(session, bal, self.sim_trades[pair])
         self.sim_pos[asset]['pnl_R'] = 0
         self.counts_dict[f'sim_open_{direction}'] += 1
 

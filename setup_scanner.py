@@ -401,14 +401,7 @@ while processed_signals['unassigned']:
 
     signal['base_size'], signal['quote_size'] = agents[signal['agent']].get_size(session, signal)
 
-    try:
-        sim_position = agents[signal['agent']].sim_pos.get(signal['asset'], {'direction': 'flat'})['direction']
-    except KeyError as e:
-        logger.debug(e)
-        logger.debug('signal:')
-        logger.debug(pformat(signal))
-        logger.debug('position:')
-        logger.debug(pformat(agents[signal['agent']].sim_pos.get(signal['asset'])))
+    sim_position = agents[signal['agent']].sim_pos.get(signal['asset'], {'direction': 'flat'})['direction']
     if signal['score'] >= score_threshold:
         processed_signals['scored'].append(signal)
     # separate unwanted signals
