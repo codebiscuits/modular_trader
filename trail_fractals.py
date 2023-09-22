@@ -15,25 +15,27 @@ import requests
 
 if not Path('/pi_2.txt').exists():
     from sklearnex import patch_sklearn
+
     patch_sklearn()
 
 from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.model_selection import GridSearchCV, train_test_split, cross_val_score
+from sklearn.model_selection import GridSearchCV, train_test_split  # , cross_val_score
 from sklearn.metrics import fbeta_score, make_scorer
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif, chi2
+from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif  # , chi2
 from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 from imblearn.under_sampling import RandomUnderSampler
 
 running_on_pi = Path('/pi_2.txt').exists()
-# if not running_on_pi:
-#     import update_ohlc
+if not running_on_pi:
+    import update_ohlc
 
-def init_client(max_retries: int=360, delay: int=5):
+
+def init_client(max_retries: int = 360, delay: int = 5):
     for i in range(max_retries):
         try:
             client = Client(keys.bPkey, keys.bSkey)
-            print(f'initialising binance client worked on attempt number {i+1}')
+            print(f'initialising binance client worked on attempt number {i + 1}')
             return client
         except bx.BinanceAPIException as e:
             if e.code != -3044:
@@ -41,6 +43,7 @@ def init_client(max_retries: int=360, delay: int=5):
             print(f"System busy, retrying in {delay} seconds...")
             time.sleep(delay)
     raise Exception(f"Max retries exceeded. Request still failed after {max_retries} attempts.")
+
 
 client = init_client()
 
@@ -50,35 +53,39 @@ all_start = time.perf_counter()
 now = datetime.now().strftime('%Y/%m/%d %H:%M')
 print(f"-:--:--:--:--:--:--:--:--:--:-  {now} Running Trail Fractals Fitting  -:--:--:--:--:--:--:--:--:--:-")
 
+
 def feature_selection(X: np.ndarray, y, limit):
     fs_start = time.perf_counter()
 
     # drop any columns with the same value in every row
-    keep_cols = np.array(-1*(np.all(X == X[0,:], axis = 0))+1, dtype=bool)
+    keep_cols = np.array(-1 * (np.all(X == X[0, :], axis=0)) + 1, dtype=bool)
     X = X[:, keep_cols]
 
     # Selection stage 1
     pre_selector_model = GradientBoostingClassifier(random_state=42,
-                                                n_estimators=10000,
-                                                validation_fraction=0.1,
-                                                n_iter_no_change=50,
-                                                subsample=0.5,
-                                                min_samples_split=8,
-                                                max_depth=12,
-                                                learning_rate=0.3)
+                                                    n_estimators=10000,
+                                                    validation_fraction=0.1,
+                                                    n_iter_no_change=50,
+                                                    subsample=0.5,
+                                                    min_samples_split=8,
+                                                    max_depth=12,
+                                                    learning_rate=0.3)
 
-    selector_1 = SFS(estimator=pre_selector_model, k_features=10, forward=True,
+    selector_1 = SFS(estimator=pre_selector_model, k_features=8, forward=True,
                      floating=False, verbose=0, scoring=scorer, n_jobs=-1)
-    selector_2 = SelectKBest(f_classif, k=10)
-    selector_3 = SelectKBest(mutual_info_classif, k=10)
+    selector_2 = SelectKBest(f_classif, k=8)
+    selector_3 = SelectKBest(mutual_info_classif, k=8)
+    # selector_4 = SelectKBest(chi2, k=8)
 
     selector_1 = selector_1.fit(X, y)
     selector_2.fit(X, y)
     selector_3.fit(X, y)
+    # selector_4.fit(X, y)
 
     cols_1 = list(selector_1.k_feature_idx_)
     cols_2 = list(selector_2.get_support(indices=True))
     cols_3 = list(selector_3.get_support(indices=True))
+    # cols_4 = list(selector_4.get_support(indices=True))
     all_cols = list(set(cols_1 + cols_2 + cols_3))
 
     # selected_columns = [cols[i] for i in all_cols]
@@ -122,8 +129,7 @@ def feature_selection(X: np.ndarray, y, limit):
     return X_transformed, y, selected
 
 
-def load_features(side, tf):
-    folder = Path("machine_learning/models/trail_fractals_slow")
+def load_features(folder, side, tf):
     info_path = folder / f"trail_fractal_{side}_{tf}_info.json"
     with open(info_path, 'r') as ip:
         info = json.load(ip)
@@ -131,8 +137,7 @@ def load_features(side, tf):
     return list(info['features'])
 
 
-def load_pairs(side, tf):
-    folder = Path("machine_learning/models/trail_fractals_slow")
+def load_pairs(folder, side, tf):
     info_path = folder / f"trail_fractal_{side}_{tf}_info.json"
     with open(info_path, 'r') as ip:
         info = json.load(ip)
@@ -140,8 +145,19 @@ def load_pairs(side, tf):
     return list(info['pairs'])
 
 
+def get_margin_pairs(method):
+    pairs = mlf.rank_pairs(method)
+    exc_info = client.get_exchange_info()
+    symbol_margin = {i['symbol']: i['isMarginTradingAllowed'] for i in exc_info['symbols'] if
+                     i['quoteAsset'] == 'USDT'}
+    pairs = [p for p in pairs if symbol_margin[p]]
+
+    return pairs[start_pair:start_pair + num_pairs]
+
+
 def fit_gbc(X, y, scorer):
-    base_model = GradientBoostingClassifier(random_state=42, n_estimators=10000, validation_fraction=0.1, n_iter_no_change=50)
+    base_model = GradientBoostingClassifier(random_state=42, n_estimators=10000, validation_fraction=0.1,
+                                            n_iter_no_change=50)
     params = dict(
         subsample=[0.25, 0.5, 1],
         min_samples_split=[2, 4, 8],
@@ -160,19 +176,12 @@ sides = ['long',
          'short'
          ]
 data_len = 500
-pair_selection = [(30, '1d_volumes'), (100, '1w_volumes')] # choose the top _ pairs ranked by _
+pair_selection = [(30, '1d_volumes'), (100, '1w_volumes')]  # choose the top _ pairs ranked by _
 start_pair = 0
 width = 5
 atr_spacing = 2
 scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
 
-for i in range(360):
-    try:
-        exc_info = client.get_exchange_info()
-        logger.info(f"get exchange info worked on attempt number {i+1}")
-        break
-    except requests.exceptions.ConnectionError as e:
-        time.sleep(5)
 
 fits = list(enumerate(itertools.product(sides, timeframes, pair_selection)))
 print(fits)
@@ -184,14 +193,12 @@ for n, fit in fits:
 
     print(f"\nFit {n} of {len(list(fits))}, Fitting {timeframe} {side} {pair_sel} model")
     loop_start = time.perf_counter()
+    folder = Path(f"machine_learning/models/trail_fractals_{selection_method}_{num_pairs}")
 
     if running_on_pi:
-        pairs = load_pairs(side, timeframe)
+        pairs = load_pairs(folder, side, timeframe)
     else:
-        pairs = mlf.rank_pairs(selection_method)
-        symbol_margin = {i['symbol']: i['isMarginTradingAllowed'] for i in exc_info['symbols'] if i['quoteAsset'] == 'USDT'}
-        pairs = [p for p in pairs if symbol_margin[p]]
-        pairs = pairs[start_pair:start_pair + num_pairs]
+        pairs = get_margin_pairs(selection_method)
 
     # create dataset
     all_res = pd.DataFrame()
@@ -210,9 +217,9 @@ for n, fit in fits:
     rus = RandomUnderSampler(random_state=0)
     X, y = rus.fit_resample(X, y)
 
-    if running_on_pi:
-        selected = load_features(side, timeframe)
-        X = X.loc[:, selected]
+    # if running_on_pi:
+    selected = load_features(folder, side, timeframe)
+    X = X.loc[:, selected]
 
     # TODO when i refactor this into a pipeline, i will need to remove the equivalent step from the agent definition
     X, _, cols = mlf.transform_columns(X, X)
@@ -276,4 +283,3 @@ for n, fit in fits:
 all_end = time.perf_counter()
 all_elapsed = all_end - all_start
 print(f"\nTotal time taken: {int(all_elapsed // 3600)}h {int(all_elapsed // 60) % 60}m {all_elapsed % 60:.1f}s")
-
