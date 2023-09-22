@@ -5,7 +5,7 @@ from resources.loggers import create_logger
 from binance.client import Client
 import binance.enums as be
 import binance.exceptions as bx
-from resources import indicators as ind, keys, features, utility_funcs as uf
+from resources import keys, features, utility_funcs as uf
 import ml_funcs as mlf
 from typing import Tuple, Dict
 from collections import Counter
@@ -1014,6 +1014,7 @@ class TradingSession():
 class LightSession(TradingSession):
     @uf.retry_on_busy()
     def __init__(self):
+        TradingSession.__init__(self, 0.1)
         self.now_start = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
         self.client = Client(keys.bPkey, keys.bSkey)
         self.live = self.set_live()
@@ -1042,23 +1043,24 @@ class LightSession(TradingSession):
 class CheckRecordsSession(TradingSession):
     @uf.retry_on_busy()
     def __init__(self):
-        self.fr_max = 0.0005
-        self.pairs_data = {}
-        self.counts = []
-        self.spot_bal = 1
-        self.margin_bal = 1
-        self.spot_usdt_bal = 1
-        self.margin_usdt_bal = 1
-
-        self.ohlc_length = 0
-        self.now_start = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
-        self.client = Client(keys.bPkey, keys.bSkey)
-        self.live = self.set_live()
-        self.weights_count = []
+        TradingSession.__init__(self, 0.1)
+        # self.fr_max = 0.0005
+        # self.pairs_data = {}
+        # self.counts = []
+        # self.spot_bal = 1
+        # self.margin_bal = 1
+        # self.spot_usdt_bal = 1
+        # self.margin_usdt_bal = 1
+        #
+        # self.ohlc_length = 0
+        # self.now_start = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
+        # self.client = Client(keys.bPkey, keys.bSkey)
+        # self.live = self.set_live()
+        # self.weights_count = []
 
         # load local data and configure settings
-        self.market_data_read, self.market_data_write = self.mkt_data_path()
-        self.read_records, self.write_records = self.records_path()
-        self.ohlc_data = self.ohlc_path()
-        self.indicators = None
+        # self.market_data_read, self.market_data_write = self.mkt_data_path()
+        # self.read_records, self.write_records = self.records_path()
+        # self.ohlc_data = self.ohlc_path()
+        # self.indicators = None
 

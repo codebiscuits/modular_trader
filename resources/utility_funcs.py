@@ -9,7 +9,6 @@ from pprint import pformat
 from decimal import Decimal, getcontext
 from resources.timers import Timer
 from resources.loggers import create_logger
-from typing import Tuple, Dict
 import sys
 import math
 import pytz
@@ -24,8 +23,8 @@ ctx.prec = 12
 logger = create_logger('utility_funcs')
 
 
-def open_risk_calc(session, record: dict, metric: str) -> dict|float:
-    """calculates what would be lost from the current value if the position ended up getting stopped out, denomianted
+def open_risk_calc(session, record: dict, metric: str) -> dict | float:
+    """calculates what would be lost from the current value if the position ended up getting stopped out, denominated
     in percent, USDT and R where percent is the percentage of the position's current value that would be lost and R is
     proportional to the initial amount that would have been lost if the position had been immediately invalidated.
     possible values for the 'metric' argument are 'pct', 'usdt', 'r' or 'all'. if 'all' is passed, the whole dictionary
@@ -56,10 +55,11 @@ def open_risk_calc(session, record: dict, metric: str) -> dict|float:
     else:
         return risk_dict[metric]
 
-def transform_signal(signal: dict, type: str, state: str, direction: str) -> dict:
+
+def transform_signal(signal: dict, sig_type: str, state: str, direction: str) -> dict:
     """takes a raw signal as input, returns a 'processed' signal ready to be scored and passed to an omf"""
 
-    if type == 'close':
+    if sig_type == 'close':
         return {'agent': signal['agent'],
                 'pair': signal['pair'],
                 'action': 'close',
@@ -67,25 +67,25 @@ def transform_signal(signal: dict, type: str, state: str, direction: str) -> dic
                 'state': state,
                 'mode': signal['mode']}
 
-    elif type == 'open':
+    elif sig_type == 'open':
         signal['action'] = 'open'
         signal['direction'] = direction
         signal['state'] = state
         return signal
 
-    elif type == 'oco':
+    elif sig_type == 'oco':
         signal['action'] = 'oco'
         signal['direction'] = direction
         signal['state'] = state
         return signal
 
-    elif type == 'tp':
+    elif sig_type == 'tp':
         signal['action'] = 'tp'
         signal['direction'] = direction
         signal['state'] = state
         return signal
 
-    elif type == 'add':
+    elif sig_type == 'add':
         signal['action'] = 'add'
         signal['direction'] = direction
         signal['state'] = state
@@ -129,19 +129,19 @@ def valid_price(session, pair: str, price: float) -> str:
 
 
 def adjust_max_positions(max_pos: int, sizing: dict) -> int:
-    '''the max_pos input tells the function what the strategy has as a default
-    the sizing input is the dictionary of currently open positions with their 
+    """the max_pos input tells the function what the strategy has as a default
+    the sizing input is the dictionary of currently open positions with their
     associated open risk
-    
+
     this function decides if there should currently be a limit on how many positions
-    can be open at once, based on current performance of currently open positions'''
+    can be open at once, based on current performance of currently open positions"""
 
     pass
 
 
 def market_benchmark(session) -> None:
-    '''calculates daily, weekly and monthly returns for btc, eth and the median 
-    altcoin on binance'''
+    """calculates daily, weekly and monthly returns for btc, eth and the median
+    altcoin on binance"""
 
     func_name = sys._getframe().f_code.co_name
     x20 = Timer(f'{func_name}')
@@ -182,7 +182,6 @@ def market_benchmark(session) -> None:
                 df['roc_1m'] = df.close.pct_change(8928)
                 all_1m.append(df.at[df.index[-1], 'roc_1m'])
 
-
             if x == 'BTCUSDT':
                 btc_1d = df.roc_1d.iloc[-1]
                 btc_1w = df.roc_1w.iloc[-1]
@@ -205,7 +204,8 @@ def market_benchmark(session) -> None:
     if valid_pairs > 3:
         valid = True
         if (all_pairs / valid_pairs) > 1.5:
-            logger.warning(f'warning (market benchmark): lots of pairs ohlc data not up to date: {all_pairs = }, {len(all_1d) = }')
+            logger.warning(f'warning (market benchmark): lots of pairs ohlc data not up to date: {all_pairs = }, '
+                           f'{len(all_1d) = }')
     else:
         valid = False
 
@@ -221,7 +221,7 @@ def market_benchmark(session) -> None:
 
 
 def strat_benchmark(session, agent) -> dict:
-    '''calculates daily, weekly and monthly returns for the agent in question'''
+    """calculates daily, weekly and monthly returns for the agent in question"""
 
     bal_now = session.spot_bal if agent.mode == 'spot' else session.margin_bal
     bal_1d, bal_1w, bal_1m = None, None, None
@@ -270,7 +270,7 @@ def strat_benchmark(session, agent) -> dict:
 
 
 def log(session, agent) -> None:
-    '''records all data from the session as a line in the perf_log.json file'''
+    """records all data from the session as a line in the perf_log.json file"""
 
     new_record = {'timestamp': session.now_start,
                   'positions': agent.real_pos, 'trade_counts': agent.counts_dict,
@@ -279,7 +279,7 @@ def log(session, agent) -> None:
                   'max_spread': session.max_spread, 'indiv_r_limit': agent.indiv_r_limit,
                   'total_r_limit': agent.total_r_limit, 'target_risk': agent.target_risk,
                   'max_pos': agent.max_positions, 'market_bias': session.market_bias
-    }
+                  }
 
     if agent.mode == 'spot':
         new_record['balance'] = round(session.spot_bal, 2)
@@ -336,8 +336,8 @@ def log(session, agent) -> None:
 
 
 def interpret_benchmark(session, agents: list) -> None:
-    '''takes the benchmark results, ranks them by performance, and prints them 
-    in a table'''
+    """takes the benchmark results, ranks them by performance, and prints them
+    in a table"""
 
     func_name = sys._getframe().f_code.co_name
     x11 = Timer(f'{func_name}')
@@ -394,8 +394,8 @@ def interpret_benchmark(session, agents: list) -> None:
 
 
 def count_trades(counts: dict) -> str:
-    '''returns a summary of the counts dict as a human-readable string for use
-    in the scanner_summary function'''
+    """returns a summary of the counts dict as a human-readable string for use
+    in the scanner_summary function"""
 
     er = Timer('count_trades')
     er.start()
@@ -410,9 +410,9 @@ def count_trades(counts: dict) -> str:
     return '\n' + ', '.join(count_list) if count_list else ''
 
 
-def update_liability(trade_record: Dict[str, dict], size: str, operation: str) -> str:
+def update_liability(trade_record: dict[str, dict], size: str, operation: str) -> str:
     """this function finds the previous value for liability and returns the new value as a string. the size argument
-    should be denominated in the asset being borrowed/repayed"""
+    should be denominated in the asset being borrowed/repaid"""
 
     ty = Timer('update_liability')
     ty.start()
@@ -442,8 +442,8 @@ def tot_rpnl(agents: list) -> str:
 
 
 def scanner_summary(session, agents: list) -> None:
-    '''prints a summary of the agents recent performance, current exposure, 
-    benchmarks, trade counts etc'''
+    """prints a summary of the agents recent performance, current exposure,
+    benchmarks, trade counts etc"""
 
     func_name = sys._getframe().f_code.co_name
     x14 = Timer(f'{func_name}')
@@ -538,8 +538,8 @@ def remove_duplicates(signals: list[dict]) -> list[dict]:
 
 def plot_call_weights(session):
     plot_df = pd.DataFrame({
-        'times': [time for time, weight in session.all_weights],
-        'weights': [weight for time, weight in session.all_weights]})
+        'times': [t for t, weight in session.all_weights],
+        'weights': [weight for t, weight in session.all_weights]})
     plot_df['seconds'] = plot_df.times - plot_df.times.iloc[0]
     plot_df['cum_weight'] = plot_df.weights.cumsum()
     plot_df = plot_df.drop('weights', axis=1)
@@ -564,6 +564,7 @@ def retry_on_busy(max_retries=360, delay=5):
                     logger.exception(f"System busy, retrying in {delay} seconds...")
                     time.sleep(delay)
             raise Exception(f"Max retries exceeded. Request still failed after {max_retries} attempts.")
-        return wrapper_retry
-    return decorator_retry
 
+        return wrapper_retry
+
+    return decorator_retry

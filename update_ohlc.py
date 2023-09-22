@@ -4,7 +4,7 @@ from resources import binance_funcs as funcs
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from sessions import LightSession
+from sessions import LightSession, TradingSession
 from pyarrow import ArrowInvalid
 import json
 from resources.loggers import create_logger
@@ -16,7 +16,8 @@ logger = create_logger('update_ohlc', 'update_ohlc')
 
 now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
 
-session = LightSession()
+# session = LightSession()
+session = TradingSession(0.1)
 
 logger.debug(f"{'-:-' * 10} {now} UTC running update_ohlc {'-:-' * 10}")
 
@@ -150,3 +151,4 @@ elapsed_str = f'Time taken: {round(all_time // 60)}m {round(all_time % 60)}s'
 
 logger.info(f"used-weight-1m: {session.client.response.headers['x-mbx-used-weight-1m']}")
 logger.info(f'update_ohlc complete, {elapsed_str}')
+logger.debug(f'update_ohlc complete, {elapsed_str}')
