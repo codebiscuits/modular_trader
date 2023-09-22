@@ -80,7 +80,6 @@ class Agent:
         self.real_pos = self.current_positions(session, 'open')
         self.sim_pos = self.current_positions(session, 'sim')
         self.tracked = self.current_positions(session, 'tracked')
-        logger.debug(pformat(self.real_pos))
         self.check_valid_open(session)
         # self.calc_init_opnl(session)
         # self.open_pnl_changes = {}
@@ -580,13 +579,12 @@ class Agent:
                 source += ' and exchange'
                 session.store_ohlc(df, pair, timeframes)
 
-        # df = pd.DataFrame()
-        try:  # this try/except block can be removed when the problem is solved
-            stop_dt = datetime.fromtimestamp(stop_time / 1000).astimezone(timezone.utc)
-            df = df.loc[df.timestamp > stop_dt].reset_index(drop=True)
-        except ValueError as e:
-            logger.exception(f"ValueError for {pair} sim stop time: {e.args}")
-            logger.error(pformat(self.sim_trades[pair]))
+        # try:  # this try/except block can be removed when the problem is solved
+        stop_dt = datetime.fromtimestamp(stop_time / 1000).astimezone(timezone.utc)
+        df = df.loc[df.timestamp > stop_dt].reset_index(drop=True)
+        # except ValueError as e:
+        #     logger.exception(f"ValueError for {pair} sim stop time: {e.args}")
+        #     logger.error(pformat(self.sim_trades[pair]))
 
         rsst_gd.stop()
 
@@ -909,10 +907,8 @@ class Agent:
         p = Timer('set_max_pos')
         p.start()
         avg_open_pnl = 0
-        real_pos = self.real_pos
-        del real_pos['USDT']
-        if real_pos:
-            opnls = [v.get('pnl_R') for v in self.real_pos.values()]
+        opnls = [v.get('pnl_R') for k, v in self.real_pos.items() if k != 'USDT']
+        if opnls:
             avg_open_pnl = stats.median(opnls)
         logger.debug(f"set_max_pos calculates {avg_open_pnl = }")
         max_pos = 6 if avg_open_pnl <= 0 else 12
@@ -1172,8 +1168,6 @@ class Agent:
         self.record_trades(session, 'open')
 
     def move_api_stop(self, session, pair, direction, atr, pos_record, stage=0):
-        logger.debug(f"move_api_stop {pair} {direction} {atr = } {stage = }")
-        logger.debug(pformat(pos_record))
         if stage == 0:
             self.create_placeholder(pair, direction, atr)
         if stage <= 1:
@@ -1853,8 +1847,6 @@ class Agent:
 
     def close_real_7(self, session, pair, close_size, direction):
         price = session.pairs_data[pair]['price']
-
-        logger.debug(pformat(self.real_pos))
 
         if direction == 'long' and session.live:
             session.update_usdt_m(repay=float(close_size))

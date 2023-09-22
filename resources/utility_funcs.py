@@ -34,11 +34,7 @@ def open_risk_calc(session, record: dict, metric: str) -> dict | float:
     direction = record['position']['direction']
     pos_scale = record['position']['pct_of_full_pos']
 
-    try:
-        init_price = float(record['trade'][0]['exe_price'])
-    except KeyError as e:
-        logger.exception(e)
-        logger.debug(pformat(record))
+    init_price = float(record['trade'][0]['exe_price'])
     init_stop = float(record['trade'][0]['hard_stop'])
     init_risk_pct = (init_price - init_stop) / init_price
 

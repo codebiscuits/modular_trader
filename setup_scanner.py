@@ -37,8 +37,6 @@ for timeframe, offset in session.timeframes:
 
 agents = {a.id: a for a in agents}
 
-logger.info(pformat(session.features))
-
 # session.name = ' | '.join([n.name for n in agents.values()])
 
 logger.debug("-*-*-*- Checking all positions for stops and open-risk -*-*-*-")
@@ -147,15 +145,9 @@ while raw_signals:
     sig_pair = signal['pair']
 
     # find whether I am currently long, short or flat on the agent and pair in this signal
-    # try:
     real_position = sig_agent.real_pos.get(signal['asset'], {'direction': 'flat'})['direction']
     sim_position = sig_agent.sim_pos.get(signal['asset'], {'direction': 'flat'})['direction']  # returns 'flat' if none
     tracked_position = sig_agent.tracked.get(signal['asset'], {'direction': 'flat'})['direction']
-    # except KeyError as e:
-    #     logger.error('KeyError')
-    #     logger.error(pformat(signal))
-    #     logger.error(pformat(sig_agent.tracked))
-    #     logger.exception(e)
 
     bullish_pos = 'spot' if (sig_agent.mode == 'spot') else 'long'
 
@@ -533,7 +525,6 @@ while unassigned:
 
 sort_end = time.perf_counter()
 sort_took = sort_end - sort_start
-# logger.debug(pformat(processed_signals['real_open']))
 
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 # Execute Real Open Signals

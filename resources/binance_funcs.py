@@ -328,8 +328,6 @@ def create_stop_dict(session, order: dict) -> dict:
     yu = Timer('create_stop-dict')
     yu.start()
 
-    logger.debug(pformat(order))
-
     pair = order.get('symbol')
     quote_qty = order.get('cummulativeQuoteQty')
     base_qty = order.get('executedQty')
