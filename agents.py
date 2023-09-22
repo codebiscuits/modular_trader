@@ -94,7 +94,7 @@ class Agent:
         return self.id
 
     def load_perf_log(self, session):
-        folder = Path(f"{session.read_records}/{self.id}")
+        folder = Path(f"{session.records_r}/{self.id}")
         if not folder.exists():
             folder.mkdir(parents=True)
         bal_path = Path(folder / 'perf_log.json')
@@ -112,8 +112,8 @@ class Agent:
 
         q = Timer('sync_test_records')
         q.start()
-        real_folder = Path(f"{session.read_records}/{self.id}")
-        test_folder = Path(f'{session.write_records}/{self.id}')
+        real_folder = Path(f"{session.records_r}/{self.id}")
+        test_folder = Path(f'{session.records_w}/{self.id}')
         if not test_folder.exists():
             test_folder.mkdir(parents=True)
         bal_path = Path(real_folder / 'perf_log.json')
@@ -133,8 +133,8 @@ class Agent:
         def sync_trades_records(switch):
             w = Timer(f'sync_trades_records-{switch}')
             w.start()
-            trades_path = Path(f'{session.read_records}/{self.id}/{switch}_trades.json')
-            test_trades = Path(f'{session.write_records}/{self.id}/{switch}_trades.json')
+            trades_path = Path(f'{session.records_r}/{self.id}/{switch}_trades.json')
+            test_trades = Path(f'{session.records_w}/{self.id}/{switch}_trades.json')
             test_trades.touch(exist_ok=True)
 
             if trades_path.exists():
@@ -163,7 +163,7 @@ class Agent:
 
         w = Timer(f'read_open_trade_records-{state}')
         w.start()
-        ot_path = Path(f"{session.read_records}/{self.id}")
+        ot_path = Path(f"{session.records_r}/{self.id}")
         ot_path.mkdir(parents=True, exist_ok=True)
         ot_path = ot_path / f'{state}_trades.json'
 
@@ -185,7 +185,7 @@ class Agent:
 
         e = Timer('read_closed_trade_records')
         e.start()
-        ct_path = Path(f"{session.read_records}/{self.id}/closed_trades.json")
+        ct_path = Path(f"{session.records_r}/{self.id}/closed_trades.json")
         if Path(ct_path).exists():
             with open(ct_path, "r") as ct_file:
                 try:
@@ -209,7 +209,7 @@ class Agent:
 
         r = Timer('read_closed_sim_trade_records')
         r.start()
-        cs_path = Path(f"{session.read_records}/{self.id}/closed_sim_trades.json")
+        cs_path = Path(f"{session.records_r}/{self.id}/closed_sim_trades.json")
         if Path(cs_path).exists():
             with open(cs_path, "r") as cs_file:
                 try:
@@ -240,23 +240,23 @@ class Agent:
         y.start()
 
         if self.open_trades:
-            with open(f"{session.write_records}/{self.id}/ot_backup.json", "w") as ot_file:
+            with open(f"{session.records_w}/{self.id}/ot_backup.json", "w") as ot_file:
                 json.dump(self.open_trades, ot_file)
 
         if self.sim_trades:
-            with open(f"{session.write_records}/{self.id}/st_backup.json", "w") as st_file:
+            with open(f"{session.records_w}/{self.id}/st_backup.json", "w") as st_file:
                 json.dump(self.sim_trades, st_file)
 
         if self.tracked_trades:
-            with open(f"{session.write_records}/{self.id}/tr_backup.json", "w") as tr_file:
+            with open(f"{session.records_w}/{self.id}/tr_backup.json", "w") as tr_file:
                 json.dump(self.tracked_trades, tr_file)
 
         if self.closed_trades:
-            with open(f"{session.write_records}/{self.id}/ct_backup.json", "w") as ct_file:
+            with open(f"{session.records_w}/{self.id}/ct_backup.json", "w") as ct_file:
                 json.dump(self.closed_trades, ct_file)
 
         if self.closed_sim_trades:
-            with open(f"{session.write_records}/{self.id}/cs_backup.json", "w") as cs_file:
+            with open(f"{session.records_w}/{self.id}/cs_backup.json", "w") as cs_file:
                 json.dump(self.closed_sim_trades, cs_file)
 
         y.stop()
@@ -538,7 +538,7 @@ class Agent:
 
         # logger.debug(f"rsst {self.name} {pair}")
 
-        filepath = Path(f'{session.ohlc_data}/{pair}.parquet')
+        filepath = Path(f'{session.ohlc_path}/{pair}.parquet')
         check_recent = False  # flag to decide whether the ohlc needs updating or not
 
         if session.pairs_data[pair].get('ohlc_5m', None) is not None:
@@ -745,31 +745,31 @@ class Agent:
         session.counts.append(f'record_trades {state}')
 
         if state in {'open', 'all'}:
-            filepath = Path(f"{session.write_records}/{self.id}/open_trades.json")
+            filepath = Path(f"{session.records_w}/{self.id}/open_trades.json")
             if not filepath.exists():
                 filepath.touch()
             with open(filepath, "w") as file:
                 json.dump(self.open_trades, file)
         if state in {'sim', 'all'}:
-            filepath = Path(f"{session.write_records}/{self.id}/sim_trades.json")
+            filepath = Path(f"{session.records_w}/{self.id}/sim_trades.json")
             if not filepath.exists():
                 filepath.touch()
             with open(filepath, "w") as file:
                 json.dump(self.sim_trades, file)
         if state in {'tracked', 'all'}:
-            filepath = Path(f"{session.write_records}/{self.id}/tracked_trades.json")
+            filepath = Path(f"{session.records_w}/{self.id}/tracked_trades.json")
             if not filepath.exists():
                 filepath.touch()
             with open(filepath, "w") as file:
                 json.dump(self.tracked_trades, file)
         if state in {'closed', 'all'}:
-            filepath = Path(f"{session.write_records}/{self.id}/closed_trades.json")
+            filepath = Path(f"{session.records_w}/{self.id}/closed_trades.json")
             if not filepath.exists():
                 filepath.touch()
             with open(filepath, "w") as file:
                 json.dump(self.closed_trades, file)
         if state in {'closed_sim', 'all'}:
-            filepath = Path(f"{session.write_records}/{self.id}/closed_sim_trades.json")
+            filepath = Path(f"{session.records_w}/{self.id}/closed_sim_trades.json")
             if not filepath.exists():
                 filepath.touch()
             with open(filepath, "w") as file:
@@ -1067,7 +1067,9 @@ class Agent:
     def update_pos(self, session, pair: str, new_bal: str, state: str) -> Dict[str, float]:
         """checks for the current balance of a particular asset and returns it in
         the correct format for the sizing dict. also calculates the open risk for
-        a given asset and returns it in R and $ denominations"""
+        a given asset and returns it in R and $ denominations.
+        The dictionary returned by this method should be used to update the existing position dictionary using the
+        '.update()' dictionary method."""
 
         jk = Timer('update_pos')
         jk.start()
@@ -1252,9 +1254,9 @@ class Agent:
         asset = signal['pair'][:-len(session.quote_asset)]
         size = trade_record['position']['base_size']
         if state == 'sim':
-            self.sim_pos[asset] = self.update_pos(session, pair, size, state)
+            self.sim_pos[asset].update(self.update_pos(session, pair, size, state))
         elif state == 'tracked':
-            self.tracked[asset] = self.update_pos(session, pair, size, state)
+            self.tracked[asset].update(self.update_pos(session, pair, size, state))
         self.record_trades(session, state)
 
         k13.stop()
@@ -1366,7 +1368,8 @@ class Agent:
         self.open_trades[pair]['position']['pfrd'] = str(pfrd)
         self.open_trades[pair]['position']['entry_price'] = open_order['exe_price']
         self.open_trades[pair]['position']['pct_of_full_pos'] = signal['pct_of_full_pos']
-        self.open_trades[pair]['placeholder']['open_order'] = open_order
+        self.open_trades[pair]['placeholder']['open_order'] = open_order  # this is for repair_trade_records
+        self.open_trades[pair]['placeholder'].update(open_order)  # this is for normal operation
         self.open_trades[pair]['placeholder']['completed'] = 'trade_dict'
 
         return open_order
@@ -1394,6 +1397,7 @@ class Agent:
     def open_save_records(self, session, pair):
         del self.open_trades[pair]['placeholder']['completed']
         del self.open_trades[pair]['placeholder']['api_order']
+        del self.open_trades[pair]['placeholder']['open_order']
         self.open_trades[pair]['trade'] = [self.open_trades[pair]['placeholder']]
         del self.open_trades[pair]['placeholder']
         self.record_trades(session, 'open')
@@ -1404,7 +1408,7 @@ class Agent:
         asset = pair[:-4]
 
         if session.live:
-            self.real_pos[asset] = self.update_pos(session, pair, size, 'real')
+            self.real_pos[asset].update(self.update_pos(session, pair, size, 'real'))
             self.real_pos[asset]['pnl_R'] = 0
             if direction == 'long':
                 session.update_usdt_m(borrow=float(usdt_size))
@@ -1972,7 +1976,7 @@ class Agent:
 
         self.sim_trades[pair] = {'trade': [sim_order], 'position': pos_record, 'signal': signal}
 
-        self.sim_pos[asset] = self.update_pos(session, pair, size, 'sim')
+        self.sim_pos[asset].update(self.update_pos(session, pair, size, 'sim'))
         self.sim_pos[asset]['pnl_R'] = 0
         self.counts_dict[f'sim_open_{direction}'] += 1
 

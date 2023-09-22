@@ -34,7 +34,11 @@ def open_risk_calc(session, record: dict, metric: str) -> dict | float:
     direction = record['position']['direction']
     pos_scale = record['position']['pct_of_full_pos']
 
-    init_price = float(record['trade'][0]['exe_price'])
+    try:
+        init_price = float(record['trade'][0]['exe_price'])
+    except KeyError as e:
+        logger.exception(e)
+        logger.debug(pformat(record))
     init_stop = float(record['trade'][0]['hard_stop'])
     init_risk_pct = (init_price - init_stop) / init_price
 
@@ -160,8 +164,8 @@ def market_benchmark(session) -> None:
     for x in session.pairs_data.keys():
         df = session.pairs_data.get(x, {}).get('ohlc_5m')
         if not isinstance(df, pd.DataFrame):
-            if Path(f"{session.ohlc_data}/{x}.parquet").exists:
-                df = pd.read_parquet(session.ohlc_data / f"{x}.parquet")
+            if Path(f"{session.ohlc_path}/{x}.parquet").exists:
+                df = pd.read_parquet(session.ohlc_path / f"{x}.parquet")
             else:
                 logger.error(f"market benchmark: couldn't get any ohlc data for {x}")
                 continue
@@ -226,7 +230,7 @@ def strat_benchmark(session, agent) -> dict:
     bal_now = session.spot_bal if agent.mode == 'spot' else session.margin_bal
     bal_1d, bal_1w, bal_1m = None, None, None
 
-    filepath = Path(f"{session.read_records}/{agent.id}/perf_log.json")
+    filepath = Path(f"{session.records_r}/{agent.id}/perf_log.json")
     try:
         with open(filepath, 'r') as rec_file:
             bal_data = json.load(rec_file)
@@ -307,10 +311,10 @@ def log(session, agent) -> None:
     else:
         logger.warning(f'*** warning log function not working for {agent.name} ***')
 
-    read_folder = Path(f"{session.read_records}/{agent.id}")
+    read_folder = Path(f"{session.records_r}/{agent.id}")
     read_path = read_folder / "perf_log.json"
 
-    write_folder = Path(f"{session.write_records}/{agent.id}")
+    write_folder = Path(f"{session.records_w}/{agent.id}")
     write_folder.mkdir(parents=True, exist_ok=True)
     write_path = write_folder / "perf_log.json"
     write_path.touch(exist_ok=True)

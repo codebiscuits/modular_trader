@@ -262,7 +262,7 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
         df = session.pairs_data[pair]['ohlc_5m']
 
     else:
-        filepath = Path(f'{session.ohlc_data}/{pair}.parquet')
+        filepath = Path(f'{session.ohlc_path}/{pair}.parquet')
 
         if filepath.exists():
             try:

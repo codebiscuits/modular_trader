@@ -26,7 +26,7 @@ start = time.perf_counter()
 for sym in session.info['symbols']:
     if sym['status'] != 'TRADING':
         dead_symbol = sym['symbol']
-        fp = Path(f"{session.ohlc_data}/{dead_symbol}.parquet")
+        fp = Path(f"{session.ohlc_path}/{dead_symbol}.parquet")
         if fp.exists():
             fp.unlink()
 
@@ -50,7 +50,7 @@ def iterations(n, session, pair, tf):
     # print(f"{n} {pair} {tf}")
     session.set_ohlc_tf(tf)
     # print(session.ohlc_data)
-    filepath = Path(f'{session.ohlc_data}/{pair}.parquet')
+    filepath = Path(f'{session.ohlc_path}/{pair}.parquet')
     # print(filepath)
     # -------------------- if theres already some local data -------------------------#
     if filepath.exists():
@@ -97,7 +97,7 @@ def mkt_rank(rocs_dict):
 
     rocs_df = rocs_df.drop(['1d', '1w', '1m'], axis=1)
 
-    filepath = session.market_data_write / 'market_ranks.parquet'
+    filepath = session.mkt_data_w / 'market_ranks.parquet'
     rocs_df.to_parquet(path=filepath)
 
 # TODO maybe combine mkt_rank, volumes and volatilities into one dataframe and save as one parquet file

@@ -403,7 +403,8 @@ while processed_signals['unassigned']:
 
     try:
         sim_position = agents[signal['agent']].sim_pos.get(signal['asset'], {'direction': 'flat'})['direction']
-    except KeyError:
+    except KeyError as e:
+        logger.debug(e)
         logger.debug('signal:')
         logger.debug(pformat(signal))
         logger.debug('position:')

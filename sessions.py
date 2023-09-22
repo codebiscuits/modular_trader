@@ -20,7 +20,34 @@ import json
 logger = create_logger('  sessions   ')
 
 
-class TradingSession():
+def get_timeframes() -> list[tuple]:
+    hour = datetime.now(timezone.utc).hour
+    # hour = 0 # for testing all timeframes
+    d = {1: ('1h', None), 4: ('4h', None), 12: ('12h', None), 24: ('1d', None)}
+
+    timeframes = [d[tf] for tf in d if hour % tf == 0]
+    # timeframes = [('1d', None), ('12h', None), ('4h', None), ('1h', None)]
+
+    return timeframes
+
+
+def set_live() -> bool:
+    """checks whether the script is running on the raspberry pi or another
+    machine and sets the live flag to True or False accordingly"""
+
+    y = Timer('set_live')
+    y.start()
+    live = Path('/pi_downstairs.txt').exists() or Path('/pi_2.txt').exists()
+
+    if live:
+        logger.debug('*** Warning: Live ***')
+    else:
+        logger.info('*** Warning: Not Live ***')
+    y.stop()
+    return live
+
+
+class TradingSession:
     min_length = 10000
     max_length = 0
     quote_asset = 'USDT'
@@ -34,6 +61,16 @@ class TradingSession():
     weights_count = []
     all_weights = []
     market_bias = {}
+    request_weight = 0
+    raw_requests = 0
+    max_orders_sec = 0
+    pairs_data = {}
+    fees = {}
+    spot_bals = {}
+    margin_lvl = 0.0
+    margin_bals = {}
+    spot_orders = []
+    margin_orders = []
 
     @uf.retry_on_busy()
     def __init__(self, fr_max):
@@ -48,9 +85,9 @@ class TradingSession():
         self.leverage = 3
         self.name = 'agent names here'
         self.last_price_update = 0
-        self.live = self.set_live()
+        self.live = set_live()
         self.min_size = 30
-        self.timeframes = self.get_timeframes()
+        self.timeframes = get_timeframes()
 
         # get data from exchange
         # self.get_cg_symbols()
@@ -58,7 +95,7 @@ class TradingSession():
         abc.start()
         self.info = self.client.get_exchange_info()
         self.check_rate_limits()
-        self.track_weights(10) # this should be before self.info, but would only work after check_rate_limits
+        self.track_weights(10)  # this should be before self.info, but would only work after check_rate_limits
         self.track_weights(10)
         self.acct = self.client.get_account()
         self.track_weights(10)
@@ -85,27 +122,25 @@ class TradingSession():
             self.top_up_bnb_m(15)
 
         # load local data and configure settings
-        self.market_data_read, self.market_data_write = self.mkt_data_path()
-        self.read_records, self.write_records = self.records_path()
-        self.ohlc_data = self.ohlc_path()
+        self.mkt_data_r, self.mkt_data_w, self.records_r, self.records_w, self.ohlc_path = self.data_paths()
         self.save_spreads()
         self.load_mkt_ranks()
         self.max_loan_amounts = {}
         self.pairs_set = set()
         self.book_data = {}
-        self.indicators = {'ema-200', 'ema-100', 'ema-50', 'ema-25', 'vol_delta',
-                           'vol_delta_div', 'roc_1d', 'roc_1w', 'roc_1m', 'vwma-24'}
-        self.features =  {tf[0]: set() for tf in self.timeframes}
+        # self.indicators = {'ema-200', 'ema-100', 'ema-50', 'ema-25', 'vol_delta',
+        #                    'vol_delta_div', 'roc_1d', 'roc_1w', 'roc_1m', 'vwma-24'}
+        self.features = {tf[0]: set() for tf in self.timeframes}
         self.wrpnl_totals = {'spot': 0, 'long': 0, 'short': 0, 'count': 0}
         self.urpnl_totals = {'spot': 0, 'long': 0, 'short': 0, 'count': 0}
         t.stop()
 
     def track_weights(self, weight):
-        '''keeps track of total api request weight to make sure i don't go over the limit
+        """keeps track of total api request weight to make sure I don't go over the limit
 
-        works by adding each new call weight with a timestamp to the end of a list, then counting back along the list up to the weight
-        limit, and checking if enough time has passed over the last {weight limit} worth of requests. also discards list
-        items beyond the time window to stop it getting too long'''
+        works by adding each new call weight with a timestamp to the end of a list, then counting back along the list up
+        to the weight limit, and checking if enough time has passed over the last {weight limit} worth of requests. also
+        discards list items beyond the time window to stop it getting too long"""
 
         tw = Timer('track_weights')
         tw.start()
@@ -121,9 +156,9 @@ class TradingSession():
         # logger.debug(f"{window = } {weight_limit = } {raw_window = } {raw_limit = }")
 
         total = 0
-        flag = 1
+        # flag = 1
+        # rolling_time = 0
         rolling_weight = 0
-        rolling_time = 0
         timespan = 0
         for n, w in list(enumerate(self.weights_count))[::-1]:
             total += w[1]
@@ -137,7 +172,8 @@ class TradingSession():
                 rolling_time = round(now - self.weights_count[n][0])
             if request_limit_exceeded and within_window:
                 flag = 0
-                logger.info(f"request weight limit: {weight_limit} per {window}s. currently: {total} in the last {timespan:.1f}s")
+                logger.info(f"request weight limit: {weight_limit} per {window}s. currently: {total} in the last "
+                            f"{timespan:.1f}s")
                 logger.info(f"track_weights needs {window - timespan:.1f}s of sleep")
                 logger.info(f"used-weight-1m: {self.client.response.headers.get('x-mbx-used-weight-1m')}")
                 time.sleep(window - timespan)
@@ -159,19 +195,21 @@ class TradingSession():
             time.sleep(raw_window - timespan)
 
         # if flag and rolling_weight:
-        #     logger.info(f"Current request weight: {rolling_weight} over {rolling_time}s, raw count: {len(self.weights_count)}")
+        #     logger.info(f"Current request weight: {rolling_weight} over {rolling_time}s, "
+        #                 f"raw count: {len(self.weights_count)}")
         # elif flag:
         #     pre_roll_w = sum([w[1] for w in self.weights_count[n:]])
         #     pre_roll_t = round(now - self.weights_count[n][0])
-        #     logger.info(f"Current request weight: {pre_roll_w} over {pre_roll_t}s, raw count: {len(self.weights_count)}")
+        #     logger.info(f"Current request weight: {pre_roll_w} over {pre_roll_t}s, "
+        #                 f"raw count: {len(self.weights_count)}")
 
         tw.stop()
 
     def check_rate_limits(self):
         """parses the rate limits from binance and warns me if these limits change
 
-        if the limits do change, i need to update the value of 'old_limits' by calling client.get_exchange_info() in
-        python console and copying the new value across from the variable explorer, and check that the way i'm
+        if the limits do change, I need to update the value of 'old_limits' by calling client.get_exchange_info() in
+        python console and copying the new value across from the variable explorer, and check that the way I'm
         calculating the session attributes still works with the new values"""
 
         limits = self.info['rateLimits']
@@ -277,8 +315,6 @@ class TradingSession():
                      'USDCUSDT', 'PAXUSDT', 'COCOSUSDT', 'SUSDUSDT', 'USDPUSDT',
                      'USTUSDT']
 
-        self.pairs_data = {}
-
         symbols = self.info['symbols']
         for sym in symbols:
             pair = sym.get('symbol')
@@ -296,15 +332,15 @@ class TradingSession():
                 if sym.get('status') != 'TRADING':
                     continue
 
-                for filter in sym['filters']:
-                    if filter['filterType'] == 'PRICE_FILTER':
-                        tick_size = Decimal(filter['tickSize'])
-                    elif filter['filterType'] == 'LOT_SIZE':
-                        step_size = Decimal(filter['stepSize'])
-                    elif filter['filterType'] == 'NOTIONAL':
-                        min_size = filter['minNotional']
-                    elif filter['filterType'] == 'MAX_NUM_ALGO_ORDERS':
-                        max_algo = filter['maxNumAlgoOrders']
+                for f in sym['filters']:
+                    if f['filterType'] == 'PRICE_FILTER':
+                        tick_size = Decimal(f['tickSize'])
+                    elif f['filterType'] == 'LOT_SIZE':
+                        step_size = Decimal(f['stepSize'])
+                    elif f['filterType'] == 'NOTIONAL':
+                        min_size = f['minNotional']
+                    elif f['filterType'] == 'MAX_NUM_ALGO_ORDERS':
+                        max_algo = f['maxNumAlgoOrders']
 
                 spread = self.spreads.get(pair)
 
@@ -329,116 +365,36 @@ class TradingSession():
         maker = Decimal(self.acct['commissionRates']['maker'])
         taker = Decimal(self.acct['commissionRates']['taker'])
 
-        self.fees = dict(
-            spot_maker=maker * Decimal(0.75) if spot_bnb else maker,
-            spot_taker=taker * Decimal(0.75) if spot_bnb else taker,
-            margin_maker=maker * Decimal(0.75) if margin_bnb else maker,
-            margin_taker=taker * Decimal(0.75) if margin_bnb else taker,
-        )
+        self.fees['spot_maker'] = maker * Decimal(0.75) if spot_bnb else maker
+        self.fees['spot_taker'] = taker * Decimal(0.75) if spot_bnb else taker
+        self.fees['margin_maker'] = maker * Decimal(0.75) if margin_bnb else maker
+        self.fees['margin_taker'] = taker * Decimal(0.75) if margin_bnb else taker
 
-    def get_timeframes(self) -> list[tuple]:
-        hour = datetime.now(timezone.utc).hour
-        # hour = 0 # for testing all timeframes
-        d = {1: ('1h', None), 4: ('4h', None), 12: ('12h', None), 24: ('1d', None)}
-
-        timeframes = [d[tf] for tf in d if hour % tf == 0]
-        # timeframes = [('1d', None), ('12h', None), ('4h', None), ('1h', None)]
-
-        return timeframes
-
-
-    def set_live(self) -> bool:
-        '''checks whether the script is running on the raspberry pi or another 
-        machine and sets the live flag to True or False accordingly'''
-
-        y = Timer('set_live')
-        y.start()
-        live = Path('/pi_downstairs.txt').exists() or Path('/pi_2.txt').exists()
-
-        if live:
-            logger.debug('*** Warning: Live ***')
-        else:
-            logger.info('*** Warning: Not Live ***')
-        y.stop()
-        return live
-
-    def mkt_data_path(self) -> tuple[Path, Path]:
-        '''automatically sets the absolute path for the market_data folder'''
+    def data_paths(self) -> tuple[Path, Path, Path, Path, Path]:
+        """automatically sets the absolute paths for the market_data, records and ohlc folders"""
 
         u = Timer('mkt_data_path in session')
         u.start()
 
-        if self.live and Path('/pi_downstairs.txt').exists():  # must be running on rpi 1
-            market_data_read = Path('/home/pi/coding/modular_trader/market_data')
-            market_data_write = Path('/home/pi/coding/modular_trader/market_data')
-        elif self.live and Path('/pi_2.txt').exists():  # must be running on rpi 2
-            market_data_read = Path('/home/ross/coding/modular_trader/market_data')
-            market_data_write = Path('/home/ross/coding/modular_trader/market_data')
-        elif Path('/mnt/pi_d/modular_trader/market_data').exists():  # must be running on laptop and rpi is accessible
-            market_data_read = Path('/mnt/pi_d/modular_trader/market_data')
-            market_data_write = Path('/home/ross/coding/modular_trader/market_data')
-        else:  # running on laptop and rpi is not available
-            market_data_read = Path('/home/ross/coding/modular_trader/market_data')
-            market_data_write = Path('/home/ross/coding/modular_trader/market_data')
-
-        market_data_write.mkdir(parents=True, exist_ok=True)
-
-        u.stop()
-        return market_data_read, market_data_write
-
-    def records_path(self) -> Tuple[Path, Path]:
-        '''automatically sets the absolute path for the records folder'''
-
-        func_name = sys._getframe().f_code.co_name
-        x1 = Timer(f'{func_name}')
-        x1.start()
-
-        if self.live and Path('/pi_downstairs.txt').exists():
-            read_records = Path(f'/home/pi/coding/modular_trader/records')
-            write_records = Path(f'/home/pi/coding/modular_trader/records')
-        elif self.live and Path('/pi_2.txt').exists():
-            read_records = Path(f'/home/ross/coding/modular_trader/records')
-            write_records = Path(f'/home/ross/coding/modular_trader/records')
-        elif Path(f'/home/ross/coding/pi_down/modular_trader/records').exists():
-            read_records = Path(f'/home/ross/coding/pi_down/modular_trader/records')
-            write_records = Path(f'/home/ross/coding/modular_trader/records')
-        elif Path(f'/home/ross/coding/pi_2/modular_trader/records').exists():
-            read_records = Path(f'/home/ross/coding/pi_2/modular_trader/records')
-            write_records = Path(f'/home/ross/coding/modular_trader/records')
+        if Path('/pi_2.txt').exists():
+            mkt_data_r = Path('/home/ross/coding/modular_trader/market_data')
+            records_r = Path(f'/home/ross/coding/modular_trader/records')
+            ohlc_data = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
         else:
-            read_records = Path(f'/home/ross/coding/modular_trader/records')
-            write_records = Path(f'/home/ross/coding/modular_trader/records')
+            mkt_data_r = Path('/home/ross/coding/pi_2/modular_trader/market_data')
+            records_r = Path(f'/home/ross/coding/pi_2/modular_trader/records')
+            ohlc_data = Path(f'/home/ross/coding/pi_2/modular_trader/bin_ohlc_{self.ohlc_tf}')
 
-        logger.debug(f"{read_records = }")
-        logger.debug(f"{write_records = }")
+        mkt_data_w = Path('/home/ross/coding/modular_trader/market_data')
+        mkt_data_w.mkdir(parents=True, exist_ok=True)
+        records_w = Path(f'/home/ross/coding/modular_trader/records')
+        records_w.mkdir(exist_ok=True)
 
-        write_records.mkdir(exist_ok=True)
-
-        x1.stop()
-        return read_records, write_records
+        return mkt_data_r, mkt_data_w, records_r, records_w, ohlc_data
 
     def set_ohlc_tf(self, tf):
         self.ohlc_tf = tf
-        self.ohlc_data = self.ohlc_path()
-
-    def ohlc_path(self) -> Path:
-        '''automatically sets the absolute path for the ohlc_data folder'''
-
-        v = Timer('ohlc_path in session')
-        v.start()
-        ohlc_data = None
-        possible_paths = [Path(f'/home/pi/coding/modular_trader/bin_ohlc_{self.ohlc_tf}'),
-                          Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')]
-
-        for ohlc_path in possible_paths:
-            if ohlc_path.exists():
-                ohlc_data = ohlc_path
-                break
-        if not ohlc_data:
-            note = 'none of the paths for ohlc_data are available'
-            logger.debug(note)
-        v.stop()
-        return ohlc_data
+        self.ohlc_path = self.ohlc_path()
 
     @uf.retry_on_busy()
     def get_pair_info(self, pair):
@@ -483,21 +439,6 @@ class TradingSession():
 
         x7.stop()
 
-    # def algo_limit_reached(self, pair: str) -> bool:
-    #     """compares the number of 'algo orders' (stop-loss and take-profit orders) currently open to the maximum allowed.
-    #     returns True if more orders are allowed to be set, and False if the limit has been reached"""
-    #     func_name = sys._getframe().f_code.co_name
-    #     x8 = Timer(f'{func_name}')
-    #     x8.start()
-    #
-    #     count = self.pairs_data[pair].get('algo_orders', 0)
-    #
-    #     limit = self.pairs_data[pair]['max_algo_orders']
-    #
-    #     x8.stop()
-    #
-    #     return limit == count
-
     @uf.retry_on_busy()
     def get_book_data(self, pair):
 
@@ -533,13 +474,13 @@ class TradingSession():
         # logger.debug(f"{pair} ohlc stored in session")
 
     def save_spreads(self):
-        spreads_path = self.market_data_write / 'spreads.json'
+        spreads_path = self.mkt_data_w / 'spreads.json'
         spreads_path.touch(exist_ok=True)
 
         with open(spreads_path, 'r') as file:
             try:
                 spreads_data = json.load(file)
-            except json.JSONDecodeError as e:
+            except json.JSONDecodeError:
                 spreads_data = {}
 
         spreads_data[self.now_start] = self.spreads
@@ -550,7 +491,7 @@ class TradingSession():
         logger.info(f'\nsaved spreads to {spreads_path}\n')
 
     def load_mkt_ranks(self):
-        filepath = self.market_data_read / 'market_ranks.parquet'
+        filepath = self.mkt_data_r / 'market_ranks.parquet'
 
         market_ranks = pd.read_parquet(filepath)
 
@@ -671,8 +612,6 @@ class TradingSession():
         gh = Timer('top_up_bnb_M')
         gh.start()
 
-        now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
-
         # check balances
         free_bnb = self.spot_bals['BNB']['free']
         free_usdt = self.spot_bals['USDT']['free']
@@ -755,15 +694,13 @@ class TradingSession():
         return
 
     def get_asset_bals_s(self):
-        '''creates a dictionary of spot asset balances, stored as floats'''
+        """creates a dictionary of spot asset balances, stored as floats"""
 
         func_name = sys._getframe().f_code.co_name
         gab = Timer(f'{func_name}')
         gab.start()
 
         bals = self.acct['balances']
-
-        self.spot_bals = {}
 
         for bal in bals:
             asset = bal.get('asset')
@@ -782,8 +719,6 @@ class TradingSession():
 
         gh = Timer('top_up_bnb_M')
         gh.start()
-
-        now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
 
         # check balances
         free_bnb = self.margin_bals['BNB']['free']
@@ -829,15 +764,15 @@ class TradingSession():
         return order
 
     def check_open_margin_orders(self):
-        # this may obviate the need for count_algo_orders if i can simply use the length of the lists in
+        # this may obviate the need for count_algo_orders if I can simply use the length of the lists in
         # pairs_data[pair]['spot_orders'] plus pairs_data[pair]['margin_orders'] as a count
         if self.margin_orders:
             for order in self.margin_orders:
                 self.pairs_data[order['symbol']]['margin_orders'].append(order)
 
     def account_bal_m(self) -> float:
-        '''fetches the total value of the margin account holdings from binance
-        and returns it, denominated in USDT'''
+        """fetches the total value of the margin account holdings from binance
+        and returns it, denominated in USDT"""
 
         jh = Timer('account_bal_M')
         jh.start()
@@ -848,7 +783,6 @@ class TradingSession():
 
         jh.stop()
         return round(usdt_total_net, 2)
-
 
     def total_debt(self) -> float:
         td = Timer('account_bal_M')
@@ -861,9 +795,8 @@ class TradingSession():
         td.stop()
         return round(usdt_total_debt, 2)
 
-
     def get_usdt_m(self) -> Dict[str, float]:
-        '''checks current usdt balance and returns a dictionary for updating the sizing dict'''
+        """checks current usdt balance and returns a dictionary for updating the sizing dict"""
         um = Timer('update_usdt_m')
         um.start()
 
@@ -877,13 +810,14 @@ class TradingSession():
             pct = round((100 * value / self.margin_bal), 5)
         else:
             pct = 0
-        # logger.debug(f'margin usdt stats: qty = {bal.get("free")}, owed = {bal.get("borrowed")}, {value = }, {pct = }, {self.margin_bal = }')
+        # logger.debug(f'margin usdt stats: qty = {bal.get("free")}, owed = {bal.get("borrowed")}, {value = }, '
+        #              f'{pct = }, {self.margin_bal = }')
         um.stop()
         return {'qty': qty, 'owed': owed, 'value': value, 'pf%': pct}
 
     def update_usdt_m(self, up: float = 0.0, down: float = 0.0, borrow: float = 0.0, repay: float = 0.0) -> None:
-        '''calculates current usdt balance without fetching from binance,
-        called whenever usdt balance is changed'''
+        """calculates current usdt balance without fetching from binance,
+        called whenever usdt balance is changed"""
 
         hj = Timer('update_usdt_m')
         hj.start()
@@ -902,19 +836,23 @@ class TradingSession():
         hj.stop()
 
     def check_margin_lvl(self) -> float:
-        '''checks how leveraged the account is and sends a warning push note if
-        leverage is getting too high'''
+        """checks how leveraged the account is and sends a warning push note if
+        leverage is getting too high"""
 
         func_name = sys._getframe().f_code.co_name
         x4 = Timer(f'{func_name}')
         x4.start()
 
+        self.track_weights(10)
+        abc = Timer('all binance calls')
+        abc.start()
         self.m_acct = self.client.get_margin_account()
+        abc.stop()
         self.margin_lvl = float(self.m_acct.get('marginLevel'))
         logger.info(f"Margin level: {self.margin_lvl:.2f}")
 
         net_asset = self.account_bal_m()
-        max_debt = net_asset * (self.leverage - 1) # 3x leverage = net_asset*2, 5x leverage = net_asset*4
+        max_debt = net_asset * (self.leverage - 1)  # 3x leverage = net_asset*2, 5x leverage = net_asset*4
         total_debt = self.total_debt()
         remaining = max_debt - total_debt
 
@@ -922,15 +860,13 @@ class TradingSession():
         return remaining
 
     def get_asset_bals_m(self) -> None:
-        '''creates a dictionary of margin asset balances, stored as floats'''
+        """creates a dictionary of margin asset balances, stored as floats"""
 
         func_name = sys._getframe().f_code.co_name
         x5 = Timer(f'{func_name}')
         x5.start()
 
         bals = self.m_acct.get('userAssets')
-
-        self.margin_bals = {}
 
         for bal in bals:
             asset = bal.get('asset')
@@ -967,34 +903,32 @@ class TradingSession():
         return self.max_loan_amounts[asset]
 
     # Non-live Methods
-    def sync_mkt_data(self) -> None:
-        func_name = sys._getframe().f_code.co_name
-        x2 = Timer(f'{func_name}')
-        x2.start()
-
-        for data_file in ['binance_liquidity_history.txt',
-                          'binance_depths_history.txt',
-                          'binance_spreads_history.txt']:
-            real_file = Path(self.market_data / data_file)
-            test_file = Path(self.test_mkt_data / data_file)
-            test_file.touch(exist_ok=True)
-
-            if real_file.exists():
-                with open(real_file, 'r') as file:
-                    book_data = file.readlines()
-                if book_data:
-                    with open(test_file, 'w') as file:
-                        file.writelines(book_data)
-
-        x2.stop()
+    # def sync_mkt_data(self) -> None:
+    #     func_name = sys._getframe().f_code.co_name
+    #     x2 = Timer(f'{func_name}')
+    #     x2.start()
+    #
+    #     for data_file in ['binance_liquidity_history.txt',
+    #                       'binance_depths_history.txt',
+    #                       'binance_spreads_history.txt']:
+    #         real_file = Path(self.market_data_read / data_file)
+    #         test_file = Path(self.market_data_write / data_file)
+    #         test_file.touch(exist_ok=True)
+    #
+    #         if real_file.exists():
+    #             with open(real_file, 'r') as file:
+    #                 book_data = file.readlines()
+    #             if book_data:
+    #                 with open(test_file, 'w') as file:
+    #                     file.writelines(book_data)
+    #
+    #     x2.stop()
 
     @uf.retry_on_busy()
     def update_algo_orders(self):
         # TODO i need to implement a check so that spot orders can be looked for only if there is a spot agent in play
         # self.track_weights(40)
         # self.spot_orders = self.client.get_open_orders()
-        self.spot_orders = []
-        self.margin_orders = []
 
         if len(self.pairs_set) > 35:
             # logger.info("getting open margin orders for all pairs")
@@ -1011,56 +945,55 @@ class TradingSession():
         self.count_algo_orders()  # kind of redundant since the above two methods create lists which could be counted
 
 
-class LightSession(TradingSession):
-    @uf.retry_on_busy()
-    def __init__(self):
-        TradingSession.__init__(self, 0.1)
-        self.now_start = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
-        self.client = Client(keys.bPkey, keys.bSkey)
-        self.live = self.set_live()
-        self.weights_count = []
-
-        # get data from exchange
-        # self.get_cg_symbols()
-        self.info = self.client.get_exchange_info()
-        self.check_rate_limits()
-        self.track_weights(10) # this should be before self.info, but would only work after check_rate_limits
-        # self.track_weights(2)
-        # self.obt = self.client.get_orderbook_tickers()
-        self.spreads = self.binance_spreads()
-
-        # filter and organise data
-        self.get_pairs_info()
-
-        # load local data and configure settings
-        self.market_data_read, self.market_data_write = self.mkt_data_path()
-        self.read_records, self.write_records = self.records_path()
-        self.ohlc_data = self.ohlc_path()
-        self.save_spreads()
-        self.indicators = None # to stop any default indicators being calculated by inheritance
-
-
-class CheckRecordsSession(TradingSession):
-    @uf.retry_on_busy()
-    def __init__(self):
-        TradingSession.__init__(self, 0.1)
-        # self.fr_max = 0.0005
-        # self.pairs_data = {}
-        # self.counts = []
-        # self.spot_bal = 1
-        # self.margin_bal = 1
-        # self.spot_usdt_bal = 1
-        # self.margin_usdt_bal = 1
-        #
-        # self.ohlc_length = 0
-        # self.now_start = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
-        # self.client = Client(keys.bPkey, keys.bSkey)
-        # self.live = self.set_live()
-        # self.weights_count = []
-
-        # load local data and configure settings
-        # self.market_data_read, self.market_data_write = self.mkt_data_path()
-        # self.read_records, self.write_records = self.records_path()
-        # self.ohlc_data = self.ohlc_path()
-        # self.indicators = None
-
+# class LightSession(TradingSession):
+#     @uf.retry_on_busy()
+#     def __init__(self):
+#         TradingSession.__init__(self, 0.1)
+#         self.now_start = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
+#         self.client = Client(keys.bPkey, keys.bSkey)
+#         self.live = set_live()
+#         self.weights_count = []
+#
+#         # get data from exchange
+#         # self.get_cg_symbols()
+#         self.info = self.client.get_exchange_info()
+#         self.check_rate_limits()
+#         self.track_weights(10)  # this should be before self.info, but would only work after check_rate_limits
+#         # self.track_weights(2)
+#         # self.obt = self.client.get_orderbook_tickers()
+#         self.spreads = self.binance_spreads()
+#
+#         # filter and organise data
+#         self.get_pairs_info()
+#
+#         # load local data and configure settings
+#         self.market_data_read, self.market_data_write = self.mkt_data_path()
+#         self.read_records, self.write_records = self.records_path()
+#         self.ohlc_data = self.ohlc_path()
+#         self.save_spreads()
+#         self.indicators = None  # to stop any default indicators being calculated by inheritance
+#
+#
+# class CheckRecordsSession(TradingSession):
+#     @uf.retry_on_busy()
+#     def __init__(self):
+#         TradingSession.__init__(self, 0.1)
+#         # self.fr_max = 0.0005
+#         # self.pairs_data = {}
+#         # self.counts = []
+#         # self.spot_bal = 1
+#         # self.margin_bal = 1
+#         # self.spot_usdt_bal = 1
+#         # self.margin_usdt_bal = 1
+#         #
+#         # self.ohlc_length = 0
+#         # self.now_start = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
+#         # self.client = Client(keys.bPkey, keys.bSkey)
+#         # self.live = self.set_live()
+#         # self.weights_count = []
+#
+#         # load local data and configure settings
+#         # self.market_data_read, self.market_data_write = self.mkt_data_path()
+#         # self.read_records, self.write_records = self.records_path()
+#         # self.ohlc_data = self.ohlc_path()
+#         # self.indicators = None
