@@ -222,9 +222,7 @@ class TradingSession:
         if limits != old_limits:
             note = 'binance rate limits have changed, check and adjust session definition'
             logger.debug('\n****************\n\n', note, '\n\n****************\n')
-            logger.info('\n****************\n\n', note, '\n\n****************\n')
             logger.warning('\n****************\n\n', note, '\n\n****************\n')
-            # pb.push_note('*** WARNING ***', note)
 
         for limit in limits:
             if limit['interval'] == 'MINUTE':

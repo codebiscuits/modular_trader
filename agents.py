@@ -2535,9 +2535,9 @@ class TrailFractals(Agent):
         try:
             long_confidence = self.long_model.predict_proba(long_X)[0, 1]
         except ValueError as e:
-            logger.exception('NaN in prediction set')
+            # logger.exception('NaN in prediction set')
             logger.error(e)
-            logger.error(long_X)
+            logger.error(long_features.tail())
             long_confidence = 0
 
         # Short model
@@ -2552,9 +2552,9 @@ class TrailFractals(Agent):
         try:
             short_confidence = self.short_model.predict_proba(short_X)[0, 1]
         except ValueError as e:
-            logger.exception('NaN in prediction set')
+            # logger.exception('NaN in prediction set')
             logger.error(e)
-            logger.error(short_X)
+            logger.error(short_features.tail())
             short_confidence = 0
 
         # logger.debug(f"{self.name} {pair} {self.tf} long conf: {long_confidence:.1%} short conf: {short_confidence:.1%}")
