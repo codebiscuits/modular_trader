@@ -80,66 +80,39 @@ for v in data.values():
             all_trades.append(stats)
             sim_reasons[d['signal']['tf']].extend(d['signal'].get('sim_reasons', []))
 
+# pprint(all_trades)
 df = pd.DataFrame(all_trades).sort_values('timestamp').reset_index(drop=True)
 df['timestamp'] = pd.to_datetime(df.timestamp)
 
-# for k, v in sim_reasons.items():
-#     print(k, Counter(v))
+timeframes = [
+    '1h',
+    '4h', '12h', '1d'
+]
+directions = [
+    'long',
+    'short'
+]
+all_dfs = {}
+for tf, dir in product(timeframes, directions):
+    print(f"\ndf_{tf}_{dir}")
+    all_dfs[f"df_{tf}_{dir}"] = (df.loc[(df.timeframe == tf) & (df.direction == dir)].reset_index(drop=True))
 
-# print(df)
+    conf_corr = all_dfs[f"df_{tf}_{dir}"].confidence.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
+    conf_l_corr = all_dfs[f"df_{tf}_{dir}"].confidence_l.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
+    conf_s_corr = all_dfs[f"df_{tf}_{dir}"].confidence_s.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
+    wanted_corr = all_dfs[f"df_{tf}_{dir}"].wanted.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
+    inval_corr = all_dfs[f"df_{tf}_{dir}"].inval_distance.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
+    signal_corr = all_dfs[f"df_{tf}_{dir}"].score.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
+    perf_ema4_corr = all_dfs[f"df_{tf}_{dir}"].perf_ema4.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
+    perf_ema8_corr = all_dfs[f"df_{tf}_{dir}"].perf_ema8.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
+    perf_ema16_corr = all_dfs[f"df_{tf}_{dir}"].perf_ema16.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
+    perf_ema32_corr = all_dfs[f"df_{tf}_{dir}"].perf_ema32.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
+    perf_ema64_corr = all_dfs[f"df_{tf}_{dir}"].perf_ema64.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
+    print(f"confidence correlation: {conf_corr:.1%}, \nlong confidence correlation: {conf_l_corr:.1%}, "
+          f"\nshort confidence correlation: {conf_s_corr:.1%}, \nwanted correlation: {wanted_corr:.1%}, "
+          f"\ninval correlation: {inval_corr:.1%}, \nsignal score correlation: {signal_corr:.1%}"
+          f"\nperf_ema4 correlation: {perf_ema4_corr:.1%}, \nperf_ema8 correlation: {perf_ema8_corr:.1%}, "
+          f"\nperf_ema16 correlation: {perf_ema16_corr:.1%}, \nperf_ema32 correlation: {perf_ema32_corr:.1%}, "
+          f"\nperf_ema64 correlation: {perf_ema64_corr:.1%}")
 
-agent_groups = df.groupby(['model_age'])
-for group in agent_groups:
-    print(group[0])
-    agent_df = group[1]
-    agent_df = agent_df.loc[agent_df.wanted].reset_index(drop=True)
-    agent_df = agent_df.drop(['agent', 'timeframe', 'wanted'], axis=1)
-    agent_l = agent_df.loc[agent_df.direction == 'long'].sort_values('timestamp').reset_index(drop=True).copy()
-    agent_s = agent_df.loc[agent_df.direction == 'short'].sort_values('timestamp').reset_index(drop=True).copy()
-    agent_l['ema10_rpnl'] = agent_l.rpnl.ewm(25).mean()
-    agent_s['ema10_rpnl'] = agent_s.rpnl.ewm(25).mean()
-    agent_df['ema10_rpnl'] = agent_df.rpnl.ewm(50).mean()
-    # print(agent_l.tail())
-    # print(agent_s.tail())
-    # print('\n\n')
-    both, long, short = 0, 0, 0
-    if len(agent_df) > 0:
-        both = agent_df['ema10_rpnl'].iloc[-1]
-    if len(agent_l) > 0:
-        long = agent_l['ema10_rpnl'].iloc[-1]
-    if len(agent_s) > 0:
-        short = agent_s['ema10_rpnl'].iloc[-1]
-    print(f"All: {both:.2f}, Long: {long:.2f}, Short: {short:.2f}\n")
-#
-# timeframes = [
-#     '1h',
-#     '4h', '12h', '1d'
-# ]
-# directions = [
-#     'long',
-#     'short'
-# ]
-# all_dfs = {}
-# for tf, dir in product(timeframes, directions):
-#     print(f"\ndf_{tf}_{dir}")
-#     all_dfs[f"df_{tf}_{dir}"] = (df.loc[(df.timeframe == tf) & (df.direction == dir)].reset_index(drop=True))
-#
-#     conf_corr = all_dfs[f"df_{tf}_{dir}"].confidence.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
-#     conf_l_corr = all_dfs[f"df_{tf}_{dir}"].confidence_l.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
-#     conf_s_corr = all_dfs[f"df_{tf}_{dir}"].confidence_s.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
-#     wanted_corr = all_dfs[f"df_{tf}_{dir}"].wanted.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
-#     inval_corr = all_dfs[f"df_{tf}_{dir}"].inval_distance.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
-#     signal_corr = all_dfs[f"df_{tf}_{dir}"].score.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
-#     perf_ema4_corr = all_dfs[f"df_{tf}_{dir}"].perf_ema4.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
-#     perf_ema8_corr = all_dfs[f"df_{tf}_{dir}"].perf_ema8.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
-#     perf_ema16_corr = all_dfs[f"df_{tf}_{dir}"].perf_ema16.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
-#     perf_ema32_corr = all_dfs[f"df_{tf}_{dir}"].perf_ema32.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
-#     perf_ema64_corr = all_dfs[f"df_{tf}_{dir}"].perf_ema64.corr(all_dfs[f"df_{tf}_{dir}"].rpnl)
-#     print(f"confidence correlation: {conf_corr:.1%}, \nlong confidence correlation: {conf_l_corr:.1%}, "
-#           f"\nshort confidence correlation: {conf_s_corr:.1%}, \nwanted correlation: {wanted_corr:.1%}, "
-#           f"\ninval correlation: {inval_corr:.1%}, \nsignal score correlation: {signal_corr:.1%}"
-#           f"\nperf_ema4 correlation: {perf_ema4_corr:.1%}, \nperf_ema8 correlation: {perf_ema8_corr:.1%}, "
-#           f"\nperf_ema16 correlation: {perf_ema16_corr:.1%}, \nperf_ema32 correlation: {perf_ema32_corr:.1%}, "
-#           f"\nperf_ema64 correlation: {perf_ema64_corr:.1%}")
-#
-#     print(all_dfs[f"df_{tf}_{dir}"].tail())
+    print(all_dfs[f"df_{tf}_{dir}"].tail())
