@@ -392,7 +392,7 @@ class TradingSession:
 
     def set_ohlc_tf(self, tf):
         self.ohlc_tf = tf
-        self.ohlc_path = self.ohlc_path()
+        # self.ohlc_path = self.ohlc_path()
 
     @uf.retry_on_busy()
     def get_pair_info(self, pair):

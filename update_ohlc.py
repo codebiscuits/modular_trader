@@ -4,7 +4,7 @@ from resources import binance_funcs as funcs
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from sessions import LightSession, TradingSession
+from sessions import TradingSession
 from pyarrow import ArrowInvalid
 import json
 from resources.loggers import create_logger

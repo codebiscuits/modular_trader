@@ -11,7 +11,6 @@ from binance import Client
 import binance.exceptions as bx
 import resources.keys as keys
 from resources.loggers import create_logger
-import requests
 
 if not Path('/pi_2.txt').exists():
     from sklearnex import patch_sklearn
@@ -27,8 +26,6 @@ from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 from imblearn.under_sampling import RandomUnderSampler
 
 running_on_pi = Path('/pi_2.txt').exists()
-if not running_on_pi:
-    import update_ohlc
 
 
 def init_client(max_retries: int = 360, delay: int = 5):
@@ -71,10 +68,10 @@ def feature_selection(X: np.ndarray, y, limit):
                                                     max_depth=12,
                                                     learning_rate=0.3)
 
-    selector_1 = SFS(estimator=pre_selector_model, k_features=8, forward=True,
+    selector_1 = SFS(estimator=pre_selector_model, k_features=10, forward=True,
                      floating=False, verbose=0, scoring=scorer, n_jobs=-1)
-    selector_2 = SelectKBest(f_classif, k=8)
-    selector_3 = SelectKBest(mutual_info_classif, k=8)
+    selector_2 = SelectKBest(f_classif, k=10)
+    selector_3 = SelectKBest(mutual_info_classif, k=10)
     # selector_4 = SelectKBest(chi2, k=8)
 
     selector_1 = selector_1.fit(X, y)
@@ -217,9 +214,9 @@ for n, fit in fits:
     rus = RandomUnderSampler(random_state=0)
     X, y = rus.fit_resample(X, y)
 
-    # if running_on_pi:
-    selected = load_features(folder, side, timeframe)
-    X = X.loc[:, selected]
+    if running_on_pi:
+        selected = load_features(folder, side, timeframe)
+        X = X.loc[:, selected]
 
     # TODO when i refactor this into a pipeline, i will need to remove the equivalent step from the agent definition
     X, _, cols = mlf.transform_columns(X, X)
