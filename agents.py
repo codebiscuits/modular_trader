@@ -2473,7 +2473,7 @@ class TrailFractals(Agent):
                      f'{self.training_pair_selection}_{self.training_pairs_n}')
         self.id = (f"trail_fractals_{self.tf}_{self.offset}_{self.width}_{self.spacing}_"
                    f"{self.training_pair_selection}_{self.training_pairs_n}")
-        self.ohlc_length = 201
+        self.ohlc_length = 251
         self.trail_stop = True
         self.notes = ''
         Agent.__init__(self, session)

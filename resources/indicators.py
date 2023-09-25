@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import resources.binance_funcs as funcs
 
 pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
@@ -577,3 +578,35 @@ def vol_profile_poc(df: pd.DataFrame, bins: int=100) -> float:
 
     return bin_mids.iloc[np.argmax(vol_bars)]
 
+
+def htf_pivots(df: pd.DataFrame, htf: str, base_tf: str) -> pd.DataFrame:
+    """calculates classic htf pivots on daily, weekly or monthly timeframes"""
+
+    # TODO i need to test and plot this indicator to see if i've written it correctly, then turn it into some useful
+    #  features
+
+    htf_map = {'daily': '1d', 'weekly': '1w', 'monthly': '1m'}
+    tf_map = {'15m': '15T', '30m': '30T', '1h': '1H', '2h': '2H', '4h': '4H', '6h': '6H',
+              '8h': '8H', '12h': '12H', '1d': '1D', '3d': '3D', '1w': '1W', '1mon': '1M'}
+
+    # resample high, low and close
+    htf_df = funcs.resample_ohlc(htf_map[htf], None, df).shift()
+    htf_df['pivot'] = (htf_df.high + htf_df.low + htf_df.close) / 3
+    df[f'{htf}_pivot'] = htf_df.pivot.resample(tf_map[base_tf]).interpolate(method='pad')
+
+    htf_df['pivot_s1'] = (htf_df.pivot * 2) - htf_df.high
+    htf_df['pivot_r1'] = (htf_df.pivot * 2) - htf_df.low
+    df[f'{htf}_pivot_s1'] = htf_df.pivot_s1.resample(tf_map[base_tf]).interpolate(method='pad')
+    df[f'{htf}_pivot_r1'] = htf_df.pivot_r1.resample(tf_map[base_tf]).interpolate(method='pad')
+
+    htf_df['pivot_s2'] = htf_df.pivot - (htf_df.high - htf_df.low)
+    htf_df['pivot_r2'] = htf_df.pivot + (htf_df.high - htf_df.low)
+    df[f'{htf}_pivot_s2'] = htf_df.pivot_s2.resample(tf_map[base_tf]).interpolate(method='pad')
+    df[f'{htf}_pivot_r2'] = htf_df.pivot_r2.resample(tf_map[base_tf]).interpolate(method='pad')
+
+    htf_df['pivot_s3'] = htf_df.low - (2 * (htf_df.high - htf_df.pivot))
+    htf_df['pivot_r3'] = htf_df.high + (2 * (htf_df.pivot - htf_df.low))
+    df[f'{htf}_pivot_s3'] = htf_df.pivot_s3.resample(tf_map[base_tf]).interpolate(method='pad')
+    df[f'{htf}_pivot_r3'] = htf_df.pivot_r3.resample(tf_map[base_tf]).interpolate(method='pad')
+
+    return df

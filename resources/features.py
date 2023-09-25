@@ -14,6 +14,7 @@ Process for adding new features:
     scripts have access to the feature when developing and training models
 """
 
+
 def add_feature(df, name, timeframe):
     feature_lookup = {
         'atr_z_25': {'call': atr_zscore, 'params': (df, 25)},
@@ -182,8 +183,8 @@ def add_feature(df, name, timeframe):
         'stoch_vwma_ratio_25': {'call': stoch_vwma_ratio, 'params': (df, 25)},
         'stoch_vwma_ratio_50': {'call': stoch_vwma_ratio, 'params': (df, 50)},
         'stoch_vwma_ratio_100': {'call': stoch_vwma_ratio, 'params': (df, 100)},
-        'fractal_trend_age_long': {'call': fractal_trend_age, 'params': (df, )},
-        'fractal_trend_age_short': {'call': fractal_trend_age, 'params': (df, )},
+        'fractal_trend_age_long': {'call': fractal_trend_age, 'params': (df,)},
+        'fractal_trend_age_short': {'call': fractal_trend_age, 'params': (df,)},
         'volume_climax_up_12': {'call': volume_climax_up, 'params': (df, 12)},
         'volume_climax_up_25': {'call': volume_climax_up, 'params': (df, 25)},
         'volume_climax_up_50': {'call': volume_climax_up, 'params': (df, 50)},
@@ -216,13 +217,15 @@ def vol_doji(df: pd.DataFrame, thresh: float, lookback: int, weighted: bool) -> 
     pass
 
 
-def htf_fractals_proximity(df: pd.DataFrame, orig_tf: str, htf: str='W', frac_width: int=3) -> pd.DataFrame:
+def htf_fractals_proximity(df: pd.DataFrame, orig_tf: str, htf: str = 'W', frac_width: int = 3) -> pd.DataFrame:
     """resamples to weekly or monthly timeframe, calculates williams fractals on that, works out which is closest to the
     current price and returns the pct difference"""
     # TODO this isn't finished yet
 
     # only need to resample close column
-    closes = df.close.resample(htf).shift(1) # make sure the close price for each week is recorded on the following week
+    closes = df.close.resample(htf).shift(
+        1)  # make sure the close price for each week is recorded on the following week
+    # is this definitely giving the last close of each period?
 
     fractal_high = np.where(closes == closes.rolling(frac_width, center=True).max(), closes, np.nan)
     fractal_low = np.where(closes == closes.rolling(frac_width, center=True).min(), closes, np.nan)
@@ -254,28 +257,28 @@ def two_emas(df: pd.DataFrame, a: int, b: int) -> pd.DataFrame:
     return df
 
 
-def rsi_timing_long(df: pd.DataFrame, lookback: int, rsi_length: int=14) -> pd.DataFrame:
+def rsi_timing_long(df: pd.DataFrame, lookback: int, rsi_length: int = 14) -> pd.DataFrame:
     """returns True if all rsi values in the lookback window are less than the value 3 periods earlier, and the
     current value is less than 30"""
     if f"rsi_{rsi_length}" not in df.columns:
         df[f"rsi_{rsi_length}"] = ind.rsi(df.close, rsi_length)
 
     df[f"rsi_timing_l_{lookback}_{rsi_length}"] = (((df[f"rsi_{rsi_length}"].pct_change(3) < 0)
-                                                 .rolling(lookback).sum() + (df[f"rsi_{rsi_length}"] < 30))
-                                                == lookback + 1)
+                                                    .rolling(lookback).sum() + (df[f"rsi_{rsi_length}"] < 30))
+                                                   == lookback + 1)
 
     return df
 
 
-def rsi_timing_short(df: pd.DataFrame, lookback: int, rsi_length: int=14) -> pd.DataFrame:
+def rsi_timing_short(df: pd.DataFrame, lookback: int, rsi_length: int = 14) -> pd.DataFrame:
     """returns True if all rsi values in the lookback window are greater than the value 3 periods earlier, and the
     current value is greater than 70"""
     if f"rsi_{rsi_length}" not in df.columns:
         df[f"rsi_{rsi_length}"] = ind.rsi(df.close, rsi_length)
 
     df[f"rsi_timing_s_{lookback}_{rsi_length}"] = (((df[f"rsi_{rsi_length}"].pct_change(3) > 0)
-                                                 .rolling(lookback).sum() + (df[f"rsi_{rsi_length}"] > 70))
-                                                == lookback + 1)
+                                                    .rolling(lookback).sum() + (df[f"rsi_{rsi_length}"] > 70))
+                                                   == lookback + 1)
 
     return df
 
@@ -330,14 +333,14 @@ def low_volume_bar(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
 
 
 def round_numbers_proximity(df: pd.DataFrame) -> pd.DataFrame:
-    nums = [x*y for x in range(1, 10) for y in [10**z for z in range(-4, 6)]]
+    nums = [x * y for x in range(1, 10) for y in [10 ** z for z in range(-4, 6)]]
     df['round_num_prox'] = df.vwma.map(lambda x: min([abs(x - value) / ((x + value) / 2) for value in nums]))
 
     return df
 
 
 def round_numbers_close(df: pd.DataFrame, threshold) -> pd.DataFrame:
-    nums = [x*y for x in range(1, 10) for y in [10**z for z in range(-4, 6)]]
+    nums = [x * y for x in range(1, 10) for y in [10 ** z for z in range(-4, 6)]]
     round_num_prox = df.vwma.map(lambda x: min([abs(x - value) / ((x + value) / 2) for value in nums]))
     df[f"round_nums_close_{threshold}"] = (round_num_prox * 100) < threshold
 
@@ -345,14 +348,14 @@ def round_numbers_close(df: pd.DataFrame, threshold) -> pd.DataFrame:
 
 
 def big_round_nums_proximity(df: pd.DataFrame) -> pd.DataFrame:
-    big_nums = [10**z for z in range(-4, 6)]
+    big_nums = [10 ** z for z in range(-4, 6)]
     df['big_round_num_prox'] = df.vwma.map(lambda x: min([abs(x - value) / ((x + value) / 2) for value in big_nums]))
 
     return df
 
 
 def big_round_nums_close(df: pd.DataFrame, threshold) -> pd.DataFrame:
-    big_nums = [10**z for z in range(-4, 6)]
+    big_nums = [10 ** z for z in range(-4, 6)]
     big_round_num_prox = df.vwma.map(lambda x: min([abs(x - value) / ((x + value) / 2) for value in big_nums]))
     df[f"big_round_nums_close_{threshold}"] = (big_round_num_prox * 100) < threshold
 
@@ -429,7 +432,7 @@ def doji(df: pd.DataFrame, thresh: float, lookback: int, weighted: bool) -> pd.D
     is multiplied by the volume z-score, so higher than average volume will increase the chance of the wick being
     considered over the threshold"""
 
-    w = f'weighted_{int(thresh*100)}' if weighted else 'unweighted'
+    w = f'weighted_{int(thresh * 100)}' if weighted else 'unweighted'
 
     if f'{w}_bull_doji' in df.columns:
         return df
@@ -462,7 +465,7 @@ def bull_bear_bar(df) -> pd.DataFrame:
     return df
 
 
-def hour(df:pd.DataFrame) -> pd.DataFrame:
+def hour(df: pd.DataFrame) -> pd.DataFrame:
     df['hour'] = df.timestamp.dt.hour
     return df
 
@@ -546,6 +549,8 @@ def hma_ratio(df, length) -> pd.DataFrame:
 
 
 def channel_mid_ratio(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
+    """ratio of closing price to the mid-point between the highest high and lowest low over the lookback window"""
+
     chan_hi = df.high.rolling(lookback).max()
     chan_lo = df.low.rolling(lookback).min()
 
@@ -555,6 +560,10 @@ def channel_mid_ratio(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
 
 
 def channel_mid_width(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
+    """this is a kind of volatility metric, similar to bollinger bands width. the channel is the space between the
+    highest high and the lowest low in the lookback  window, so the width of the channel (as a proportion of the
+    mid-price) is an indication of how volatile price has been in that window."""
+
     chan_hi = df.high.rolling(lookback).max()
     chan_lo = df.low.rolling(lookback).min()
 
@@ -699,7 +708,7 @@ def vol_delta(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def fractal_trend_age(df: pd.DataFrame, width: int=5, spacing: int=2) -> pd.DataFrame:
+def fractal_trend_age(df: pd.DataFrame, width: int = 5, spacing: int = 2) -> pd.DataFrame:
     if 'frac_low' not in df.columns:
         df = ind.williams_fractals(df, width, spacing)
         df = df.drop(['fractal_high', 'fractal_low', f"atr-{spacing}", f"atr_{spacing}_pct"], axis=1)
@@ -753,7 +762,6 @@ def stoch_m(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
     df[f"stoch_m_{lookback}"] = cond_1 & cond_2 & cond_3 & cond_4 & cond_5
 
     return df
-
 
 # def rolling_poc(df: pd.DataFrame, lookback: int=24) -> pd.DataFrame:
 #     data = df.loc[:, ['close', 'base_vol']]

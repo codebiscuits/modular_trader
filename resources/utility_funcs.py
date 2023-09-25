@@ -205,7 +205,7 @@ def market_benchmark(session) -> None:
         valid = True
         if (all_pairs / valid_pairs) > 1.5:
             logger.warning(f'warning (market benchmark): lots of pairs ohlc data not up to date: {all_pairs = }, '
-                           f'{len(all_1d) = }')
+                           f'{valid_pairs = }')
     else:
         valid = False
 
