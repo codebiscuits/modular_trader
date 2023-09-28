@@ -31,6 +31,15 @@ import lightgbm as lgbm
 from optuna import Trial, logging as op_logging, visualization, integration, pruners, create_study
 from optuna.samplers import TPESampler
 
+################################################ - IMPORTANT - #####################################################
+
+"""
+I have trained the models on adjusted targets - ie i have classified positive PnL as being pnl > some threshold.
+I have calculated the final validation scores for each test run by comparing the model's predictions against un-adjusted 
+targets - ie PnL > 0.
+So just remember that if the scores are really weird, then this may be a stupid thing to do.
+"""
+
 op_logging.set_verbosity(op_logging.ERROR)
 warnings.filterwarnings('ignore')
 
@@ -39,15 +48,23 @@ all_start = time.perf_counter()
 logger = create_logger('trail_fractals_2', 'trail_fractals_2')
 
 def create_dataset(side, tf, selection_method, num_pairs, frac_width, atr_spacing, thresh):
-    records_path = Path(f"/home/ross/coding/modular_trader/records/trail_fractals_{tf}_"
-                        f"None_{frac_width}_{atr_spacing}_{selection_method}_{num_pairs}")
+    records_path_1 = Path(f"/home/ross/coding/modular_trader/records/trail_fractals_{tf}_"
+                        f"None_{frac_width}_{atr_spacing}_{'1d_volumes'}_{30}")
 
-    with open(records_path / "closed_trades.json", 'r') as real_file:
-        real_records = json.load(real_file)
-    with open(records_path / "closed_sim_trades.json", 'r') as sim_file:
-        sim_records = json.load(sim_file)
+    records_path_2 = Path(f"/home/ross/coding/modular_trader/records/trail_fractals_{tf}_"
+                        f"None_{frac_width}_{atr_spacing}_{'1w_volumes'}_{100}")
 
-    all_records = real_records | sim_records
+    with open(records_path_1 / "closed_trades.json", 'r') as real_file:
+        real_records_1 = json.load(real_file)
+    with open(records_path_1 / "closed_sim_trades.json", 'r') as sim_file:
+        sim_records_1 = json.load(sim_file)
+
+    with open(records_path_2 / "closed_trades.json", 'r') as real_file:
+        real_records_2 = json.load(real_file)
+    with open(records_path_2 / "closed_sim_trades.json", 'r') as sim_file:
+        sim_records_2 = json.load(sim_file)
+
+    all_records = real_records_1 | sim_records_1 | real_records_2 | sim_records_2
     observations = []
 
     for position in all_records.values():
@@ -74,18 +91,19 @@ def create_dataset(side, tf, selection_method, num_pairs, frac_width, atr_spacin
             perf_ema_16=signal['perf_ema16'],
             perf_ema_32=signal['perf_ema32'],
             perf_ema_64=signal['perf_ema64'],
-            pnl=pnl > thresh
+            pnl=pnl > 0,
+            win=pnl > thresh
         )
         observations.append(observation)
 
     return pd.DataFrame(observations)
 
-def feature_selection(X, y, scorer):
+def feature_selection(X, y, scorer, arch):
     # feature selection on base model
     selector_model = lgbm.LGBMClassifier(objective='binary',
                                          random_state=42,
                                          n_estimators=50,
-                                         boosting='gbdt',
+                                         boosting=arch,
                                          verbosity=-1)
     # lgbm long: 59.4, 59.7, 58.4, 62.2 1h 13m - short: 64.1, 66.3, 65.1, 69.5 1h 1m
 
@@ -104,16 +122,17 @@ def feature_selection(X, y, scorer):
 
     return X, y
 
-def trail_fractals_2(side, tf, selection_method, num_pairs, frac_width, atr_spacing, thresh):
+def trail_fractals_2(side, tf, frac_width, atr_spacing, thresh, arch):
     tf_start = time.perf_counter()
 
-    results = create_dataset(side, tf, selection_method, num_pairs, frac_width, atr_spacing, thresh)
+    results = create_dataset(side, tf, frac_width, atr_spacing, thresh)
 
     fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
 
     # split features from labels
     X = results.drop('pnl', axis=1)
-    y = results.pnl
+    y = results.win  # pnl > threshold
+    z = results.pnl  # pnl > 0
     cols = X.columns
 
     # random undersampling
@@ -123,6 +142,7 @@ def trail_fractals_2(side, tf, selection_method, num_pairs, frac_width, atr_spac
 
     # split off validation set
     X, X_val, y, y_val = train_test_split(X, y, train_size=0.9, random_state=43875)
+    _, _, z, z_val = train_test_split(X, z, train_size=0.9, random_state=43875)
 
     # feature scaling
     scaler = StandardScaler()
@@ -130,19 +150,19 @@ def trail_fractals_2(side, tf, selection_method, num_pairs, frac_width, atr_spac
     X_val = scaler.transform(X_val)
 
     # feature selection
-    # X, y = feature_selection(X, y, fb_scorer)
+    X, y = feature_selection(X, y, fb_scorer, arch)
 
     # hyperparameter optimisation
-    model = mlf.fit_lgbm(X, y)
+    model = mlf.fit_lgbm(X, y, arch)
 
     # test performance on unseen data
     best_params = model.params
-    val_model = lgbm.LGBMClassifier(objective='binary', **best_params)
+    val_model = lgbm.LGBMClassifier(objective='binary', **best_params, boosting_type=arch)
     val_model.fit(X, y)
     y_pred = val_model.predict(X_val)
     y_prob = val_model.predict_proba(X_val)
-    accuracy = val_model.score(X_val, y_val)
-    f_beta = fbeta_score(y_val, y_pred, beta=0.333)
+    accuracy = val_model.score(X_val, z_val)
+    f_beta = fbeta_score(y_val, z_pred, beta=0.333)
     logger.debug(f"Performance on validation set: accuracy: {accuracy:.1%}, f beta: {f_beta:.1%}")
 
     tf_end = time.perf_counter()
@@ -150,9 +170,9 @@ def trail_fractals_2(side, tf, selection_method, num_pairs, frac_width, atr_spac
     logger.debug(
     f"\nTest time taken: {int(tf_elapsed // 3600)}h {int(tf_elapsed // 60) % 60}m {tf_elapsed % 60:.1f}s")
 
-for thresh in [0.0, 0.1, 0.2, 0.4]:
+for thresh, architecture in itertools.product([0.0, 0.1, 0.2, 0.4], ['gbdt', 'rf']):
     print(f"\nTesting {thresh}")
-    trail_fractals_2('short', '1h', '1d_volumes', 30, 5, 2, thresh)
+    trail_fractals_2('short', '1h', 5, 2, thresh, architecture)
 
 all_end = time.perf_counter()
 all_elapsed = all_end - all_start

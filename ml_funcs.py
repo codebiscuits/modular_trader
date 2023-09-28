@@ -338,7 +338,7 @@ def add_features(df, tf):
     return df.copy()
 
 
-def fit_lgbm(X, y):
+def fit_lgbm(X, y, arch):
     X = X.astype('float64')
     y = y.astype('int32')
 
@@ -369,7 +369,7 @@ def fit_lgbm(X, y):
             X_train, X_test = X[train_idx], X[test_idx]
             y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
 
-            model = lgbm.LGBMClassifier(objective='binary', **params)
+            model = lgbm.LGBMClassifier(objective='binary', boosting_type=arch, **params)
             model.fit(X_train, y_train,
                       eval_set=[(X_test, y_test)],
                       eval_metric='binary_logloss',
@@ -386,7 +386,7 @@ def fit_lgbm(X, y):
     sampler = TPESampler(seed=11)
     study = create_study(sampler=sampler, pruner=pruner, direction='minimize')
     func = lambda trial: objective(trial, X, y)
-    study.optimize(func, n_trials=100, show_progress_bar=True)
+    study.optimize(func, n_trials=1000, show_progress_bar=True)
 
     best = study.best_trial
     print(f"Best trial: {best.value:.1%}")
