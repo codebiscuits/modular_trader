@@ -386,7 +386,7 @@ def fit_lgbm(X, y, arch):
     sampler = TPESampler(seed=11)
     study = create_study(sampler=sampler, pruner=pruner, direction='minimize')
     func = lambda trial: objective(trial, X, y)
-    study.optimize(func, n_trials=1000, show_progress_bar=True)
+    study.optimize(func, n_trials=100, show_progress_bar=True)
 
     best = study.best_trial
     print(f"Best trial: {best.value:.1%}")
