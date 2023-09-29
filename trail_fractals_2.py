@@ -22,7 +22,7 @@ if not running_on_pi:
 
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.model_selection import GridSearchCV, train_test_split  # , cross_val_score
-from sklearn.metrics import fbeta_score, make_scorer
+from sklearn.metrics import accuracy_score, fbeta_score, make_scorer
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif  # , chi2
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, QuantileTransformer
@@ -31,6 +31,7 @@ from imblearn.under_sampling import RandomUnderSampler
 import lightgbm as lgbm
 from optuna import Trial, logging as op_logging, visualization, integration, pruners, create_study
 from optuna.samplers import TPESampler
+from xgboost import DMatrix
 
 ################################################ - IMPORTANT - #####################################################
 
@@ -101,12 +102,12 @@ def create_dataset(side, tf, frac_width, atr_spacing, thresh):
     return pd.DataFrame(observations)
 
 
-def feature_selection(X, y, scorer, arch):
+def feature_selection(X, y, X_val, scorer):
     # feature selection on base model
     selector_model = lgbm.LGBMClassifier(objective='binary',
                                          random_state=42,
                                          n_estimators=50,
-                                         boosting=arch,
+                                         boosting='gbdt',
                                          verbosity=-1)
     # lgbm long: 59.4, 59.7, 58.4, 62.2 1h 13m - short: 64.1, 66.3, 65.1, 69.5 1h 1m
 
@@ -118,15 +119,16 @@ def feature_selection(X, y, scorer, arch):
 
     selector = selector.fit(X, y)
     X = selector.transform(X)
+    X_val = selector.transform(X_val)
     print(f"Sequential FS selected: {selector.k_feature_names_}")
 
     sel_score = selector.k_score_
     print(f"Model score after feature selection: {sel_score:.1%}")
 
-    return X, y
+    return X, y, X_val
 
 
-def trail_fractals_2(side, tf, frac_width, atr_spacing, thresh, arch, s):
+def trail_fractals_2(side, tf, frac_width, atr_spacing, thresh):
     tf_start = time.perf_counter()
 
     results = create_dataset(side, tf, frac_width, atr_spacing, thresh)
@@ -136,7 +138,6 @@ def trail_fractals_2(side, tf, frac_width, atr_spacing, thresh, arch, s):
     # split features from labels
     X = results.drop('win', axis=1)
     y = results.win  # pnl > threshold
-    cols = X.columns
 
     # random undersampling
     rus = RandomUnderSampler(random_state=0)
@@ -145,46 +146,70 @@ def trail_fractals_2(side, tf, frac_width, atr_spacing, thresh, arch, s):
     # split off validation set
     X, X_val, y, y_val = train_test_split(X, y, train_size=0.9, random_state=43875)
 
-    # split features from validation labels
+    # split off validation labels
     z = X.pnl  # pnl > 0
     X = X.drop('pnl', axis=1)
     z_val = X_val.pnl  # pnl > 0
     X_val = X_val.drop('pnl', axis=1)
+    cols = X.columns
 
-    print(f"Number of observations in dataset: {len(y)}")
+    logger.debug(f"{len(y)} observations in {tf} {side} dataset")
 
     # feature scaling
-    scalers = {1: StandardScaler, 2: MinMaxScaler, 3: QuantileTransformer}
-    scaler = scalers[s]()
+    scaler = QuantileTransformer()
     X = scaler.fit_transform(X)
     X_val = scaler.transform(X_val)
 
-    # feature selection
-    # X, y = feature_selection(X, y, fb_scorer, arch)
+    # quick feature selection
+    # selector = SelectKBest(mutual_info_classif, k=7)
+    # selector.fit(X, y)
+    # cols_idx = list(selector.get_support(indices=True))
+    # selected_columns = [col for i, col in enumerate(cols) if i in cols_idx]
+    # print(selected_columns)
+    # X = X[:, cols_idx]
+    # X_val = X_val[:, cols_idx]
+
+    # slow feature selection
+    X, y, X_val = feature_selection(X, y, X_val, fb_scorer)
 
     # hyperparameter optimisation
-    model = mlf.fit_lgbm(X, y, arch)
-
-    # test performance on unseen data
-    best_params = model.params
-    val_model = lgbm.LGBMClassifier(objective='binary', **best_params, boosting_type=arch)
-    val_model.fit(X, y)
-    y_pred = val_model.predict(X_val)
-    y_prob = val_model.predict_proba(X_val)
-    accuracy = val_model.score(X_val, z_val)
+    start_lgb = time.perf_counter()
+    lgbm_model = mlf.fit_lgbm(X, y, 1000)
+    y_pred = lgbm_model.predict(X_val)
+    accuracy = accuracy_score(z_val, y_pred)
     f_beta = fbeta_score(z_val, y_pred, beta=0.333)
-    logger.debug(f"Performance on validation set: accuracy: {accuracy:.1%}, f beta: {f_beta:.1%}")
+    logger.debug(f"LGBM Performance on validation set: accuracy: {accuracy:.1%}, f beta: {f_beta:.1%}")
+    end_lgb = time.perf_counter()
+    lgb_elapsed = end_lgb - start_lgb
+    logger.debug(f"LGB time taken: {int(lgb_elapsed // 3600)}h {int(lgb_elapsed // 60) % 60}m {lgb_elapsed % 60:.1f}s")
+
+    xgb_start = time.perf_counter()
+    xgb_model = mlf.fit_xgb(X, y, 1000)
+    d_val = DMatrix(X_val, label=z_val)
+    y_pred = xgb_model.predict(d_val) > 0.5
+    # print(z_val)
+    # print(y_pred)
+    accuracy = accuracy_score(z_val, y_pred)
+    f_beta = fbeta_score(z_val, y_pred, beta=0.333)
+    logger.debug(f"XGB Performance on validation set: accuracy: {accuracy:.1%}, f beta: {f_beta:.1%}")
+    xgb_end = time.perf_counter()
+    xgb_elapsed = xgb_end - xgb_start
+    logger.debug(f"XGB time taken: {int(xgb_elapsed // 3600)}h {int(xgb_elapsed // 60) % 60}m {xgb_elapsed % 60:.1f}s")
+
 
     tf_end = time.perf_counter()
     tf_elapsed = tf_end - tf_start
-    logger.debug(
-        f"\nTest time taken: {int(tf_elapsed // 3600)}h {int(tf_elapsed // 60) % 60}m {tf_elapsed % 60:.1f}s")
+    logger.debug(f"Test time taken: {int(tf_elapsed // 3600)}h {int(tf_elapsed // 60) % 60}m {tf_elapsed % 60:.1f}s")
 
-
-for thresh, architecture, scaler in itertools.product([0.0, 0.1, 0.2, 0.4], ['gbdt', 'rf'], [1, 2, 3]):
-    print(f"\nTesting threshold {thresh}, {architecture}, scaler {scaler}")
-    trail_fractals_2('short', '1h', 5, 2, thresh, architecture, scaler)
+trail_fractals_2('long', '1h', 5, 2, 0.4)
+trail_fractals_2('short', '1h', 5, 2, 0.4)
+trail_fractals_2('long', '4h', 5, 2, 0.4)
+trail_fractals_2('short', '4h', 5, 2, 0.4)
+trail_fractals_2('long', '12h', 5, 2, 0.4)
+trail_fractals_2('short', '12h', 5, 2, 0.4)
+trail_fractals_2('long', '1d', 5, 2, 0.4)
+trail_fractals_2('short', '1d', 5, 2, 0.4)
 
 all_end = time.perf_counter()
 all_elapsed = all_end - all_start
-logger.debug(f"\nTotal time taken: {int(all_elapsed // 3600)}h {int(all_elapsed // 60) % 60}m {all_elapsed % 60:.1f}s")
+logger.debug(f"Total time taken: {int(all_elapsed // 3600)}h {int(all_elapsed // 60) % 60}m {all_elapsed % 60:.1f}s")

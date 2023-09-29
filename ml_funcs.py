@@ -26,6 +26,7 @@ from sklearn.inspection import permutation_importance
 from imblearn.under_sampling import RandomUnderSampler
 from xgboost import XGBClassifier
 import lightgbm as lgbm
+import xgboost as xgb
 from optuna import Trial, logging as op_logging, visualization, integration, pruners, create_study
 from optuna.samplers import TPESampler
 
@@ -338,7 +339,7 @@ def add_features(df, tf):
     return df.copy()
 
 
-def fit_lgbm(X, y, arch):
+def fit_lgbm(X, y, num):
     X = X.astype('float64')
     y = y.astype('int32')
 
@@ -369,7 +370,7 @@ def fit_lgbm(X, y, arch):
             X_train, X_test = X[train_idx], X[test_idx]
             y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
 
-            model = lgbm.LGBMClassifier(objective='binary', boosting_type=arch, **params)
+            model = lgbm.LGBMClassifier(objective='binary', boosting_type='gbdt', **params)
             model.fit(X_train, y_train,
                       eval_set=[(X_test, y_test)],
                       eval_metric='binary_logloss',
@@ -386,14 +387,75 @@ def fit_lgbm(X, y, arch):
     sampler = TPESampler(seed=11)
     study = create_study(sampler=sampler, pruner=pruner, direction='minimize')
     func = lambda trial: objective(trial, X, y)
-    study.optimize(func, n_trials=100, show_progress_bar=True)
+    study.optimize(func, n_trials=num)  #, show_progress_bar=True)
+    logger.debug(f"Optimisation Score: {study.best_trial.value:.1%}")
 
-    best = study.best_trial
-    print(f"Best trial: {best.value:.1%}")
-    print("Params:")
-    pprint(best.params)
+    # test performance on unseen data
+    best_params = study.best_trial.params
+    val_model = lgbm.LGBMClassifier(objective='binary', boosting_type='gbdt', **best_params)
+    val_model.fit(X, y)
 
-    return best
+    return val_model
+
+
+def fit_xgb(X, y, num):
+    X = X.astype('float64')
+    y = y.astype('int32')
+
+    d_train = xgb.DMatrix(X, label=y)
+
+    def objective(trial):
+        params = {
+            'verbosity': 0,
+            'eval_metric': 'auc',
+            'tree_method': 'hist',
+            'alpha': trial.suggest_float('alpha', 1e-8, 100.0, log=True),
+            'lambda': trial.suggest_float('lambda', 1e-8, 100.0, log=True),
+            'gamma': trial.suggest_float('gamma', 1e-8, 100.0, log=True),
+            'grow_policy': trial.suggest_categorical('grow_policy', ['depthwise', 'lossguide']),
+            'colsample_bytree': trial.suggest_float('colsample_bytree', 0.1, 1.0),
+            'colsample_bylevel': trial.suggest_float('colsample_bylevel', 0.1, 1.0),
+            'max_depth': trial.suggest_int('max_depth', 2, 30, step=1),
+            'subsample': trial.suggest_float('subsample', 0.1, 0.5),
+            'min_child_weight': trial.suggest_float('min_child_weight', 1e-4, 100.0),
+            'learning_rate': trial.suggest_float('learning_rate', 1e-8, 1.0),
+            'n_thread': -1
+        }
+
+
+        pruning_callback = integration.XGBoostPruningCallback(trial, 'test-auc')
+        history = xgb.cv(params, d_train,
+                         num_boost_round=50000,
+                         early_stopping_rounds=50,
+                         metrics=['auc'],
+                         nfold=5,
+                         verbose_eval=False,
+                         callbacks=[pruning_callback])
+
+        return history['test-auc-mean'].values[-1]
+
+    op_logging.set_verbosity(op_logging.ERROR)
+    # pruner = pruners.MedianPruner(n_warmup_steps=5)
+    pruner = pruners.SuccessiveHalvingPruner()
+    sampler = TPESampler(seed=11)
+    study = create_study(sampler=sampler, pruner=pruner, direction='maximize')
+    study.optimize(objective, n_trials=num)
+    logger.debug(f"Optimisation Score: {study.best_trial.value:.1%}")
+
+    best_params = study.best_trial.params
+    best_params['eval_metric'] = 'auc'
+
+    X, X_eval, y, y_eval = train_test_split(X, y, test_size=0.333, random_state=55)
+    d_fit = xgb.DMatrix(X, label=y)
+    d_eval = xgb.DMatrix(X_eval, label=y_eval)
+    best_model = xgb.train(params=best_params,
+                           dtrain=d_fit,
+                           evals=[(d_eval, 'eval')],
+                           num_boost_round=50000,
+                           early_stopping_rounds=100,
+                           verbose_eval=False)
+
+    return best_model
 
 
 def features_labels_split(df):
