@@ -108,23 +108,16 @@ def create_dataset(side, tf, frac_width, atr_spacing, thresh):
     return pd.DataFrame(observations)
 
 
-def feature_selection(X, y, X_val, scorer, arch):
+def feature_selection(X, y, X_val, scorer):
     # feature selection on base model
-    if arch == 'lgbm':
-        selector_model = lgbm.LGBMClassifier(objective='binary',
-                                             random_state=42,
-                                             n_estimators=50,
-                                             boosting='gbdt',
-                                             verbosity=-1)
-    elif arch == 'xgb':
-        selector_model = GradientBoostingClassifier(random_state=42,
-                                                    n_estimators=10000,
-                                                    validation_fraction=0.1,
-                                                    n_iter_no_change=50,
-                                                    subsample=0.5,
-                                                    min_samples_split=2,
-                                                    max_depth=12,
-                                                    learning_rate=0.3)
+    selector_model = GradientBoostingClassifier(random_state=42,
+                                                n_estimators=10000,
+                                                validation_fraction=0.1,
+                                                n_iter_no_change=50,
+                                                subsample=0.5,
+                                                min_samples_split=2,
+                                                max_depth=12,
+                                                learning_rate=0.3)
 
     selector = SFS(estimator=selector_model, k_features='best', forward=False, floating=True, verbose=0,
                    scoring=scorer, n_jobs=-1)
@@ -157,8 +150,6 @@ def trail_fractals_2(side, tf, frac_width, atr_spacing, thresh):
 
     # split off validation set
     X, X_val, y, y_val = train_test_split(X, y, train_size=0.9, random_state=43875, stratify=y)
-    if len(X_val) < 30:
-        logger.warning(f"Only {len(X_val)} observations in validation set, results will be unreliable.")
 
     # split off validation labels
     X = X.drop('pnl', axis=1)
@@ -167,7 +158,8 @@ def trail_fractals_2(side, tf, frac_width, atr_spacing, thresh):
     cols = X.columns
 
     print('')
-    logger.debug(f"{len(y)} observations in {tf} {side} dataset")
+    warn = f"*** WARNING only {len(X_val)} observations in validation set. ***" if len(X_val) < 30 else ''
+    logger.debug(f"{len(y)} observations in {tf} {side} dataset. {warn}")
 
     # feature scaling
     scaler = QuantileTransformer()
@@ -178,47 +170,36 @@ def trail_fractals_2(side, tf, frac_width, atr_spacing, thresh):
     selector = SelectKBest(mutual_info_classif, k=7)
     selector.fit(X, y)
     cols_idx = list(selector.get_support(indices=True))
-    lgb_feature_names = [col for i, col in enumerate(cols) if i in cols_idx]
-    xgb_feature_names = [col for i, col in enumerate(cols) if i in cols_idx]
-    lgb_X = X[:, cols_idx]
-    lgb_X_val = X_val[:, cols_idx]
-    xgb_X = X[:, cols_idx]
-    xgb_X_val = X_val[:, cols_idx]
+    feature_names = [col for i, col in enumerate(cols) if i in cols_idx]
+    X = X[:, cols_idx]
+    X_val = X_val[:, cols_idx]
 
     # slow feature selection
 
     # hyperparameter optimisation
-    start_lgb = time.perf_counter()
-    # lgb_X, y, lgb_X_val, lgb_selected = feature_selection(X, y, X_val, fb_scorer, 'lgbm')
-    # lgb_feature_names = [col for i, col in enumerate(cols) if i in lgb_selected]
-    lgbm_model = mlf.fit_lgbm(lgb_X, y, 1000)
+    hp_start = time.perf_counter()
+    # X, y, X_val, selected = feature_selection(X, y, X_val, fb_scorer)
+    # feature_names = [col for i, col in enumerate(cols) if i in selected]
+    model = mlf.fit_xgb(X, y, 1000)
 
-    y_pred = lgbm_model.predict(lgb_X_val)
+    d_val = DMatrix(X_val, label=z_val)
+    y_pred = model.predict(d_val) > 0.5
     accuracy = accuracy_score(z_val, y_pred)
     f_beta = fbeta_score(z_val, y_pred, beta=0.333)
-    logger.debug(f"LGBM Performance on validation set: accuracy: {accuracy:.1%}, f beta: {f_beta:.1%}")
-    end_lgb = time.perf_counter()
-    lgb_elapsed = end_lgb - start_lgb
-    logger.debug(f"LGB time taken: {int(lgb_elapsed // 3600)}h {int(lgb_elapsed // 60) % 60}m {lgb_elapsed % 60:.1f}s")
+    logger.debug(f"Performance on validation set: accuracy: {accuracy:.1%}, f beta: {f_beta:.1%}")
+    hp_end = time.perf_counter()
+    hp_elapsed = hp_end - hp_start
+    logger.debug(f"Hyperparameter tuning took: {int(hp_elapsed // 3600)}h {int(hp_elapsed // 60) % 60}m {hp_elapsed % 60:.1f}s")
 
-    xgb_start = time.perf_counter()
-    # xgb_X, y, xgb_X_val, xgb_selected = feature_selection(X, y, X_val, fb_scorer, 'xgb')
-    # xgb_feature_names = [col for i, col in enumerate(cols) if i in xgb_selected]
-    xgb_model = mlf.fit_xgb(xgb_X, y, 1000)
-
-    d_val = DMatrix(xgb_X_val, label=z_val)
-    y_pred = xgb_model.predict(d_val) > 0.5
-    accuracy = accuracy_score(z_val, y_pred)
-    f_beta = fbeta_score(z_val, y_pred, beta=0.333)
-    logger.debug(f"XGB Performance on validation set: accuracy: {accuracy:.1%}, f beta: {f_beta:.1%}")
-    xgb_end = time.perf_counter()
-    xgb_elapsed = xgb_end - xgb_start
-    logger.debug(f"XGB time taken: {int(xgb_elapsed // 3600)}h {int(xgb_elapsed // 60) % 60}m {xgb_elapsed % 60:.1f}s")
-
+    # TODO i want to try different undersamplers
+    # TODO i need to save the model and info in the correct folder
+    # TODO i need a way to differentiate between a model that has been trained on enough data and one that has not been
+    #  trained on enough data, so the trading system doesn't use the unreliable ones, and just uses the old way instead
 
     tf_end = time.perf_counter()
     tf_elapsed = tf_end - tf_start
     logger.debug(f"Test time taken: {int(tf_elapsed // 3600)}h {int(tf_elapsed // 60) % 60}m {tf_elapsed % 60:.1f}s")
+
 
 trail_fractals_2('long', '1h', 5, 2, 0.4)
 trail_fractals_2('short', '1h', 5, 2, 0.4)
@@ -231,4 +212,6 @@ trail_fractals_2('short', '1d', 5, 2, 0.4)
 
 all_end = time.perf_counter()
 all_elapsed = all_end - all_start
+logger.debug('')
+logger.debug('')
 logger.debug(f"Total time taken: {int(all_elapsed // 3600)}h {int(all_elapsed // 60) % 60}m {all_elapsed % 60:.1f}s")
