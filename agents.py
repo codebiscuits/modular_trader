@@ -221,7 +221,7 @@ class Agent:
             cs_trades = {}
             # logger.info(f'{cs_path} not found')
 
-        limit = 2000
+        limit = 5000
         if len(cs_trades.keys()) > limit:
             logger.info(f"{self.name} closed sim trades on record: {len(cs_trades.keys())}")
             closed_sim_tups = sorted(zip(cs_trades.keys(), cs_trades.values()), key=lambda x: int(x[0]))
@@ -1837,6 +1837,7 @@ class Agent:
 
         trade_id = int(datetime.now().timestamp() * 1000)
         del self.open_trades[pair]['position']
+        del self.open_trades[pair]['placeholder']
         self.closed_trades[trade_id] = self.open_trades[pair]
         self.record_trades(session, 'closed')
 
