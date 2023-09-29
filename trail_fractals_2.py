@@ -72,7 +72,10 @@ def create_dataset(side, tf, frac_width, atr_spacing, thresh):
 
     for position in all_records.values():
         signal = position['signal']
-        if signal['direction'] != side:
+        if ((signal['direction'] != side) or
+                (signal.get('confidence_l') is None) or
+                (signal.get('market_rank_1d') is None) or
+                (signal.get('perf_ema4') is None)):
             continue
 
         trade = position['trade']
@@ -81,22 +84,25 @@ def create_dataset(side, tf, frac_width, atr_spacing, thresh):
             if t.get('rpnl'):
                 pnl += t['rpnl']
 
-        observation = dict(
-            # asset=signal['asset'],
-            conf_l=signal['confidence_l'],
-            conf_s=signal['confidence_s'],
-            inval_ratio=signal['inval_ratio'],
-            mkt_rank_1d=signal['market_rank_1d'],
-            mkt_rank_1w=signal['market_rank_1w'],
-            mkt_rank_1m=signal['market_rank_1m'],
-            perf_ema_4=signal['perf_ema4'],
-            perf_ema_8=signal['perf_ema8'],
-            perf_ema_16=signal['perf_ema16'],
-            perf_ema_32=signal['perf_ema32'],
-            perf_ema_64=signal['perf_ema64'],
-            pnl=pnl > 0,
-            win=pnl > thresh
-        )
+        try:
+            observation = dict(
+                # asset=signal['asset'],
+                conf_l=signal['confidence_l'],
+                conf_s=signal['confidence_s'],
+                inval_ratio=signal['inval_ratio'],
+                mkt_rank_1d=signal['market_rank_1d'],
+                mkt_rank_1w=signal['market_rank_1w'],
+                mkt_rank_1m=signal['market_rank_1m'],
+                perf_ema_4=signal['perf_ema4'],
+                perf_ema_8=signal['perf_ema8'],
+                perf_ema_16=signal['perf_ema16'],
+                perf_ema_32=signal['perf_ema32'],
+                perf_ema_64=signal['perf_ema64'],
+                pnl=pnl > 0,
+                win=pnl > thresh
+            )
+        except KeyError:
+            logger.debug(pformat(position))
         observations.append(observation)
 
     return pd.DataFrame(observations)
@@ -153,6 +159,7 @@ def trail_fractals_2(side, tf, frac_width, atr_spacing, thresh):
     X_val = X_val.drop('pnl', axis=1)
     cols = X.columns
 
+    print('')
     logger.debug(f"{len(y)} observations in {tf} {side} dataset")
 
     # feature scaling
@@ -161,16 +168,16 @@ def trail_fractals_2(side, tf, frac_width, atr_spacing, thresh):
     X_val = scaler.transform(X_val)
 
     # quick feature selection
-    # selector = SelectKBest(mutual_info_classif, k=7)
-    # selector.fit(X, y)
-    # cols_idx = list(selector.get_support(indices=True))
-    # selected_columns = [col for i, col in enumerate(cols) if i in cols_idx]
-    # print(selected_columns)
-    # X = X[:, cols_idx]
-    # X_val = X_val[:, cols_idx]
+    selector = SelectKBest(mutual_info_classif, k=7)
+    selector.fit(X, y)
+    cols_idx = list(selector.get_support(indices=True))
+    selected_columns = [col for i, col in enumerate(cols) if i in cols_idx]
+    print(selected_columns)
+    X = X[:, cols_idx]
+    X_val = X_val[:, cols_idx]
 
     # slow feature selection
-    X, y, X_val = feature_selection(X, y, X_val, fb_scorer)
+    # X, y, X_val = feature_selection(X, y, X_val, fb_scorer)
 
     # hyperparameter optimisation
     start_lgb = time.perf_counter()
