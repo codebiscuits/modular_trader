@@ -175,19 +175,22 @@ def trail_fractals_2(side, tf, frac_width, atr_spacing, thresh):
     X_val = scaler.transform(X_val)
 
     # quick feature selection
-    # selector = SelectKBest(mutual_info_classif, k=7)
-    # selector.fit(X, y)
-    # cols_idx = list(selector.get_support(indices=True))
-    # selected_columns = [col for i, col in enumerate(cols) if i in cols_idx]
-    # print(selected_columns)
-    # X = X[:, cols_idx]
-    # X_val = X_val[:, cols_idx]
+    selector = SelectKBest(mutual_info_classif, k=7)
+    selector.fit(X, y)
+    cols_idx = list(selector.get_support(indices=True))
+    selected_columns = [col for i, col in enumerate(cols) if i in cols_idx]
+    print(selected_columns)
+
+    lgb_X = X[:, cols_idx]
+    lgb_X_val = X_val[:, cols_idx]
+    xgb_X = X[:, cols_idx]
+    xgb_X_val = X_val[:, cols_idx]
 
     # slow feature selection
 
     # hyperparameter optimisation
     start_lgb = time.perf_counter()
-    lgb_X, y, lgb_X_val = feature_selection(X, y, X_val, fb_scorer, 'lgbm')
+    # lgb_X, y, lgb_X_val = feature_selection(X, y, X_val, fb_scorer, 'lgbm')
     lgbm_model = mlf.fit_lgbm(lgb_X, y, 1000)
     y_pred = lgbm_model.predict(lgb_X_val)
     accuracy = accuracy_score(z_val, y_pred)
@@ -198,7 +201,7 @@ def trail_fractals_2(side, tf, frac_width, atr_spacing, thresh):
     logger.debug(f"LGB time taken: {int(lgb_elapsed // 3600)}h {int(lgb_elapsed // 60) % 60}m {lgb_elapsed % 60:.1f}s")
 
     xgb_start = time.perf_counter()
-    xgb_X, y, xgb_X_val = feature_selection(X, y, X_val, fb_scorer, 'xgb')
+    # xgb_X, y, xgb_X_val = feature_selection(X, y, X_val, fb_scorer, 'xgb')
     xgb_model = mlf.fit_xgb(xgb_X, y, 1000)
     d_val = DMatrix(xgb_X_val, label=z_val)
     y_pred = xgb_model.predict(d_val) > 0.5
