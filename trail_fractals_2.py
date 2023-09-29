@@ -156,7 +156,7 @@ def trail_fractals_2(side, tf, frac_width, atr_spacing, thresh):
     X, y = rus.fit_resample(X, y)
 
     # split off validation set
-    X, X_val, y, y_val = train_test_split(X, y, train_size=0.9, random_state=43875)
+    X, X_val, y, y_val = train_test_split(X, y, train_size=0.9, random_state=43875, stratify=y)
     if len(X_val) < 30:
         logger.warning(f"Only {len(X_val)} observations in validation set, results will be unreliable.")
 
