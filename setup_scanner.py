@@ -30,8 +30,8 @@ agents = []
 for timeframe, offset in session.timeframes:
     agents.extend(
         [
-            TrailFractals(session, timeframe, offset, '1d_volumes', 30),
-            TrailFractals(session, timeframe, offset, '1w_volumes', 100),
+            TrailFractals(session, timeframe, offset, 5, 2, '1d_volumes', 30),
+            TrailFractals(session, timeframe, offset, 5, 2, '1w_volumes', 100),
         ]
     )
 
@@ -320,86 +320,39 @@ tp_close_took = tp_close_end - tp_close_start
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 # calculate fixed risk for each agent using wanted rpnl
 
-logger.info(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Risk Scalars -+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n")
+logger.info(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Signal Scores -+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n")
 logger.info("these values have been clipped and normalised, so 0.5 is equivalent to break-even, 0 is the lowest "
             "possible value and 1 is the highest possible value")
 
 for agent in agents.values():
-    agent.pnls = dict(
-        spot=agent.get_pnls('spot'),
-        long=agent.get_pnls('long'),
-        short=agent.get_pnls('short'),
-    )
-    logger.info(f"\n{agent.id} scaled pnls")
-    if agent.mode == 'margin':
-        logger.info("Long:")
-        logger.info(f"EMA4: {agent.pnls['long']['ema_4']:.2f}, EMA8: {agent.pnls['long']['ema_8']:.2f}, "
-                    f"EMA16: {agent.pnls['long']['ema_16']:.2f}, EMA32: {agent.pnls['long']['ema_32']:.2f}, "
-                    f"EMA64: {agent.pnls['long']['ema_64']:.2f}")
-        logger.info("Short:")
-        logger.info(f"EMA4: {agent.pnls['short']['ema_4']:.2f}, EMA8: {agent.pnls['short']['ema_8']:.2f}, "
-                    f"EMA16: {agent.pnls['short']['ema_16']:.2f}, EMA32: {agent.pnls['short']['ema_32']:.2f}, "
-                    f"EMA64: {agent.pnls['short']['ema_64']:.2f}")
-    else:
-        logger.info("Spot:")
-        logger.info(f"EMA4: {agent.pnls['spot']['ema_4']:.2f}, EMA8: {agent.pnls['spot']['ema_8']:.2f}, "
-                    f"EMA16: {agent.pnls['spot']['ema_16']:.2f}, EMA32: {agent.pnls['spot']['ema_32']:.2f}, "
-                    f"EMA64: {agent.pnls['spot']['ema_64']:.2f}")
+    agent.print_rpnls()
 
 while processed_signals['unassigned']:
     signal = processed_signals['unassigned'].pop()
 
-    # when the secondary ml model is ready, it will replace the contents of this while-loop down to sig_score. I will
-    # simply pass the inval distance (0-1, 1 being 100% between entry and init stop), 5 perf_emas, the 3 market_ranks,
-    # and confidence numbers from however many ml models have made a prediction (2 currently), and the model will return
-    # a signal score. I record them all in the signal record, calculate size, and if the score is too low, move the
-    # signal over to sim_opens
+    # if the relevant secondary model is valid (sufficient training data) then the secondary_prediction method will be
+    # called, otherwise, secondary_manual_prediction (original, hand-made scoring algorithm) will be called.
 
-    signal['perf_ema4'] = agents[signal['agent']].pnls[signal['direction']]['ema_4']
-    signal['perf_ema8'] = agents[signal['agent']].pnls[signal['direction']]['ema_8']
-    signal['perf_ema16'] = agents[signal['agent']].pnls[signal['direction']]['ema_16']
-    signal['perf_ema32'] = agents[signal['agent']].pnls[signal['direction']]['ema_32']
-    signal['perf_ema64'] = agents[signal['agent']].pnls[signal['direction']]['ema_64']
-
-    sig_bias = signal['bias']
-
-    perf_score, rank_score = 0, 0
-    if signal['tf'] == '1h':
-        perf_score = ((signal['perf_ema64'] > 0.5) + (signal['perf_ema32'] > 0.5) + (signal['perf_ema16'] > 0.5)) / 3
-        rank_score = signal.get('market_rank_1d', 1) if sig_bias == 'bullish' else (1 - signal.get('market_rank_1d', 1))
-    elif signal['tf'] in {'4h', '12h'}:
-        perf_score = ((signal['perf_ema32'] > 0.5) + (signal['perf_ema16'] > 0.5) + (signal['perf_ema8'] > 0.5)) / 3
-        rank_score = signal.get('market_rank_1w', 1) if sig_bias == 'bullish' else (1 - signal.get('market_rank_1w', 1))
-    elif signal['tf'] == '1d':
-        perf_score = ((signal['perf_ema16'] > 0.5) + (signal['perf_ema8'] > 0.5) + (signal['perf_ema4'] > 0.5)) / 3
-        rank_score = signal.get('market_rank_1m', 1) if sig_bias == 'bullish' else (1 - signal.get('market_rank_1m', 1))
-
-    if not session.live:
-        perf_score = 1.0
-
-    # TODO don't forget inval_score
-    inval_scalar = 1 + abs(1 - signal['inval_ratio'])
-    sig_score = signal['confidence'] * rank_score
-    risk_scalar = (sig_score * perf_score) / inval_scalar
-    signal['score'] = sig_score
-    signal['risk_scalar'] = risk_scalar
+    if (signal['direction'] == 'long') and agents[signal['agent']].long_info_2['valid']:
+        signal = agents[signal['agent']].secondary_prediction(signal)
+    elif (signal['direction'] == 'short') and agents[signal['agent']].short_info_2['valid']:
+        signal = agents[signal['agent']].secondary_prediction(signal)
+    else:
+        signal = agents[signal['agent']].secondary_manual_prediction(signal)
 
     score_threshold = 0.3
-    if sig_score > score_threshold:
+    if float(signal['score']) > score_threshold:
         logger.info('')
-        logger.info(f"{signal['pair']}, {signal['tf']}, {signal['direction']}")
-        logger.info(f"risk scalar: {risk_scalar:.1%}, signal score: {sig_score:.1%}, "
-                    f"conf: {signal['confidence']:.1%}, rank: {rank_score:.1%}, perf: {perf_score:.1%}")
+        logger.info(f"{signal['pair']}, {signal['tf']}, {signal['direction']}, signal score: {float(signal['score']):.1%}")
 
     signal['base_size'], signal['quote_size'] = agents[signal['agent']].get_size(session, signal)
 
     sim_position = agents[signal['agent']].sim_pos.get(signal['asset'], {'direction': 'flat'})['direction']
-    if signal['score'] >= score_threshold:
+    if float(signal['score']) >= score_threshold:
         processed_signals['scored'].append(signal)
     # separate unwanted signals
-    elif signal['score'] < score_threshold and sim_position == 'flat':
+    elif float(signal['score']) < score_threshold and sim_position == 'flat':
         signal['sim_reasons'] = ['low_score']
-        # sig_direction = 'long' if signal['bias'] == 'bullish' else 'short'
         processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', signal['direction']))
 
 logger.info(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Fixed Risk -+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n")
@@ -575,7 +528,7 @@ logger.debug(f"-+-+-+-+-+-+-+-+-+-+-+- Executing {len(sim_opens)} Sim Opens -+-+
 for signal in sim_opens:
     # logger.debug(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} "
     #              f"{signal['direction']}")
-    # logger.debug(f"Sim reason: {signal['sim_reasons']}, score: {signal['score']}")
+    # logger.debug(f"Sim reason: {signal['sim_reasons']}, score: {float(signal['score']):.1%}")
     agents[signal['agent']].open_sim(session, signal)
 
 # when they are all finished, update records once

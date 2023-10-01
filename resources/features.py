@@ -30,6 +30,7 @@ def add_feature(df, name, timeframe):
         'atr_50_pct': {'call': atr_pct, 'params': (df, 50)},
         'atr_100_pct': {'call': atr_pct, 'params': (df, 100)},
         'atr_200_pct': {'call': atr_pct, 'params': (df, 200)},
+        'ats_z_12': {'call': ats_z, 'params': (df, 12)},
         'ats_z_25': {'call': ats_z, 'params': (df, 25)},
         'ats_z_50': {'call': ats_z, 'params': (df, 50)},
         'ats_z_100': {'call': ats_z, 'params': (df, 100)},
@@ -112,6 +113,11 @@ def add_feature(df, name, timeframe):
         'kurtosis_50': {'call': kurtosis, 'params': (df, 50)},
         'kurtosis_100': {'call': kurtosis, 'params': (df, 100)},
         'kurtosis_200': {'call': kurtosis, 'params': (df, 200)},
+        'num_trades_z_12': {'call': num_trades_z, 'params': (df, 12)},
+        'num_trades_z_25': {'call': num_trades_z, 'params': (df, 25)},
+        'num_trades_z_50': {'call': num_trades_z, 'params': (df, 50)},
+        'num_trades_z_100': {'call': num_trades_z, 'params': (df, 100)},
+        'num_trades_z_200': {'call': num_trades_z, 'params': (df, 200)},
         'prev_daily_open_ratio': {'call': prev_daily_open_ratio, 'params': (df,)},
         'prev_daily_high_ratio': {'call': prev_daily_high_ratio, 'params': (df,)},
         'prev_daily_low_ratio': {'call': prev_daily_low_ratio, 'params': (df,)},
@@ -770,6 +776,13 @@ def stoch_m(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
     cond_5 = df.close.iloc[-1] > df.close.iloc[-5]
 
     df[f"stoch_m_{lookback}"] = cond_1 & cond_2 & cond_3 & cond_4 & cond_5
+
+    return df
+
+def num_trades_z(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
+    num_trades_mean = df.num_trades.rolling(lookback).mean()
+    num_trades_std = df.num_trades.rolling(lookback).std()
+    df[f'num_trades_z_{lookback}'] = (df.num_trades - num_trades_mean) / num_trades_std
 
     return df
 

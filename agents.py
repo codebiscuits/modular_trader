@@ -16,6 +16,7 @@ import sys
 from pyarrow import ArrowInvalid
 import joblib
 import ml_funcs as mlf
+from xgboost import XGBClassifier
 
 ctx = getcontext()
 ctx.prec = 12
@@ -274,8 +275,9 @@ class Agent:
                 valid = float(position['hard_stop']) > session.pairs_data[pair]['price']
 
             if not valid:
-                logger.warning(f"{self.id} {pair} {position['direction']} position somehow passed its stop-loss without "
-                               f"closing")
+                logger.warning(
+                    f"{self.id} {pair} {position['direction']} position somehow passed its stop-loss without "
+                    f"closing")
                 # TODO close position and record as stopped
 
     # record stopped trades ------------------------------------------------
@@ -570,6 +572,10 @@ class Agent:
             df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
         except TypeError:
             pass
+        except AttributeError:
+            print(source)
+            print(df.head())
+            print(df.info())
 
         if check_recent:
             last = df.timestamp.iloc[-1]
@@ -1303,7 +1309,7 @@ class Agent:
         usdt_size = signal['quote_size']
         price = signal['trig_price']
         stp = signal['inval']
-        score = signal['score']
+        score = float(signal['score'])
         note = (f"{self.name} real open {direction} {size:.5} {pair} ({usdt_size:.2f} usdt) @ {price}, "
                 f"stop @ {stp:.5}, score: {score:.1%}")
         logger.info(note)
@@ -1395,7 +1401,11 @@ class Agent:
         del self.open_trades[pair]['placeholder']['open_order']
         self.open_trades[pair]['trade'] = [self.open_trades[pair]['placeholder']]
         del self.open_trades[pair]['placeholder']
-        self.record_trades(session, 'open')
+        try:
+            self.record_trades(session, 'open')
+        except TypeError as e:
+            logger.exception(e)
+            logger.error(pformat(self.open_trades))
 
     def open_update_real_pos_usdtM_counts(self, session, pair, size, inval_ratio, direction):
         price = session.pairs_data[pair]['price']
@@ -1431,7 +1441,8 @@ class Agent:
         stp = signal['inval']
         inval_ratio = signal['inval_ratio']
 
-        placeholder = self.open_trades.get(pair, dict()).get('placeholder')  # if placeholder is needed in stage 1 or 2, this
+        placeholder = self.open_trades.get(pair, dict()).get(
+            'placeholder')  # if placeholder is needed in stage 1 or 2, this
         # will contain the relevant data. if it is empty, it won't be needed anyway.
 
         if stage == 0:
@@ -1925,8 +1936,8 @@ class Agent:
         direction = signal['direction']
         price = signal['trig_price']
 
-        spot_usdt_size = session.fr_max * session.spot_bal * signal['score']
-        margin_usdt_size = session.fr_max * session.margin_bal * signal['score']
+        spot_usdt_size = session.fr_max * session.spot_bal * float(signal['score'])
+        margin_usdt_size = session.fr_max * session.margin_bal * float(signal['score'])
         usdt_size = spot_usdt_size if self.mode == 'spot' else margin_usdt_size
         pfrd = usdt_size * signal['inval_dist']
         size = f"{usdt_size / price:.8f}"
@@ -2171,6 +2182,27 @@ class Agent:
         k4.stop()
 
     # other
+    def print_rpnls(self):
+        self.pnls = dict(
+            spot=self.get_pnls('spot'),
+            long=self.get_pnls('long'),
+            short=self.get_pnls('short'),
+        )
+        logger.info(f"\n{self.id} scaled pnls")
+        if self.mode == 'margin':
+            logger.info("Long:")
+            logger.info(f"EMA4: {self.pnls['long']['ema_4']:.2f}, EMA8: {self.pnls['long']['ema_8']:.2f}, "
+                        f"EMA16: {self.pnls['long']['ema_16']:.2f}, EMA32: {self.pnls['long']['ema_32']:.2f}, "
+                        f"EMA64: {self.pnls['long']['ema_64']:.2f}")
+            logger.info("Short:")
+            logger.info(f"EMA4: {self.pnls['short']['ema_4']:.2f}, EMA8: {self.pnls['short']['ema_8']:.2f}, "
+                        f"EMA16: {self.pnls['short']['ema_16']:.2f}, EMA32: {self.pnls['short']['ema_32']:.2f}, "
+                        f"EMA64: {self.pnls['short']['ema_64']:.2f}")
+        else:
+            logger.info("Spot:")
+            logger.info(f"EMA4: {self.pnls['spot']['ema_4']:.2f}, EMA8: {self.pnls['spot']['ema_8']:.2f}, "
+                        f"EMA16: {self.pnls['spot']['ema_16']:.2f}, EMA32: {self.pnls['spot']['ema_32']:.2f}, "
+                        f"EMA64: {self.pnls['spot']['ema_64']:.2f}")
 
     def calc_stop(self, inval: float, spread: float, price: float, min_risk: float = 0.0015) -> float:
         """calculates what the stop-loss trigger price should be based on the current
@@ -2199,7 +2231,7 @@ class Agent:
         direction = signal['direction']
         price = session.pairs_data[signal['pair']]['price']
 
-        usdt_size = balance * session.fr_max * signal['risk_scalar']
+        usdt_size = balance * session.fr_max * float(signal['score'])
 
         base_size = float(usdt_size / price)
 
@@ -2460,15 +2492,18 @@ class Agent:
 class TrailFractals(Agent):
     """Machine learning strategy based around williams fractals trailing stops"""
 
-    def __init__(self, session, tf: str, offset: int, training_pair_selection: str, num_pairs: int) -> None:
+    def __init__(self, session, tf: str, offset: int, width: int, spacing: int, training_pair_selection: str, num_pairs: int) -> None:
         t = Timer('TrailFractals init')
         t.start()
         self.mode = 'margin'
         self.tf = tf
         self.offset = offset
+        self.width = width
+        self.spacing = spacing
         self.training_pair_selection = training_pair_selection
         self.training_pairs_n = num_pairs
-        self.load_data(session, tf)
+        self.load_primary_model_data(session, tf)
+        self.load_secondary_model_data()
         session.pairs_set.update(self.pairs)
         self.name = (f'{self.tf} trail_fractals {self.width}-{self.spacing}_'
                      f'{self.training_pair_selection}_{self.training_pairs_n}')
@@ -2481,17 +2516,18 @@ class TrailFractals(Agent):
         session.features[tf].update(self.features)
         t.stop()
 
-    def load_data(self, session, tf):
+    def load_primary_model_data(self, session, tf):
         # paths
-        folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/trail_fractals_"
-                      f"{self.training_pair_selection}_{self.training_pairs_n}")
-        self.long_model_path = folder / f"trail_fractal_long_{self.tf}_model.sav"
-        self.short_model_path = folder / f"trail_fractal_short_{self.tf}_model.sav"
-        long_info_path = folder / f"trail_fractal_long_{self.tf}_info.json"
-        short_info_path = folder / f"trail_fractal_short_{self.tf}_info.json"
+        primary_folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/trail_fractals_{self.width}_"
+                              f"{self.spacing}/{self.training_pair_selection}_{self.training_pairs_n}")
+        self.long_model_path = primary_folder / f"long_{self.tf}_model_1a.sav"
+        self.short_model_path = primary_folder / f"short_{self.tf}_model_1a.sav"
+        long_info_path = primary_folder / f"long_{self.tf}_info_1a.json"
+        short_info_path = primary_folder / f"short_{self.tf}_info_1a.json"
 
         self.long_model = joblib.load(self.long_model_path)
         self.short_model = joblib.load(self.short_model_path)
+
         with open(long_info_path, 'r') as ip:
             self.long_info = json.load(ip)
         with open(short_info_path, 'r') as ip:
@@ -2500,8 +2536,94 @@ class TrailFractals(Agent):
         self.pairs = self.long_info['pairs']
         self.features = set(self.long_info['features'] + self.short_info['features'])
         session.features[tf].update(self.features)
-        self.width = self.long_info['frac_width']
-        self.spacing = self.long_info['atr_spacing']
+
+    def load_secondary_model_data(self):
+        # paths
+        secondary_folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/"
+                                f"trail_fractals_{self.width}_{self.spacing}")
+        long_model_file = secondary_folder / f"long_{self.tf}_model_2.json"
+        long_model_info = secondary_folder / f"long_{self.tf}_info_2.json"
+        short_model_file = secondary_folder / f"short_{self.tf}_model_2.json"
+        short_model_info = secondary_folder / f"short_{self.tf}_info_2.json"
+
+        self.long_model_2 = XGBClassifier()
+        self.long_model_2.load_model(long_model_file)
+        self.short_model_2 = XGBClassifier()
+        self.short_model_2.load_model(short_model_file)
+
+        with open(long_model_info, 'r') as ip:
+            self.long_info_2 = json.load(ip)
+        with open(short_model_info, 'r') as ip:
+            self.short_info_2 = json.load(ip)
+
+        self.features_2 = set(self.long_info_2['features'] + self.short_info_2['features'])
+
+    def secondary_prediction(self, signal):
+        direction = signal['direction']
+
+        conf_l = signal['confidence_l']
+        conf_s = signal['confidence_s']
+
+        inval_ratio = signal['inval_ratio']
+
+        perf_ema4 = self.pnls[direction]['ema_4']
+        perf_ema8 = self.pnls[direction]['ema_8']
+        perf_ema16 = self.pnls[direction]['ema_16']
+        perf_ema32 = self.pnls[direction]['ema_32']
+        perf_ema64 = self.pnls[direction]['ema_64']
+
+        mkt_rank_1d = signal.get('market_rank_1d', 1)
+        mkt_rank_1w = signal.get('market_rank_1w', 1)
+        mkt_rank_1m = signal.get('market_rank_1m', 1)
+
+        things = [conf_l, conf_s, inval_ratio, perf_ema4, perf_ema8, perf_ema16,
+                  perf_ema32, perf_ema64, mkt_rank_1d, mkt_rank_1w, mkt_rank_1m]
+        names = ['conf_l', 'conf_s', 'inval_ratio', 'perf_ema4', 'perf_ema8', 'perf_ema16',
+                 'perf_ema32', 'perf_ema64', 'mkt_rank_1d', 'mkt_rank_1w', 'mkt_rank_1m']
+        data = pd.Series(things, index=names)
+
+        if direction == 'long':
+            signal['score'] = str(self.long_model_2.predict_proba(data)[0, 1])
+        else:
+            signal['score'] = str(self.short_model_2.predict_proba(data)[0, 1])
+
+        return signal
+
+
+    def secondary_manual_prediction(self, session, signal):
+        signal['perf_ema4'] = self.pnls[signal['direction']]['ema_4']
+        signal['perf_ema8'] = self.pnls[signal['direction']]['ema_8']
+        signal['perf_ema16'] = self.pnls[signal['direction']]['ema_16']
+        signal['perf_ema32'] = self.pnls[signal['direction']]['ema_32']
+        signal['perf_ema64'] = self.pnls[signal['direction']]['ema_64']
+
+        sig_bias = signal['bias']
+
+        perf_score, rank_score = 0, 0
+        if signal['tf'] == '1h':
+            perf_score = ((signal['perf_ema64'] > 0.5) + (signal['perf_ema32'] > 0.5) + (
+                        signal['perf_ema16'] > 0.5)) / 3
+            rank_score = signal.get('market_rank_1d', 1) if sig_bias == 'bullish' else (
+                        1 - signal.get('market_rank_1d', 1))
+        elif signal['tf'] in {'4h', '12h'}:
+            perf_score = ((signal['perf_ema32'] > 0.5) + (signal['perf_ema16'] > 0.5) + (signal['perf_ema8'] > 0.5)) / 3
+            rank_score = signal.get('market_rank_1w', 1) if sig_bias == 'bullish' else (
+                        1 - signal.get('market_rank_1w', 1))
+        elif signal['tf'] == '1d':
+            perf_score = ((signal['perf_ema16'] > 0.5) + (signal['perf_ema8'] > 0.5) + (signal['perf_ema4'] > 0.5)) / 3
+            rank_score = signal.get('market_rank_1m', 1) if sig_bias == 'bullish' else (
+                        1 - signal.get('market_rank_1m', 1))
+
+        if not session.live:
+            perf_score = 1.0
+
+        inval_scalar = 1 + abs(1 - signal['inval_ratio'])
+        sig_score = signal['confidence'] * rank_score
+        risk_scalar = (sig_score * perf_score) / inval_scalar
+        signal['score'] = str(risk_scalar)
+
+        return signal
+
 
     def signals(self, session, df: pd.DataFrame, pair: str) -> dict:
         """generates spot buy signals based on the ats_z indicator. does not account for currently open positions,
