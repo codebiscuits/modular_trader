@@ -15,14 +15,14 @@ from sklearn.model_selection import train_test_split, StratifiedKFold
 from sklearn.preprocessing import QuantileTransformer, MinMaxScaler
 from sklearn.compose import ColumnTransformer
 from sklearn.metrics import log_loss
-import lightgbm as lgbm
+# import lightgbm as lgbm
 import xgboost as xgb
 from optuna import logging as op_logging, integration, pruners, create_study
 from optuna.samplers import TPESampler
 
 logger = logging.getLogger('ml_funcs')
 logger.setLevel(logging.DEBUG)
-lgbm.register_logger(logger)
+# lgbm.register_logger(logger)
 
 def rank_pairs(selection):
     with open(f'recent_{selection}.json', 'r') as file:
@@ -167,6 +167,7 @@ def add_features(df, tf):
     df = features.atr_pct(df, 50)
     df = features.atr_pct(df, 100)
     df = features.atr_pct(df, 200)
+    df = features.ats_z(df, 12)
     df = features.ats_z(df, 25)
     df = features.ats_z(df, 50)
     df = features.ats_z(df, 100)
@@ -226,6 +227,11 @@ def add_features(df, tf):
     df = features.kurtosis(df, 50)
     df = features.kurtosis(df, 100)
     df = features.kurtosis(df, 200)
+    df = features.num_trades_z(df, 12)
+    df = features.num_trades_z(df, 25)
+    df = features.num_trades_z(df, 50)
+    df = features.num_trades_z(df, 100)
+    df = features.num_trades_z(df, 200)
     df = features.prev_daily_open_ratio(df)
     df = features.prev_daily_high_ratio(df)
     df = features.prev_daily_low_ratio(df)
@@ -331,63 +337,63 @@ def add_features(df, tf):
     return df.copy()
 
 
-def fit_lgbm(X, y, num):
-    X = X.astype('float64')
-    y = y.astype('int32')
-
-    def objective(trial, X, y):
-        params = {
-            'n_estimators': 50000,
-            'lambda_l1': trial.suggest_int('lambda_l1', 0, 100, step=5),
-            'lambda_l2': trial.suggest_int('lambda_l2', 0, 100, step=5),
-            'min_gain_to_split': trial.suggest_float('min_gain_to_split', 0.0, 15.0),
-            'bagging_fraction': trial.suggest_float('bagging_fraction', 0.2, 0.95, step=0.1),
-            'bagging_freq': trial.suggest_categorical('bagging_freq', [1]),
-            'feature_fraction': trial.suggest_float('feature_fraction', 0.2, 0.95, step=0.1),
-            'max_depth': trial.suggest_int('max_depth', 3, 12, step=1),
-            'num_leaves': trial.suggest_int('num_leaves', 20, 3000, log=True),
-            'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 5, 50, log=True),
-            'max_bin': trial.suggest_int('max_bin', 200, 300),
-            'learning_rate': trial.suggest_float('learning_rate', 1e-8, 1.0, log=True),
-            'early_stopping_round': 100,
-            'n_thread': -1,
-            'verbosity': -1
-        }
-
-        pruning_callback = integration.LightGBMPruningCallback(trial, 'binary_logloss')
-
-        cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=1234)
-        cv_scores = np.empty(5)
-        for i, (train_idx, test_idx) in enumerate(cv.split(X, y)):
-            X_train, X_test = X[train_idx], X[test_idx]
-            y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
-
-            model = lgbm.LGBMClassifier(objective='binary', boosting_type='gbdt', **params)
-            model.fit(X_train, y_train,
-                      eval_set=[(X_test, y_test)],
-                      eval_metric='binary_logloss',
-                      # early_stopping_round=50,
-                      callbacks=[pruning_callback])
-            preds = model.predict_proba(X_test)
-            cv_scores[i] = log_loss(y_test, preds)
-
-        return np.mean(cv_scores)
-
-    op_logging.set_verbosity(op_logging.ERROR)
-    # pruner = pruners.MedianPruner(n_warmup_steps=5)
-    pruner = pruners.SuccessiveHalvingPruner()
-    sampler = TPESampler(seed=11)
-    study = create_study(sampler=sampler, pruner=pruner, direction='minimize')
-    func = lambda trial: objective(trial, X, y)
-    study.optimize(func, n_trials=num)  #, show_progress_bar=True)
-    logger.debug(f"Optimisation Score: {study.best_trial.value:.1%}")
-
-    # test performance on unseen data
-    best_params = study.best_trial.params
-    val_model = lgbm.LGBMClassifier(objective='binary', boosting_type='gbdt', **best_params)
-    val_model.fit(X, y)
-
-    return val_model
+# def fit_lgbm(X, y, num):
+#     X = X.astype('float64')
+#     y = y.astype('int32')
+#
+#     def objective(trial, X, y):
+#         params = {
+#             'n_estimators': 50000,
+#             'lambda_l1': trial.suggest_int('lambda_l1', 0, 100, step=5),
+#             'lambda_l2': trial.suggest_int('lambda_l2', 0, 100, step=5),
+#             'min_gain_to_split': trial.suggest_float('min_gain_to_split', 0.0, 15.0),
+#             'bagging_fraction': trial.suggest_float('bagging_fraction', 0.2, 0.95, step=0.1),
+#             'bagging_freq': trial.suggest_categorical('bagging_freq', [1]),
+#             'feature_fraction': trial.suggest_float('feature_fraction', 0.2, 0.95, step=0.1),
+#             'max_depth': trial.suggest_int('max_depth', 3, 12, step=1),
+#             'num_leaves': trial.suggest_int('num_leaves', 20, 3000, log=True),
+#             'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 5, 50, log=True),
+#             'max_bin': trial.suggest_int('max_bin', 200, 300),
+#             'learning_rate': trial.suggest_float('learning_rate', 1e-8, 1.0, log=True),
+#             'early_stopping_round': 100,
+#             'n_thread': -1,
+#             'verbosity': -1
+#         }
+#
+#         pruning_callback = integration.LightGBMPruningCallback(trial, 'binary_logloss')
+#
+#         cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=1234)
+#         cv_scores = np.empty(5)
+#         for i, (train_idx, test_idx) in enumerate(cv.split(X, y)):
+#             X_train, X_test = X[train_idx], X[test_idx]
+#             y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+#
+#             model = lgbm.LGBMClassifier(objective='binary', boosting_type='gbdt', **params)
+#             model.fit(X_train, y_train,
+#                       eval_set=[(X_test, y_test)],
+#                       eval_metric='binary_logloss',
+#                       # early_stopping_round=50,
+#                       callbacks=[pruning_callback])
+#             preds = model.predict_proba(X_test)
+#             cv_scores[i] = log_loss(y_test, preds)
+#
+#         return np.mean(cv_scores)
+#
+#     op_logging.set_verbosity(op_logging.ERROR)
+#     # pruner = pruners.MedianPruner(n_warmup_steps=5)
+#     pruner = pruners.SuccessiveHalvingPruner()
+#     sampler = TPESampler(seed=11)
+#     study = create_study(sampler=sampler, pruner=pruner, direction='minimize')
+#     func = lambda trial: objective(trial, X, y)
+#     study.optimize(func, n_trials=num)  #, show_progress_bar=True)
+#     logger.debug(f"Optimisation Score: {study.best_trial.value:.1%}")
+#
+#     # test performance on unseen data
+#     best_params = study.best_trial.params
+#     val_model = lgbm.LGBMClassifier(objective='binary', boosting_type='gbdt', **best_params)
+#     val_model.fit(X, y)
+#
+#     return val_model
 
 
 def fit_xgb(X, y, num):
