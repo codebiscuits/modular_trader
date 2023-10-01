@@ -75,13 +75,15 @@ def iterations(n, session, pair, tf):
         df = from_scratch(session, pair, tf)
         # print(f'{n} downloaded {pair} from scratch')
 
-    max_dict = {'1m': 1051200, '5m': 210240, '15m': 70080, '1h': 17520}
+    max_dict = {'1m': 1051200, '5m': 210240, '1h': 17520}
     max_len = max_dict[tf]  # returns 2 years worth of timeframe periods
     if len(df) > max_len:
         # print(f"trimming ohlc from {len(df)} to {max_len}")
         df = df.tail(max_len).reset_index(drop=True)
 
-    # df.to_parquet(filepath, compression=None)
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+    # save to file
     pldf = pl.from_pandas(df)
     pldf.write_parquet(filepath, row_group_size=10512, use_pyarrow=True)
 
