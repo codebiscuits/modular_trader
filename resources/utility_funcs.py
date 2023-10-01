@@ -519,7 +519,7 @@ def remove_duplicates(signals: list[dict]) -> list[dict]:
         d = close_sigs.pop()
         k = (d[key1], d[key2], d[key3], d[key4])
         if k in seen:
-            logger.debug(f"duplicate close signal found: {key1} {key2} {key3} {key4}")
+            logger.debug(f"duplicate close signal found: {d[key1]} {d[key2]} {d[key3]} {d[key4]}")
             continue
         seen[k] = d
         checked_signals.append(d)
@@ -528,7 +528,7 @@ def remove_duplicates(signals: list[dict]) -> list[dict]:
         d = tp_sigs.pop()
         k = (d[key1], d[key2], d[key3], d[key4])
         if k in seen:
-            logger.debug(f"duplicate tp signal found: {key1} {key2} {key3} {key4}")
+            logger.debug(f"duplicate tp signal found: {d[key1]} {d[key2]} {d[key3]} {d[key4]}")
             continue
         seen[k] = d
         checked_signals.append(d)

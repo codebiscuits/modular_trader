@@ -1451,8 +1451,14 @@ class Agent:
             if not successful:
                 del self.open_trades[pair]
                 return False
+            try:
+                api_order = self.increase_position(session, pair, size, direction)
+            except bx.BinanceAPIException as e:
+                logger.exception(e)
+                if e.code == -2010:
+                    del self.open_trades[pair]
+                    return False
 
-            api_order = self.increase_position(session, pair, size, direction)
         if stage <= 1:
             if stage == 1:
                 api_order = placeholder['api_order']
