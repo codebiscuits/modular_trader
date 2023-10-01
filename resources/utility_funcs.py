@@ -558,10 +558,10 @@ def retry_on_busy(max_retries=360, delay=5):
                 except BinanceAPIException as e:
                     if e.code != -3044:
                         raise e
-                    logger.exception(f"System busy, retrying in {delay} seconds...")
+                    logger.exception(f"Binance busy, retrying in {delay} seconds...")
                     time.sleep(delay)
                 except requests.exceptions.ConnectionError:
-                    logger.exception(f"System busy, retrying in {delay} seconds...")
+                    logger.exception(f"Connection error, retrying in {delay} seconds...")
                     time.sleep(delay)
             raise Exception(f"Max retries exceeded. Request still failed after {max_retries} attempts.")
 
