@@ -4,30 +4,20 @@ from pathlib import Path
 from resources import indicators as ind, binance_funcs as funcs, features as features
 import numpy as np
 import json
-from itertools import product
-from collections import Counter
-from datetime import datetime
 from pyarrow import ArrowInvalid
-from pprint import pprint, pformat
 import logging
 
 if not Path('/pi_2.txt').exists():
     from sklearnex import patch_sklearn
     patch_sklearn()
 
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier
 from sklearn.model_selection import train_test_split, StratifiedKFold
 from sklearn.preprocessing import QuantileTransformer, MinMaxScaler
 from sklearn.compose import ColumnTransformer
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, fbeta_score
-from sklearn.metrics import confusion_matrix, roc_auc_score, make_scorer, log_loss
-from sklearn.inspection import permutation_importance
-from imblearn.under_sampling import RandomUnderSampler
-from xgboost import XGBClassifier
+from sklearn.metrics import log_loss
 import lightgbm as lgbm
 import xgboost as xgb
-from optuna import Trial, logging as op_logging, visualization, integration, pruners, create_study
+from optuna import logging as op_logging, integration, pruners, create_study
 from optuna.samplers import TPESampler
 
 logger = logging.getLogger('ml_funcs')
@@ -175,6 +165,8 @@ def add_features(df, tf):
     df = features.atr_pct(df, 10)
     df = features.atr_pct(df, 25)
     df = features.atr_pct(df, 50)
+    df = features.atr_pct(df, 100)
+    df = features.atr_pct(df, 200)
     df = features.ats_z(df, 25)
     df = features.ats_z(df, 50)
     df = features.ats_z(df, 100)
@@ -426,7 +418,7 @@ def fit_xgb(X, y, num):
         pruning_callback = integration.XGBoostPruningCallback(trial, 'test-auc')
         history = xgb.cv(params, d_train,
                          num_boost_round=50000,
-                         early_stopping_rounds=50,
+                         early_stopping_rounds=100,
                          metrics=['auc'],
                          nfold=5,
                          verbose_eval=False,
@@ -463,7 +455,8 @@ def features_labels_split(df):
                  'taker_buy_base_vol', 'taker_buy_quote_vol', 'vwma', 'r_pct', 'pnl_pct', 'pnl_r', 'pnl_cat',
                  'atr-25', 'atr-50', 'atr-100', 'atr-200', 'ema_12', 'ema_25', 'ema_50', 'ema_100', 'ema_200',
                  'hma_25', 'hma_50', 'hma_100', 'hma_200', 'lifespan', 'frac_high', 'frac_low', 'inval', 'daily_open',
-                 'prev_daily_open', 'prev_daily_high', 'prev_daily_low', 'bullish_doji', 'bearish_doji'],
+                 'prev_daily_open', 'prev_daily_high', 'prev_daily_low', 'weekly_open', 'prev_weekly_open',
+                 'prev_weekly_high', 'prev_weekly_low', 'bullish_doji', 'bearish_doji'],
                 axis=1, errors='ignore').drop(index=df.index[-1], axis=0)
     y = df.pnl_cat.shift(-1).drop(index=df.index[-1], axis=0)
     z = df.pnl_r.shift(-1).drop(index=df.index[-1], axis=0)

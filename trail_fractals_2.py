@@ -41,9 +41,6 @@ warnings.filterwarnings('ignore')
 logger = create_logger('trail_fractals_2', 'trail_fractals_2')
 
 # TODO i want to try different undersamplers
-# TODO i need to save the model and info in the correct folder
-# TODO i need a way to differentiate between a model that has been trained on enough data and one that has not been
-#  trained on enough data, so the trading system doesn't use the unreliable ones, and just uses the old way instead
 
 
 def create_dataset(side, tf, frac_width, atr_spacing, thresh):
@@ -181,14 +178,14 @@ def trail_fractals_2(side, tf, width, atr_spacing, thresh):
     folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/trail_fractals_{width}_{atr_spacing}")
     pi_folder = Path(f"/home/ross/coding/pi_2/modular_trader/machine_learning/"
                      f"models/trail_fractals_{width}_{atr_spacing}")
-    model_file = f"{side}_{tf}_model_2.sav"
+    model_file = f"{side}_{tf}_model_2.json"
     model_info = f"{side}_{tf}_info_2.json"
 
-    info_dict = {'features': feature_names, 'pnl_threshold': thresh}
+    info_dict = {'features': feature_names, 'pnl_threshold': thresh, 'valid': len(X_val) > 30}
 
     # save local copy
     folder.mkdir(parents=True, exist_ok=True)
-    joblib.dump(model, folder / model_file)
+    model.save_model(folder / model_file)
     info_path = folder / model_info
     info_path.touch(exist_ok=True)
     with open(info_path, 'w') as info:
@@ -197,7 +194,7 @@ def trail_fractals_2(side, tf, width, atr_spacing, thresh):
     # save on pi
     if not running_on_pi:
         pi_folder.mkdir(parents=True, exist_ok=True)
-        joblib.dump(model, pi_folder / model_file)
+        model.save_model(pi_folder / model_file)
         info_path_pi = pi_folder / model_info
         info_path_pi.touch(exist_ok=True)
         with open(info_path_pi, 'w') as info:

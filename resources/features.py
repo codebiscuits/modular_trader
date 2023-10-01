@@ -1,6 +1,9 @@
 from resources import indicators as ind
 import pandas as pd
 import numpy as np
+from resources.loggers import create_logger
+
+logger = create_logger('  features   ')
 
 """
 Process for adding new features:
@@ -25,6 +28,8 @@ def add_feature(df, name, timeframe):
         'atr_10_pct': {'call': atr_pct, 'params': (df, 10)},
         'atr_25_pct': {'call': atr_pct, 'params': (df, 25)},
         'atr_50_pct': {'call': atr_pct, 'params': (df, 50)},
+        'atr_100_pct': {'call': atr_pct, 'params': (df, 100)},
+        'atr_200_pct': {'call': atr_pct, 'params': (df, 200)},
         'ats_z_25': {'call': ats_z, 'params': (df, 25)},
         'ats_z_50': {'call': ats_z, 'params': (df, 50)},
         'ats_z_100': {'call': ats_z, 'params': (df, 100)},
@@ -206,7 +211,11 @@ def add_feature(df, name, timeframe):
         'weekly_open_ratio': {'call': weekly_open_ratio, 'params': (df,)},
         'roc_1w': {'call': weekly_roc, 'params': (df, timeframe)}
     }
-    feature = feature_lookup[name]
+    try:
+        feature = feature_lookup[name]
+    except KeyError as e:
+        logger.exception(e)
+        logger.error(timeframe)
     df = feature['call'](*feature['params'])
 
     return df
@@ -501,6 +510,7 @@ def vol_denom_roc(df: pd.DataFrame, roc_lb: int, atr_lb: int) -> pd.DataFrame:
         df = atr_pct(df, atr_lb)
 
     df[f'vol_denom_roc_{roc_lb}'] = (df.close.pct_change(roc_lb) / df[f'atr_{atr_lb}_pct'])
+    df = df.drop(f'atr_{atr_lb}_pct', axis=1)
 
     return df
 

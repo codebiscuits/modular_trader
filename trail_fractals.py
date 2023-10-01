@@ -20,7 +20,7 @@ fits = list(enumerate(itertools.product(['1h', '4h', '12h', '1d'], ['long', 'sho
 
 for n, fit in fits:
     timeframe, side = fit[0], fit[1]
-    print(f"\nFit {n} of {len(list(fits))}, Fitting {timeframe} {side} model")
+    print(f"\nFit {n+1} of {len(list(fits))}, Fitting {timeframe} {side} model")
 
     trail_fractals_1a(side, timeframe, width, atr_spacing, 30, '1d_volumes')
     trail_fractals_1a(side, timeframe, width, atr_spacing, 100, '1w_volumes')
