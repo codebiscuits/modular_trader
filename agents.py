@@ -692,7 +692,7 @@ class Agent:
 
             df = self.get_data(session, pair, timeframes, stop_time)
             if df.empty:
-                logger.warning(f"RSST couldn't find a valid stop time for {v['position']['agent']} {pair} {direction}")
+                logger.warning(f"RSST couldn't find a valid stop time for {pair} {direction}")
                 logger.warning(f"Stop time on record: {stop_time}")
                 continue
 
@@ -1300,7 +1300,7 @@ class Agent:
         self.open_trades[pair] = {}
         self.open_trades[pair]['placeholder'] = placeholder
         self.open_trades[pair]['signal'] = signal
-        self.open_trades[pair]['position'] = {'pair': pair, 'direction': direction, 'state': 'real'}
+        self.open_trades[pair]['position'] = {'pair': pair, 'direction': direction, 'state': 'real', 'agent': self.id}
 
         size = signal['base_size']
         usdt_size = signal['quote_size']
@@ -2585,8 +2585,6 @@ class TrailFractals(Agent):
                  'perf_ema32', 'perf_ema64', 'mkt_rank_1d', 'mkt_rank_1w', 'mkt_rank_1m']
         data = pd.Series(features, index=names)
 
-        print('\n', data, '\n')
-
         if direction == 'long':
             signal['score'] = str(self.long_model_2.predict_proba(data)[0, 1])
         else:
@@ -2594,7 +2592,8 @@ class TrailFractals(Agent):
 
         signal['predictor'] = 'ml'
 
-        print(f"secondary prediction: {float(signal['score']):.1%}")
+        print(f"secondary long prediction: {self.long_model_2.predict_proba(data)}")
+        print(f"secondary short prediction: {self.short_model_2.predict_proba(data)}")
 
         return signal
 
