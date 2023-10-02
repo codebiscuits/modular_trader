@@ -338,7 +338,7 @@ while processed_signals['unassigned']:
     elif (signal['direction'] == 'short') and agents[signal['agent']].short_info_2['valid']:
         signal = agents[signal['agent']].secondary_prediction(signal)
     else:
-        signal = agents[signal['agent']].secondary_manual_prediction(signal)
+        signal = agents[signal['agent']].secondary_manual_prediction(session, signal)
 
     score_threshold = 0.3
     if float(signal['score']) > score_threshold:
