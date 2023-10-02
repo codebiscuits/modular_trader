@@ -16,7 +16,7 @@ import sys
 from pyarrow import ArrowInvalid
 import joblib
 import ml_funcs as mlf
-from xgboost import XGBClassifier
+from xgboost import XGBClassifier, DMatrix
 
 ctx = getcontext()
 ctx.prec = 12
@@ -76,11 +76,11 @@ class Agent:
         self.tracked_trades = self.read_open_trade_records(session, 'tracked')
         self.closed_trades = self.read_closed_trade_records(session)
         self.closed_sim_trades = self.read_closed_sim_trade_records(session)
-        self.backup_trade_records(session)
-        self.repair_trade_records(session)
         self.real_pos = self.current_positions(session, 'open')
         self.sim_pos = self.current_positions(session, 'sim')
         self.tracked = self.current_positions(session, 'tracked')
+        self.backup_trade_records(session)
+        self.repair_trade_records(session)
         self.check_valid_open(session)
         # self.calc_init_opnl(session)
         # self.open_pnl_changes = {}
