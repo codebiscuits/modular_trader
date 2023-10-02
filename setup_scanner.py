@@ -401,7 +401,6 @@ algo_limits = {pair: (v['max_algo_orders'] - v['algo_orders']) for pair, v in se
 usdt_bal_s = session.spot_usdt_bal['qty']
 
 while unassigned:
-    logger.debug(f"{len(unassigned)} unassigned signals left to process")
     s = unassigned.pop()
 
     # set variables

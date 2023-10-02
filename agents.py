@@ -568,14 +568,11 @@ class Agent:
             session.store_ohlc(df, pair, timeframes)
 
         # check df is localised to UTC
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
         try:
             df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
         except TypeError:
             pass
-        except AttributeError:
-            print(source)
-            print(df.head())
-            print(df.info())
 
         if check_recent:
             last = df.timestamp.iloc[-1]
@@ -2582,16 +2579,22 @@ class TrailFractals(Agent):
         mkt_rank_1w = signal.get('market_rank_1w', 1)
         mkt_rank_1m = signal.get('market_rank_1m', 1)
 
-        things = [conf_l, conf_s, inval_ratio, perf_ema4, perf_ema8, perf_ema16,
+        features = [conf_l, conf_s, inval_ratio, perf_ema4, perf_ema8, perf_ema16,
                   perf_ema32, perf_ema64, mkt_rank_1d, mkt_rank_1w, mkt_rank_1m]
         names = ['conf_l', 'conf_s', 'inval_ratio', 'perf_ema4', 'perf_ema8', 'perf_ema16',
                  'perf_ema32', 'perf_ema64', 'mkt_rank_1d', 'mkt_rank_1w', 'mkt_rank_1m']
-        data = pd.Series(things, index=names)
+        data = pd.Series(features, index=names)
+
+        print('\n', data, '\n')
 
         if direction == 'long':
             signal['score'] = str(self.long_model_2.predict_proba(data)[0, 1])
         else:
             signal['score'] = str(self.short_model_2.predict_proba(data)[0, 1])
+
+        signal['predictor'] = 'ml'
+
+        print(f"secondary prediction: {float(signal['score']):.1%}")
 
         return signal
 
@@ -2627,6 +2630,10 @@ class TrailFractals(Agent):
         sig_score = signal['confidence'] * rank_score
         risk_scalar = (sig_score * perf_score) / inval_scalar
         signal['score'] = str(risk_scalar)
+
+        signal['predictor'] = 'manual'
+
+        print(f"secondary manual prediction: {float(signal['score']):.1%}")
 
         return signal
 

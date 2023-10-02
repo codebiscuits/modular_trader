@@ -152,6 +152,7 @@ def get_bin_ohlc(pair: str, timeframe: str, span: str = "2 years ago UTC", sessi
     df['timestamp'] = pd.to_datetime(df['timestamp'])
 
     # check df is localised to UTC
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
     try:
         df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
     except TypeError:
@@ -190,6 +191,7 @@ def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame, session=None) -
         client = Client(keys.bPkey, keys.bSkey)
 
     # check old_df is localised to UTC
+    old_df['timestamp'] = pd.to_datetime(old_df['timestamp'])
     try:
         old_df['timestamp'] = old_df.timestamp.dt.tz_localize('UTC')
     except TypeError:
@@ -214,6 +216,7 @@ def update_ohlc(pair: str, timeframe: str, old_df: pd.DataFrame, session=None) -
     df['timestamp'] = pd.to_datetime(df['timestamp'])
 
     # check df is localised to UTC
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
     try:
         df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
     except TypeError:
@@ -274,6 +277,7 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
                 df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC')
 
             # check df is localised to UTC
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
             try:
                 df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
             except TypeError:
@@ -297,6 +301,7 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
             df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
 
         # check df is localised to UTC
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
         try:
             df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
         except TypeError:
