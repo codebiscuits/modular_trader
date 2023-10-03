@@ -35,7 +35,8 @@ def init_client(max_retries: int = 360, delay: int = 5):
     for i in range(max_retries):
         try:
             client = Client(keys.bPkey, keys.bSkey)
-            print(f'initialising binance client worked on attempt number {i + 1}')
+            if i > 0:
+                print(f'initialising binance client worked on attempt number {i + 1}')
             return client
         except bx.BinanceAPIException as e:
             if e.code != -3044:
@@ -208,7 +209,7 @@ def save_models(width, spacing, sel_method, num_pairs, side, tf, data_len, selec
                       f"models/trail_fractals_{width}_{spacing}/{sel_method}_{num_pairs}")
     model_file = f"{side}_{tf}_model_1a.sav"
     model_info = f"{side}_{tf}_info_1a.json"
-    scaler_file = f"{side}_{tf}_scaler_2.sav"
+    scaler_file = f"{side}_{tf}_scaler_1a.sav"
 
     info_dict = {'data_length': data_len, 'features': selected, 'pair_selection': sel_method,
                  'pairs': pairs, 'created': int(datetime.now(timezone.utc).timestamp())}
@@ -240,6 +241,7 @@ def save_models(width, spacing, sel_method, num_pairs, side, tf, data_len, selec
 
 def trail_fractals_1a(side, tf, width, atr_spacing, num_pairs, selection_method):
     loop_start = time.perf_counter()
+    print(f"\n- Running Trail_fractals_1a, {side}, {tf}, {width}, {atr_spacing}, {num_pairs}, {selection_method}")
     data_len = 500
     pairs = get_margin_pairs(selection_method, num_pairs)
 
@@ -273,8 +275,10 @@ def trail_fractals_1a(side, tf, width, atr_spacing, num_pairs, selection_method)
     X = pd.DataFrame(X, columns=selected)
     grid_model = fit_gbc(X, y, scorer)
     # grid_model = fit_rfc(X, y, scorer)
-    grid_score = grid_model.score(X, y)
-    print(f"Model score after grid search: {grid_score:.1%}")
+    train_score = grid_model.score(X, y)
+    print(f"Model score on train set after grid search: {train_score:.1%}")
+    test_score = grid_model.score(X_cal, y_cal)
+    print(f"Model score on test set after grid search: {test_score:.1%}")
 
     # calibrate model
     print(f"Calibrating on {X_cal.shape[0]} observations: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
@@ -289,5 +293,5 @@ def trail_fractals_1a(side, tf, width, atr_spacing, num_pairs, selection_method)
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
-    print(f"This test time taken: {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
+    print(f"TF 1a test time taken: {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
 

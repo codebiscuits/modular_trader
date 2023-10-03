@@ -2522,11 +2522,15 @@ class TrailFractals(Agent):
                               f"{self.spacing}/{self.training_pair_selection}_{self.training_pairs_n}")
         self.long_model_path = primary_folder / f"long_{self.tf}_model_1a.sav"
         self.short_model_path = primary_folder / f"short_{self.tf}_model_1a.sav"
+        long_scaler_path = primary_folder / f"long_{self.tf}_scaler_1a.sav"
+        short_scaler_path = primary_folder / f"short_{self.tf}_scaler_1a.sav"
         long_info_path = primary_folder / f"long_{self.tf}_info_1a.json"
         short_info_path = primary_folder / f"short_{self.tf}_info_1a.json"
 
         self.long_model = joblib.load(self.long_model_path)
         self.short_model = joblib.load(self.short_model_path)
+        self.long_scaler = joblib.load(long_scaler_path)
+        self.short_scaler = joblib.load(short_scaler_path)
 
         with open(long_info_path, 'r') as ip:
             self.long_info = json.load(ip)
@@ -2542,14 +2546,19 @@ class TrailFractals(Agent):
         secondary_folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/"
                                 f"trail_fractals_{self.width}_{self.spacing}")
         long_model_file = secondary_folder / f"long_{self.tf}_model_2.json"
-        long_model_info = secondary_folder / f"long_{self.tf}_info_2.json"
         short_model_file = secondary_folder / f"short_{self.tf}_model_2.json"
+        long_scaler_file = secondary_folder / f"long_{self.tf}_scaler_2.json"
+        short_scaler_file = secondary_folder / f"short_{self.tf}_scaler_2.json"
+        long_model_info = secondary_folder / f"long_{self.tf}_info_2.json"
         short_model_info = secondary_folder / f"short_{self.tf}_info_2.json"
 
         self.long_model_2 = XGBClassifier()
         self.long_model_2.load_model(long_model_file)
         self.short_model_2 = XGBClassifier()
         self.short_model_2.load_model(short_model_file)
+
+        self.long_scaler_2 = joblib.load(long_scaler_file)
+        self.short_scaler_2 = joblib.load(short_scaler_file)
 
         with open(long_model_info, 'r') as ip:
             self.long_info_2 = json.load(ip)
@@ -2583,9 +2592,13 @@ class TrailFractals(Agent):
         data = pd.Series(features, index=names)
 
         if direction == 'long':
-            signal['score'] = str(self.long_model_2.predict_proba(data)[0, 1])
+            long_data = data.loc[self.long_info_2['features']]
+            long_data = self.long_scaler_2.transform(long_data)
+            signal['score'] = str(self.long_model_2.predict_proba(long_data)[0, 1])
         else:
-            signal['score'] = str(self.short_model_2.predict_proba(data)[0, 1])
+            short_data = data.loc[self.short_info_2['features']]
+            short_data = self.short_scaler_2.transform(short_data)
+            signal['score'] = str(self.short_model_2.predict_proba(short_data)[0, 1])
 
         signal['predictor'] = 'ml'
 
@@ -2661,6 +2674,7 @@ class TrailFractals(Agent):
         long_features = df[self.long_info['features']]
         long_features, _, cols = mlf.transform_columns(long_features, long_features)
         long_features = pd.DataFrame(long_features, columns=cols)
+        long_features = self.long_scaler.transform(long_features)
         long_features = long_features.iloc[-1]
 
         long_X = pd.DataFrame(long_features).transpose()
@@ -2669,7 +2683,7 @@ class TrailFractals(Agent):
         except ValueError as e:
             # logger.exception('NaN in prediction set')
             logger.error(e)
-            logger.error(long_features.tail())
+            logger.error(long_features)
             long_confidence = 0
 
         # Short model
@@ -2678,6 +2692,7 @@ class TrailFractals(Agent):
         short_features = df[self.short_info['features']]
         short_features, _, cols = mlf.transform_columns(short_features, short_features)
         short_features = pd.DataFrame(short_features, columns=cols)
+        short_features = self.short_scaler.transform(short_features)
         short_features = short_features.iloc[-1]
 
         short_X = pd.DataFrame(short_features).transpose()
@@ -2686,7 +2701,7 @@ class TrailFractals(Agent):
         except ValueError as e:
             # logger.exception('NaN in prediction set')
             logger.error(e)
-            logger.error(short_features.tail())
+            logger.error(short_features)
             short_confidence = 0
 
         # logger.debug(f"{self.name} {pair} {self.tf} long conf: {long_confidence:.1%} short conf: {short_confidence:.1%}")

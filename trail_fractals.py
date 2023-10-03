@@ -19,14 +19,18 @@ atr_spacing = 2
 fits = list(enumerate(itertools.product(['1h', '4h', '12h', '1d'], ['long', 'short'])))
 
 for n, fit in fits:
+    loop_start = time.perf_counter()
     timeframe, side = fit[0], fit[1]
-    print(f"\nFit {n+1} of {len(list(fits))}, Fitting {timeframe} {side} model")
+    print(f"\nFit {n+1} of {len(list(fits))}, Fitting {timeframe} {side} models")
 
     trail_fractals_1a(side, timeframe, width, atr_spacing, 30, '1d_volumes')
     trail_fractals_1a(side, timeframe, width, atr_spacing, 100, '1w_volumes')
-    # trail_fractals_2(side, timeframe, width, atr_spacing, 0.4)
+    trail_fractals_2(side, timeframe, width, atr_spacing, 0.4)
 
-
+    loop_end = time.perf_counter()
+    loop_elapsed = loop_end - loop_start
+    print(f"\nThis fit took: {int(loop_elapsed // 3600)}h {int(loop_elapsed // 60) % 60}m {loop_elapsed % 60:.1f}s\n")
+    print('-' * 30)
 
 all_end = time.perf_counter()
 all_elapsed = all_end - all_start

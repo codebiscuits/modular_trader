@@ -119,62 +119,7 @@ def feature_selection(X, y, X_val, scorer):
     return X, y, X_val, selected
 
 
-def trail_fractals_2(side, tf, width, atr_spacing, thresh):
-    tf_start = time.perf_counter()
-
-    results = create_dataset(side, tf, width, atr_spacing, thresh)
-
-    fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
-
-    # split features from labels
-    X = results.drop('win', axis=1)
-    y = results.win  # pnl > threshold
-
-    # random undersampling
-    rus = RandomUnderSampler(random_state=0)
-    X, y = rus.fit_resample(X, y)
-
-    # split off validation set
-    X, X_val, y, y_val = train_test_split(X, y, train_size=0.9, random_state=43875, stratify=y)
-
-    # split off validation labels
-    X = X.drop('pnl', axis=1)
-    z_val = X_val.pnl  # pnl > 0
-    X_val = X_val.drop('pnl', axis=1)
-    cols = X.columns
-
-    print('')
-    warn = f"*** WARNING only {len(X_val)} observations in validation set. ***" if len(X_val) < 30 else ''
-    logger.debug(f"{len(y)} observations in {tf} {side} dataset. {warn}")
-
-    # feature scaling
-    scaler = QuantileTransformer()
-    X = scaler.fit_transform(X)
-    X_val = scaler.transform(X_val)
-
-    # quick feature selection
-    # selector = SelectKBest(mutual_info_classif, k=7)
-    # selector.fit(X, y)
-    # cols_idx = list(selector.get_support(indices=True))
-    # feature_names = [col for i, col in enumerate(cols) if i in cols_idx]
-    # X = X[:, cols_idx]
-    # X_val = X_val[:, cols_idx]
-
-    # slow feature selection
-    X, y, X_val, selected = feature_selection(X, y, X_val, fb_scorer)
-    feature_names = [col for i, col in enumerate(cols) if i in selected]
-
-    # hyperparameter optimisation
-    model = mlf.fit_xgb(X, y, 1000)
-
-    # Test model on validation set
-    d_val = DMatrix(X_val, label=z_val)
-    y_pred = model.predict(d_val) > 0.5
-    accuracy = accuracy_score(z_val, y_pred)
-    f_beta = fbeta_score(z_val, y_pred, beta=0.333)
-    logger.debug(f"Performance on validation set: accuracy: {accuracy:.1%}, f beta: {f_beta:.1%}")
-
-    # save models and info
+def save_models(side, tf, width, atr_spacing, feature_names, thresh, X_val, model, scaler):
     folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/trail_fractals_{width}_{atr_spacing}")
     pi_folder = Path(f"/home/ross/coding/pi_2/modular_trader/machine_learning/"
                      f"models/trail_fractals_{width}_{atr_spacing}")
@@ -209,6 +154,73 @@ def trail_fractals_2(side, tf, width, atr_spacing, thresh):
         with open(scaler_path, 'w') as sp:
             joblib.dump(scaler, sp)
 
+
+def trail_fractals_2(side, tf, width, atr_spacing, thresh):
+    tf_start = time.perf_counter()
+    print(f"- Running Trail_fractals_2, {side}, {tf}, {width}, {atr_spacing}, {thresh}")
+
+    results = create_dataset(side, tf, width, atr_spacing, thresh)
+
+    fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
+
+    # split features from labels
+    X = results.drop('win', axis=1)
+    y = results.win  # pnl > threshold
+
+    # random undersampling
+    rus = RandomUnderSampler(random_state=0)
+    X, y = rus.fit_resample(X, y)
+
+    # split off validation set
+    X, X_val, y, y_val = train_test_split(X, y, train_size=0.9, random_state=43875, stratify=y)
+
+    # split off validation labels
+    z = X.pnl  # pnl > 0
+    X = X.drop('pnl', axis=1)
+    z_val = X_val.pnl
+    X_val = X_val.drop('pnl', axis=1)
+    cols = X.columns
+
+    warn = f"*** WARNING only {len(X_val)} observations in validation set. ***" if len(X_val) < 30 else ''
+    logger.debug(f"{len(y)} observations in {tf} {side} dataset. {warn}")
+
+    # feature scaling
+    scaler = QuantileTransformer()
+    X = scaler.fit_transform(X)
+    X_val = scaler.transform(X_val)
+
+    # quick feature selection
+    # selector = SelectKBest(mutual_info_classif, k=7)
+    # selector.fit(X, y)
+    # cols_idx = list(selector.get_support(indices=True))
+    # feature_names = [col for i, col in enumerate(cols) if i in cols_idx]
+    # X = X[:, cols_idx]
+    # X_val = X_val[:, cols_idx]
+
+    # slow feature selection
+    X, y, X_val, selected = feature_selection(X, y, X_val, fb_scorer)
+    feature_names = [col for i, col in enumerate(cols) if i in selected]
+
+    # hyperparameter optimisation
+    model = mlf.fit_xgb(X, y, 1000)
+
+    # Test model on training set
+    d_train = DMatrix(X, label=z)
+    y_pred = model.predict(d_train) > 0.5
+    training_accuracy = accuracy_score(z, y_pred)
+    training_f_beta = fbeta_score(z, y_pred, beta=0.333)
+    logger.debug(f"Performance on validation set: accuracy: {training_accuracy:.1%}, f beta: {training_f_beta:.1%}")
+
+    # Test model on validation set
+    d_val = DMatrix(X_val, label=z_val)
+    y_pred = model.predict(d_val) > 0.5
+    accuracy = accuracy_score(z_val, y_pred)
+    f_beta = fbeta_score(z_val, y_pred, beta=0.333)
+    logger.debug(f"Performance on validation set: accuracy: {accuracy:.1%}, f beta: {f_beta:.1%}")
+
+    # save models and info
+    # save_models(side, tf, width, atr_spacing, feature_names, thresh, X_val, model, scaler)
+
     tf_end = time.perf_counter()
     tf_elapsed = tf_end - tf_start
-    logger.debug(f"Test time taken: {int(tf_elapsed // 3600)}h {int(tf_elapsed // 60) % 60}m {tf_elapsed % 60:.1f}s")
+    logger.debug(f"TF 2 time taken: {int(tf_elapsed // 3600)}h {int(tf_elapsed // 60) % 60}m {tf_elapsed % 60:.1f}s")
