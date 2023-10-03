@@ -2492,7 +2492,8 @@ class Agent:
 class TrailFractals(Agent):
     """Machine learning strategy based around williams fractals trailing stops"""
 
-    def __init__(self, session, tf: str, offset: int, width: int, spacing: int, training_pair_selection: str, num_pairs: int) -> None:
+    def __init__(self, session, tf: str, offset: int, width: int, spacing: int, training_pair_selection: str,
+                 num_pairs: int) -> None:
         t = Timer('TrailFractals init')
         t.start()
         self.mode = 'margin'
@@ -2547,8 +2548,8 @@ class TrailFractals(Agent):
                                 f"trail_fractals_{self.width}_{self.spacing}")
         long_model_file = secondary_folder / f"long_{self.tf}_model_2.json"
         short_model_file = secondary_folder / f"short_{self.tf}_model_2.json"
-        long_scaler_file = secondary_folder / f"long_{self.tf}_scaler_2.json"
-        short_scaler_file = secondary_folder / f"short_{self.tf}_scaler_2.json"
+        long_scaler_file = secondary_folder / f"long_{self.tf}_scaler_2.sav"
+        short_scaler_file = secondary_folder / f"short_{self.tf}_scaler_2.sav"
         long_model_info = secondary_folder / f"long_{self.tf}_info_2.json"
         short_model_info = secondary_folder / f"short_{self.tf}_info_2.json"
 
@@ -2575,28 +2576,31 @@ class TrailFractals(Agent):
 
         inval_ratio = signal['inval_ratio']
 
-        perf_ema4 = self.pnls[direction]['ema_4']
-        perf_ema8 = self.pnls[direction]['ema_8']
-        perf_ema16 = self.pnls[direction]['ema_16']
-        perf_ema32 = self.pnls[direction]['ema_32']
-        perf_ema64 = self.pnls[direction]['ema_64']
+        perf_ema_4 = self.pnls[direction]['ema_4']
+        perf_ema_8 = self.pnls[direction]['ema_8']
+        perf_ema_16 = self.pnls[direction]['ema_16']
+        perf_ema_32 = self.pnls[direction]['ema_32']
+        perf_ema_64 = self.pnls[direction]['ema_64']
 
         mkt_rank_1d = signal.get('market_rank_1d', 1)
         mkt_rank_1w = signal.get('market_rank_1w', 1)
         mkt_rank_1m = signal.get('market_rank_1m', 1)
 
-        features = [conf_l, conf_s, inval_ratio, perf_ema4, perf_ema8, perf_ema16,
-                  perf_ema32, perf_ema64, mkt_rank_1d, mkt_rank_1w, mkt_rank_1m]
-        names = ['conf_l', 'conf_s', 'inval_ratio', 'perf_ema4', 'perf_ema8', 'perf_ema16',
-                 'perf_ema32', 'perf_ema64', 'mkt_rank_1d', 'mkt_rank_1w', 'mkt_rank_1m']
+        features = [conf_l, conf_s, inval_ratio, perf_ema_4, perf_ema_8, perf_ema_16,
+                    perf_ema_32, perf_ema_64, mkt_rank_1d, mkt_rank_1w, mkt_rank_1m]
+        names = ['conf_l', 'conf_s', 'inval_ratio', 'perf_ema_4', 'perf_ema_8', 'perf_ema_16',
+                 'perf_ema_32', 'perf_ema_64', 'mkt_rank_1d', 'mkt_rank_1w', 'mkt_rank_1m']
         data = pd.Series(features, index=names)
+        print(data)
+        print(self.long_info_2['features'])
+        print(self.short_info_2['features'])
 
         if direction == 'long':
-            long_data = data.loc[self.long_info_2['features']]
+            long_data = DMatrix(data[self.long_info_2['features']])
             long_data = self.long_scaler_2.transform(long_data)
             signal['score'] = str(self.long_model_2.predict_proba(long_data)[0, 1])
         else:
-            short_data = data.loc[self.short_info_2['features']]
+            short_data = DMatrix(data[self.short_info_2['features']])
             short_data = self.short_scaler_2.transform(short_data)
             signal['score'] = str(self.short_model_2.predict_proba(short_data)[0, 1])
 
@@ -2606,7 +2610,6 @@ class TrailFractals(Agent):
         print(f"secondary short prediction: {self.short_model_2.predict_proba(data)}")
 
         return signal
-
 
     def secondary_manual_prediction(self, session, signal):
         signal['perf_ema4'] = self.pnls[signal['direction']]['ema_4']
@@ -2620,17 +2623,17 @@ class TrailFractals(Agent):
         perf_score, rank_score = 0, 0
         if signal['tf'] == '1h':
             perf_score = ((signal['perf_ema64'] > 0.5) + (signal['perf_ema32'] > 0.5) + (
-                        signal['perf_ema16'] > 0.5)) / 3
+                    signal['perf_ema16'] > 0.5)) / 3
             rank_score = signal.get('market_rank_1d', 1) if sig_bias == 'bullish' else (
-                        1 - signal.get('market_rank_1d', 1))
+                    1 - signal.get('market_rank_1d', 1))
         elif signal['tf'] in {'4h', '12h'}:
             perf_score = ((signal['perf_ema32'] > 0.5) + (signal['perf_ema16'] > 0.5) + (signal['perf_ema8'] > 0.5)) / 3
             rank_score = signal.get('market_rank_1w', 1) if sig_bias == 'bullish' else (
-                        1 - signal.get('market_rank_1w', 1))
+                    1 - signal.get('market_rank_1w', 1))
         elif signal['tf'] == '1d':
             perf_score = ((signal['perf_ema16'] > 0.5) + (signal['perf_ema8'] > 0.5) + (signal['perf_ema4'] > 0.5)) / 3
             rank_score = signal.get('market_rank_1m', 1) if sig_bias == 'bullish' else (
-                        1 - signal.get('market_rank_1m', 1))
+                    1 - signal.get('market_rank_1m', 1))
 
         if not session.live:
             perf_score = 1.0
@@ -2645,7 +2648,6 @@ class TrailFractals(Agent):
         print(f"secondary manual prediction: {float(signal['score']):.1%}")
 
         return signal
-
 
     def signals(self, session, df: pd.DataFrame, pair: str) -> dict:
         """generates spot buy signals based on the ats_z indicator. does not account for currently open positions,
@@ -2672,10 +2674,10 @@ class TrailFractals(Agent):
         # Long model
         df['r_pct'] = df.long_r_pct
         long_features = df[self.long_info['features']]
-        long_features, _, cols = mlf.transform_columns(long_features, long_features)
-        long_features = pd.DataFrame(long_features, columns=cols)
+        # long_features, _, cols = mlf.transform_columns(long_features, long_features)
+        # long_features = pd.DataFrame(long_features, columns=cols)
         long_features = self.long_scaler.transform(long_features)
-        long_features = long_features.iloc[-1]
+        long_features = long_features[-1, :]
 
         long_X = pd.DataFrame(long_features).transpose()
         try:
@@ -2690,10 +2692,10 @@ class TrailFractals(Agent):
         df = df.drop('long_r_pct', axis=1)
         df['r_pct'] = df.short_r_pct
         short_features = df[self.short_info['features']]
-        short_features, _, cols = mlf.transform_columns(short_features, short_features)
-        short_features = pd.DataFrame(short_features, columns=cols)
+        # short_features, _, cols = mlf.transform_columns(short_features, short_features)
+        # short_features = pd.DataFrame(short_features, columns=cols)
         short_features = self.short_scaler.transform(short_features)
-        short_features = short_features.iloc[-1]
+        short_features = short_features[-1, :]
 
         short_X = pd.DataFrame(short_features).transpose()
         try:
