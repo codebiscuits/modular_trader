@@ -673,13 +673,15 @@ def repay_asset_M(session, asset: str, qty: str, live: bool) -> bool:
 
 
 @uf.retry_on_busy()
-def set_stop_M(session, pair: str, size: float, side: str, trigger: float, limit: float) -> dict:
+def set_stop_M(session, pair: str, size: float, side: str, trigger: float) -> dict:
     """sends a margin stop-loss limit order to binance and returns the order data"""
 
     sd = Timer('set_stop_M')
     sd.start()
 
     now = datetime.now(timezone.utc).timestamp()
+    curr_price = session.pairs_data[pair]['price']
+    limit = curr_price * 0.81 if side == be.SIDE_SELL else curr_price * 1.19
 
     trigger = uf.valid_price(session, pair, trigger)
     limit = uf.valid_price(session, pair, limit)
