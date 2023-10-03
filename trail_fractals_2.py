@@ -180,6 +180,7 @@ def trail_fractals_2(side, tf, width, atr_spacing, thresh):
                      f"models/trail_fractals_{width}_{atr_spacing}")
     model_file = f"{side}_{tf}_model_2.json"
     model_info = f"{side}_{tf}_info_2.json"
+    scaler_file = f"{side}_{tf}_scaler_2.sav"
 
     info_dict = {'features': feature_names, 'pnl_threshold': thresh, 'valid': len(X_val) > 30}
 
@@ -190,6 +191,10 @@ def trail_fractals_2(side, tf, width, atr_spacing, thresh):
     info_path.touch(exist_ok=True)
     with open(info_path, 'w') as info:
         json.dump(info_dict, info)
+    scaler_path = folder / scaler_file
+    scaler_path.touch(exist_ok=True)
+    with open(scaler_path, 'w') as sp:
+        joblib.dump(scaler, sp)
 
     # save on pi
     if not running_on_pi:
@@ -199,6 +204,10 @@ def trail_fractals_2(side, tf, width, atr_spacing, thresh):
         info_path_pi.touch(exist_ok=True)
         with open(info_path_pi, 'w') as info:
             json.dump(info_dict, info)
+        scaler_path = pi_folder / scaler_file
+        scaler_path.touch(exist_ok=True)
+        with open(scaler_path, 'w') as sp:
+            joblib.dump(scaler, sp)
 
     tf_end = time.perf_counter()
     tf_elapsed = tf_end - tf_start

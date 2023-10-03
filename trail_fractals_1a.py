@@ -16,17 +16,17 @@ if not Path('/pi_2.txt').exists():
 
     patch_sklearn()
 
-from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.model_selection import GridSearchCV, train_test_split  # , cross_val_score
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, train_test_split  # , cross_val_score
 from sklearn.metrics import fbeta_score, make_scorer
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif  # , chi2
+from sklearn.preprocessing import MinMaxScaler
 from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 from imblearn.under_sampling import RandomUnderSampler
 import warnings
 warnings.filterwarnings('ignore')
 
-running_on_pi = Path('/pi_2.txt').exists()
 logger = create_logger('trail_fractals', 'trail_fractals')
 scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
 
@@ -45,12 +45,15 @@ def init_client(max_retries: int = 360, delay: int = 5):
     raise Exception(f"Max retries exceeded. Request still failed after {max_retries} attempts.")
 
 
-def feature_selection_1a(X: np.ndarray, y, limit, cols):
+def feature_selection_1a(X: np.ndarray, y, limit: int, cols: list[str]):
+    """uses a combination of methods to select the best performing subset of features. returns the trained selector
+    object that can be used to transform a new dataset"""
     fs_start = time.perf_counter()
 
-    # drop any columns with the same value in every row
+    # drop any columns with the same value in every row, and adjust cols to match
     keep_cols = np.array(-1 * (np.all(X == X[0, :], axis=0)) + 1, dtype=bool)
     X = X[:, keep_cols]
+    cols = [col for i, col in enumerate(cols) if keep_cols[i]]
 
     # Selection stage 1
     pre_selector_model = GradientBoostingClassifier(random_state=42,
@@ -73,16 +76,16 @@ def feature_selection_1a(X: np.ndarray, y, limit, cols):
     selector_3.fit(X, y)
     # selector_4.fit(X, y)
 
-    cols_1 = list(selector_1.k_feature_idx_)
-    cols_2 = list(selector_2.get_support(indices=True))
-    cols_3 = list(selector_3.get_support(indices=True))
+    cols_idx_1 = list(selector_1.k_feature_idx_)
+    cols_idx_2 = list(selector_2.get_support(indices=True))
+    cols_idx_3 = list(selector_3.get_support(indices=True))
     # cols_4 = list(selector_4.get_support(indices=True))
-    all_cols = list(set(cols_1 + cols_2 + cols_3))
+    all_cols_idx = list(set(cols_idx_1 + cols_idx_2 + cols_idx_3))
 
     # selected_columns = [cols[i] for i in all_cols]
-    selected_columns = [col for i, col in enumerate(cols) if i in all_cols]
+    selected_columns = [col for i, col in enumerate(cols) if i in all_cols_idx]
 
-    X = pd.DataFrame(X[:, all_cols], columns=selected_columns)
+    X = pd.DataFrame(X[:, all_cols_idx], columns=selected_columns)
 
     if X.shape[0] > limit:
         X_train, _, y_train, _ = train_test_split(X, y, train_size=limit, random_state=99)
@@ -106,9 +109,7 @@ def feature_selection_1a(X: np.ndarray, y, limit, cols):
                    scoring=scorer,
                    n_jobs=-1)
     selector = selector.fit(X_train, y_train)
-    X_transformed = selector.transform(X)
-    selected = selector.k_feature_names_
-    print(f"Number of features selected: {len(selected)}")
+    print(f"Number of features selected: {len(selector.k_feature_names_)}")
 
     # sel_score = selector.score(X_train, y_train)
     # print(f"Model score after feature selection: {sel_score:.1%}")
@@ -117,7 +118,7 @@ def feature_selection_1a(X: np.ndarray, y, limit, cols):
     fs_elapsed = fs_end - fs_start
     print(f"Feature selection time taken: {int(fs_elapsed // 60)}m {fs_elapsed % 60:.1f}s")
 
-    return X_transformed, y, selected
+    return selector
 
 
 def load_features(folder, side, tf):
@@ -162,20 +163,25 @@ def fit_gbc(X, y, scorer):
     return gs.best_estimator_
 
 
+def fit_rfc(X_train, y_train):
+    param_dict = dict(
+        estimator__max_features=[4, 6, 8, 10],
+        estimator__max_depth=[int(x) for x in np.linspace(start=15, stop=30, num=4)],
+        estimator__min_samples_split=[2, 3, 4],  # must be 2 or more
+    )
+    fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
+    model = RandomForestClassifier(class_weight='balanced', n_estimators=300, min_samples_leaf=2)
+    rf_grid = RandomizedSearchCV(estimator=model,
+                                 param_distributions=param_dict,
+                                 n_iter=60,
+                                 scoring=fb_scorer,
+                                 cv=3, n_jobs=-1)
+    rf_grid.fit(X_train, y_train)
 
-def trail_fractals_1a(side, timeframe, width, atr_spacing, num_pairs, selection_method):
-    loop_start = time.perf_counter()
-    folder = Path(f"/home/ross/coding/modular_trader/machine_learning/"
-                  f"models/trail_fractals_{width}_{atr_spacing}/{selection_method}_{num_pairs}")
+    return rf_grid
 
-    data_len = 500
 
-    if running_on_pi:
-        pairs = load_pairs(folder, side, timeframe)
-    else:
-        pairs = get_margin_pairs(selection_method, num_pairs)
-
-    # create dataset
+def create_dataset(pairs, data_len, timeframe, width, atr_spacing, side):
     all_res = pd.DataFrame()
     for pair in pairs:
         df = mlf.get_data(pair, timeframe).tail(data_len + 200).reset_index(drop=True)
@@ -186,32 +192,87 @@ def trail_fractals_1a(side, timeframe, width, atr_spacing, num_pairs, selection_
     all_res = all_res.sort_values('timestamp').reset_index(drop=True)
 
     # split features from labels
-    X, y, z = mlf.features_labels_split(all_res)
+    X, y, _ = mlf.features_labels_split(all_res)
 
     # random undersampling
     rus = RandomUnderSampler(random_state=0)
     X, y = rus.fit_resample(X, y)
 
-    if running_on_pi:
-        selected = load_features(folder, side, timeframe)
-        X = X.loc[:, selected]
+    return X, y
 
-    # TODO when i refactor this into a pipeline, i will need to remove the equivalent step from the agent definition
-    X, _, cols = mlf.transform_columns(X, X)
 
-    # feature selection
-    if not running_on_pi:
-        print(f"feature selection began: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
-        X, y, selected = feature_selection_1a(X, y, 1000, cols)
-        print(selected)
+def save_models(width, spacing, sel_method, num_pairs, side, tf, data_len, selected, pairs, cal_model, scaler):
+    folder = Path(f"/home/ross/coding/modular_trader/machine_learning/"
+                  f"models/trail_fractals_{width}_{spacing}/{sel_method}_{num_pairs}")
+    pi_folder = Path(f"/home/ross/coding/pi_2/modular_trader/machine_learning/"
+                      f"models/trail_fractals_{width}_{spacing}/{sel_method}_{num_pairs}")
+    model_file = f"{side}_{tf}_model_1a.sav"
+    model_info = f"{side}_{tf}_info_1a.json"
+    scaler_file = f"{side}_{tf}_scaler_2.sav"
+
+    info_dict = {'data_length': data_len, 'features': selected, 'pair_selection': sel_method,
+                 'pairs': pairs, 'created': int(datetime.now(timezone.utc).timestamp())}
+
+    # save local copy
+    folder.mkdir(parents=True, exist_ok=True)
+    joblib.dump(cal_model, folder / model_file)
+    info_path = folder / model_info
+    info_path.touch(exist_ok=True)
+    with open(info_path, 'w') as info:
+        json.dump(info_dict, info)
+    scaler_path = folder / scaler_file
+    scaler_path.touch(exist_ok=True)
+    with open(scaler_path, 'w') as sp:
+        joblib.dump(scaler, sp)
+
+    # save on pi
+    pi_folder.mkdir(parents=True, exist_ok=True)
+    joblib.dump(cal_model, pi_folder / model_file)
+    info_path_pi = pi_folder / model_info
+    info_path_pi.touch(exist_ok=True)
+    with open(info_path_pi, 'w') as info:
+        json.dump(info_dict, info)
+    scaler_path = pi_folder / scaler_file
+    scaler_path.touch(exist_ok=True)
+    with open(scaler_path, 'w') as sp:
+        joblib.dump(scaler, sp)
+
+
+def trail_fractals_1a(side, tf, width, atr_spacing, num_pairs, selection_method):
+    loop_start = time.perf_counter()
+    data_len = 500
+    pairs = get_margin_pairs(selection_method, num_pairs)
+
+    X, y = create_dataset(pairs, data_len, tf, width, atr_spacing, side)
 
     # split data for fitting and calibration
-    X, X_cal, y, y_cal = train_test_split(X, y, test_size=0.333, random_state=11, stratify=y)
+    X, X_cal, y, y_cal = train_test_split(X, y, test_size=0.2, random_state=11, stratify=y)
+
+    # TODO when i refactor this into a pipeline, i will need to remove the equivalent step from the agent definition
+    # X, _, cols = mlf.transform_columns(X, X)
+    cols = list(X.columns) # list of strings, names of all features
+    scaler = MinMaxScaler()
+    X1 = scaler.fit_transform(X)
+
+    # feature selection
+    print(f"feature selection began: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
+    selector = feature_selection_1a(X1, y, 1000, cols)
+    selected = selector.k_feature_names_
+    print(selected)
+
+    # apply selector and scaler to X and X_cal
+    X = selector.transform(X)
+    X = pd.DataFrame(X, columns=selected)
+    X = scaler.fit_transform(X)
+    X_cal = selector.transform(X_cal)
+    X_cal = pd.DataFrame(X_cal, columns=selected)
+    X_cal = scaler.transform(X_cal)
 
     # fit model
     print(f"Training on {X.shape[0]} observations: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
     X = pd.DataFrame(X, columns=selected)
     grid_model = fit_gbc(X, y, scorer)
+    # grid_model = fit_rfc(X, y, scorer)
     grid_score = grid_model.score(X, y)
     print(f"Model score after grid search: {grid_score:.1%}")
 
@@ -224,31 +285,7 @@ def trail_fractals_1a(side, timeframe, width, atr_spacing, num_pairs, selection_
     print(f"Model score after calibration: {cal_score:.1%}")
 
     # save models and info
-
-    pi_folder = Path(f"/home/ross/coding/pi_2/modular_trader/machine_learning/"
-                      f"models/trail_fractals_{width}_{atr_spacing}/{selection_method}_{num_pairs}")
-    model_file = f"{side}_{timeframe}_model_1a.sav"
-    model_info = f"{side}_{timeframe}_info_1a.json"
-
-    info_dict = {'data_length': data_len, 'features': selected, 'pair_selection': selection_method,
-                 'pairs': pairs, 'created': int(datetime.now(timezone.utc).timestamp())}
-
-    # save local copy
-    folder.mkdir(parents=True, exist_ok=True)
-    joblib.dump(cal_model, folder / model_file)
-    info_path = folder / model_info
-    info_path.touch(exist_ok=True)
-    with open(info_path, 'w') as info:
-        json.dump(info_dict, info)
-
-    # save on pi
-    if not running_on_pi:
-        pi_folder.mkdir(parents=True, exist_ok=True)
-        joblib.dump(cal_model, pi_folder / model_file)
-        info_path_pi = pi_folder / model_info
-        info_path_pi.touch(exist_ok=True)
-        with open(info_path_pi, 'w') as info:
-            json.dump(info_dict, info)
+    # save_models(width, atr_spacing, selection_method, num_pairs, side, tf, data_len, selected, pairs, cal_model, scaler)
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
