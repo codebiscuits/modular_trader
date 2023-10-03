@@ -138,26 +138,24 @@ def save_models(side, tf, width, atr_spacing, feature_names, thresh, X_val, mode
         json.dump(info_dict, info)
     scaler_path = folder / scaler_file
     scaler_path.touch(exist_ok=True)
-    with open(scaler_path, 'w') as sp:
-        joblib.dump(scaler, sp)
+    joblib.dump(scaler, scaler_path)
 
     # save on pi
-    if not running_on_pi:
-        pi_folder.mkdir(parents=True, exist_ok=True)
-        model.save_model(pi_folder / model_file)
-        info_path_pi = pi_folder / model_info
-        info_path_pi.touch(exist_ok=True)
-        with open(info_path_pi, 'w') as info:
-            json.dump(info_dict, info)
-        scaler_path = pi_folder / scaler_file
-        scaler_path.touch(exist_ok=True)
-        with open(scaler_path, 'w') as sp:
-            joblib.dump(scaler, sp)
+    # if not running_on_pi:
+    #     pi_folder.mkdir(parents=True, exist_ok=True)
+    #     model.save_model(pi_folder / model_file)
+    #     info_path_pi = pi_folder / model_info
+    #     info_path_pi.touch(exist_ok=True)
+    #     with open(info_path_pi, 'w') as info:
+    #         json.dump(info_dict, info)
+    #     scaler_path = pi_folder / scaler_file
+    #     scaler_path.touch(exist_ok=True)
+    #     joblib.dump(scaler, scaler_path)
 
 
 def trail_fractals_2(side, tf, width, atr_spacing, thresh):
     tf_start = time.perf_counter()
-    print(f"- Running Trail_fractals_2, {side}, {tf}, {width}, {atr_spacing}, {thresh}")
+    print(f"\n- Running Trail_fractals_2, {side}, {tf}, {width}, {atr_spacing}, {thresh}")
 
     results = create_dataset(side, tf, width, atr_spacing, thresh)
 
@@ -219,7 +217,7 @@ def trail_fractals_2(side, tf, width, atr_spacing, thresh):
     logger.debug(f"Performance on validation set: accuracy: {accuracy:.1%}, f beta: {f_beta:.1%}")
 
     # save models and info
-    # save_models(side, tf, width, atr_spacing, feature_names, thresh, X_val, model, scaler)
+    save_models(side, tf, width, atr_spacing, feature_names, thresh, X_val, model, scaler)
 
     tf_end = time.perf_counter()
     tf_elapsed = tf_end - tf_start

@@ -223,20 +223,18 @@ def save_models(width, spacing, sel_method, num_pairs, side, tf, data_len, selec
         json.dump(info_dict, info)
     scaler_path = folder / scaler_file
     scaler_path.touch(exist_ok=True)
-    with open(scaler_path, 'w') as sp:
-        joblib.dump(scaler, sp)
+    joblib.dump(scaler, scaler_path)
 
-    # save on pi
-    pi_folder.mkdir(parents=True, exist_ok=True)
-    joblib.dump(cal_model, pi_folder / model_file)
-    info_path_pi = pi_folder / model_info
-    info_path_pi.touch(exist_ok=True)
-    with open(info_path_pi, 'w') as info:
-        json.dump(info_dict, info)
-    scaler_path = pi_folder / scaler_file
-    scaler_path.touch(exist_ok=True)
-    with open(scaler_path, 'w') as sp:
-        joblib.dump(scaler, sp)
+    # # save on pi
+    # pi_folder.mkdir(parents=True, exist_ok=True)
+    # joblib.dump(cal_model, pi_folder / model_file)
+    # info_path_pi = pi_folder / model_info
+    # info_path_pi.touch(exist_ok=True)
+    # with open(info_path_pi, 'w') as info:
+    #     json.dump(info_dict, info)
+    # scaler_path = pi_folder / scaler_file
+    # scaler_path.touch(exist_ok=True)
+    # joblib.dump(scaler, scaler_path)
 
 
 def trail_fractals_1a(side, tf, width, atr_spacing, num_pairs, selection_method):
@@ -289,7 +287,7 @@ def trail_fractals_1a(side, tf, width, atr_spacing, num_pairs, selection_method)
     print(f"Model score after calibration: {cal_score:.1%}")
 
     # save models and info
-    # save_models(width, atr_spacing, selection_method, num_pairs, side, tf, data_len, selected, pairs, cal_model, scaler)
+    save_models(width, atr_spacing, selection_method, num_pairs, side, tf, data_len, selected, pairs, cal_model, scaler)
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
