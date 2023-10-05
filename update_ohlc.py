@@ -38,6 +38,7 @@ volumes_1d = {}
 volumes_1w = {}
 volatilities_1d = {}
 volatilities_1w = {}
+lengths = {}
 
 def from_scratch(session, pair, tf):
     df_start = time.perf_counter()
@@ -122,6 +123,14 @@ def save_volatilities(vols, period):
         json.dump(vols, file)
 
 
+def save_lengths(lengths: dict):
+    len_path = Path(f"ohlc_lengths.json")
+    len_path.touch(exist_ok=True)
+
+    with open(len_path, 'w') as file:
+        json.dump(lengths, file)
+
+
 iterations(0, session, 'BTCUSDT', '1m')
 iterations(1, session, 'ETHUSDT', '1m')
 
@@ -136,20 +145,23 @@ for n, pair in enumerate(pairs):
         continue
 
     rocs[pair] = {}
-    rocs[pair]['1d'] = df.close.rolling(12).mean().pct_change(288).iloc[-1]
-    rocs[pair]['1w'] = df.close.rolling(84).mean().pct_change(2016).iloc[-1]
-    rocs[pair]['1m'] = df.close.rolling(360).mean().pct_change(8640).iloc[-1]
+    rocs[pair]['1d'] = df.close.rolling(12).mean().ffill().pct_change(288).iloc[-1]
+    rocs[pair]['1w'] = df.close.rolling(84).mean().ffill().pct_change(2016).iloc[-1]
+    rocs[pair]['1m'] = df.close.rolling(360).mean().ffill().pct_change(8640).iloc[-1]
 
     volumes_1d[pair] = df.tail(288).quote_vol.sum()
     volumes_1w[pair] = df.tail(2016).quote_vol.sum()
-    volatilities_1d[pair] = df.tail(288).close.pct_change().std()
-    volatilities_1w[pair] = df.tail(2016).close.pct_change().std()
+    volatilities_1d[pair] = df.tail(288).close.ffill().pct_change().std()
+    volatilities_1w[pair] = df.tail(2016).close.ffill().pct_change().std()
+
+    lengths[pair] = len(df)
 
 mkt_rank(rocs)
 save_volumes(volumes_1d, 'd')
 save_volumes(volumes_1w, 'w')
 save_volatilities(volatilities_1d, 'd')
 save_volatilities(volatilities_1w, 'w')
+save_lengths(lengths)
 
 end = time.perf_counter()
 all_time = end - start
