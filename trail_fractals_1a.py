@@ -225,16 +225,16 @@ def save_models(width, spacing, sel_method, num_pairs, side, tf, data_len, selec
     scaler_path.touch(exist_ok=True)
     joblib.dump(scaler, scaler_path)
 
-    # # save on pi
-    # pi_folder.mkdir(parents=True, exist_ok=True)
-    # joblib.dump(cal_model, pi_folder / model_file)
-    # info_path_pi = pi_folder / model_info
-    # info_path_pi.touch(exist_ok=True)
-    # with open(info_path_pi, 'w') as info:
-    #     json.dump(info_dict, info)
-    # scaler_path = pi_folder / scaler_file
-    # scaler_path.touch(exist_ok=True)
-    # joblib.dump(scaler, scaler_path)
+    # save on pi
+    pi_folder.mkdir(parents=True, exist_ok=True)
+    joblib.dump(cal_model, pi_folder / model_file)
+    info_path_pi = pi_folder / model_info
+    info_path_pi.touch(exist_ok=True)
+    with open(info_path_pi, 'w') as info:
+        json.dump(info_dict, info)
+    scaler_path = pi_folder / scaler_file
+    scaler_path.touch(exist_ok=True)
+    joblib.dump(scaler, scaler_path)
 
 
 def trail_fractals_1a(side, tf, width, atr_spacing, num_pairs, selection_method):
