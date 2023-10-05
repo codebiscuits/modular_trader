@@ -20,13 +20,15 @@ now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
 session = TradingSession(0.1)
 
 logger.debug(f"{'-:-' * 10} {now} UTC running update_ohlc {'-:-' * 10}")
+logger.debug(f"ohlc read path: {session.ohlc_r}")
+logger.debug(f"ohlc write path: {session.ohlc_w}")
 
 start = time.perf_counter()
 
 for sym in session.info['symbols']:
     if sym['status'] != 'TRADING':
         dead_symbol = sym['symbol']
-        fp = Path(f"{session.ohlc_path}/{dead_symbol}.parquet")
+        fp = Path(f"{session.ohlc_w}/{dead_symbol}.parquet")
         if fp.exists():
             fp.unlink()
 
@@ -50,20 +52,21 @@ def iterations(n, session, pair, tf):
     # print(f"{n} {pair} {tf}")
     session.set_ohlc_tf(tf)
     # print(session.ohlc_data)
-    filepath = Path(f'{session.ohlc_path}/{pair}.parquet')
+    ohlc_r = Path(f'{session.ohlc_r}/{pair}.parquet')
+    ohlc_w = Path(f'{session.ohlc_w}/{pair}.parquet')
     # print(filepath)
     # -------------------- if theres already some local data -------------------------#
-    if filepath.exists():
+    if ohlc_r.exists():
 
         try:
-            pldf = pl.read_parquet(source=filepath, use_pyarrow=True)
+            pldf = pl.read_parquet(source=ohlc_r, use_pyarrow=True)
             df = pldf.to_pandas()
 
         except (ArrowInvalid, OSError) as e:
             logger.error('Error:\n', e)
             logger.error(f"Problem reading {pair} parquet file, downloading from scratch.")
             logger.exception(e)
-            filepath.unlink()
+            ohlc_r.unlink()
             df = from_scratch(session, pair, tf)
 
         # df = pd.read_parquet(filepath)
@@ -85,7 +88,7 @@ def iterations(n, session, pair, tf):
 
     # save to file
     pldf = pl.from_pandas(df)
-    pldf.write_parquet(filepath, row_group_size=10512, use_pyarrow=True)
+    pldf.write_parquet(ohlc_w, row_group_size=10512, use_pyarrow=True)
 
     return df
 
@@ -125,6 +128,7 @@ iterations(1, session, 'ETHUSDT', '1m')
 for n, pair in enumerate(pairs):
     # print(n, pair)
     try:
+        logger.debug(pair)
         df = iterations(n, session, pair, '5m')
     except Exception as e:
         logger.error(f"*** {pair} exception during download, data not downloaded ***")
