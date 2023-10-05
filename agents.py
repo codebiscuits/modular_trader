@@ -1,4 +1,5 @@
 import binance.exceptions as bx
+import numpy as np
 import pandas as pd
 from pathlib import Path
 import json
@@ -540,7 +541,7 @@ class Agent:
 
         # logger.debug(f"rsst {self.name} {pair}")
 
-        filepath = Path(f'{session.ohlc_path}/{pair}.parquet')
+        filepath = Path(f'{session.ohlc_r}/{pair}.parquet')
         check_recent = False  # flag to decide whether the ohlc needs updating or not
 
         if session.pairs_data[pair].get('ohlc_5m', None) is not None:
@@ -2586,28 +2587,26 @@ class TrailFractals(Agent):
         mkt_rank_1w = signal.get('market_rank_1w', 1)
         mkt_rank_1m = signal.get('market_rank_1m', 1)
 
-        features = [conf_l, conf_s, inval_ratio, perf_ema_4, perf_ema_8, perf_ema_16,
-                    perf_ema_32, perf_ema_64, mkt_rank_1d, mkt_rank_1w, mkt_rank_1m]
-        names = ['conf_l', 'conf_s', 'inval_ratio', 'perf_ema_4', 'perf_ema_8', 'perf_ema_16',
-                 'perf_ema_32', 'perf_ema_64', 'mkt_rank_1d', 'mkt_rank_1w', 'mkt_rank_1m']
-        data = pd.Series(features, index=names)
-        print(data)
-        print(self.long_info_2['features'])
-        print(self.short_info_2['features'])
+        features = [conf_l, conf_s, inval_ratio, mkt_rank_1d, mkt_rank_1w, mkt_rank_1m,
+                    perf_ema_4, perf_ema_8, perf_ema_16, perf_ema_32, perf_ema_64]
+        names = ['conf_l', 'conf_s', 'inval_ratio', 'mkt_rank_1d', 'mkt_rank_1w', 'mkt_rank_1m',
+                 'perf_ema_4', 'perf_ema_8', 'perf_ema_16', 'perf_ema_32', 'perf_ema_64']
+        data = np.array(features).reshape(1, -1)
+        self.long_features_2_idx = [i for i, f in enumerate(names) if f in self.long_info_2['features']]
+        self.short_features_2_idx = [i for i, f in enumerate(names) if f in self.short_info_2['features']]
 
         if direction == 'long':
-            long_data = DMatrix(data[self.long_info_2['features']])
-            long_data = self.long_scaler_2.transform(long_data)
-            signal['score'] = str(self.long_model_2.predict_proba(long_data)[0, 1])
+            long_data = self.long_scaler_2.transform(data)
+            long_data = long_data[:, self.long_features_2_idx]
+            signal['score'] = str(self.long_model_2.predict_proba(long_data)[-1, 1])
+            print(f"secondary long prediction: {self.long_model_2.predict_proba(long_data)}")
         else:
-            short_data = DMatrix(data[self.short_info_2['features']])
-            short_data = self.short_scaler_2.transform(short_data)
-            signal['score'] = str(self.short_model_2.predict_proba(short_data)[0, 1])
+            short_data = self.short_scaler_2.transform(data)
+            short_data = short_data[:, self.short_features_2_idx]
+            signal['score'] = str(self.short_model_2.predict_proba(short_data)[-1, 1])
+            print(f"secondary short prediction: {self.short_model_2.predict_proba(short_data)}")
 
         signal['predictor'] = 'ml'
-
-        print(f"secondary long prediction: {self.long_model_2.predict_proba(data)}")
-        print(f"secondary short prediction: {self.short_model_2.predict_proba(data)}")
 
         return signal
 
@@ -2676,16 +2675,19 @@ class TrailFractals(Agent):
         long_features = df[self.long_info['features']]
         # long_features, _, cols = mlf.transform_columns(long_features, long_features)
         # long_features = pd.DataFrame(long_features, columns=cols)
-        long_features = self.long_scaler.transform(long_features)
-        long_features = long_features[-1, :]
+        long_features_scaled = self.long_scaler.transform(long_features)
+        # long_features = long_features[-1, :]
 
-        long_X = pd.DataFrame(long_features).transpose()
+        long_X = pd.DataFrame(long_features_scaled, columns=self.long_info['features']).iloc[-2:, :]
+        # long_X = np.array(pd.Series(long_X.iloc[-1])).reshape(1, -1)
         try:
-            long_confidence = self.long_model.predict_proba(long_X)[0, 1]
+            long_confidence = self.long_model.predict_proba(long_X, )[-1, 1]
         except ValueError as e:
             # logger.exception('NaN in prediction set')
+            print('\n\n')
             logger.error(e)
-            logger.error(long_features)
+            logger.error(long_features.tail())
+            logger.error(long_features_scaled[-3:, :])
             long_confidence = 0
 
         # Short model
@@ -2694,16 +2696,18 @@ class TrailFractals(Agent):
         short_features = df[self.short_info['features']]
         # short_features, _, cols = mlf.transform_columns(short_features, short_features)
         # short_features = pd.DataFrame(short_features, columns=cols)
-        short_features = self.short_scaler.transform(short_features)
-        short_features = short_features[-1, :]
+        short_features_scaled = self.short_scaler.transform(short_features)
+        # short_features = short_features[-1, :]
 
-        short_X = pd.DataFrame(short_features).transpose()
+        short_X = pd.DataFrame(short_features_scaled, columns=self.short_info['features']).iloc[-2:, :]
+        # short_X = np.array(pd.Series(short_X.iloc[-1])).reshape(1, -1)
         try:
-            short_confidence = self.short_model.predict_proba(short_X)[0, 1]
+            short_confidence = self.short_model.predict_proba(short_X)[-1, 1]
         except ValueError as e:
             # logger.exception('NaN in prediction set')
             logger.error(e)
-            logger.error(short_features)
+            logger.error(short_features.tail())
+            logger.error(short_features_scaled[-3:, :])
             short_confidence = 0
 
         # logger.debug(f"{self.name} {pair} {self.tf} long conf: {long_confidence:.1%} short conf: {short_confidence:.1%}")

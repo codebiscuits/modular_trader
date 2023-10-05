@@ -265,15 +265,15 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
         df = session.pairs_data[pair]['ohlc_5m']
 
     else:
-        filepath = Path(f'{session.ohlc_path}/{pair}.parquet')
+        read_path = Path(f'{session.ohlc_r}/{pair}.parquet')
 
-        if filepath.exists():
+        if read_path.exists():
             try:
-                pldf = pl.read_parquet(source=filepath, use_pyarrow=True)
+                pldf = pl.read_parquet(source=read_path, use_pyarrow=True)
                 df = pldf.to_pandas()
             except (ArrowInvalid, OSError):
                 logger.exception(f"Problem reading {pair} parquet file, downloading from scratch.")
-                filepath.unlink()
+                read_path.unlink()
                 df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC')
 
             # check df is localised to UTC

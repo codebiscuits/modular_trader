@@ -122,7 +122,7 @@ class TradingSession:
             self.top_up_bnb_m(15)
 
         # load local data and configure settings
-        self.mkt_data_r, self.mkt_data_w, self.records_r, self.records_w, self.ohlc_path = self.data_paths()
+        self.mkt_data_r, self.mkt_data_w, self.records_r, self.records_w, self.ohlc_r, self.ohlc_w = self.data_paths()
         self.save_spreads()
         self.load_mkt_ranks()
         self.max_loan_amounts = {}
@@ -377,22 +377,23 @@ class TradingSession:
         if Path('/pi_2.txt').exists():
             mkt_data_r = Path('/home/ross/coding/modular_trader/market_data')
             records_r = Path(f'/home/ross/coding/modular_trader/records')
-            ohlc_data = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
+            ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
         else:
             mkt_data_r = Path('/home/ross/coding/pi_2/modular_trader/market_data')
             records_r = Path(f'/home/ross/coding/pi_2/modular_trader/records')
-            ohlc_data = Path(f'/home/ross/coding/pi_2/modular_trader/bin_ohlc_{self.ohlc_tf}')
+            ohlc_r = Path(f'/home/ross/coding/pi_2/modular_trader/bin_ohlc_{self.ohlc_tf}')
 
         mkt_data_w = Path('/home/ross/coding/modular_trader/market_data')
         mkt_data_w.mkdir(parents=True, exist_ok=True)
         records_w = Path(f'/home/ross/coding/modular_trader/records')
         records_w.mkdir(exist_ok=True)
+        ohlc_w = Path(f"/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}")
+        ohlc_w.mkdir(exist_ok=True)
 
-        return mkt_data_r, mkt_data_w, records_r, records_w, ohlc_data
+        return mkt_data_r, mkt_data_w, records_r, records_w, ohlc_r, ohlc_w
 
     def set_ohlc_tf(self, tf):
         self.ohlc_tf = tf
-        # self.ohlc_path = self.ohlc_path()
 
     @uf.retry_on_busy()
     def get_pair_info(self, pair):
@@ -497,92 +498,6 @@ class TradingSession:
             self.pairs_data[pair]['market_rank_1d'] = market_ranks.at[pair, 'rank_1d']
             self.pairs_data[pair]['market_rank_1w'] = market_ranks.at[pair, 'rank_1w']
             self.pairs_data[pair]['market_rank_1m'] = market_ranks.at[pair, 'rank_1m']
-
-    # def compute_indicators(self, df: pd.DataFrame, tf: str) -> dict:
-    #     '''takes the set of required indicators and the dataframe and applies the
-    #     indicator functions as necessary'''
-    #
-    #     ci = Timer('compute_indicators')
-    #     ci.start()
-    #
-    #     # indicator specs:
-    #     # {'indicator': 'ema', 'length': lb, 'nans': 0}
-    #     # {'indicator': 'hma', 'length': lb, 'nans': 0}
-    #     # {'indicator': 'ema_ratio', 'length': lb, 'nans': 0}
-    #     # {'indicator': 'vol_delta', 'length': 1, 'nans': 0}
-    #     # {'indicator': 'vol_delta_div', 'length': 2, 'nans': 1}
-    #     # {'indicator': 'atr', 'length': lb, 'lookback': lb, 'multiplier': 3, 'nans': 0}
-    #     # {'indicator': 'supertrend', 'lookback': lb, 'multiplier': mult, 'length': lb*mult, 'nans': 1}
-    #     # {'indicator': 'atsz', 'length': lb, 'nans': 1}
-    #     # {'indicator': 'rsi', 'length': lb+1, 'nans': lb}
-    #     # {'indicator': 'stoch_rsi', 'lookback': lb1, 'stoch_lookback': lb2, 'length': lb1+lb2+1, 'nans': lb1+lb2}
-    #     # {'indicator': 'inside', 'length': 2, 'nans': 1}
-    #     # {'indicator': 'doji', 'length': 1, 'nans': 0}
-    #     # {'indicator': 'engulfing', 'length': lb+1, 'nans': lb}
-    #     # {'indicator': 'bull_bear_bar', 'length': 1, 'nans': 0}
-    #     # {'indicator': 'roc_1d', 'length': 2, 'nans': 1}
-    #     # {'indicator': 'roc_1w', 'length': 2, 'nans': 1}
-    #     # {'indicator': 'roc_1m', 'length': 2, 'nans': 1}
-    #     # {'indicator': 'vwma', 'length': lb+1, 'nans': lb}
-    #     # {'indicator': 'cross_age', 'series_1': s1, 'series_2': s2, 'length': lb, 'nans': 0}
-    #
-    #     for i in self.indicators:
-    #         vals = i.split('-')
-    #         if vals[0] == 'ema':
-    #             df[f"ema_{vals[1]}"] = df.close.ewm(int(vals[1])).mean()
-    #         elif vals[0] == 'hma':
-    #             df[f"hma_{vals[1]}"] = ind.hma(df.close, int(vals[1]))
-    #         elif vals[0] == 'ema_ratio':
-    #             df[f"ema_{vals[1]}_ratio"] = ind.ema_ratio(df.close, int(vals[1]))
-    #         elif vals[0] == 'vol_delta':
-    #             df['vol_delta'] = ind.vol_delta(df)
-    #         elif vals[0] == 'vol_delta_div':
-    #             df['vol_delta_div'] = ind.vol_delta_div(df)
-    #         elif vals[0] == 'atr':
-    #             df = ind.atr_bands(df, int(vals[1]), float(vals[2]))
-    #         elif vals[0] == 'supertrend':
-    #             df = ind.supertrend(df, int(vals[1]), float(vals[2]))
-    #         elif vals[0] == 'atsz':
-    #             df = ind.ats_z(df, int(vals[1]))
-    #         elif vals[0] == 'rsi':
-    #             df['rsi'] = ind.rsi(df.close, int(vals[1]))
-    #         elif vals[0] == 'stoch_rsi':
-    #             df['stoch_rsi'] = ind.stoch_rsi(df.close, int(vals[1]), int(vals[2]))
-    #         elif vals[0] == 'inside':
-    #             df = ind.inside_bars(df)
-    #         elif vals[0] == 'doji':
-    #             df = ind.doji(df)
-    #         elif vals[0] == 'engulfing':
-    #             df = ind.engulfing(df, int(vals[1]))
-    #         elif vals[0] == 'bbb':
-    #             df = ind.bull_bear_bar(df)
-    #         elif vals[0] == 'roc_1d':
-    #             df['roc_1d'] = ind.roc_1d(df.close, tf)
-    #         elif vals[0] == 'roc_1w':
-    #             df['roc_1w'] = ind.roc_1w(df.close, tf)
-    #         elif vals[0] == 'roc_1m':
-    #             df['roc_1m'] = ind.roc_1m(df.close, tf)
-    #         elif vals[0] == 'vwma':
-    #             df[f'vwma_{vals[1]}'] = ind.vwma(df, int(vals[1]))
-    #         elif vals[0] == 'cross_age':
-    #             if vals[1] == 'st':
-    #                 s1 = f"st-{int(vals[2])}-{float(vals[3]/10):.1f}"
-    #                 if s1 not in df.columns:
-    #                     df = ind.supertrend(df, int(vals[2]), float(vals[3]/10))
-    #                 s2 = f"st-{int(vals[4])}-{float(vals[5]/10):.1f}"
-    #                 if s2 not in df.columns:
-    #                     df = ind.supertrend(df, int(vals[4]), float(vals[5]/10))
-    #             elif vals[1] == 'ema':
-    #                 s1 = f"ema_{vals[2]}"
-    #                 if s1 not in df.columns:
-    #                     df[f"ema_{vals[2]}"] = df.close.ewm(int(vals[2])).mean()
-    #                 s2 = f"{vals[1]}_{vals[3]}"
-    #                 if s2 not in df.columns:
-    #                     df[f"ema_{vals[3]}"] = df.close.ewm(int(vals[3])).mean()
-    #             df[i] = ind.consec_condition(df[s1] > df[s2])
-    #
-    #     ci.stop()
-    #     return df
 
     def compute_features(self, df: pd.DataFrame, tf: str) -> pd.DataFrame:
         """takes the set of features that need to be calculated and applies them to the dataframe"""
@@ -900,28 +815,6 @@ class TradingSession:
 
         return self.max_loan_amounts[asset]
 
-    # Non-live Methods
-    # def sync_mkt_data(self) -> None:
-    #     func_name = sys._getframe().f_code.co_name
-    #     x2 = Timer(f'{func_name}')
-    #     x2.start()
-    #
-    #     for data_file in ['binance_liquidity_history.txt',
-    #                       'binance_depths_history.txt',
-    #                       'binance_spreads_history.txt']:
-    #         real_file = Path(self.market_data_read / data_file)
-    #         test_file = Path(self.market_data_write / data_file)
-    #         test_file.touch(exist_ok=True)
-    #
-    #         if real_file.exists():
-    #             with open(real_file, 'r') as file:
-    #                 book_data = file.readlines()
-    #             if book_data:
-    #                 with open(test_file, 'w') as file:
-    #                     file.writelines(book_data)
-    #
-    #     x2.stop()
-
     @uf.retry_on_busy()
     def update_algo_orders(self):
         # TODO i need to implement a check so that spot orders can be looked for only if there is a spot agent in play
@@ -942,56 +835,3 @@ class TradingSession:
         self.check_open_margin_orders()
         self.count_algo_orders()  # kind of redundant since the above two methods create lists which could be counted
 
-
-# class LightSession(TradingSession):
-#     @uf.retry_on_busy()
-#     def __init__(self):
-#         TradingSession.__init__(self, 0.1)
-#         self.now_start = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
-#         self.client = Client(keys.bPkey, keys.bSkey)
-#         self.live = set_live()
-#         self.weights_count = []
-#
-#         # get data from exchange
-#         # self.get_cg_symbols()
-#         self.info = self.client.get_exchange_info()
-#         self.check_rate_limits()
-#         self.track_weights(10)  # this should be before self.info, but would only work after check_rate_limits
-#         # self.track_weights(2)
-#         # self.obt = self.client.get_orderbook_tickers()
-#         self.spreads = self.binance_spreads()
-#
-#         # filter and organise data
-#         self.get_pairs_info()
-#
-#         # load local data and configure settings
-#         self.market_data_read, self.market_data_write = self.mkt_data_path()
-#         self.read_records, self.write_records = self.records_path()
-#         self.ohlc_data = self.ohlc_path()
-#         self.save_spreads()
-#         self.indicators = None  # to stop any default indicators being calculated by inheritance
-#
-#
-# class CheckRecordsSession(TradingSession):
-#     @uf.retry_on_busy()
-#     def __init__(self):
-#         TradingSession.__init__(self, 0.1)
-#         # self.fr_max = 0.0005
-#         # self.pairs_data = {}
-#         # self.counts = []
-#         # self.spot_bal = 1
-#         # self.margin_bal = 1
-#         # self.spot_usdt_bal = 1
-#         # self.margin_usdt_bal = 1
-#         #
-#         # self.ohlc_length = 0
-#         # self.now_start = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
-#         # self.client = Client(keys.bPkey, keys.bSkey)
-#         # self.live = self.set_live()
-#         # self.weights_count = []
-#
-#         # load local data and configure settings
-#         # self.market_data_read, self.market_data_write = self.mkt_data_path()
-#         # self.read_records, self.write_records = self.records_path()
-#         # self.ohlc_data = self.ohlc_path()
-#         # self.indicators = None

@@ -184,7 +184,7 @@ def trail_fractals_2(side, tf, width, atr_spacing, thresh):
 
     # feature scaling
     scaler = QuantileTransformer()
-    X = scaler.fit_transform(X)
+    X = scaler.fit_transform(np.array(X))
     X_val = scaler.transform(X_val)
 
     # quick feature selection

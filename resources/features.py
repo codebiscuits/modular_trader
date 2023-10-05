@@ -278,7 +278,7 @@ def rsi_timing_long(df: pd.DataFrame, lookback: int, rsi_length: int = 14) -> pd
     if f"rsi_{rsi_length}" not in df.columns:
         df[f"rsi_{rsi_length}"] = ind.rsi(df.close, rsi_length)
 
-    df[f"rsi_timing_l_{lookback}_{rsi_length}"] = (((df[f"rsi_{rsi_length}"].pct_change(3) < 0)
+    df[f"rsi_timing_l_{lookback}_{rsi_length}"] = (((df[f"rsi_{rsi_length}"].ffill().pct_change(3) < 0)
                                                     .rolling(lookback).sum() + (df[f"rsi_{rsi_length}"] < 30))
                                                    == lookback + 1)
 
@@ -291,7 +291,7 @@ def rsi_timing_short(df: pd.DataFrame, lookback: int, rsi_length: int = 14) -> p
     if f"rsi_{rsi_length}" not in df.columns:
         df[f"rsi_{rsi_length}"] = ind.rsi(df.close, rsi_length)
 
-    df[f"rsi_timing_s_{lookback}_{rsi_length}"] = (((df[f"rsi_{rsi_length}"].pct_change(3) > 0)
+    df[f"rsi_timing_s_{lookback}_{rsi_length}"] = (((df[f"rsi_{rsi_length}"].ffill().pct_change(3) > 0)
                                                     .rolling(lookback).sum() + (df[f"rsi_{rsi_length}"] > 70))
                                                    == lookback + 1)
 
@@ -404,7 +404,7 @@ def ema_roc(df, length) -> pd.DataFrame:
     if f"ema_{length}" not in df.columns:
         df[f"ema_{length}"] = df.close.ewm(length).mean()
 
-    df[f"ema_{length}_roc"] = (df[f"ema_{length}"].pct_change())
+    df[f"ema_{length}_roc"] = (df[f"ema_{length}"].ffill().pct_change())
 
     return df
 
@@ -515,7 +515,7 @@ def vol_denom_roc(df: pd.DataFrame, roc_lb: int, atr_lb: int) -> pd.DataFrame:
     if f'atr_{atr_lb}_pct' not in df.columns:
         df = atr_pct(df, atr_lb)
 
-    df[f'vol_denom_roc_{roc_lb}'] = (df.close.pct_change(roc_lb) / df[f'atr_{atr_lb}_pct'])
+    df[f'vol_denom_roc_{roc_lb}'] = (df.close.ffill().pct_change(roc_lb) / df[f'atr_{atr_lb}_pct'])
     df = df.drop(f'atr_{atr_lb}_pct', axis=1)
 
     return df
@@ -524,7 +524,7 @@ def vol_denom_roc(df: pd.DataFrame, roc_lb: int, atr_lb: int) -> pd.DataFrame:
 def vol_delta_div(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
     """adds a boolean series to the dataframe representing whether there was a volume delta divergence at any time
     during the lookback period"""
-    roc: pd.Series = df.close.pct_change(1)
+    roc: pd.Series = df.close.ffill().pct_change(1)
     if 'vol_delta' not in df.columns:
         df['vol_delta'] = ind.vol_delta(df)
 
@@ -550,7 +550,7 @@ def hma_roc(df, length) -> pd.DataFrame:
     if f"hma_{length}" not in df.columns:
         df[f"hma_{length}"] = ind.hma(df.close, length)
 
-    df[f"hma_{length}_roc"] = (df[f"hma_{length}"].pct_change())
+    df[f"hma_{length}_roc"] = (df[f"hma_{length}"].ffill().pct_change())
 
     return df
 
@@ -686,18 +686,18 @@ def rsi_above(df: pd.DataFrame, lookback: int, thresh: int) -> pd.DataFrame:
 
 def daily_roc(df: pd.DataFrame, timeframe) -> pd.DataFrame:
     periods_1d = {'1h': 24, '4h': 6, '12h': 2, '1d': 1}
-    df['roc_1d'] = df.close.pct_change(periods_1d[timeframe])
+    df['roc_1d'] = df.close.ffill().pct_change(periods_1d[timeframe])
     return df
 
 
 def weekly_roc(df: pd.DataFrame, timeframe) -> pd.DataFrame:
     periods_1w = {'1h': 168, '4h': 42, '12h': 14, '1d': 7}
-    df['roc_1w'] = df.close.pct_change(periods_1w[timeframe])
+    df['roc_1w'] = df.close.ffill().pct_change(periods_1w[timeframe])
     return df
 
 
 def log_returns(df: pd.DataFrame) -> pd.DataFrame:
-    df['log_returns'] = np.log(df.close.pct_change() + 1)
+    df['log_returns'] = np.log(df.close.ffill().pct_change() + 1)
     return df
 
 

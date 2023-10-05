@@ -13,8 +13,7 @@ script_start = time.perf_counter()
 # import update_ohlc
 
 # TODO current (02/04/23) roadmap should be:
-#  * start integrating polars and doing anything else i can to speed things up enough to run 3day and 1week timeframes
-#  in the same session as everything else
+#  * start integrating polars and doing anything else i can to speed things up
 #  * get oco entries and trade adds working so i can use other strats
 
 logger = create_logger('setup_scanner')
@@ -333,11 +332,10 @@ while processed_signals['unassigned']:
     # if the relevant secondary model is valid (sufficient training data) then the secondary_prediction method will be
     # called, otherwise, secondary_manual_prediction (original, hand-made scoring algorithm) will be called.
 
-    # TODO fix xgboost predictions and then reinstate this bit
-    # if (signal['direction'] == 'long') and agents[signal['agent']].long_info_2['valid']:
-    #     signal = agents[signal['agent']].secondary_prediction(signal)
-    # elif (signal['direction'] == 'short') and agents[signal['agent']].short_info_2['valid']:
-    #     signal = agents[signal['agent']].secondary_prediction(signal)
+    if (signal['direction'] == 'long') and agents[signal['agent']].long_info_2['valid']:
+        signal = agents[signal['agent']].secondary_prediction(signal)
+    elif (signal['direction'] == 'short') and agents[signal['agent']].short_info_2['valid']:
+        signal = agents[signal['agent']].secondary_prediction(signal)
     # else:
     signal = agents[signal['agent']].secondary_manual_prediction(session, signal)
 
@@ -462,6 +460,8 @@ while unassigned:
     else:
         # TODO since i'm moving away from fixed risk, i should add a check here which makes sure pfrd isn't too much,
         #  maybe scale the position down if it is
+        logger.info(f"quote size: {quote_size}, inval ratio: {s['inval_ratio']}, "
+                    f"pfrd: {quote_size * abs(1 - s['inval_ratio']):.2f}. Think about if i need to put a limit on pfrd")
         or_limits[agent.name] += r
         pos_limits[agent.name] += 1
         algo_limits[s['pair']] -= 2 if s['action'] == 'oco' else 1

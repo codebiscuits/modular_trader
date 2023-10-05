@@ -160,8 +160,8 @@ def market_benchmark(session) -> None:
     for x in session.pairs_data.keys():
         df = session.pairs_data.get(x, {}).get('ohlc_5m')
         if not isinstance(df, pd.DataFrame):
-            if Path(f"{session.ohlc_path}/{x}.parquet").exists:
-                df = pd.read_parquet(session.ohlc_path / f"{x}.parquet")
+            if Path(f"{session.ohlc_r}/{x}.parquet").exists:
+                df = pd.read_parquet(session.ohlc_r / f"{x}.parquet")
             else:
                 logger.error(f"market benchmark: couldn't get any ohlc data for {x}")
                 continue
