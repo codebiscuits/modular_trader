@@ -139,13 +139,17 @@ def load_pairs(folder, side, tf):
 
 
 def get_margin_pairs(method, num_pairs):
-    client = init_client()
     start_pair = 0
     pairs = mlf.rank_pairs(method)
+
+    with open('ohlc_lengths.json', 'r') as file:
+        ohlc_lengths = json.load(file)
+
+    client = init_client()
     exc_info = client.get_exchange_info()
     symbol_margin = {i['symbol']: i['isMarginTradingAllowed'] for i in exc_info['symbols'] if
                      i['quoteAsset'] == 'USDT'}
-    pairs = [p for p in pairs if symbol_margin[p]]
+    pairs = [p for p in pairs if symbol_margin[p] and (ohlc_lengths[p] > 4032)]
 
     return pairs[start_pair:start_pair + num_pairs]
 
