@@ -15,6 +15,7 @@ Process for adding new features:
     trading system accesses each individual feature it needs.
 3 - add the same variations of the call to the 'add_features' function in ml_funcs so that all the training and analysis
     scripts have access to the feature when developing and training models
+4 - consider whether it leaves a column in the dataframe that would need to be removed inside features_labels_split
 """
 
 

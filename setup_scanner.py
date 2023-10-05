@@ -330,15 +330,14 @@ while processed_signals['unassigned']:
     signal = processed_signals['unassigned'].pop()
 
     # if the relevant secondary model is valid (sufficient training data) then the secondary_prediction method will be
-    # called, otherwise, secondary_manual_prediction (original, hand-made scoring algorithm) will be called.
-
+    # used, otherwise, secondary_manual_prediction (original, hand-made scoring algorithm) will be used.
+    signal = agents[signal['agent']].secondary_manual_prediction(session, signal)
     if (signal['direction'] == 'long') and agents[signal['agent']].long_info_2['valid']:
         signal = agents[signal['agent']].secondary_prediction(signal)
     elif (signal['direction'] == 'short') and agents[signal['agent']].short_info_2['valid']:
         signal = agents[signal['agent']].secondary_prediction(signal)
-    # else:
-    signal = agents[signal['agent']].secondary_manual_prediction(session, signal)
 
+    print(f"score chosen: {signal['score']:.1%}")
     score_threshold = 0.3
     if float(signal['score']) > score_threshold:
         logger.info('')

@@ -2598,15 +2598,17 @@ class TrailFractals(Agent):
         if direction == 'long':
             long_data = self.long_scaler_2.transform(data)
             long_data = long_data[:, self.long_features_2_idx]
-            signal['score'] = str(self.long_model_2.predict_proba(long_data)[-1, 1])
-            print(f"secondary long prediction: {self.long_model_2.predict_proba(long_data)}")
+            score = float(self.long_model_2.predict_proba(long_data)[-1, 1])
+            signal['score'] = max(0.0, (score * 2) - 1)
+            signal['score_ml'] = max(0.0, (score * 2) - 1)
+            print(f"secondary long prediction: {signal['score_ml']:.1%}")
         else:
             short_data = self.short_scaler_2.transform(data)
             short_data = short_data[:, self.short_features_2_idx]
-            signal['score'] = str(self.short_model_2.predict_proba(short_data)[-1, 1])
-            print(f"secondary short prediction: {self.short_model_2.predict_proba(short_data)}")
-
-        signal['predictor'] = 'ml'
+            score = float(self.short_model_2.predict_proba(short_data)[-1, 1])
+            signal['score'] = max(0.0, (score * 2) - 1)
+            signal['score_ml'] = max(0.0, (score * 2) - 1)
+            print(f"secondary short prediction: {signal['score_ml']:.1%}")
 
         return signal
 
@@ -2641,10 +2643,9 @@ class TrailFractals(Agent):
         sig_score = signal['confidence'] * rank_score
         risk_scalar = (sig_score * perf_score) / inval_scalar
         signal['score'] = str(risk_scalar)
+        signal['score_old'] = str(risk_scalar)
 
-        signal['predictor'] = 'manual'
-
-        print(f"secondary manual prediction: {float(signal['score']):.1%}")
+        print(f"secondary manual prediction: {float(signal['score_old']):.1%}")
 
         return signal
 
