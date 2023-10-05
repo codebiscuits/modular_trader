@@ -49,7 +49,7 @@ def set_live() -> bool:
 
 class TradingSession:
     min_length = 10000
-    max_length = 0
+    max_length = 0  # this gets updated by each agent init so it ends up enough for all of them
     quote_asset = 'USDT'
     max_spread = 0.5
     ohlc_tf = '5m'

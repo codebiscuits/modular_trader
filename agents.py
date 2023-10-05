@@ -2511,7 +2511,7 @@ class TrailFractals(Agent):
                      f'{self.training_pair_selection}_{self.training_pairs_n}')
         self.id = (f"trail_fractals_{self.tf}_{self.offset}_{self.width}_{self.spacing}_"
                    f"{self.training_pair_selection}_{self.training_pairs_n}")
-        self.ohlc_length = 251
+        self.ohlc_length = 4035
         self.trail_stop = True
         self.notes = ''
         Agent.__init__(self, session)
@@ -2666,7 +2666,7 @@ class TrailFractals(Agent):
         long_stop = self.calc_stop(df.frac_low.iloc[-1], session.pairs_data[pair]['spread'], price)
         short_stop = self.calc_stop(df.frac_high.iloc[-1], session.pairs_data[pair]['spread'], price)
 
-        if pair not in self.pairs:
+        if pair not in self.pairs:  # might need inval ratio for pairs that used to be in the list
             return {'long_ratio': long_stop / price,
                     'short_ratio': short_stop / price}
 
@@ -2684,10 +2684,10 @@ class TrailFractals(Agent):
             long_confidence = self.long_model.predict_proba(long_X, )[-1, 1]
         except ValueError as e:
             # logger.exception('NaN in prediction set')
-            print('\n\n')
+            print(f'\n{pair}\n')
             logger.error(e)
-            logger.error(long_features.tail())
-            logger.error(long_features_scaled[-3:, :])
+            print(long_features.tail())
+            print(long_features_scaled[-3:, :])
             long_confidence = 0
 
         # Short model
@@ -2705,9 +2705,10 @@ class TrailFractals(Agent):
             short_confidence = self.short_model.predict_proba(short_X)[-1, 1]
         except ValueError as e:
             # logger.exception('NaN in prediction set')
+            print(f'\n{pair}\n')
             logger.error(e)
-            logger.error(short_features.tail())
-            logger.error(short_features_scaled[-3:, :])
+            print(short_features.tail())
+            print(short_features_scaled[-3:, :])
             short_confidence = 0
 
         # logger.debug(f"{self.name} {pair} {self.tf} long conf: {long_confidence:.1%} short conf: {short_confidence:.1%}")
