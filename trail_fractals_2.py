@@ -22,7 +22,7 @@ from sklearn.calibration import CalibratedClassifierCV
 from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif  # , chi2
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, QuantileTransformer
 from mlxtend.feature_selection import SequentialFeatureSelector as SFS
-from imblearn.under_sampling import RandomUnderSampler
+from imblearn.under_sampling import RandomUnderSampler, ClusterCentroids
 from optuna import logging as op_logging, visualization
 from xgboost import XGBClassifier, DMatrix
 
@@ -37,6 +37,7 @@ So just remember that if the scores are really weird, then this may be a stupid 
 
 op_logging.set_verbosity(op_logging.ERROR)
 warnings.filterwarnings('ignore')
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 logger = create_logger('trail_fractals_2', 'trail_fractals_2')
 
@@ -66,8 +67,8 @@ def create_dataset(side, tf, frac_width, atr_spacing, thresh):
     for position in all_records.values():
         signal = position['signal']
         if ((signal['direction'] != side) or
-                (signal.get('confidence_l') is None) or
-                (signal.get('market_rank_1d') is None) or
+                (signal.get('confidence_l') in [None, 0]) or
+                (signal.get('market_rank_1d') in [None, 0]) or
                 (signal.get('perf_ema4') is None)):
             continue
 
@@ -127,7 +128,7 @@ def save_models(side, tf, width, atr_spacing, feature_names, thresh, X_val, mode
     model_info = f"{side}_{tf}_info_2.json"
     scaler_file = f"{side}_{tf}_scaler_2.sav"
 
-    info_dict = {'features': feature_names, 'pnl_threshold': thresh, 'valid': len(X_val) > 30}
+    info_dict = {'features': feature_names, 'pnl_threshold': thresh, 'valid': len(X_val) > 30, 'validity': len(X_val)}
 
     # save local copy
     folder.mkdir(parents=True, exist_ok=True)
@@ -165,8 +166,9 @@ def trail_fractals_2(side, tf, width, atr_spacing, thresh):
     y = results.win  # pnl > threshold
 
     # random undersampling
-    rus = RandomUnderSampler(random_state=0)
-    X, y = rus.fit_resample(X, y)
+    # us = RandomUnderSampler(random_state=0)
+    us = ClusterCentroids(random_state=0)
+    X, y = us.fit_resample(X, y)
 
     # split off validation set
     X, X_val, y, y_val = train_test_split(X, y, train_size=0.9, random_state=43875, stratify=y)
@@ -180,6 +182,8 @@ def trail_fractals_2(side, tf, width, atr_spacing, thresh):
 
     warn = f"*** WARNING only {len(X_val)} observations in validation set. ***" if len(X_val) < 30 else ''
     logger.debug(f"{len(y)} observations in {tf} {side} dataset. {warn}")
+
+    print(f"{X.shape = }, {y.shape = }, {X_val.shape = }, {y_val.shape}")
 
     # feature scaling
     scaler = QuantileTransformer()
@@ -197,6 +201,7 @@ def trail_fractals_2(side, tf, width, atr_spacing, thresh):
     # slow feature selection
     X, y, X_val, selected = feature_selection(X, y, X_val, fb_scorer)
     feature_names = [col for i, col in enumerate(cols) if i in selected]
+    print(feature_names)
 
     # hyperparameter optimisation
     model = mlf.fit_xgb(X, y, 1000)
@@ -216,8 +221,11 @@ def trail_fractals_2(side, tf, width, atr_spacing, thresh):
     logger.debug(f"Performance on validation set: accuracy: {accuracy:.1%}, f beta: {f_beta:.1%}")
 
     # save models and info
-    save_models(side, tf, width, atr_spacing, feature_names, thresh, X_val, model, scaler)
+    # save_models(side, tf, width, atr_spacing, feature_names, thresh, X_val, model, scaler)
 
     tf_end = time.perf_counter()
     tf_elapsed = tf_end - tf_start
     logger.debug(f"TF 2 time taken: {int(tf_elapsed // 3600)}h {int(tf_elapsed // 60) % 60}m {tf_elapsed % 60:.1f}s")
+
+if __name__ == '__main__':
+    trail_fractals_2('short', '1h', 5, 2, 0.4)

@@ -23,7 +23,7 @@ from sklearn.calibration import CalibratedClassifierCV
 from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif  # , chi2
 from sklearn.preprocessing import MinMaxScaler
 from mlxtend.feature_selection import SequentialFeatureSelector as SFS
-from imblearn.under_sampling import RandomUnderSampler
+from imblearn.under_sampling import RandomUnderSampler, ClusterCentroids
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -199,9 +199,10 @@ def create_dataset(pairs, data_len, timeframe, width, atr_spacing, side):
     # split features from labels
     X, y, _ = mlf.features_labels_split(all_res)
 
-    # random undersampling
-    rus = RandomUnderSampler(random_state=0)
-    X, y = rus.fit_resample(X, y)
+    # undersampling
+    # us = RandomUnderSampler(random_state=0)
+    us = ClusterCentroids(random_state=0)
+    X, y = us.fit_resample(X, y)
 
     return X, y
 

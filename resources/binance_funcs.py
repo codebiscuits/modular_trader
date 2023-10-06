@@ -650,12 +650,12 @@ def borrow_asset_M(session, asset: str, qty: str, live: bool) -> str:
             if e.code == -3045:  # the system does not have enough asset now
                 logger.error(f"Problem borrowing {qty} {asset}, not enough to borrow.")
             logger.exception(e)
-            return False
+            return 0
 
         return qty
 
     else:
-        return True
+        return qty
 
 
 

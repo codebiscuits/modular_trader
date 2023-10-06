@@ -331,17 +331,25 @@ while processed_signals['unassigned']:
 
     # if the relevant secondary model is valid (sufficient training data) then the secondary_prediction method will be
     # used, otherwise, secondary_manual_prediction (original, hand-made scoring algorithm) will be used.
-    signal = agents[signal['agent']].secondary_manual_prediction(session, signal)
+    signal['score_ml'] = agents[signal['agent']].secondary_prediction(signal)
+    signal['score_old'] = agents[signal['agent']].secondary_manual_prediction(session, signal)
+
+    # TODO once i have trained the models again, i can swap the 'valid' condition for 'validity > 30', and record the
+    #  validity number in the signal. then in future analysis i can look at the data to see if the model gets more
+    #  accurate as validity increases (and what is a good threshold).
     if (signal['direction'] == 'long') and agents[signal['agent']].long_info_2['valid']:
-        signal = agents[signal['agent']].secondary_prediction(signal)
+        signal['score'] = signal['score_ml']
     elif (signal['direction'] == 'short') and agents[signal['agent']].short_info_2['valid']:
-        signal = agents[signal['agent']].secondary_prediction(signal)
+        signal['score'] = signal['score_ml']
+    else:
+        signal['score'] = signal['score_old']
 
     print(f"score chosen: {signal['score']:.1%}")
     score_threshold = 0.3
     if float(signal['score']) > score_threshold:
         logger.info('')
-        logger.info(f"{signal['pair']}, {signal['tf']}, {signal['direction']}, signal score: {float(signal['score']):.1%}")
+        logger.info(
+            f"{signal['pair']}, {signal['tf']}, {signal['direction']}, signal score: {float(signal['score']):.1%}")
 
     signal['base_size'], signal['quote_size'] = agents[signal['agent']].get_size(session, signal)
 

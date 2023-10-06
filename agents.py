@@ -2602,18 +2602,16 @@ class TrailFractals(Agent):
             long_data = self.long_scaler_2.transform(data)
             long_data = long_data[:, self.long_features_2_idx]
             score = float(self.long_model_2.predict_proba(long_data)[-1, 0])
-            signal['score'] = max(0.0, (score * 2) - 1)
-            signal['score_ml'] = max(0.0, (score * 2) - 1)
-            print(f"secondary long prediction: {signal['score_ml']:.1%}")
+            score = max(0.0, (score * 2) - 1)
+            print(f"secondary long prediction: {score:.1%}")
         else:
             short_data = self.short_scaler_2.transform(data)
             short_data = short_data[:, self.short_features_2_idx]
             score = float(self.short_model_2.predict_proba(short_data)[-1, 0])
-            signal['score'] = max(0.0, (score * 2) - 1)
-            signal['score_ml'] = max(0.0, (score * 2) - 1)
-            print(f"secondary short prediction: {signal['score_ml']:.1%}")
+            score = max(0.0, (score * 2) - 1)
+            print(f"secondary short prediction: {score:.1%}")
 
-        return signal
+        return score
 
     def secondary_manual_prediction(self, session, signal):
         signal['perf_ema4'] = self.pnls[signal['direction']]['ema_4']
@@ -2645,12 +2643,11 @@ class TrailFractals(Agent):
         inval_scalar = 1 + abs(1 - signal['inval_ratio'])
         sig_score = signal['confidence'] * rank_score
         risk_scalar = (sig_score * perf_score) / inval_scalar
-        signal['score'] = str(risk_scalar)
-        signal['score_old'] = str(risk_scalar)
+        score = round(risk_scalar, 5)
 
-        print(f"secondary manual prediction: {float(signal['score_old']):.1%}")
+        print(f"secondary manual prediction: {score:.1%}")
 
-        return signal
+        return score
 
     def signals(self, session, df: pd.DataFrame, pair: str) -> dict:
         """generates spot buy signals based on the ats_z indicator. does not account for currently open positions,
