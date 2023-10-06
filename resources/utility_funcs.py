@@ -16,6 +16,7 @@ import time
 from functools import wraps
 from binance.exceptions import BinanceAPIException
 import plotly.express as px
+from pyarrow import ArrowInvalid
 
 ctx = getcontext()
 ctx.prec = 12
@@ -160,9 +161,12 @@ def market_benchmark(session) -> None:
     for x in session.pairs_data.keys():
         df = session.pairs_data.get(x, {}).get('ohlc_5m')
         if not isinstance(df, pd.DataFrame):
-            if Path(f"{session.ohlc_r}/{x}.parquet").exists:
+            try:
                 df = pd.read_parquet(session.ohlc_r / f"{x}.parquet")
-            else:
+            except ArrowInvalid:
+                logger.error(f"market benchmark: couldn't get any ohlc data for {x}")
+                continue
+            except FileNotFoundError:
                 logger.error(f"market benchmark: couldn't get any ohlc data for {x}")
                 continue
 
