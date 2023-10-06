@@ -2655,6 +2655,12 @@ class TrailFractals(Agent):
 
         sig = Timer('ats_spot_signals')
         sig.start()
+
+        # check if it's a valid margin pair first
+        if not session.pairs_data[pair]['margin_allowed']:
+            logger.info(f"{pair} not a margin pair, but was trying to get margin signals")
+            return None
+
         signal_dict = {'agent': self.id, 'mode': self.mode, 'pair': pair}
 
         df = ind.williams_fractals(df, self.width, self.spacing)
