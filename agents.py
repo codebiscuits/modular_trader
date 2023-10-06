@@ -1259,7 +1259,7 @@ class Agent:
 
         k13.stop()
 
-    # dispatch
+    # dispatch ---------------------------------------------------------------------------------------------------------
 
     def tp_pos(self, session, signal):
         if signal['state'] == 'real' and signal['mode'] == 'margin':
@@ -1287,7 +1287,7 @@ class Agent:
         elif signal['state'] == 'tracked':
             self.close_tracked(session, signal['pair'], signal['direction'])
 
-    # real open margin
+    # real open margin -------------------------------------------------------------------------------------------------
 
     def create_record(self, signal):
         pair = signal['pair']
@@ -1469,7 +1469,7 @@ class Agent:
 
         return True
 
-    # real open spot
+    # real open spot ---------------------------------------------------------------------------------------------------
 
     def open_real_s(self, session, signal, stage):
         func_name = sys._getframe().f_code.co_name
@@ -1481,7 +1481,7 @@ class Agent:
 
         ros.stop()
 
-    # real tp
+    # real tp ----------------------------------------------------------------------------------------------------------
 
     def create_tp_placeholder(self, session, pair, stp, direction):
         price = session.pairs_data[pair]['price']
@@ -1747,7 +1747,7 @@ class Agent:
 
         k10.stop()
 
-    # real close
+    # real close -------------------------------------------------------------------------------------------------------
 
     def create_close_placeholder(self, session, pair, direction, action):
         price = session.pairs_data[pair]['price']
@@ -1924,7 +1924,8 @@ class Agent:
 
         k9.stop()
 
-    # sim
+    # sim --------------------------------------------------------------------------------------------------------------
+
     def open_sim(self, session, signal):
         k8 = Timer(f'open_sim')
         k8.start()
@@ -2106,7 +2107,7 @@ class Agent:
 
         k6.stop()
 
-    # tracked
+    # tracked ----------------------------------------------------------------------------------------------------------
 
     def tp_tracked(self, session, pair, stp, direction):
         k5 = Timer(f'tp_tracked')
@@ -2182,7 +2183,8 @@ class Agent:
 
         k4.stop()
 
-    # other
+    # other ------------------------------------------------------------------------------------------------------------
+
     def print_rpnls(self):
         self.pnls = dict(
             spot=self.get_pnls('spot'),
@@ -2288,7 +2290,8 @@ class Agent:
 
         return min(free_bal, real_bal)
 
-    # repair trades
+    # repair trades ----------------------------------------------------------------------------------------------------
+
     def check_invalidation(self, session, ph):
         """returns true if trade is still valid, false otherwise.
         trade is still valid if direction is long and price is above invalidation, OR if dir is short and price is below"""
