@@ -330,7 +330,8 @@ class Agent:
         stop_dict['state'] = 'real'
         stop_dict['reason'] = 'hit hard stop'
         stop_dict['liability'] = uf.update_liability(self.open_trades[pair], stop_size, 'reduce')
-        if stop_dict['liability'] not in ['0', '0.0']:
+
+        if float(stop_dict['liability']) > (stop_size * 0.01):
             logger.warning(
                 f"+++ WARNING {self.name} {pair} stop hit, liability record doesn't add up. Recorded value: "
                 f"{stop_dict['liability']} +++")
