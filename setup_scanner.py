@@ -345,7 +345,7 @@ while processed_signals['unassigned']:
         signal['score'] = signal['score_old']
 
     print(f"score chosen: {signal['score']:.1%}")
-    score_threshold = 0.3
+    score_threshold = 0.6
     if float(signal['score']) > score_threshold:
         logger.info('')
         logger.info(
@@ -465,10 +465,12 @@ while unassigned:
         processed_signals['sim_open'].append(s)
         logger.info(f"{s['pair']} {sim_reasons}, {s['quote_size']:.2f}USDT")
     else:
-        # TODO since i'm moving away from fixed risk, i should add a check here which makes sure pfrd isn't too much,
-        #  maybe scale the position down if it is
-        logger.info(f"quote size: {quote_size}, inval ratio: {s['inval_ratio']}, "
-                    f"pfrd: {quote_size * abs(1 - s['inval_ratio']):.2f}. Think about if i need to put a limit on pfrd")
+        pfrd = quote_size * abs(1 - s['inval_ratio'])
+        fractional_risk = balance * 0.01
+        if pfrd > fractional_risk:
+            r = fractional_risk / pfrd
+            quote_size = quote_size * r
+            logger.info(f"quote size: {quote_size}, inval ratio: {s['inval_ratio']}, pfrd: {pfrd:.2f}.")
         or_limits[agent.name] += r
         pos_limits[agent.name] += 1
         algo_limits[s['pair']] -= 2 if s['action'] == 'oco' else 1

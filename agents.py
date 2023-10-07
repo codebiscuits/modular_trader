@@ -2128,7 +2128,7 @@ class Agent:
                     'base_size': '0',
                     'quote_size': '0',
                     'reason': 'trade over-extended',
-                    'timestamp': timestamp,
+                    'timestamp': timestamp * 1000,
                     'action': 'tp',
                     'direction': direction,
                     'fee': '0',
@@ -2232,7 +2232,6 @@ class Agent:
 
         balance = session.spot_bal if self.mode == 'spot' else session.margin_bal
 
-        direction = signal['direction']
         price = session.pairs_data[signal['pair']]['price']
 
         usdt_size = balance * session.fr_max * float(signal['score'])
