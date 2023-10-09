@@ -702,20 +702,27 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float) -> di
                                                                  quantity=stop_size,
                                                                  price=limit)
         except bx.BinanceAPIException as e:
-            if e.code in [-2010, 51113]:
+            if e.code == -2010:
                 logger.exception(e)
+                now = datetime.now(timezone=timezone.utc).strftime('%d/%m/%y %H:%M')
+                logger.error(f"current time: {now}, failed to set stop: {trigger} on {pair}")
                 if side == 'long':
-                    limit = uf.valid_price(session, pair, float(trigger) * 0.81)
+                    real_curr_price = float(session.client.get_orderbook_ticker(symbol=pair)['bidPrice'])
+                    trigger = uf.valid_price(session, pair, real_curr_price * 0.99)
+                    limit = uf.valid_price(session, pair, real_curr_price * 0.81)
                 else:
-                    limit = uf.valid_price(session, pair, float(trigger) * 1.19)
+                    real_curr_price = float(session.client.get_orderbook_ticker(symbol=pair)['askPrice'])
+                    trigger = uf.valid_price(session, pair, real_curr_price * 1.01)
+                    limit = uf.valid_price(session, pair, real_curr_price * 1.19)
 
-            stop_sell_order = session.client.create_margin_order(symbol=pair,
-                                                                 side=side,
-                                                                 type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
-                                                                 timeInForce=be.TIME_IN_FORCE_GTC,
-                                                                 stopPrice=trigger,
-                                                                 quantity=stop_size,
-                                                                 price=limit)
+                stop_sell_order = session.client.create_margin_order(symbol=pair,
+                                                                     side=side,
+                                                                     type=be.ORDER_TYPE_STOP_LOSS_LIMIT,
+                                                                     timeInForce=be.TIME_IN_FORCE_GTC,
+                                                                     stopPrice=trigger,
+                                                                     quantity=stop_size,
+                                                                     price=limit)
+                logger.error(f"New {pair} {side} stop successfuly set at {trigger}")
         session.pairs_data[pair]['algo_orders'] += 1
     else:
         stop_sell_order = {'orderId': 'not live',
