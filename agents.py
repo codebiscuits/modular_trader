@@ -2601,14 +2601,14 @@ class TrailFractals(Agent):
         if direction == 'long':
             long_data = self.long_scaler_2.transform(data)
             long_data = long_data[:, self.long_features_2_idx]
-            score = float(self.long_model_2.predict_proba(long_data)[-1, 0])
-            score = max(0.0, (score * 2) - 1)
+            score = float(self.long_model_2.predict(long_data))
+            score = min(1, max(0.01, score))
             print(f"secondary long prediction: {score:.1%}")
         else:
             short_data = self.short_scaler_2.transform(data)
             short_data = short_data[:, self.short_features_2_idx]
             score = float(self.short_model_2.predict_proba(short_data)[-1, 0])
-            score = max(0.0, (score * 2) - 1)
+            score = min(1, max(0.01, score))
             print(f"secondary short prediction: {score:.1%}")
 
         return score
