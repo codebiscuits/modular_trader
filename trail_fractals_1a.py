@@ -207,7 +207,7 @@ def create_dataset(pairs, data_len, timeframe, width, atr_spacing, side):
     return X, y
 
 
-def save_models(width, spacing, sel_method, num_pairs, side, tf, data_len, selected, pairs, cal_model, scaler):
+def save_models(width, spacing, sel_method, num_pairs, side, tf, data_len, selected, pairs, cal_model, scaler, validity):
     folder = Path(f"/home/ross/coding/modular_trader/machine_learning/"
                   f"models/trail_fractals_{width}_{spacing}/{sel_method}_{num_pairs}")
     pi_folder = Path(f"/home/ross/coding/pi_2/modular_trader/machine_learning/"
@@ -217,7 +217,7 @@ def save_models(width, spacing, sel_method, num_pairs, side, tf, data_len, selec
     scaler_file = f"{side}_{tf}_scaler_1a.sav"
 
     info_dict = {'data_length': data_len, 'features': selected, 'pair_selection': sel_method,
-                 'pairs': pairs, 'created': int(datetime.now(timezone.utc).timestamp())}
+                 'pairs': pairs, 'created': int(datetime.now(timezone.utc).timestamp()), 'validity': validity}
 
     # save local copy
     folder.mkdir(parents=True, exist_ok=True)
@@ -292,7 +292,8 @@ def trail_fractals_1a(side, tf, width, atr_spacing, num_pairs, selection_method)
     print(f"Model score after calibration: {cal_score:.1%}")
 
     # save models and info
-    save_models(width, atr_spacing, selection_method, num_pairs, side, tf, data_len, selected, pairs, cal_model, scaler)
+    save_models(width, atr_spacing, selection_method, num_pairs, side,
+                tf, data_len, selected, pairs, cal_model, scaler, len(X_cal))
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
