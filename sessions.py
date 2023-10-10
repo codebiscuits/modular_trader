@@ -71,6 +71,7 @@ class TradingSession:
     margin_bals = {}
     spot_orders = []
     margin_orders = []
+    open_risk_records = {}
 
     @uf.retry_on_busy()
     def __init__(self, fr_max):
@@ -488,6 +489,23 @@ class TradingSession:
             json.dump(spreads_data, file)
 
         logger.info(f'\nsaved spreads to {spreads_path}\n')
+
+    def save_open_risk_stats(self):
+        or_stats_path = self.records_w / 'or_stats.json'
+        or_stats_path.touch(exist_ok=True)
+
+        with open(or_stats_path, 'r') as file:
+            try:
+                or_stats_data = json.load(file)
+            except json.JSONDecodeError:
+                or_stats_data = {}
+
+        or_stats_data[datetime.now().timestamp()] = self.open_risk_records
+
+        with open(or_stats_path, 'w') as file:
+            json.dump(or_stats_data, file)
+
+        logger.info(f'\nsaved open risk stats to {or_stats_path}\n')
 
     def load_mkt_ranks(self):
         filepath = self.mkt_data_r / 'market_ranks.parquet'

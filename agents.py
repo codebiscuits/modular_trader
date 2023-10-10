@@ -225,7 +225,7 @@ class Agent:
 
         limit = 5000
         if len(cs_trades.keys()) > limit:
-            logger.info(f"{self.name} closed sim trades on record: {len(cs_trades.keys())}")
+            logger.info(f"{self.id} closed sim trades on record: {len(cs_trades.keys())}")
             closed_sim_tups = sorted(zip(cs_trades.keys(), cs_trades.values()), key=lambda x: int(x[0]))
             closed_sim_trades = dict(closed_sim_tups[-limit:])
         else:
@@ -333,7 +333,7 @@ class Agent:
 
         if float(stop_dict['liability']) > (float(stop_size) * 0.01):
             logger.warning(
-                f"+++ WARNING {self.name} {pair} stop hit, liability record doesn't add up. Recorded value: "
+                f"+++ WARNING {self.id} {pair} stop hit, liability record doesn't add up. Recorded value: "
                 f"{stop_dict['liability']} +++")
 
         return stop_dict
@@ -358,7 +358,7 @@ class Agent:
 
     def error_print(self, session, pair, stage, e):
         self.record_trades(session, 'all')
-        logger.exception(f'{self.name} problem with record_stopped_trades during {pair} {stage}')
+        logger.exception(f'{self.id} problem with record_stopped_trades during {pair} {stage}')
         logger.error(f"code: {e.code}")
         logger.error(f"message: {e.message}")
 
@@ -381,14 +381,14 @@ class Agent:
 
         # else:  # if no order can be found, try to close the position
         #     if session.live:
-        #         logger.warning(f"record_stopped_trades found no stop for {pair} {self.name}")
+        #         logger.warning(f"record_stopped_trades found no stop for {pair} {self.id}")
         #     if direction == 'long':
         #         free_bal = session.margin_bals[pair[:-4]].get('free')
         #         pos_size = self.open_trades[pair]['position']['base_size']
         #
         #         if Decimal(free_bal) >= Decimal(pos_size):
         #             # if the free balance covers the position, close it
-        #             logger.info(f'{self.name} record_stopped_trades will close {pair} now')
+        #             logger.info(f'{self.id} record_stopped_trades will close {pair} now')
         #             try:
         #                 self.close_real_full_M(session, pair, direction, action)
         #             except bx.BinanceAPIException as e:
@@ -408,7 +408,7 @@ class Agent:
         #         elif not owed:
         #             return
         #         else:  # if live and owed
-        #             logger.info(f'{self.name} record_stopped_trades will close {pair} now')
+        #             logger.info(f'{self.id} record_stopped_trades will close {pair} now')
         #             try:
         #                 size = self.open_trades[pair]['position']['base_size']
         #                 self.close_real_full_M(session, pair, direction, action, size=size, stage=2)
@@ -433,7 +433,7 @@ class Agent:
                 stop = float(v['position']['hard_stop'])
                 stopped, overshoot_pct, stop_hit_time = self.check_stop_hit(pair, df, direction, stop)
                 if stopped:
-                    logger.info(f"{self.name} {pair} real {direction} stopped out")
+                    logger.info(f"{self.id} {pair} real {direction} stopped out")
                     base_size = float(v['position']['base_size'])
                     stop_dict = {
                         'timestamp': int(stop_time),
@@ -458,7 +458,7 @@ class Agent:
                     self.save_records(session, pair, stop_dict, order)
                     self.counts_dict[f'real_stop_{direction}'] += 1
                 else:
-                    # logger.info(f"{self.name} {pair} {direction} still open")
+                    # logger.info(f"{self.id} {pair} {direction} still open")
                     pass
                 continue
 
@@ -474,33 +474,33 @@ class Agent:
             session.counts.append('get_margin_order')
 
             if order.get('status') == 'FILLED':
-                logger.info(f"{self.name} {pair} stop order filled")
+                logger.info(f"{self.id} {pair} stop order filled")
                 try:
                     self.rst_iteration_m(session, pair, order)
                 except bx.BinanceAPIException as e:
                     self.record_trades(session, 'all')
-                    logger.exception(f'{self.name} problem with record_stopped_trades during {pair}')
+                    logger.exception(f'{self.id} problem with record_stopped_trades during {pair}')
                     logger.error(e)
             elif order.get('status') == 'CANCELED':
-                logger.warning(f'Problem with {self.name} {pair} trade record')
+                logger.warning(f'Problem with {self.id} {pair} trade record')
 
                 # TODO it should be possible to check the placeholder in the trade record and piece together what to do
                 ph = self.open_trades[pair].get('placeholder')
 
                 if ph:
-                    logger.warning(f"{self.name} {pair} stop canceled, placeholder found")
+                    logger.warning(f"{self.id} {pair} stop canceled, placeholder found")
                     logger.warning('use this to modify record_stopped_trades with useful behaviour in this scenario:')
                     logger.warning(pformat(self.open_trades[pair]))
                     logger.warning('')
                     logger.warning(pformat(order))
                 else:
-                    logger.warning(f"{self.name} {pair} stop canceled, no placeholder found, deleting record")
+                    logger.warning(f"{self.id} {pair} stop canceled, no placeholder found, deleting record")
                     logger.warning(pformat(self.open_trades[pair]))
                     del self.open_trades[pair]
                     del self.real_pos[pair[:-len(self.quote_asset)]]
                     self.record_trades(session, 'open')
             elif order.get('status') == 'PARTIALLY_FILLED':
-                logger.info(f"{self.name} {pair} stop hit and partially filled, recording trade.")
+                logger.info(f"{self.id} {pair} stop hit and partially filled, recording trade.")
 
                 old_size = Decimal(order['origQty'])
                 exe_size = Decimal(order['executedQty'])
@@ -525,7 +525,7 @@ class Agent:
                 # TODO need to repay loan that was partially freed up
 
             else:
-                # logger.info(f"{self.name} {pair} stop order (id {sid}) not filled, status: {order['status']}")
+                # logger.info(f"{self.id} {pair} stop order (id {sid}) not filled, status: {order['status']}")
                 del self.open_trades[pair]['placeholder']
 
         self.record_trades(session, 'closed')
@@ -540,7 +540,7 @@ class Agent:
         rsst_gd = Timer('rsst - get_data')
         rsst_gd.start()
 
-        # logger.debug(f"rsst {self.name} {pair}")
+        # logger.debug(f"rsst {self.id} {pair}")
 
         filepath = Path(f'{session.ohlc_r}/{pair}.parquet')
         check_recent = False  # flag to decide whether the ohlc needs updating or not
@@ -623,7 +623,7 @@ class Agent:
     #         #   title='Price',
     #         # ),
     #     )
-    #     plot_folder = Path(f"/home/ross/Documents/backtester_2021/trade_plots/{self.name}")
+    #     plot_folder = Path(f"/home/ross/Documents/backtester_2021/trade_plots/{self.id}")
     #     plot_folder.mkdir(parents=True, exist_ok=True)
     #     fig.write_image(f"{plot_folder}/{pair}.png")
 
@@ -823,6 +823,12 @@ class Agent:
                 self.sim_pos[asset]['or_$'] = open_risk['usdt']
                 self.sim_pos[asset]['or_R'] = open_risk['r']
                 self.sim_pos[asset]['price_delta'] = price_delta
+
+            # identify wanted positions by checking sim reasons (subbed with empty list for real positions)
+            if 'low_score' not in pos['signal'].get('sim_reasons', []):
+                if not session.open_risk_records.get(f"{self.tf}_{self.name}"):
+                    session.open_risk_records[f"{self.tf}_{self.name}"] = []
+                session.open_risk_records[f"{self.tf}_{self.name}"].append(open_risk['r'])
 
             if 0 <= open_risk['r'] < self.indiv_r_limit:
                 # logger.debug(f"{self.id} {pair} {direction} open risk: {open_risk['r']:.3f}R, within limits "
@@ -1038,7 +1044,7 @@ class Agent:
                 try:
                     size_dict[asset] = self.open_trade_stats(session, total_bal, v)
                 except KeyError as e:
-                    logger.exception(f"Problem calling open_trade_stats on {self.name}.{state}_trades, {asset}")
+                    logger.exception(f"Problem calling open_trade_stats on {self.id}.{state}_trades, {asset}")
                     logger.error('KeyError:', e)
                     logger.error('')
                     logger.error(pformat(v))
@@ -1206,12 +1212,12 @@ class Agent:
             logger.exception(e)
 
         if move_condition:
-            logger.debug(f"*** {self.name} {pair} move real {direction} stop from {current_stop:.5} to {inval:.5}")
+            logger.debug(f"*** {self.id} {pair} move real {direction} stop from {current_stop:.5} to {inval:.5}")
             try:
                 self.move_api_stop(session, pair, direction, inval, self.open_trades[pair]['position'])
             except bx.BinanceAPIException as e:
                 self.record_trades(session, 'all')
-                logger.exception(f'{self.name} problem with move_stop order for {pair}')
+                logger.exception(f'{self.id} problem with move_stop order for {pair}')
                 logger.error(e)
 
         asset = signal['pair'][:-len(session.quote_asset)]
@@ -1308,7 +1314,7 @@ class Agent:
         price = signal['trig_price']
         stp = signal['inval']
         score = float(signal['score'])
-        note = (f"{self.name} real open {direction} {size:.5} {pair} ({usdt_size:.2f} usdt) @ {price}, "
+        note = (f"{self.id} real open {direction} {size:.5} {pair} ({usdt_size:.2f} usdt) @ {price}, "
                 f"stop @ {stp:.5}, score: {score:.1%}")
         logger.info(note)
 
@@ -1535,7 +1541,7 @@ class Agent:
         new_base_size = Decimal(curr_base_size) - Decimal(api_order.get('executedQty'))
         self.open_trades[pair]['position']['base_size'] = str(new_base_size)
         self.open_trades[pair]['position']['pct_of_full_pos'] *= (pct / 100)
-        # logger.debug(f"+++ {self.name} {pair} tp {direction} resulted in base qty: {new_base_size}")
+        # logger.debug(f"+++ {self.id} {pair} tp {direction} resulted in base qty: {new_base_size}")
         tp_order = funcs.create_trade_dict(api_order, price, session.live)
 
         self.open_trades[pair]['placeholder']['tp_order'] = tp_order
@@ -1721,13 +1727,13 @@ class Agent:
 
         if not cleared_size:
             logger.warning(
-                f'{self.name} {pair} clear_stop returned base_size 0, checking exchange bals before closing {direction}')
+                f'{self.id} {pair} clear_stop returned base_size 0, checking exchange bals before closing {direction}')
             cleared_size = self.set_size_from_free(session, pair)
 
         # execute trade
         tp_order = self.tp_reduce_position(session, pair, cleared_size, pct, direction)
 
-        note = f"{self.name} real take-profit {pair} {direction} {pct}% @ {price}"
+        note = f"{self.id} real take-profit {pair} {direction} {pct}% @ {price}"
         logger.info(note)
 
         if pct == 100:
@@ -1799,7 +1805,7 @@ class Agent:
             new_base_size = Decimal(0)
         self.open_trades[pair]['position']['base_size'] = str(new_base_size)
         if new_base_size != 0:
-            logger.debug(f"+++ {self.name} {pair} close {direction} resulted in base qty: {new_base_size}")
+            logger.debug(f"+++ {self.id} {pair} close {direction} resulted in base qty: {new_base_size}")
         close_order = funcs.create_trade_dict(api_order, price, session.live)
 
         close_order['pair'] = pair
@@ -1845,7 +1851,7 @@ class Agent:
 
         if rpnl <= -1:
             logger.warning(f"*.*.* problem with real trade rpnl ({rpnl:.2f})")
-            logger.warning(self.name)
+            logger.warning(self.id)
             logger.warning(pformat(self.open_trades[pair]))
 
         trade_id = int(datetime.now().timestamp() * 1000)
@@ -1882,7 +1888,7 @@ class Agent:
         k9.start()
 
         price = session.pairs_data[pair]['price']
-        logger.info(f"{self.name} real {action} {direction} {pair} @ {price}")
+        logger.info(f"{self.id} real {action} {direction} {pair} @ {price}")
 
         placeholder = self.open_trades[pair].get('placeholder')
 
@@ -1896,7 +1902,7 @@ class Agent:
             # if close_clear_stop returns 0, assume that the stop was already canceled and check for free balance.
             if not cleared_size:
                 logger.warning(
-                    f'{self.name} {pair} clear_stop returned base_size 0, checking exchange bals before closing {direction}')
+                    f'{self.id} {pair} clear_stop returned base_size 0, checking exchange bals before closing {direction}')
                 cleared_size = self.set_size_from_free(session, pair)
         if stage <= 2:
             # execute trade
@@ -1908,7 +1914,7 @@ class Agent:
                 close_order = self.close_position(session, pair, cleared_size, reason, direction, action)
             else:
                 # in this case, the trade is closed and the record is ruined, so just delete the record and move on
-                logger.warning(f"{self.name} {pair} {direction} position no longer exists, deleting trade record")
+                logger.warning(f"{self.id} {pair} {direction} position no longer exists, deleting trade record")
                 del self.open_trades[pair]
                 return
         if stage <= 3:
@@ -2004,7 +2010,7 @@ class Agent:
         order_size = sim_bal / 2
         usdt_size = f"{order_size * price:.2f}"
 
-        logger.info(f"{self.name} sim take-profit {pair} {direction} @ {price}")
+        logger.info(f"{self.id} sim take-profit {pair} {direction} @ {price}")
 
         # execute order
         now = datetime.now(timezone.utc)
@@ -2058,7 +2064,7 @@ class Agent:
 
         if rpnl < -1:
             logger.warning(f"*.*.* problem with sim trade rpnl ({rpnl:.2f})")
-            logger.warning(self.name)
+            logger.warning(self.id)
             logger.warning(pformat(self.sim_trades[pair]))
 
         if 'low_score' in self.sim_trades[pair]['signal']['sim_reasons']:
@@ -2084,7 +2090,7 @@ class Agent:
         price = session.pairs_data[pair]['price']
         sim_bal = float(self.sim_trades[pair]['position']['base_size'])
 
-        logger.info(f"{self.name} sim close {pair} {direction} @ {price}")
+        logger.info(f"{self.id} sim close {pair} {direction} @ {price}")
 
         # execute order
         now = datetime.now(timezone.utc)
@@ -2116,7 +2122,7 @@ class Agent:
         price = session.pairs_data[pair]['price']
         now = datetime.now(timezone.utc).strftime(timestring)
 
-        logger.info(f"{self.name} tracked take-profit {pair} {direction} 50% @ {price}")
+        logger.info(f"{self.id} tracked take-profit {pair} {direction} 50% @ {price}")
 
         trade_record = self.tracked_trades[pair]['trade']
         timestamp = round(datetime.now(timezone.utc).timestamp())
@@ -2163,7 +2169,7 @@ class Agent:
         k4.start()
 
         price = session.pairs_data[pair]['price']
-        logger.info(f"{self.name} tracked close {direction} {pair} @ {price}")
+        logger.info(f"{self.id} tracked close {direction} {pair} @ {price}")
 
         now = datetime.now(timezone.utc)
         close_order = {'pair': pair,
@@ -2258,7 +2264,7 @@ class Agent:
         real_bal = Decimal(self.open_trades[pair]['position']['base_size'])
         base_size = Decimal(base_size)
         if base_size and (real_bal != base_size):  # check records match reality
-            logger.warning(f"{self.name} {pair} records don't match real balance. {real_bal = }, {base_size = }")
+            logger.warning(f"{self.id} {pair} records don't match real balance. {real_bal = }, {base_size = }")
             mismatch = 100 * abs(base_size - real_bal) / base_size
             logger.warning(f"{mismatch = }%")
         elif base_size == 0:  # in this case the stop was probably cleared previously
@@ -2510,8 +2516,7 @@ class TrailFractals(Agent):
         self.load_primary_model_data(session, tf)
         self.load_secondary_model_data()
         session.pairs_set.update(self.pairs)
-        self.name = (f'{self.tf} trail_fractals {self.width}-{self.spacing}_'
-                     f'{self.training_pair_selection}_{self.training_pairs_n}')
+        self.name = (f'trail_fractals_{self.width}_{self.spacing}')
         self.id = (f"trail_fractals_{self.tf}_{self.offset}_{self.width}_{self.spacing}_"
                    f"{self.training_pair_selection}_{self.training_pairs_n}")
         self.ohlc_length = 4035
@@ -2718,7 +2723,7 @@ class TrailFractals(Agent):
             print(short_features_scaled[-3:, :])
             short_confidence = 0
 
-        # logger.debug(f"{self.name} {pair} {self.tf} long conf: {long_confidence:.1%} short conf: {short_confidence:.1%}")
+        # logger.debug(f"{self.id} {pair} {self.tf} long conf: {long_confidence:.1%} short conf: {short_confidence:.1%}")
 
         # these are deliberately back-to-front because my analysis showed they were actually inversely correlated to pnl
         combined_long = short_confidence - long_confidence

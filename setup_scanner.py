@@ -2,7 +2,7 @@ import time
 from resources import utility_funcs as uf, binance_funcs as funcs
 from datetime import datetime, timezone
 from agents import TrailFractals
-from pprint import pformat
+from pprint import pprint, pformat
 import sessions
 from resources.timers import Timer
 from collections import Counter
@@ -48,6 +48,8 @@ for agent in agents.values():
     real_sim_tps_closes.extend(agent.check_open_risk(session))
     agent.max_positions = agent.set_max_pos()
     agent.total_r_limit = agent.max_positions * 1.7  # TODO need to update reduce_risk and run it before/after set_fixed_risk
+pprint(session.open_risk_records)
+session.save_open_risk_stats()
 
 init_end = time.perf_counter()
 init_elapsed = init_end - script_start
@@ -83,7 +85,7 @@ for n, pair in enumerate(session.pairs_set):
     for agent in agents.values():
         if agent.tf not in df_dict:  # some pairs will not have all required timeframes for the session
             continue
-        # logger.debug(f"{agent.name}")
+        # logger.debug(f"{agent.id}")
         df_2 = df_dict[agent.tf].copy()
         # logger.debug(f"{pair} {tf} {len(df_2)}")
 
@@ -334,30 +336,24 @@ while processed_signals['unassigned']:
     signal['score_ml'] = agents[signal['agent']].secondary_prediction(signal)
     signal['score_old'] = agents[signal['agent']].secondary_manual_prediction(session, signal)
 
-    # TODO once i have trained the models again, i can swap the 'valid' condition for 'validity > 30', and record the
-    #  validity number in the signal. then in future analysis i can look at the data to see if the model gets more
-    #  accurate as validity increases (and what is a good threshold).
-    if (signal['direction'] == 'long') and agents[signal['agent']].long_info_2['valid']:
+    if (signal['direction'] == 'long') and (agents[signal['agent']].long_info_2['valid']):
         signal['score'] = signal['score_ml']
-    elif (signal['direction'] == 'short') and agents[signal['agent']].short_info_2['valid']:
+    elif (signal['direction'] == 'short') and (agents[signal['agent']].short_info_2['valid']):
         signal['score'] = signal['score_ml']
     else:
         signal['score'] = signal['score_old']
 
-    print(f"score chosen: {signal['score']:.1%}")
     score_threshold = 0.6
-    if float(signal['score']) > score_threshold:
-        logger.info('')
-        logger.info(
-            f"{signal['pair']}, {signal['tf']}, {signal['direction']}, signal score: {float(signal['score']):.1%}")
 
     signal['base_size'], signal['quote_size'] = agents[signal['agent']].get_size(session, signal)
 
     sim_position = agents[signal['agent']].sim_pos.get(signal['asset'], {'direction': 'flat'})['direction']
     if float(signal['score']) >= score_threshold:
+        signal['wanted'] = True
         processed_signals['scored'].append(signal)
     # separate unwanted signals
     elif float(signal['score']) < score_threshold and sim_position == 'flat':
+        signal['wanted'] = False
         signal['sim_reasons'] = ['low_score']
         processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', signal['direction']))
 
@@ -401,8 +397,8 @@ logger.info(f"\n-*-*-*- Sorting and Filtering {len(unassigned)} Processed Signal
 logger.debug(f"-*-*-*- Sorting and Filtering {len(unassigned)} Processed Signals for all agents -*-*-*-")
 
 # work through the list and check each filter for each signal
-or_limits = {agent.name: agent.total_open_risk for agent in agents.values()}
-pos_limits = {agent.name: agent.num_open_positions for agent in agents.values()}
+or_limits = {agent.id: agent.total_open_risk for agent in agents.values()}
+pos_limits = {agent.id: agent.num_open_positions for agent in agents.values()}
 algo_limits = {pair: (v['max_algo_orders'] - v['algo_orders']) for pair, v in session.pairs_data.items()}
 usdt_bal_s = session.spot_usdt_bal['qty']
 
@@ -437,9 +433,9 @@ while unassigned:
         r = (balance * 0.1) / quote_size
         quote_size = balance * 0.1
 
-    if or_limits[agent.name] >= agent.total_r_limit:
+    if or_limits[agent.id] >= agent.total_r_limit:
         sim_reasons.append('too_much_or')
-    if pos_limits[agent.name] >= agent.max_positions:
+    if pos_limits[agent.id] >= agent.max_positions:
         sim_reasons.append('too_many_pos')
     if (algo_limits[s['pair']] < 2 and s['action'] == 'oco') or (algo_limits[s['pair']] < 1 and s['action'] == 'open'):
         sim_reasons.append('algo_order_limit')
@@ -471,8 +467,8 @@ while unassigned:
             r = fractional_risk / pfrd
             quote_size = quote_size * r
             logger.info(f"quote size: {quote_size}, inval ratio: {s['inval_ratio']}, pfrd: {pfrd:.2f}.")
-        or_limits[agent.name] += r
-        pos_limits[agent.name] += 1
+        or_limits[agent.id] += r
+        pos_limits[agent.id] += 1
         algo_limits[s['pair']] -= 2 if s['action'] == 'oco' else 1
 
         if r != 1:
@@ -569,7 +565,7 @@ for agent in agents.values():
 
     #################################
 
-    logger.info(f"\n{agent.name.upper()} SUMMARY")
+    logger.info(f"\n{agent.id.upper()} SUMMARY")
 
     logger.info(f"\n{len(agent.real_pos.keys())} real positions, {len(agent.sim_pos.keys())} sim positions\n")
 
@@ -586,7 +582,7 @@ for agent in agents.values():
                     f"realised sim short pnl: {agent.realised_pnls['sim_short']:.1f}R")
     logger.info(f'tor: {agent.total_open_risk:.1f}')
 
-    logger.info(f'\n{agent.name} Counts:')
+    logger.info(f'\n{agent.id} Counts:')
     logger.info(pformat({f"{k}: {v}" for k, v in agent.counts_dict.items() if v}))
     logger.info('-:-' * 20)
 

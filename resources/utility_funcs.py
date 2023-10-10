@@ -309,7 +309,7 @@ def log(session, agent) -> None:
         new_record['wanted_rpnl_short'] = agent.realised_pnls['wanted_short']
         new_record['unwanted_rpnl_short'] = agent.realised_pnls['unwanted_short']
     else:
-        logger.warning(f'*** warning log function not working for {agent.name} ***')
+        logger.warning(f'*** warning log function not working for {agent.id} ***')
 
     read_folder = Path(f"{session.records_r}/{agent.id}")
     read_path = read_folder / "perf_log.json"
@@ -371,12 +371,12 @@ def interpret_benchmark(session, agents: list) -> None:
     for agent in agents:
         agent_bench = agent.benchmark
         if mkt_bench['valid']:
-            d_ranking.append((agent.name, round(agent_bench['strat_1d'] * 100, 3)))
-            w_ranking.append((agent.name, round(agent_bench['strat_1w'] * 100, 2)))
-            m_ranking.append((agent.name, round(agent_bench['strat_1m'] * 100, 1)))
+            d_ranking.append((agent.id, round(agent_bench['strat_1d'] * 100, 3)))
+            w_ranking.append((agent.id, round(agent_bench['strat_1w'] * 100, 2)))
+            m_ranking.append((agent.id, round(agent_bench['strat_1m'] * 100, 1)))
 
         else:
-            logger.info(f'no benchmarking data available for {agent.name}')
+            logger.info(f'no benchmarking data available for {agent.id}')
 
     if d_ranking:
         d_ranking = sorted(d_ranking, key=lambda x: x[1], reverse=True)
@@ -466,7 +466,7 @@ def scanner_summary(session, agents: list) -> None:
 
     for agent in agents:
         print_msg = False
-        agent_msg = f'\n{agent.name}'
+        agent_msg = f'\n{agent.id}'
 
         # spot
         if (agent.mode == 'spot') and agent.realised_pnls['real_spot']:
