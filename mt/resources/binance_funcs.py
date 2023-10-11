@@ -285,13 +285,12 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
             last_timestamp = df.timestamp.iloc[-1].timestamp()
             now = datetime.now(timezone.utc).timestamp()
             data_age_mins = (now - last_timestamp) / 60
-            logger.debug(f"{pair} ohlc data ends: {(now - last_timestamp) / 60:.1f} minutes ago")
             if (data_age_mins < 15) and (len(df) > 2):
                 # update last close price with current price
-                logger.debug(f"{pair} ohlc data less than 15 mins old, adjusting last close")
                 last_idx = df.index[-1]
                 df.at[last_idx, 'close'] = session.pairs_data[pair]['price']
             elif len(df) > 2:
+                logger.debug(f"{pair} ohlc data ends: {(now - last_timestamp) / 60:.1f} minutes ago, updating")
                 df = update_ohlc(pair, session.ohlc_tf, df, session)
             else:
                 df = get_ohlc(pair, session.ohlc_tf, '2 years ago UTC', session)
