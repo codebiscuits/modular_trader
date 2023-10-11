@@ -11,11 +11,11 @@ from typing import Tuple, Dict, Any
 import sys
 from pycoingecko import CoinGeckoAPI
 from pyarrow import ArrowInvalid
-from mt.resources import keys
-from mt.resources import indicators as ind
-from mt.resources import utility_funcs as uf
-from mt.resources.timers import Timer
+from mt.resources import keys, indicators as ind, utility_funcs as uf
 from mt.resources.loggers import create_logger
+# from timers import Timer
+# from loggers import create_logger
+from mt.resources.timers import Timer
 
 cg = CoinGeckoAPI()
 # pb = uf.init_pb()

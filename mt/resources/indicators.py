@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-import mt.resources.binance_funcs as funcs
+from mt.resources import binance_funcs as funcs
 
 pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)

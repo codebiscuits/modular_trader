@@ -2,8 +2,6 @@ import logging
 from datetime import datetime, timezone
 import sys
 from pathlib import Path
-from logging import handlers
-from mt.resources import keys
 
 def create_logger(source, other_path=None):
     day = datetime.now(timezone.utc).strftime('%-d')

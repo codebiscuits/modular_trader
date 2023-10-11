@@ -7,8 +7,8 @@ import statistics as stats
 import requests
 from pprint import pformat
 from decimal import Decimal, getcontext
-from mt.resources.timers import Timer
-from mt.resources.loggers import create_logger
+# from timers import Timer
+# from loggers import create_logger
 import sys
 import math
 import pytz
@@ -17,6 +17,8 @@ from functools import wraps
 from binance.exceptions import BinanceAPIException
 import plotly.express as px
 from pyarrow import ArrowInvalid
+from mt.resources.loggers import create_logger
+from mt.resources.timers import Timer
 
 ctx = getcontext()
 ctx.prec = 12

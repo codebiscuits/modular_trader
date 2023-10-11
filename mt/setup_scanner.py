@@ -1,13 +1,14 @@
 import time
+from mt.resources.timers import Timer
 from resources import utility_funcs as uf
-from mt.resources import binance_funcs as funcs
+from resources import binance_funcs as funcs
 from datetime import datetime, timezone
 from agents import TrailFractals
 from pprint import pprint, pformat
 import sessions
-from mt.resources.timers import Timer
+# from resources import timers.Timer as Timer
 from collections import Counter
-from mt.resources.loggers import create_logger
+from resources.loggers import create_logger
 
 script_start = time.perf_counter()
 
