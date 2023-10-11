@@ -4,10 +4,10 @@ from pathlib import Path
 import json
 from json.decoder import JSONDecodeError
 import statistics as stats
-from resources.timers import Timer
-from resources.loggers import create_logger
+from mt.resources.timers import Timer
+from mt.resources.loggers import create_logger
 from typing import Dict
-from resources import indicators as ind, utility_funcs as uf, binance_funcs as funcs
+from mt.resources import indicators as ind, utility_funcs as uf, binance_funcs as funcs
 from datetime import datetime, timezone
 import binance.exceptions as bx
 import binance.enums as be

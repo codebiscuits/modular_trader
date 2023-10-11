@@ -3,3 +3,4 @@ __pycache__/
 ohlc_data/
 results/
 mt/resources/keys.py
+/mt_env/

@@ -1,13 +1,13 @@
 import pandas as pd
 import polars as pl
-from resources import binance_funcs as funcs
+from mt.resources import binance_funcs as funcs
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from sessions import TradingSession
+from mt.sessions import TradingSession
 from pyarrow import ArrowInvalid
 import json
-from resources.loggers import create_logger
+from mt.resources.loggers import create_logger
 
 pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)

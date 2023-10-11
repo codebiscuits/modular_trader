@@ -1,12 +1,12 @@
 from pathlib import Path
 from datetime import datetime, timezone
 from mt.resources.timers import Timer
-from resources.loggers import create_logger
+from mt.resources.loggers import create_logger
 from binance.client import Client
 import binance.enums as be
 import binance.exceptions as bx
 from mt.resources import keys, features, utility_funcs as uf
-import ml_funcs as mlf
+import mt.ml_funcs as mlf
 from typing import Dict
 from collections import Counter
 import sys
