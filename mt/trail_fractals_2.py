@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import ml_funcs as mlf
+from mt.resources import ml_funcs as mlf
 import time
 from pathlib import Path
 import joblib
@@ -15,15 +15,12 @@ if not running_on_pi:
 
     patch_sklearn()
 
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, fbeta_score, make_scorer
-from sklearn.calibration import CalibratedClassifierCV
-from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif  # , chi2
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, QuantileTransformer
+from sklearn.preprocessing import QuantileTransformer
 from mlxtend.feature_selection import SequentialFeatureSelector as SFS
-from imblearn.under_sampling import RandomUnderSampler, ClusterCentroids
-from optuna import logging as op_logging, visualization
+from imblearn.under_sampling import ClusterCentroids
+from optuna import logging as op_logging
 from xgboost import XGBClassifier, DMatrix
 
 ################################################ - IMPORTANT - #####################################################

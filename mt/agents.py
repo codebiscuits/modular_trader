@@ -539,8 +539,6 @@ class Agent:
         rsst_gd = Timer('rsst - get_data')
         rsst_gd.start()
 
-        # logger.debug(f"rsst {self.id} {pair}")
-
         filepath = Path(f'{session.ohlc_r}/{pair}.parquet')
         check_recent = False  # flag to decide whether the ohlc needs updating or not
 
@@ -735,7 +733,11 @@ class Agent:
         scalar = position['pct_of_full_pos']
         realised_r = trade_r * scalar
 
-        logger.debug(f"{position['pair']} realised_r: {realised_r:.2f}")
+        if position['state'] == 'real':
+            pair = position['pair']
+            state = position['state']
+            direction = position['direction']
+            logger.debug(f"{self.id} {pair} {state} {direction} realised_r: {realised_r:.2f}")
         k15.stop()
 
         return realised_r
@@ -830,8 +832,6 @@ class Agent:
                 session.open_risk_records[f"{self.tf}_{self.name}"].append(open_risk['r'])
 
             if 0 <= open_risk['r'] < self.indiv_r_limit:
-                # logger.debug(f"{self.id} {pair} {direction} open risk: {open_risk['r']:.3f}R, within limits "
-                #              f"(0-{self.indiv_r_limit})")
                 continue
 
             # TODO i could check for failed stops here too by simply looking for positions with negative open risk.
@@ -857,10 +857,11 @@ class Agent:
 
             signals.append(signal)
 
-            logger.debug(f"{state} {pair} open risk over threshold, or: {open_risk['r']:.1f}R. "
-                         f"Size: {current_value:.2f}USDT so action is {signal['action']}")
-            logger.info(f"{state} {pair} open risk over threshold, or: {open_risk['r']:.1f}R. "
-                        f"Size: {current_value:.2f}USDT so action is {signal['action']}")
+            if state == 'real':
+                logger.debug(f"{state} {pair} open risk out of bounds, or: {open_risk['r']:.1f}R. "
+                             f"Size: {current_value:.2f}USDT so action is {signal['action']}")
+                logger.info(f"{state} {pair} open risk out of bounds, or: {open_risk['r']:.1f}R. "
+                            f"Size: {current_value:.2f}USDT so action is {signal['action']}")
 
         return signals
 
@@ -908,6 +909,13 @@ class Agent:
             return rpnl_df.to_dict(orient='records')[-1]
         else:
             return {'ema_4': 0, 'ema_8': 0, 'ema_16': 0, 'ema_32': 0, 'ema_64': 0}
+
+    def calc_rpnls(self):
+        self.pnls = dict(
+            spot=self.get_pnls('spot'),
+            long=self.get_pnls('long'),
+            short=self.get_pnls('short'),
+        )
 
     def set_max_pos(self) -> int:
         """sets the maximum number of open positions for the agent. if the median
@@ -1455,8 +1463,12 @@ class Agent:
             try:
                 api_order = self.increase_position(session, pair, size, direction)
             except bx.BinanceAPIException as e:
-                logger.exception(e)
-                if e.code == -2010:
+                if e.code in [-2010, -3027]:
+                    logger.info(f"Error {e.code} while calling increase_position for {self.id} {pair} {direction}")
+                    del self.open_trades[pair]
+                    return False
+                else:
+                    logger.exception(e)
                     del self.open_trades[pair]
                     return False
 
@@ -1471,6 +1483,7 @@ class Agent:
         if stage <= 3:
             self.open_save_records(session, pair)
             self.open_update_real_pos_usdtM_counts(session, pair, size, inval_ratio, direction)
+
         k11.stop()
 
         return True
@@ -1540,7 +1553,6 @@ class Agent:
         new_base_size = Decimal(curr_base_size) - Decimal(api_order.get('executedQty'))
         self.open_trades[pair]['position']['base_size'] = str(new_base_size)
         self.open_trades[pair]['position']['pct_of_full_pos'] *= (pct / 100)
-        # logger.debug(f"+++ {self.id} {pair} tp {direction} resulted in base qty: {new_base_size}")
         tp_order = funcs.create_trade_dict(api_order, price, session.live)
 
         self.open_trades[pair]['placeholder']['tp_order'] = tp_order
@@ -1731,9 +1743,6 @@ class Agent:
 
         # execute trade
         tp_order = self.tp_reduce_position(session, pair, cleared_size, pct, direction)
-
-        note = f"{self.id} real take-profit {pair} {direction} {pct}% @ {price}"
-        logger.info(note)
 
         if pct == 100:
             # repay assets
@@ -2009,7 +2018,7 @@ class Agent:
         order_size = sim_bal / 2
         usdt_size = f"{order_size * price:.2f}"
 
-        logger.info(f"{self.id} sim take-profit {pair} {direction} @ {price}")
+        # logger.info(f"{self.id} sim take-profit {pair} {direction} @ {price}")
 
         # execute order
         now = datetime.now(timezone.utc)
@@ -2089,7 +2098,7 @@ class Agent:
         price = session.pairs_data[pair]['price']
         sim_bal = float(self.sim_trades[pair]['position']['base_size'])
 
-        logger.info(f"{self.id} sim close {pair} {direction} @ {price}")
+        # logger.info(f"{self.id} sim close {pair} {direction} @ {price}")
 
         # execute order
         now = datetime.now(timezone.utc)
@@ -2192,11 +2201,6 @@ class Agent:
     # other ------------------------------------------------------------------------------------------------------------
 
     def print_rpnls(self):
-        self.pnls = dict(
-            spot=self.get_pnls('spot'),
-            long=self.get_pnls('long'),
-            short=self.get_pnls('short'),
-        )
         logger.info(f"\n{self.id} scaled pnls")
         if self.mode == 'margin':
             logger.info("Long:")
@@ -2608,14 +2612,12 @@ class TrailFractals(Agent):
             score = float(self.long_model_2.predict(long_data))
             score = min(1, max(0.01, score))
             validity = self.long_info_2['validity']
-            print(f"secondary long prediction: {score:.1%}, validity: {validity}")
         else:
             short_data = self.short_scaler_2.transform(data)
             short_data = short_data[:, self.short_features_2_idx]
             score = float(self.short_model_2.predict_proba(short_data)[-1, 0])
             score = min(1, max(0.01, score))
             validity = self.short_info_2['validity']
-            print(f"secondary short prediction: {score:.1%}, validity: {validity}")
 
         return score, validity
 
@@ -2650,8 +2652,6 @@ class TrailFractals(Agent):
         sig_score = signal['confidence'] * rank_score
         risk_scalar = (sig_score * perf_score) / inval_scalar
         score = round(risk_scalar, 5)
-
-        print(f"secondary manual prediction: {score:.1%}")
 
         return score
 
@@ -2723,8 +2723,6 @@ class TrailFractals(Agent):
             print(short_features.tail())
             print(short_features_scaled[-3:, :])
             short_confidence = 0
-
-        # logger.debug(f"{self.id} {pair} {self.tf} long conf: {long_confidence:.1%} short conf: {short_confidence:.1%}")
 
         # these are deliberately back-to-front because my analysis showed they were actually inversely correlated to pnl
         combined_long = short_confidence - long_confidence

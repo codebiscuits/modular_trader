@@ -6,7 +6,7 @@ from itertools import product
 from collections import Counter
 from datetime import datetime
 from pyarrow import ArrowInvalid
-import ml_funcs as mlf
+import mt.resources.ml_funcs as mlf
 
 if not Path('/pi_2.txt').exists():
     from sklearnex import patch_sklearn

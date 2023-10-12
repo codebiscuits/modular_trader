@@ -6,7 +6,7 @@ from binance.client import Client
 import binance.enums as be
 import binance.exceptions as bx
 from mt.resources import keys, features, utility_funcs as uf
-import mt.ml_funcs as mlf
+import mt.resources.ml_funcs as mlf
 from typing import Dict
 from collections import Counter
 import sys
@@ -428,13 +428,9 @@ class TradingSession:
         margin_symbols = [d['symbol'] for d in self.margin_orders if d['type'] in algo_types]
         order_symbols = spot_symbols + margin_symbols
 
-        logger.info('algo order counts:')
         counted = Counter(order_symbols)
         for p, v in self.pairs_data.items():
             v['algo_orders'] = 0 if p not in counted else counted[p]
-
-            if counted[p]:
-                logger.info(f"{p}: {counted[p]}")
 
         x7.stop()
 

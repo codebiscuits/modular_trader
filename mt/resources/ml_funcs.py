@@ -34,9 +34,8 @@ def get_data(pair, timeframe, vwma_periods=24):
     """loads the ohlc data from file or downloads it from binance if necessary, then calculates vwma at the correct
     scale before resampling to the desired timeframe.
     vwma_lengths just accounts for timeframe resampling, vwma_periods is a multiplier on that"""
-    start = time.perf_counter()
 
-    ohlc_folder = Path('../bin_ohlc_5m')
+    ohlc_folder = Path('../../bin_ohlc_5m')
     ohlc_path = ohlc_folder / f"{pair}.parquet"
 
     if ohlc_path.exists():
@@ -65,9 +64,6 @@ def get_data(pair, timeframe, vwma_periods=24):
     if timeframe == '1h':
         df = df.tail(8760).reset_index(drop=True)
 
-    elapsed = time.perf_counter() - start
-    # print(f"get_data took {int(elapsed // 60)}m {elapsed % 60:.1f}s")
-
     return df
 
 
@@ -75,6 +71,8 @@ def trail_fractal(df_0: pd.DataFrame, width: int, spacing: int, side: str, trim_
     """r_threshold is how much pnl a trade must make for the model to consider it a profitable trade.
     higher values will train the model to target only the trades which produce higher profits, but will also limit
     the number of true positives to train the model on """
+
+    # establish entry conditions
     df_0 = ind.williams_fractals(df_0, width, spacing)
     df_0 = df_0.drop(['fractal_high', 'fractal_low', f"atr-{spacing}", f"atr_{spacing}_pct"], axis=1).dropna(
         axis=0).reset_index(drop=True)
@@ -143,9 +141,7 @@ def oco(df, r_mult, inval_lb, side):
     # then I can compare those numbers to find which will be hit first
 
     # method 2
-    # I want to find the index of the first high / low to exceed the profit value and the index of the first low / high
-    # to exceed the stop value, then I can see which is first. I can use idxmax and idxmin for this, but I first need to
-    # use clip to make sure that the first values to exceed my limits will be considered the first min/max value
+    #
 
     # calculate r by setting init stop based on last 2 bars ll/hh
     if side == 'long':

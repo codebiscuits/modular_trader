@@ -11,7 +11,7 @@ from mt.resources.loggers import create_logger
 
 script_start = time.perf_counter()
 
-# import update_ohlc
+import update_ohlc
 
 # TODO current (02/04/23) roadmap should be:
 #  * start integrating polars and doing anything else i can to speed things up
@@ -300,11 +300,12 @@ checked_signals = uf.remove_duplicates(processed_signals['real_sim_tp_close'])
 logger.debug(f"{len(checked_signals) = }")
 
 for signal in checked_signals:
-    logger.debug('')
-    logger.debug(f"Executing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} "
-                 f"{signal['direction']}")
-    logger.info(f"\nExecuting {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} "
-                f"{signal['direction']}")
+    if signal['state'] == 'real':
+        logger.debug('')
+        logger.debug(f"Executing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} "
+                     f"{signal['direction']}")
+        logger.info(f"\nExecuting {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} "
+                    f"{signal['direction']}")
     if signal['action'] in ['close', 'stop']:  # TODO stop signals could be added in here
         agents[signal['agent']].close_pos(session, signal)
     elif signal['action'] == 'tp':
@@ -321,18 +322,15 @@ tp_close_took = tp_close_end - tp_close_start
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 # calculate fixed risk for each agent using wanted rpnl
 
+logger.debug(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Signal Scores -+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n")
 logger.info(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Signal Scores -+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n")
-logger.info("these values have been clipped and normalised, so 0.5 is equivalent to break-even, 0 is the lowest "
-            "possible value and 1 is the highest possible value")
 
 for agent in agents.values():
-    agent.print_rpnls()
+    agent.calc_rpnls()
 
 while processed_signals['unassigned']:
     signal = processed_signals['unassigned'].pop()
 
-    # if the relevant secondary model is valid (sufficient training data) then the secondary_prediction method will be
-    # used, otherwise, secondary_manual_prediction (original, hand-made scoring algorithm) will be used.
     signal['score_ml'], signal['validity'] = agents[signal['agent']].secondary_prediction(signal)
     signal['score_old'] = agents[signal['agent']].secondary_manual_prediction(session, signal)
 
@@ -459,7 +457,6 @@ while unassigned:
         s['state'] = 'sim'
         s['pct_of_full_pos'] *= r
         processed_signals['sim_open'].append(s)
-        logger.info(f"{s['pair']} {sim_reasons}, {s['quote_size']:.2f}USDT")
     else:
         pfrd = quote_size * abs(1 - s['inval_ratio'])
         fractional_risk = balance * 0.01
@@ -503,10 +500,10 @@ for signal in processed_signals['real_open']:
         signal['sim_reasons'] = ['too_much_leverage']
         processed_signals['sim_open'].append(signal)
         logger.info("changed real open signal to sim, borrow limit reached")
-        # now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
-        # pb.push_note(now, 'Margin limit reached, maybe add collateral')
 
     else:
+        logger.debug(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} "
+                    f"{signal['direction']}")
         logger.info(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} "
                     f"{signal['direction']}")
         successful = agents[signal['agent']].open_real_M(session, signal, 0)

@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import ml_funcs as mlf
+from mt.resources import ml_funcs as mlf
 import time
 from pathlib import Path
 import joblib
@@ -23,7 +23,7 @@ from sklearn.calibration import CalibratedClassifierCV
 from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif  # , chi2
 from sklearn.preprocessing import MinMaxScaler
 from mlxtend.feature_selection import SequentialFeatureSelector as SFS
-from imblearn.under_sampling import RandomUnderSampler, ClusterCentroids
+from imblearn.under_sampling import ClusterCentroids
 import warnings
 warnings.filterwarnings('ignore')
 
