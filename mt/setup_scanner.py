@@ -23,7 +23,7 @@ logger = create_logger('setup_scanner')
 
 ########################################################################################################################
 
-session = sessions.TradingSession(0.03)  # this argument is now max position size rather than max fixed risk
+session = sessions.TradingSession(0.01)  # this argument is now max position size rather than max fixed risk
 
 logger.debug(f'-+-+-+-+-+-+-+-+ {session.now_start} Running Setup Scanner ({session.timeframes}) +-+-+-+-+-+-+-+-')
 
