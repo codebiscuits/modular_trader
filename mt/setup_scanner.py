@@ -74,6 +74,7 @@ for n, pair in enumerate(session.pairs_set):
 
     # df_dict contains ohlc dataframes for each active timeframe for the current pair
     df_dict = funcs.prepare_ohlc(session, session.timeframes, pair)
+    print(df_dict.keys())
 
     # if there is not enough history at a given timeframe, this function will return None instead of the df
     # TODO this would be a good function to start the migration to polars
@@ -329,19 +330,19 @@ logger.info(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Signal Scores -+-+-+-+
 
 for agent in agents.values():
     agent.calc_rpnls()
-
+print('creating signal scores:')
 while processed_signals['unassigned']:
     signal = processed_signals['unassigned'].pop()
 
     signal['score_ml'], signal['validity'] = agents[signal['agent']].secondary_prediction(signal)
     signal['score_old'] = agents[signal['agent']].secondary_manual_prediction(session, signal)
 
-    if (signal['direction'] == 'long') and (signal['validity'] > 30):
-        signal['score'] = signal['score_ml']
-    elif (signal['direction'] == 'short') and (signal['validity'] > 30):
+    if signal['validity'] > 30:
         signal['score'] = signal['score_ml']
     else:
         signal['score'] = signal['score_old']
+
+    print(f"{signal['agent']}, {signal['pair']}, {signal['tf']}, {signal['direction']}, {signal['validity']}, {signal['score']:.1%}")
 
     score_threshold = 0.6
 

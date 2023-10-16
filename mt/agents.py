@@ -2610,13 +2610,13 @@ class TrailFractals(Agent):
             long_data = self.long_scaler_2.transform(data)
             long_data = long_data[:, self.long_features_2_idx]
             score = float(self.long_model_2.predict(long_data))
-            score = min(1, max(0.01, score))
+            score = min(1, max(0.001, score))
             validity = self.long_info_2['validity']
         else:
             short_data = self.short_scaler_2.transform(data)
             short_data = short_data[:, self.short_features_2_idx]
             score = float(self.short_model_2.predict_proba(short_data)[-1, 0])
-            score = min(1, max(0.01, score))
+            score = min(1, max(0.001, score))
             validity = self.short_info_2['validity']
 
         return score, validity
@@ -2681,7 +2681,8 @@ class TrailFractals(Agent):
 
         if pair not in self.pairs:  # might need inval ratio for pairs that used to be in the list
             return {'long_ratio': long_stop / price,
-                    'short_ratio': short_stop / price}
+                    'short_ratio': short_stop / price,
+                    'tf': self.tf}
 
         # Long model
         df['r_pct'] = df.long_r_pct
@@ -2724,9 +2725,8 @@ class TrailFractals(Agent):
             print(short_features_scaled[-3:, :])
             short_confidence = 0
 
-        # these are deliberately back-to-front because my analysis showed they were actually inversely correlated to pnl
-        combined_long = short_confidence - long_confidence
-        combined_short = long_confidence - short_confidence
+        combined_long = long_confidence - short_confidence
+        combined_short = short_confidence - long_confidence
         # combined confidence will not be needed at all when the secondary ml model is doing signal scores
 
         if (price > df.frac_low.iloc[-1]) and (combined_long > 0):
@@ -2741,7 +2741,8 @@ class TrailFractals(Agent):
             model_created = self.short_info.get('created')
         else:  # if there is no signal, long or short ratio might still be needed for moving stops
             return {'long_ratio': long_stop / price,
-                    'short_ratio': short_stop / price}
+                    'short_ratio': short_stop / price,
+                    'tf': self.tf}
 
         created_dt = datetime.fromtimestamp(model_created).astimezone(timezone.utc)
         model_age = datetime.now(timezone.utc) - created_dt

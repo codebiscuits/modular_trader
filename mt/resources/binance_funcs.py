@@ -316,7 +316,7 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
         res_df = resample_ohlc(tf, offset, df.copy()).tail(session.max_length).reset_index(drop=True)
         res_df['vwma'] = vwma
 
-        if len(res_df) >= session.min_length:
+        if (tf in ['12h', '1d']) or (len(res_df) >= session.min_length):
             df_dict[tf] = res_df
 
     ds.stop()
