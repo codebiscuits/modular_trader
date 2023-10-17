@@ -6,6 +6,11 @@ import numpy as np
 import json
 from pyarrow import ArrowInvalid
 import logging
+from binance import Client
+import binance.exceptions as bx
+import mt.resources.keys as keys
+from datetime import datetime, timezone
+import joblib
 
 if not Path('/pi_2.txt').exists():
     from sklearnex import patch_sklearn
@@ -14,6 +19,10 @@ if not Path('/pi_2.txt').exists():
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import QuantileTransformer, MinMaxScaler
 from sklearn.compose import ColumnTransformer
+from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.metrics import fbeta_score, make_scorer
+from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 # import lightgbm as lgbm
 import xgboost as xgb
 from optuna import logging as op_logging, integration, pruners, create_study
@@ -21,10 +30,60 @@ from optuna.samplers import TPESampler
 
 logger = logging.getLogger('ml_funcs')
 logger.setLevel(logging.DEBUG)
-# lgbm.register_logger(logger)
+scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
+
+def init_client(max_retries: int = 360, delay: int = 5):
+    for i in range(max_retries):
+        try:
+            client = Client(keys.bPkey, keys.bSkey)
+            if i > 0:
+                print(f'initialising binance client worked on attempt number {i + 1}')
+            return client
+        except bx.BinanceAPIException as e:
+            if e.code != -3044:
+                raise e
+            print(f"System busy, retrying in {delay} seconds...")
+            time.sleep(delay)
+    raise Exception(f"Max retries exceeded. Request still failed after {max_retries} attempts.")
+
+
+def save_models(strategy, params, sel_method, num_pairs, side, tf, data_len, selected, pairs, model, scaler, validity):
+    folder = Path(f"/home/ross/coding/modular_trader/machine_learning/"
+                  f"models/{strategy}_{params}/{sel_method}_{num_pairs}")
+    pi_folder = Path(f"/home/ross/coding/pi_2/modular_trader/machine_learning/"
+                      f"models/{strategy}_{params}/{sel_method}_{num_pairs}")
+    model_file = f"{side}_{tf}_model_1a.sav"
+    model_info = f"{side}_{tf}_info_1a.json"
+    scaler_file = f"{side}_{tf}_scaler_1a.sav"
+
+    info_dict = {'data_length': data_len, 'features': selected, 'pair_selection': sel_method,
+                 'pairs': pairs, 'created': int(datetime.now(timezone.utc).timestamp()), 'validity': validity}
+
+    # save local copy
+    folder.mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, folder / model_file)
+    info_path = folder / model_info
+    info_path.touch(exist_ok=True)
+    with open(info_path, 'w') as info:
+        json.dump(info_dict, info)
+    scaler_path = folder / scaler_file
+    scaler_path.touch(exist_ok=True)
+    joblib.dump(scaler, scaler_path)
+
+    # save on pi
+    pi_folder.mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, pi_folder / model_file)
+    info_path_pi = pi_folder / model_info
+    info_path_pi.touch(exist_ok=True)
+    with open(info_path_pi, 'w') as info:
+        json.dump(info_dict, info)
+    scaler_path = pi_folder / scaler_file
+    scaler_path.touch(exist_ok=True)
+    joblib.dump(scaler, scaler_path)
+
 
 def rank_pairs(selection):
-    with open(f'recent_{selection}.json', 'r') as file:
+    with open(f'../recent_{selection}.json', 'r') as file:
         vols = json.load(file)
 
     return sorted(vols, key=lambda x: vols[x], reverse=True)
@@ -54,7 +113,7 @@ def get_data(pair, timeframe, vwma_periods=24):
         df.to_parquet(ohlc_path)
         # print("Downloaded OHLC from internet")
 
-    vwma_lengths = {'1h': 12, '4h': 48, '6h': 70, '8h': 96, '12h': 140, '1d': 280}
+    vwma_lengths = {'15m': 3, '30m': 6, '1h': 12, '4h': 48, '6h': 70, '8h': 96, '12h': 140, '1d': 280}
     vwma = ind.vwma(df, vwma_lengths[timeframe] * vwma_periods)
     vwma = vwma[int(vwma_lengths[timeframe] / 2)::vwma_lengths[timeframe]].reset_index(drop=True)
 
@@ -67,12 +126,104 @@ def get_data(pair, timeframe, vwma_periods=24):
     return df
 
 
+def get_margin_pairs(method, num_pairs):
+    start_pair = 0
+    pairs = rank_pairs(method)
+
+    with open('/home/ross/coding/modular_trader/ohlc_lengths.json', 'r') as file:
+        ohlc_lengths = json.load(file)
+
+    client = init_client()
+    exc_info = client.get_exchange_info()
+    symbol_margin = {i['symbol']: i['isMarginTradingAllowed'] for i in exc_info['symbols'] if
+                     i['quoteAsset'] == 'USDT'}
+    pairs = [p for p in pairs if symbol_margin[p] and (ohlc_lengths[p] > 4032)]
+
+    return pairs[start_pair:start_pair + num_pairs]
+
+
+def feature_selection_1a(X: np.ndarray, y, limit: int, cols: list[str]):
+    """uses a combination of methods to select the best performing subset of features. returns the trained selector
+    object that can be used to transform a new dataset"""
+    fs_start = time.perf_counter()
+
+    # drop any columns with the same value in every row, and adjust cols to match
+    keep_cols = np.array(-1 * (np.all(X == X[0, :], axis=0)) + 1, dtype=bool)
+    X = X[:, keep_cols]
+    cols = [col for i, col in enumerate(cols) if keep_cols[i]]
+
+    # Selection stage 1
+    pre_selector_model = GradientBoostingClassifier(random_state=42,
+                                                    n_estimators=10000,
+                                                    validation_fraction=0.1,
+                                                    n_iter_no_change=50,
+                                                    subsample=0.5,
+                                                    min_samples_split=8,
+                                                    max_depth=12,
+                                                    learning_rate=0.3)
+
+    selector_1 = SFS(estimator=pre_selector_model, k_features=10, forward=True,
+                     floating=False, verbose=0, scoring=scorer, n_jobs=-1)
+    selector_2 = SelectKBest(f_classif, k=10)
+    selector_3 = SelectKBest(mutual_info_classif, k=10)
+    # selector_4 = SelectKBest(chi2, k=8)
+
+    selector_1 = selector_1.fit(X, y)
+    selector_2.fit(X, y)
+    selector_3.fit(X, y)
+    # selector_4.fit(X, y)
+
+    cols_idx_1 = list(selector_1.k_feature_idx_)
+    cols_idx_2 = list(selector_2.get_support(indices=True))
+    cols_idx_3 = list(selector_3.get_support(indices=True))
+    # cols_4 = list(selector_4.get_support(indices=True))
+    all_cols_idx = list(set(cols_idx_1 + cols_idx_2 + cols_idx_3))
+
+    # selected_columns = [cols[i] for i in all_cols]
+    selected_columns = [col for i, col in enumerate(cols) if i in all_cols_idx]
+
+    X = pd.DataFrame(X[:, all_cols_idx], columns=selected_columns)
+
+    if X.shape[0] > limit:
+        X_train, _, y_train, _ = train_test_split(X, y, train_size=limit, random_state=99)
+    else:
+        X_train, y_train = X, y
+
+    # Selection stage 2
+    selector_model = GradientBoostingClassifier(random_state=42,
+                                                n_estimators=10000,
+                                                validation_fraction=0.1,
+                                                n_iter_no_change=50,
+                                                subsample=0.5,
+                                                min_samples_split=8,
+                                                max_depth=12,
+                                                learning_rate=0.3)
+    selector = SFS(estimator=selector_model,
+                   k_features='best',
+                   forward=False,
+                   floating=True,
+                   verbose=0,
+                   scoring=scorer,
+                   n_jobs=-1)
+    selector = selector.fit(X_train, y_train)
+    print(f"Number of features selected: {len(selector.k_feature_names_)}")
+
+    # sel_score = selector.score(X_train, y_train)
+    # print(f"Model score after feature selection: {sel_score:.1%}")
+
+    fs_end = time.perf_counter()
+    fs_elapsed = fs_end - fs_start
+    print(f"Feature selection time taken: {int(fs_elapsed // 60)}m {fs_elapsed % 60:.1f}s")
+
+    return selector
+
+
 def trail_fractal(df_0: pd.DataFrame, width: int, spacing: int, side: str, trim_ohlc: int=1000, r_threshold: float=0.5):
     """r_threshold is how much pnl a trade must make for the model to consider it a profitable trade.
     higher values will train the model to target only the trades which produce higher profits, but will also limit
     the number of true positives to train the model on """
 
-    # establish entry conditions
+    # identify potential entries
     df_0 = ind.williams_fractals(df_0, width, spacing)
     df_0 = df_0.drop(['fractal_high', 'fractal_low', f"atr-{spacing}", f"atr_{spacing}_pct"], axis=1).dropna(
         axis=0).reset_index(drop=True)
@@ -80,9 +231,9 @@ def trail_fractal(df_0: pd.DataFrame, width: int, spacing: int, side: str, trim_
     trend_condition = (df_0.open > df_0.frac_low) if side == 'long' else (df_0.open < df_0.frac_high)
     rows = list(df_0.loc[trend_condition].index)
     df_0[f'fractal_trend_age_{side}'] = ind.consec_condition(trend_condition)
-    results = []
 
     # loop through potential entries
+    results = []
     for row in rows:
         df = df_0[row:row + trim_ohlc].copy().reset_index(drop=True)
         entry_price = df.open.iloc[0]
@@ -128,26 +279,18 @@ def trail_fractal(df_0: pd.DataFrame, width: int, spacing: int, side: str, trim_
     return results
 
 
-def trail_atr(df, atr_len, atr_mult):
-    pass
 
 
-def oco(df, r_mult, inval_lb, side):
-    """i want this function to either set the invalidation by looking at recent lows/highs or by using recent volatility
-    as a multiplier"""
-
-    # method 1
-    # I want to ask how many rows from current_row till row.high / row.low exceeds current_row.stop / current_row.profit
-    # then I can compare those numbers to find which will be hit first
-
-    # method 2
-    #
 
     # calculate r by setting init stop based on last 2 bars ll/hh
     if side == 'long':
         df['r'] = abs((df.close - df.low.rolling(inval_lb).min()) / df.close).shift(1)
     else:
         df['r'] = abs((df.close - df.high.rolling(inval_lb).max()) / df.close).shift(1)
+    pass
+
+
+def trail_atr(df, atr_len, atr_mult):
     pass
 
 
@@ -457,10 +600,12 @@ def features_labels_split(df):
                  'atr-25', 'atr-50', 'atr-100', 'atr-200', 'ema_12', 'ema_25', 'ema_50', 'ema_100', 'ema_200',
                  'hma_25', 'hma_50', 'hma_100', 'hma_200', 'lifespan', 'frac_high', 'frac_low', 'inval', 'daily_open',
                  'prev_daily_open', 'prev_daily_high', 'prev_daily_low', 'weekly_open', 'prev_weekly_open',
-                 'prev_weekly_high', 'prev_weekly_low', 'bullish_doji', 'bearish_doji'],
-                axis=1, errors='ignore').drop(index=df.index[-1], axis=0)
-    y = df.pnl_cat.shift(-1).drop(index=df.index[-1], axis=0)
-    z = df.pnl_r.shift(-1).drop(index=df.index[-1], axis=0)
+                 'prev_weekly_high', 'prev_weekly_low', 'bullish_doji', 'bearish_doji', 'entry_l', 'entry_s',
+                 'entry_l_price', 'entry_s_price'],
+                axis=1, errors='ignore')#.drop(index=df.index[-1], axis=0)
+    y = df.pnl_cat#.shift(-1).drop(index=df.index[-1], axis=0)
+    z = df.pnl_r#.shift(-1).drop(index=df.index[-1], axis=0)
+    # the shift is better done at the point where the pnls are calculated, by this time, the data is no longer true timeseries
 
     return X, y, z
 
