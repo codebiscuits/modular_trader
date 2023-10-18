@@ -331,6 +331,15 @@ def consec_condition(s: pd.Series) -> pd.Series:
     return n
 
 
+def consec_condition_uni(s: pd.Series) -> pd.Series:
+    """takes a boolean series as an input (or any expression that evaluates to a series) and returns a series of
+    integers representing the number of periods since the last True"""
+
+    cum_diff = s.cumsum()
+    n = cum_diff.groupby(cum_diff).cumcount()
+    return n
+
+
 def trend_consec_bars(df, bars):
     """returns True for any ohlc period which follows a strong trend as defined by a sequence of consecutive periods
     that all move in the same direction"""
@@ -388,8 +397,8 @@ def vol_delta_div(df: pd.DataFrame) -> bool:
 
 def rsi(s: pd.Series, lookback: int=14) -> pd.Series:
     #TODO this calculation is all wrong, i need to completely rewrite it
-    avg_up = s.pct_change().clip(lower=0).rolling(lookback).mean()
-    avg_dn = s.pct_change().clip(upper=0).abs().rolling(lookback).mean()
+    avg_up = s.ffill().pct_change().clip(lower=0).rolling(lookback).mean()
+    avg_dn = s.ffill().pct_change().clip(upper=0).abs().rolling(lookback).mean()
 
     return pd.Series(100 - (100 / (1 + (avg_up / avg_dn))))
 
@@ -552,7 +561,7 @@ def z_score(s: pd.Series, lookback) -> pd.Series:
     s_mean = s.ewm(lookback).mean()
     s_std = s.ewm(lookback).std()
 
-    return (s - s_mean) / s_std
+    return abs(s - s_mean) / s_std
 
 
 def numpy_moving_average(arr: np.array, lookback: int) -> np.array:

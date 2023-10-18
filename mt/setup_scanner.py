@@ -3,7 +3,7 @@ from mt.resources.timers import Timer
 from mt.resources import utility_funcs as uf
 from mt.resources import binance_funcs as funcs
 from datetime import datetime, timezone
-from mt.agents import TrailFractals
+from mt.agents import TrailFractals, ChannelRun
 from pprint import pprint, pformat
 import mt.sessions as sessions
 from collections import Counter
@@ -29,13 +29,16 @@ logger.debug(f'-+-+-+-+-+-+-+-+ {session.now_start} Running Setup Scanner ({sess
 
 # initialise agents
 agents = []
-for timeframe, offset in session.timeframes:
-    agents.extend(
-        [
-            TrailFractals(session, timeframe, offset, 5, 2, '1d_volumes', 30),
-            TrailFractals(session, timeframe, offset, 5, 2, '1w_volumes', 100),
-        ]
-    )
+for timeframe, offset, active_agents in session.timeframes:
+    if 'TrailFractals' in active_agents:
+        agents.extend([
+                TrailFractals(session, timeframe, offset, 5, 2, '1d_volumes', 30),
+                TrailFractals(session, timeframe, offset, 5, 2, '1w_volumes', 100),
+            ])
+    if 'ChannelRun' in active_agents:
+        agents.extend([
+                ChannelRun(session, timeframe, offset, 200, '1w_volumes', 150),
+            ])
 
 agents = {a.id: a for a in agents}
 
@@ -74,7 +77,6 @@ for n, pair in enumerate(session.pairs_set):
 
     # df_dict contains ohlc dataframes for each active timeframe for the current pair
     df_dict = funcs.prepare_ohlc(session, session.timeframes, pair)
-    print(df_dict.keys())
 
     # if there is not enough history at a given timeframe, this function will return None instead of the df
     # TODO this would be a good function to start the migration to polars
@@ -334,7 +336,9 @@ print('creating signal scores:')
 while processed_signals['unassigned']:
     signal = processed_signals['unassigned'].pop()
 
-    signal['score_ml'], signal['validity'] = agents[signal['agent']].secondary_prediction(signal)
+    signal['validity'] = 0
+    if 'ChannelRun' not in signal['agent']:
+        signal['score_ml'], signal['validity'] = agents[signal['agent']].secondary_prediction(signal)
     signal['score_old'] = agents[signal['agent']].secondary_manual_prediction(session, signal)
 
     if signal['validity'] > 30:

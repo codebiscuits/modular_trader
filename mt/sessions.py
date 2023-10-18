@@ -23,10 +23,18 @@ logger = create_logger('  sessions   ')
 def get_timeframes() -> list[tuple]:
     hour = datetime.now(timezone.utc).hour
     # hour = 0 # for testing all timeframes
-    d = {1: ('1h', None), 4: ('4h', None), 12: ('12h', None), 24: ('1d', None)}
+    d = {1: ('1h', None, ('TrailFractals', 'ChannelRun')),
+         4: ('4h', None, ('TrailFractals', 'ChannelRun')),
+         12: ('12h', None, ('TrailFractals', )),
+         24: ('1d', None, ('TrailFractals', ))}
 
     timeframes = [d[tf] for tf in d if hour % tf == 0]
-    # timeframes = [('1d', None), ('12h', None), ('4h', None), ('1h', None)]
+    # timeframes = [
+    # ('1d', None, ('TrailFractals', 'ChannelRun')),
+    # ('12h', None, ('TrailFractals', 'ChannelRun')),
+    # ('4h', None, ('TrailFractals', )),
+    # ('1h', None, ('TrailFractals', ))
+    # ]
 
     return timeframes
 

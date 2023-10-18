@@ -688,13 +688,13 @@ def rsi_above(df: pd.DataFrame, lookback: int, thresh: int) -> pd.DataFrame:
 
 
 def daily_roc(df: pd.DataFrame, timeframe) -> pd.DataFrame:
-    periods_1d = {'1h': 24, '4h': 6, '12h': 2, '1d': 1}
+    periods_1d = {'15m': 96, '30m': 48, '1h': 24, '4h': 6, '12h': 2, '1d': 1}
     df['roc_1d'] = df.close.ffill().pct_change(periods_1d[timeframe])
     return df
 
 
 def weekly_roc(df: pd.DataFrame, timeframe) -> pd.DataFrame:
-    periods_1w = {'1h': 168, '4h': 42, '12h': 14, '1d': 7}
+    periods_1w = {'15m': 672, '30m': 336, '1h': 168, '4h': 42, '12h': 14, '1d': 7}
     df['roc_1w'] = df.close.ffill().pct_change(periods_1w[timeframe])
     return df
 
@@ -788,6 +788,9 @@ def num_trades_z(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
     df[f'num_trades_z_{lookback}'] = (df.num_trades - num_trades_mean) / num_trades_std
 
     return df
+
+def lagged_returns(df: pd.DataFrame, lag: int) -> pd.DataFrame:
+    rtns = df.close.ffill().pct_change()
 
 # def rolling_poc(df: pd.DataFrame, lookback: int=24) -> pd.DataFrame:
 #     data = df.loc[:, ['close', 'base_vol']]

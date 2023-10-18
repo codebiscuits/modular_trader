@@ -94,7 +94,7 @@ def get_data(pair, timeframe, vwma_periods=24):
     scale before resampling to the desired timeframe.
     vwma_lengths just accounts for timeframe resampling, vwma_periods is a multiplier on that"""
 
-    ohlc_folder = Path('../../bin_ohlc_5m')
+    ohlc_folder = Path('../bin_ohlc_5m')
     ohlc_path = ohlc_folder / f"{pair}.parquet"
 
     if ohlc_path.exists():
