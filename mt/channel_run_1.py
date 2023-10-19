@@ -361,7 +361,7 @@ sides = ['long', 'short']
 timeframes = ['15m', '30m', '1h', '4h']
 
 for side, timeframe in product(sides, timeframes):
-    channel_run_1(side, timeframe, 200, 50, '1w_volumes', 5000, 100)
+    channel_run_1(side, timeframe, 200, 150, '1w_volumes', 5000, 1000)
 
 all_end = time.perf_counter()
 all_elapsed = all_end - all_start
