@@ -37,7 +37,7 @@ for timeframe, offset, active_agents in session.timeframes:
             ])
     if 'ChannelRun' in active_agents:
         agents.extend([
-                ChannelRun(session, timeframe, offset, 200, '1w_volumes', 150),
+                ChannelRun(session, timeframe, offset, 200, '1w_volumes', 50),
             ])
 
 agents = {a.id: a for a in agents}

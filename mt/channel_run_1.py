@@ -21,9 +21,10 @@ from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 from imblearn.under_sampling import RandomUnderSampler, ClusterCentroids
 from xgboost import XGBClassifier, DMatrix
 import optuna
+optuna.logging.set_verbosity(optuna.logging.ERROR)
 
-# if not Path('pi_2.txt').exists():
-#     import mt.update_ohlc
+if not Path('pi_2.txt').exists():
+    import mt.update_ohlc
 
 
 def backtest_oco(df_0, side, lookback, trim_ohlc=2000):
@@ -177,7 +178,7 @@ def generate_dataset(pairs, side, timeframe, lookback, data_len):
     return res_df.dropna(axis=1)
 
 
-def channel_run_1(side, timeframe, lookback, num_pairs, selection_method, data_len):
+def channel_run_1(side, timeframe, lookback, num_pairs, selection_method, data_len, num_trials):
     loop_start = time.perf_counter()
     print(f"\n- Running Channel Run 1, {side}, {timeframe}, {lookback}, {num_pairs}, {selection_method}")
 
@@ -272,14 +273,14 @@ def channel_run_1(side, timeframe, lookback, num_pairs, selection_method, data_l
         model.fit(X_train, y_train)
 
         # Score model
-        scores = cross_val_score(model, X_test, y_test, n_jobs=-1)
+        scores = cross_val_score(model, X_test, y_test, verbose=0, n_jobs=-1)
         avg_score = stats.mean(scores)
 
         # Return score
         return avg_score
 
     study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=1000, n_jobs=-1)
+    study.optimize(objective, n_trials=num_trials, n_jobs=-1)
     best_trials = [trial.params for trial in study.trials if trial.values[0] >= (study.best_value - 0.001)]
     best_df = pd.DataFrame(best_trials)
     best_df.describe()
@@ -354,9 +355,14 @@ def channel_run_1(side, timeframe, lookback, num_pairs, selection_method, data_l
     loop_elapsed = loop_end - loop_start
     print(f"TF 1a test time taken: {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
 
+all_start = time.perf_counter()
 
 sides = ['long', 'short']
-timeframes = ['15m', '30m', '4h']
+timeframes = ['15m', '30m', '1h', '4h']
 
 for side, timeframe in product(sides, timeframes):
-    channel_run_1(side, timeframe, 200, 150, '1w_volumes', 5000)
+    channel_run_1(side, timeframe, 200, 50, '1w_volumes', 5000, 100)
+
+all_end = time.perf_counter()
+all_elapsed = all_end - all_start
+print(f"Total time taken: {int(all_elapsed // 3600)}h {int(all_elapsed // 60) % 60}m {int(all_elapsed % 60)}s")

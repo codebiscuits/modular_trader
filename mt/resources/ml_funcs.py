@@ -597,7 +597,7 @@ def fit_xgb(X, y, num_trials):
 def features_labels_split(df):
     X = df.drop(['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'quote_vol', 'num_trades',
                  'taker_buy_base_vol', 'taker_buy_quote_vol', 'vwma', 'r_pct', 'pnl_pct', 'pnl_r', 'pnl_cat',
-                 'atr-25', 'atr-50', 'atr-100', 'atr-200', 'ema_12', 'ema_25', 'ema_50', 'ema_100', 'ema_200',
+                 'atr-10', 'atr-25', 'atr-50', 'atr-100', 'atr-200', 'ema_12', 'ema_25', 'ema_50', 'ema_100', 'ema_200',
                  'hma_25', 'hma_50', 'hma_100', 'hma_200', 'lifespan', 'frac_high', 'frac_low', 'inval', 'daily_open',
                  'prev_daily_open', 'prev_daily_high', 'prev_daily_low', 'weekly_open', 'prev_weekly_open',
                  'prev_weekly_high', 'prev_weekly_low', 'bullish_doji', 'bearish_doji', 'entry_l', 'entry_s',

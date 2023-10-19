@@ -223,9 +223,14 @@ def add_feature(df, name, timeframe):
     try:
         feature = feature_lookup[name]
     except KeyError as e:
-        logger.exception(e)
-        logger.error(timeframe)
-    df = feature['call'](*feature['params'])
+        if name == 'rr':
+            feature = None
+        else:
+            logger.exception(e)
+            logger.error(timeframe)
+
+    if feature:
+        df = feature['call'](*feature['params'])
 
     return df
 

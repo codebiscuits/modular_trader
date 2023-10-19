@@ -2972,11 +2972,14 @@ class ChannelRun(Agent):
         else:
             return dict()
 
-        signal_dict['rr'] = abs((target / price) - 1) / abs((inval / price) - 1)
+        rr = abs((target / price) - 1) / abs((inval / price) - 1)
+        signal_dict['rr'] = rr
+        df['rr'] = rr
 
         # Long model
         long_features = df[self.long_info['features']]
         long_features_scaled = self.long_scaler.transform(long_features)
+        # print(long_features_scaled[-1, :])
         long_X = pd.DataFrame(long_features_scaled, columns=self.long_info['features'])
         try:
             long_confidence = self.long_model.predict_proba(long_X.iloc[-3:, :])[-1, 1]
