@@ -3,7 +3,7 @@ from mt.resources.timers import Timer
 from mt.resources import utility_funcs as uf
 from mt.resources import binance_funcs as funcs
 from datetime import datetime, timezone
-from mt.agents import TrailFractals, ChannelRun
+from mt.agents import TrailFractals#, ChannelRun
 from pprint import pprint, pformat
 import mt.sessions as sessions
 from collections import Counter
@@ -35,10 +35,10 @@ for timeframe, offset, active_agents in session.timeframes:
                 TrailFractals(session, timeframe, offset, 5, 2, '1d_volumes', 30),
                 TrailFractals(session, timeframe, offset, 5, 2, '1w_volumes', 100),
             ])
-    if 'ChannelRun' in active_agents:
-        agents.extend([
-                ChannelRun(session, timeframe, offset, 200, '1w_volumes', 50),
-            ])
+    # if 'ChannelRun' in active_agents:
+    #     agents.extend([
+    #             ChannelRun(session, timeframe, offset, 200, '1w_volumes', 50),
+    #         ])
 
 agents = {a.id: a for a in agents}
 
