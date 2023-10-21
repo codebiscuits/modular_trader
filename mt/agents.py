@@ -2531,7 +2531,7 @@ class TrailFractals(Agent):
 
     def load_primary_model_data(self, session, tf):
         # paths
-        primary_folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/trail_fractals_{self.width}_"
+        primary_folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/trail_fractals_test_{self.width}_"
                               f"{self.spacing}/{self.pair_selection}_{self.training_pairs_n}")
         self.long_model_path = primary_folder / f"long_{self.tf}_model_1a.sav"
         long_scaler_path = primary_folder / f"long_{self.tf}_scaler_1a.sav"
@@ -2558,7 +2558,7 @@ class TrailFractals(Agent):
     def load_secondary_model_data(self):
         # paths
         secondary_folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/"
-                                f"trail_fractals_{self.width}_{self.spacing}")
+                                f"trail_fractals_test_{self.width}_{self.spacing}")
 
         long_model_file = secondary_folder / f"long_{self.tf}_model_2.json"
         long_scaler_file = secondary_folder / f"long_{self.tf}_scaler_2.sav"
