@@ -116,9 +116,9 @@ def feature_selection(X, y, X_val, scorer):
 
 
 def save_models(side, tf, width, atr_spacing, feature_names, thresh, X_val, model, scaler):
-    folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/trail_fractals_{width}_{atr_spacing}")
+    folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/trail_fractals_new_{width}_{atr_spacing}")
     pi_folder = Path(f"/home/ross/coding/pi_2/modular_trader/machine_learning/"
-                     f"models/trail_fractals_{width}_{atr_spacing}")
+                     f"models/trail_fractals_new_{width}_{atr_spacing}")
     model_file = f"{side}_{tf}_model_2.json"
     model_info = f"{side}_{tf}_info_2.json"
     scaler_file = f"{side}_{tf}_scaler_2.sav"
@@ -160,12 +160,13 @@ def trail_fractals_2(side, tf, width, atr_spacing, thresh):
     X = results.drop('win', axis=1)
     y = results.win  # pnl > threshold
 
-    # random undersampling
+    # balance classes
     # us = RandomUnderSampler(random_state=0)
     us = ClusterCentroids(random_state=0)
     X, y = us.fit_resample(X, y)
 
     # split off validation set
+    X_final = X.copy()
     X, X_val, y, y_val = train_test_split(X, y, train_size=0.9, random_state=43875, stratify=y)
 
     # split off validation labels
@@ -185,18 +186,18 @@ def trail_fractals_2(side, tf, width, atr_spacing, thresh):
     X = scaler.fit_transform(np.array(X))
     X_val = scaler.transform(X_val)
 
-    # quick feature selection
-    # selector = SelectKBest(mutual_info_classif, k=7)
-    # selector.fit(X, y)
-    # cols_idx = list(selector.get_support(indices=True))
-    # feature_names = [col for i, col in enumerate(cols) if i in cols_idx]
-    # X = X[:, cols_idx]
-    # X_val = X_val[:, cols_idx]
-
     # slow feature selection
     X, y, X_val, selected = feature_selection(X, y, X_val, fb_scorer)
     feature_names = [col for i, col in enumerate(cols) if i in selected]
     print(feature_names)
+
+
+
+    # lin_reg = LinearRegression()
+    # lin_reg.fit(X, y)
+    # lin_reg.score(X_test, y_test)
+
+
 
     # hyperparameter optimisation
     model = mlf.fit_xgb(X, y, 1000)
@@ -214,6 +215,12 @@ def trail_fractals_2(side, tf, width, atr_spacing, thresh):
     accuracy = accuracy_score(z_val, y_pred)
     f_beta = fbeta_score(z_val, y_pred, beta=0.333)
     logger.debug(f"Performance on validation set: accuracy: {accuracy:.1%}, f beta: {f_beta:.1%}")
+
+    # retrain model on whole dataset
+    z_final = X_final.pnl
+    X_final = X_final[feature_names]
+    X_final = scaler.fit_transform(np.array(X_final))
+    # TODO fit final model on whole dataset with best params and best features
 
     # save models and info
     save_models(side, tf, width, atr_spacing, feature_names, thresh, X_val, model, scaler)
