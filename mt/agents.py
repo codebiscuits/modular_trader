@@ -2777,263 +2777,263 @@ class TrailFractals(Agent):
 
         return signal_dict
 
-# class ChannelRun(Agent):
-#     """Machine learning strategy that uses OCO orders to manage trades"""
-#
-#     def __init__(self, session, tf: str, offset: int, lookback: int, pair_selection: str, num_pairs: int) -> None:
-#         t = Timer('Channel Run init')
-#         t.start()
-#         self.mode = 'margin'
-#         self.tf = tf
-#         self.offset = offset
-#         self.lookback = lookback
-#         self.pair_selection = pair_selection
-#         self.training_pairs_n = num_pairs
-#         self.name = f'channel_run_{self.lookback}'
-#         self.id = f"ChannelRun_{self.tf}_{self.offset}_{self.lookback}_{self.pair_selection}_{self.training_pairs_n}"
-#         self.load_primary_model_data(session, tf)
-#         # self.load_secondary_model_data()
-#         session.pairs_set.update(self.pairs)
-#         self.ohlc_length = 4035
-#         self.trail_stop = False
-#         self.notes = ''
-#         Agent.__init__(self, session)
-#         session.features[tf].update(self.features)
-#         t.stop()
-#
-#     def load_primary_model_data(self, session, tf):
-#         # paths
-#         primary_folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/"
-#                               f"{self.name}/{self.pair_selection}_{self.training_pairs_n}")
-#
-#         self.long_model_path = primary_folder / f"long_{self.tf}_model_1a.sav"
-#         long_scaler_path = primary_folder / f"long_{self.tf}_scaler_1a.sav"
-#         long_info_path = primary_folder / f"long_{self.tf}_info_1a.json"
-#
-#         self.short_model_path = primary_folder / f"short_{self.tf}_model_1a.sav"
-#         short_scaler_path = primary_folder / f"short_{self.tf}_scaler_1a.sav"
-#         short_info_path = primary_folder / f"short_{self.tf}_info_1a.json"
-#
-#         self.long_model = joblib.load(self.long_model_path)
-#         self.long_scaler = joblib.load(long_scaler_path)
-#         with open(long_info_path, 'r') as ip:
-#             self.long_info = json.load(ip)
-#
-#         self.short_model = joblib.load(self.short_model_path)
-#         self.short_scaler = joblib.load(short_scaler_path)
-#         with open(short_info_path, 'r') as ip:
-#             self.short_info = json.load(ip)
-#
-#         self.pairs = self.long_info['pairs']
-#         self.features = set(self.long_info['features'] + self.short_info['features'])
-#         session.features[tf].update(self.features)
-#
-#     def load_secondary_model_data(self):
-#         # paths
-#         secondary_folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/"
-#                                 f"channel_run_{self.lookback}")
-#
-#         long_model_file = secondary_folder / f"long_{self.tf}_model_2.json"
-#         long_scaler_file = secondary_folder / f"long_{self.tf}_scaler_2.sav"
-#         long_model_info = secondary_folder / f"long_{self.tf}_info_2.json"
-#
-#         short_model_file = secondary_folder / f"short_{self.tf}_model_2.json"
-#         short_scaler_file = secondary_folder / f"short_{self.tf}_scaler_2.sav"
-#         short_model_info = secondary_folder / f"short_{self.tf}_info_2.json"
-#
-#         self.long_model_2 = XGBClassifier()
-#         self.long_model_2.load_model(long_model_file)
-#         self.long_scaler_2 = joblib.load(long_scaler_file)
-#         with open(long_model_info, 'r') as ip:
-#             self.long_info_2 = json.load(ip)
-#
-#         self.short_model_2 = XGBClassifier()
-#         self.short_model_2.load_model(short_model_file)
-#         self.short_scaler_2 = joblib.load(short_scaler_file)
-#         with open(short_model_info, 'r') as ip:
-#             self.short_info_2 = json.load(ip)
-#
-#         self.features_2 = set(self.long_info_2['features'] + self.short_info_2['features'])
-#
-#     def secondary_prediction(self, signal):
-#         direction = signal['direction']
-#
-#         conf_rf_usdt_l = signal['conf_rf_usdt_l']
-#         conf_rf_usdt_s = signal['conf_rf_usdt_s']
-#
-#         inval_ratio = signal['inval_ratio']
-#
-#         perf_ema_4 = self.pnls[direction]['ema_4']
-#         perf_ema_8 = self.pnls[direction]['ema_8']
-#         perf_ema_16 = self.pnls[direction]['ema_16']
-#         perf_ema_32 = self.pnls[direction]['ema_32']
-#         perf_ema_64 = self.pnls[direction]['ema_64']
-#
-#         mkt_rank_1d = signal.get('market_rank_1d', 1)
-#         mkt_rank_1w = signal.get('market_rank_1w', 1)
-#         mkt_rank_1m = signal.get('market_rank_1m', 1)
-#
-#         features = [conf_rf_usdt_l, conf_rf_usdt_s, inval_ratio, mkt_rank_1d, mkt_rank_1w, mkt_rank_1m,
-#                     perf_ema_4, perf_ema_8, perf_ema_16, perf_ema_32, perf_ema_64]
-#         names = ['conf_rf_usdt_l', 'conf_rf_usdt_s', 'inval_ratio', 'mkt_rank_1d', 'mkt_rank_1w', 'mkt_rank_1m',
-#                  'perf_ema_4', 'perf_ema_8', 'perf_ema_16', 'perf_ema_32', 'perf_ema_64']
-#         data = np.array(features).reshape(1, -1)
-#         self.long_features_2_idx = [i for i, f in enumerate(names) if f in self.long_info_2['features']]
-#         self.short_features_2_idx = [i for i, f in enumerate(names) if f in self.short_info_2['features']]
-#
-#         if direction == 'long':
-#             long_data = self.long_scaler_2.transform(data)
-#             long_data = long_data[:, self.long_features_2_idx]
-#             score = float(self.long_model_2.predict(long_data))
-#             score = min(1, max(0.001, score))
-#             validity = self.long_info_2['validity']
-#         else:
-#             short_data = self.short_scaler_2.transform(data)
-#             short_data = short_data[:, self.short_features_2_idx]
-#             score = float(self.short_model_2.predict_proba(short_data)[-1, 0])
-#             score = min(1, max(0.001, score))
-#             validity = self.short_info_2['validity']
-#
-#         return score, validity
-#
-#     def secondary_manual_prediction(self, session, signal):
-#         signal['perf_ema4'] = self.pnls[signal['direction']]['ema_4']
-#         signal['perf_ema8'] = self.pnls[signal['direction']]['ema_8']
-#         signal['perf_ema16'] = self.pnls[signal['direction']]['ema_16']
-#         signal['perf_ema32'] = self.pnls[signal['direction']]['ema_32']
-#         signal['perf_ema64'] = self.pnls[signal['direction']]['ema_64']
-#
-#         sig_bias = signal['bias']
-#
-#         perf_score, rank_score = 0, 0
-#         if signal['tf'] in {'15m', '30m'}:
-#             perf_score = ((signal['perf_ema64'] > 0.5) + (signal['perf_ema32'] > 0.5) + (
-#                     signal['perf_ema16'] > 0.5)) / 3
-#             rank_score = signal.get('market_rank_1d', 1) if sig_bias == 'bullish' else (
-#                     1 - signal.get('market_rank_1d', 1))
-#         elif signal['tf'] in {'1h', '4h'}:
-#             perf_score = ((signal['perf_ema32'] > 0.5) + (signal['perf_ema16'] > 0.5) + (signal['perf_ema8'] > 0.5)) / 3
-#             rank_score = signal.get('market_rank_1w', 1) if sig_bias == 'bullish' else (
-#                     1 - signal.get('market_rank_1w', 1))
-#         elif signal['tf'] in {'12h', '1d'}:
-#             perf_score = ((signal['perf_ema16'] > 0.5) + (signal['perf_ema8'] > 0.5) + (signal['perf_ema4'] > 0.5)) / 3
-#             rank_score = signal.get('market_rank_1m', 1) if sig_bias == 'bullish' else (
-#                     1 - signal.get('market_rank_1m', 1))
-#
-#         if not session.live:
-#             perf_score = 1.0
-#
-#         combined_long = signal['conf_rf_usdt_l'] - signal['conf_rf_usdt_s']
-#         combined_short = signal['conf_rf_usdt_s'] - signal['conf_rf_usdt_l']
-#         confidence = combined_long if signal['bias'] == 'bullish' else combined_short
-#         sig_score = confidence * rank_score
-#
-#         inval_scalar = 1 + signal['inval_dist']
-#         inval_score = self.calc_inval_risk_score(signal['inval_dist']) # TODO maybe use this
-#         risk_scalar = (sig_score * perf_score) / inval_scalar
-#         score = round(risk_scalar, 5)
-#
-#         return score
-#
-#     def signals(self, session, df: pd.DataFrame, pair: str) -> dict:
-#         """generates long/short oco signals with accompanying contextual information"""
-#
-#         sig = Timer('channel_run_oco_signals')
-#         sig.start()
-#
-#         # check if it's a valid margin pair first
-#         if not session.pairs_data[pair]['margin_allowed']:
-#             logger.info(f"{pair} not a margin pair, but was trying to get margin signals")
-#             return dict()
-#
-#         signal_dict = {'agent': self.id, 'mode': self.mode, 'pair': pair}
-#         price = session.pairs_data[pair]['price']
-#
-#         df[f"ll_{self.lookback}"] = df.low.rolling(self.lookback).min()
-#         df[f"hh_{self.lookback}"] = df.high.rolling(self.lookback).max()
-#         chan_high = df[f"ll_{self.lookback}"].iloc[-1]
-#         chan_low = df[f"hh_{self.lookback}"].iloc[-1]
-#         channel_position = (price - chan_low) / (chan_high - chan_low)
-#         signal_dict['channel_position'] = channel_position
-#
-#         entry_l = channel_position < 0.05
-#         entry_s = channel_position > 0.95
-#
-#         atr_lb = 10
-#         df = ind.atr(df, atr_lb)
-#         atr = df[f"atr-{atr_lb}"].iloc[-1]
-#
-#         if entry_l:
-#             target = chan_high
-#             inval = chan_low - atr
-#             signal_dict['bias'] = 'bullish'
-#             model_created = self.long_info.get('created')
-#         elif entry_s:
-#             target = chan_low
-#             inval = chan_high + atr
-#             signal_dict['bias'] = 'bearish'
-#             model_created = self.short_info.get('created')
-#         else:
-#             return dict()
-#
-#         rr = abs((target / price) - 1) / abs((inval / price) - 1)
-#         signal_dict['rr'] = rr
-#         df['rr'] = rr
-#
-#         # Long model
-#         long_features = df[self.long_info['features']]
-#         long_features_scaled = self.long_scaler.transform(long_features)
-#         print(long_features_scaled[-1, :])
-#         long_X = pd.DataFrame(long_features_scaled, columns=self.long_info['features'])
-#         try:
-#             long_confidence = self.long_model.predict_proba(long_X.iloc[-3:, :])[-1, 1]
-#         except ValueError as e:
-#             # logger.exception('NaN in prediction set')
-#             print(f'\n{pair}\n')
-#             logger.error(e)
-#             print('long_features dataframe:')
-#             print(long_features.tail())
-#             print('long_features_scaled array:')
-#             print(long_features_scaled[-3:, :])
-#             long_confidence = 0
-#
-#         # Short model
-#         short_features = df[self.short_info['features']]
-#         short_features_scaled = self.short_scaler.transform(short_features)
-#         short_X = pd.DataFrame(short_features_scaled, columns=self.short_info['features'])
-#         try:
-#             short_confidence = self.short_model.predict_proba(short_X.iloc[-3:, :])[-1, 1]
-#         except ValueError as e:
-#             # logger.exception('NaN in prediction set')
-#             print(f'\n{pair}\n')
-#             logger.error(e)
-#             print('short_features dataframe:')
-#             print(short_features.tail())
-#             print('short_features_scaled array:')
-#             print(short_features_scaled[-3:, :])
-#             short_confidence = 0
-#
-#         created_dt = datetime.fromtimestamp(model_created).astimezone(timezone.utc)
-#         model_age = datetime.now(timezone.utc) - created_dt
-#
-#         stp = self.calc_stop(inval, session.pairs_data[pair]['spread'], price)
-#         signal_dict['inval'] = stp
-#         signal_dict['inval_ratio'] = stp / price
-#         signal_dict['inval_dist'] = abs(stp - price) / price
-#         signal_dict['trig_price'] = price
-#         signal_dict['pct_of_full_pos'] = 1
-#         signal_dict['tf'] = self.tf
-#         signal_dict['asset'] = pair[:-len(session.quote_asset)]
-#         signal_dict['model_age'] = model_age.total_seconds()
-#         signal_dict['conf_rf_usdt_l'] = long_confidence
-#         signal_dict['conf_rf_usdt_s'] = short_confidence
-#         signal_dict['market_rank_1d'] = session.pairs_data[pair]['market_rank_1d']
-#         signal_dict['market_rank_1w'] = session.pairs_data[pair]['market_rank_1w']
-#         signal_dict['market_rank_1m'] = session.pairs_data[pair]['market_rank_1m']
-#         signal_dict['lookback'] = self.lookback
-#         signal_dict['training_pair_selection'] = self.pair_selection
-#         signal_dict['training_pairs_n'] = len(self.pairs)
-#
-#         sig.stop()
-#
-#         return signal_dict
+class ChannelRun(Agent):
+    """Machine learning strategy that uses OCO orders to manage trades"""
+
+    def __init__(self, session, tf: str, offset: int, lookback: int, pair_selection: str, num_pairs: int) -> None:
+        t = Timer('Channel Run init')
+        t.start()
+        self.mode = 'margin'
+        self.tf = tf
+        self.offset = offset
+        self.lookback = lookback
+        self.pair_selection = pair_selection
+        self.training_pairs_n = num_pairs
+        self.name = f'channel_run_{self.lookback}'
+        self.id = f"ChannelRun_{self.tf}_{self.offset}_{self.lookback}_{self.pair_selection}_{self.training_pairs_n}"
+        self.load_primary_model_data(session, tf)
+        # self.load_secondary_model_data()
+        session.pairs_set.update(self.pairs)
+        self.ohlc_length = 4035
+        self.trail_stop = False
+        self.notes = ''
+        Agent.__init__(self, session)
+        session.features[tf].update(self.features)
+        t.stop()
+
+    def load_primary_model_data(self, session, tf):
+        # paths
+        primary_folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/"
+                              f"{self.name}/{self.pair_selection}_{self.training_pairs_n}")
+
+        self.long_model_path = primary_folder / f"long_{self.tf}_model_1a.sav"
+        long_scaler_path = primary_folder / f"long_{self.tf}_scaler_1a.sav"
+        long_info_path = primary_folder / f"long_{self.tf}_info_1a.json"
+
+        self.short_model_path = primary_folder / f"short_{self.tf}_model_1a.sav"
+        short_scaler_path = primary_folder / f"short_{self.tf}_scaler_1a.sav"
+        short_info_path = primary_folder / f"short_{self.tf}_info_1a.json"
+
+        self.long_model = joblib.load(self.long_model_path)
+        self.long_scaler = joblib.load(long_scaler_path)
+        with open(long_info_path, 'r') as ip:
+            self.long_info = json.load(ip)
+
+        self.short_model = joblib.load(self.short_model_path)
+        self.short_scaler = joblib.load(short_scaler_path)
+        with open(short_info_path, 'r') as ip:
+            self.short_info = json.load(ip)
+
+        self.pairs = self.long_info['pairs']
+        self.features = set(self.long_info['features'] + self.short_info['features'])
+        session.features[tf].update(self.features)
+
+    def load_secondary_model_data(self):
+        # paths
+        secondary_folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/"
+                                f"channel_run_{self.lookback}")
+
+        long_model_file = secondary_folder / f"long_{self.tf}_model_2.json"
+        long_scaler_file = secondary_folder / f"long_{self.tf}_scaler_2.sav"
+        long_model_info = secondary_folder / f"long_{self.tf}_info_2.json"
+
+        short_model_file = secondary_folder / f"short_{self.tf}_model_2.json"
+        short_scaler_file = secondary_folder / f"short_{self.tf}_scaler_2.sav"
+        short_model_info = secondary_folder / f"short_{self.tf}_info_2.json"
+
+        self.long_model_2 = XGBClassifier()
+        self.long_model_2.load_model(long_model_file)
+        self.long_scaler_2 = joblib.load(long_scaler_file)
+        with open(long_model_info, 'r') as ip:
+            self.long_info_2 = json.load(ip)
+
+        self.short_model_2 = XGBClassifier()
+        self.short_model_2.load_model(short_model_file)
+        self.short_scaler_2 = joblib.load(short_scaler_file)
+        with open(short_model_info, 'r') as ip:
+            self.short_info_2 = json.load(ip)
+
+        self.features_2 = set(self.long_info_2['features'] + self.short_info_2['features'])
+
+    def secondary_prediction(self, signal):
+        direction = signal['direction']
+
+        conf_rf_usdt_l = signal['conf_rf_usdt_l']
+        conf_rf_usdt_s = signal['conf_rf_usdt_s']
+
+        inval_ratio = signal['inval_ratio']
+
+        perf_ema_4 = self.pnls[direction]['ema_4']
+        perf_ema_8 = self.pnls[direction]['ema_8']
+        perf_ema_16 = self.pnls[direction]['ema_16']
+        perf_ema_32 = self.pnls[direction]['ema_32']
+        perf_ema_64 = self.pnls[direction]['ema_64']
+
+        mkt_rank_1d = signal.get('market_rank_1d', 1)
+        mkt_rank_1w = signal.get('market_rank_1w', 1)
+        mkt_rank_1m = signal.get('market_rank_1m', 1)
+
+        features = [conf_rf_usdt_l, conf_rf_usdt_s, inval_ratio, mkt_rank_1d, mkt_rank_1w, mkt_rank_1m,
+                    perf_ema_4, perf_ema_8, perf_ema_16, perf_ema_32, perf_ema_64]
+        names = ['conf_rf_usdt_l', 'conf_rf_usdt_s', 'inval_ratio', 'mkt_rank_1d', 'mkt_rank_1w', 'mkt_rank_1m',
+                 'perf_ema_4', 'perf_ema_8', 'perf_ema_16', 'perf_ema_32', 'perf_ema_64']
+        data = np.array(features).reshape(1, -1)
+        self.long_features_2_idx = [i for i, f in enumerate(names) if f in self.long_info_2['features']]
+        self.short_features_2_idx = [i for i, f in enumerate(names) if f in self.short_info_2['features']]
+
+        if direction == 'long':
+            long_data = self.long_scaler_2.transform(data)
+            long_data = long_data[:, self.long_features_2_idx]
+            score = float(self.long_model_2.predict(long_data))
+            score = min(1, max(0.001, score))
+            validity = self.long_info_2['validity']
+        else:
+            short_data = self.short_scaler_2.transform(data)
+            short_data = short_data[:, self.short_features_2_idx]
+            score = float(self.short_model_2.predict_proba(short_data)[-1, 0])
+            score = min(1, max(0.001, score))
+            validity = self.short_info_2['validity']
+
+        return score, validity
+
+    def secondary_manual_prediction(self, session, signal):
+        signal['perf_ema4'] = self.pnls[signal['direction']]['ema_4']
+        signal['perf_ema8'] = self.pnls[signal['direction']]['ema_8']
+        signal['perf_ema16'] = self.pnls[signal['direction']]['ema_16']
+        signal['perf_ema32'] = self.pnls[signal['direction']]['ema_32']
+        signal['perf_ema64'] = self.pnls[signal['direction']]['ema_64']
+
+        sig_bias = signal['bias']
+
+        perf_score, rank_score = 0, 0
+        if signal['tf'] in {'15m', '30m'}:
+            perf_score = ((signal['perf_ema64'] > 0.5) + (signal['perf_ema32'] > 0.5) + (
+                    signal['perf_ema16'] > 0.5)) / 3
+            rank_score = signal.get('market_rank_1d', 1) if sig_bias == 'bullish' else (
+                    1 - signal.get('market_rank_1d', 1))
+        elif signal['tf'] in {'1h', '4h'}:
+            perf_score = ((signal['perf_ema32'] > 0.5) + (signal['perf_ema16'] > 0.5) + (signal['perf_ema8'] > 0.5)) / 3
+            rank_score = signal.get('market_rank_1w', 1) if sig_bias == 'bullish' else (
+                    1 - signal.get('market_rank_1w', 1))
+        elif signal['tf'] in {'12h', '1d'}:
+            perf_score = ((signal['perf_ema16'] > 0.5) + (signal['perf_ema8'] > 0.5) + (signal['perf_ema4'] > 0.5)) / 3
+            rank_score = signal.get('market_rank_1m', 1) if sig_bias == 'bullish' else (
+                    1 - signal.get('market_rank_1m', 1))
+
+        if not session.live:
+            perf_score = 1.0
+
+        combined_long = signal['conf_rf_usdt_l'] - signal['conf_rf_usdt_s']
+        combined_short = signal['conf_rf_usdt_s'] - signal['conf_rf_usdt_l']
+        confidence = combined_long if signal['bias'] == 'bullish' else combined_short
+        sig_score = confidence * rank_score
+
+        inval_scalar = 1 + signal['inval_dist']
+        inval_score = self.calc_inval_risk_score(signal['inval_dist']) # TODO maybe use this
+        risk_scalar = (sig_score * perf_score) / inval_scalar
+        score = round(risk_scalar, 5)
+
+        return score
+
+    def signals(self, session, df: pd.DataFrame, pair: str) -> dict:
+        """generates long/short oco signals with accompanying contextual information"""
+
+        sig = Timer('channel_run_oco_signals')
+        sig.start()
+
+        # check if it's a valid margin pair first
+        if not session.pairs_data[pair]['margin_allowed']:
+            logger.info(f"{pair} not a margin pair, but was trying to get margin signals")
+            return dict()
+
+        signal_dict = {'agent': self.id, 'mode': self.mode, 'pair': pair}
+        price = session.pairs_data[pair]['price']
+
+        df[f"ll_{self.lookback}"] = df.low.rolling(self.lookback).min()
+        df[f"hh_{self.lookback}"] = df.high.rolling(self.lookback).max()
+        chan_high = df[f"ll_{self.lookback}"].iloc[-1]
+        chan_low = df[f"hh_{self.lookback}"].iloc[-1]
+        channel_position = (price - chan_low) / (chan_high - chan_low)
+        signal_dict['channel_position'] = channel_position
+
+        entry_l = channel_position < 0.05
+        entry_s = channel_position > 0.95
+
+        atr_lb = 10
+        df = ind.atr(df, atr_lb)
+        atr = df[f"atr-{atr_lb}"].iloc[-1]
+
+        if entry_l:
+            target = chan_high
+            inval = chan_low - atr
+            signal_dict['bias'] = 'bullish'
+            model_created = self.long_info.get('created')
+        elif entry_s:
+            target = chan_low
+            inval = chan_high + atr
+            signal_dict['bias'] = 'bearish'
+            model_created = self.short_info.get('created')
+        else:
+            return dict()
+
+        rr = abs((target / price) - 1) / abs((inval / price) - 1)
+        signal_dict['rr'] = rr
+        df['rr'] = rr
+
+        # Long model
+        long_features = df[self.long_info['features']]
+        long_features_scaled = self.long_scaler.transform(long_features)
+        print(long_features_scaled[-1, :])
+        long_X = pd.DataFrame(long_features_scaled, columns=self.long_info['features'])
+        try:
+            long_confidence = self.long_model.predict_proba(long_X.iloc[-3:, :])[-1, 1]
+        except ValueError as e:
+            # logger.exception('NaN in prediction set')
+            print(f'\n{pair}\n')
+            logger.error(e)
+            print('long_features dataframe:')
+            print(long_features.tail())
+            print('long_features_scaled array:')
+            print(long_features_scaled[-3:, :])
+            long_confidence = 0
+
+        # Short model
+        short_features = df[self.short_info['features']]
+        short_features_scaled = self.short_scaler.transform(short_features)
+        short_X = pd.DataFrame(short_features_scaled, columns=self.short_info['features'])
+        try:
+            short_confidence = self.short_model.predict_proba(short_X.iloc[-3:, :])[-1, 1]
+        except ValueError as e:
+            # logger.exception('NaN in prediction set')
+            print(f'\n{pair}\n')
+            logger.error(e)
+            print('short_features dataframe:')
+            print(short_features.tail())
+            print('short_features_scaled array:')
+            print(short_features_scaled[-3:, :])
+            short_confidence = 0
+
+        created_dt = datetime.fromtimestamp(model_created).astimezone(timezone.utc)
+        model_age = datetime.now(timezone.utc) - created_dt
+
+        stp = self.calc_stop(inval, session.pairs_data[pair]['spread'], price)
+        signal_dict['inval'] = stp
+        signal_dict['inval_ratio'] = stp / price
+        signal_dict['inval_dist'] = abs(stp - price) / price
+        signal_dict['trig_price'] = price
+        signal_dict['pct_of_full_pos'] = 1
+        signal_dict['tf'] = self.tf
+        signal_dict['asset'] = pair[:-len(session.quote_asset)]
+        signal_dict['model_age'] = model_age.total_seconds()
+        signal_dict['conf_rf_usdt_l'] = long_confidence
+        signal_dict['conf_rf_usdt_s'] = short_confidence
+        signal_dict['market_rank_1d'] = session.pairs_data[pair]['market_rank_1d']
+        signal_dict['market_rank_1w'] = session.pairs_data[pair]['market_rank_1w']
+        signal_dict['market_rank_1m'] = session.pairs_data[pair]['market_rank_1m']
+        signal_dict['lookback'] = self.lookback
+        signal_dict['training_pair_selection'] = self.pair_selection
+        signal_dict['training_pairs_n'] = len(self.pairs)
+
+        sig.stop()
+
+        return signal_dict
