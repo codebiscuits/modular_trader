@@ -2609,18 +2609,18 @@ class TrailFractals(Agent):
         self.short_features_2_idx = [i for i, f in enumerate(names) if f in self.short_info_2['features']]
 
         if direction == 'long':
-            long_data = self.long_scaler_2.transform(data)
-            long_data = long_data[:, self.long_features_2_idx]
-            # long_data = data[:, self.long_features_2_idx]
-            # long_data = self.long_scaler_2.transform(long_data)
+            # long_data = self.long_scaler_2.transform(data)
+            # long_data = long_data[:, self.long_features_2_idx]
+            long_data = data[:, self.long_features_2_idx]
+            long_data = self.long_scaler_2.transform(long_data)
             score = float(self.long_model_2.predict(long_data))
             score = min(1, max(0.001, score))
             validity = self.long_info_2['validity']
         else:
-            short_data = self.short_scaler_2.transform(data)
-            short_data = short_data[:, self.short_features_2_idx]
-            # short_data = data[:, self.short_features_2_idx]
-            # short_data = self.short_scaler_2.transform(short_data)
+            # short_data = self.short_scaler_2.transform(data)
+            # short_data = short_data[:, self.short_features_2_idx]
+            short_data = data[:, self.short_features_2_idx]
+            short_data = self.short_scaler_2.transform(short_data)
             score = float(self.short_model_2.predict_proba(short_data)[-1, 0])
             score = min(1, max(0.001, score))
             validity = self.short_info_2['validity']
