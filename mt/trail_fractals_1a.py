@@ -199,7 +199,7 @@ def trail_fractals_1a(side, tf, width, atr_spacing, num_pairs, selection_method)
 
     # save models and info
     mlf.save_models(
-        "trail_fractals_new",
+        "trail_fractals",
         f"{width}_{atr_spacing}",
         selection_method,
         num_pairs,

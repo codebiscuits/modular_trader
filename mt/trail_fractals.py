@@ -24,7 +24,7 @@ for n, fit in fits:
     print(f"\nFit {n+1} of {len(list(fits))}, Fitting {timeframe} {side} models")
 
     trail_fractals_1a(side, timeframe, width, atr_spacing, 30, '1d_volumes')
-    trail_fractals_1a(side, timeframe, width, atr_spacing, 100, '1w_volumes')
+    trail_fractals_1a(side, timeframe, width, atr_spacing, 30, '1w_volumes')
     trail_fractals_2(side, timeframe, width, atr_spacing, 0.4)
 
     loop_end = time.perf_counter()
