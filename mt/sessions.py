@@ -21,19 +21,25 @@ logger = create_logger('  sessions   ')
 
 
 def get_timeframes() -> list[tuple]:
+    qh = datetime.now(timezone.utc).minute // 15  # this represents which quarter-hour is current
     hour = datetime.now(timezone.utc).hour
-    # hour = 0 # for testing all timeframes
-    d = {1: ('1h', None, ('TrailFractals', 'ChannelRun')),
+    # minute, hour = 0, 0 # for testing all timeframes
+    mi = {1: ('15m', None, ('ChannelRun', )),
+         2: ('30m', None, ('ChannelRun', ))}
+
+    ho = {1: ('1h', None, ('TrailFractals', 'ChannelRun')),
          4: ('4h', None, ('TrailFractals', 'ChannelRun')),
          12: ('12h', None, ('TrailFractals', )),
          24: ('1d', None, ('TrailFractals', ))}
 
-    timeframes = [d[tf] for tf in d if hour % tf == 0]
+    timeframes = [mi[tf] for tf in mi if qh % tf == 0] + [ho[tf] for tf in ho if hour % tf == 0]
     # timeframes = [
-    # ('1d', None, ('TrailFractals', 'ChannelRun')),
-    # ('12h', None, ('TrailFractals', 'ChannelRun')),
-    # ('4h', None, ('TrailFractals', )),
-    # ('1h', None, ('TrailFractals', ))
+    # ('15m', None, ('ChannelRun', )),
+    # ('30m', None, ('ChannelRun', )),
+    # ('1h', None, ('TrailFractals', 'ChannelRun')),
+    # ('4h', None, ('TrailFractals', 'ChannelRun')),
+    # ('12h', None, ('TrailFractals', )),
+    # ('1d', None, ('TrailFractals', ))
     # ]
 
     return timeframes

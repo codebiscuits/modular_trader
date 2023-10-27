@@ -707,6 +707,98 @@ class Agent:
 
         n.stop()
 
+    def check_oco_closed(self, df, direction, target, stop):
+        func_name = sys._getframe().f_code.co_name
+        k16 = Timer(f'{func_name}')
+        k16.start()
+
+        target_hit, stop_hit, closed_time = False, False, None
+        if direction == 'long':
+            highest = df.high.max()
+            lowest = df.low.min()
+            target_hit_idx = df.high.clip(upper=target).idxmax()
+            stop_hit_idx = df.low.clip(lower=stop).idxmin()
+            if (stop > lowest) and ((target > highest) or (stop_hit_idx < target_hit_idx)):  # stop hit
+                stop_hit = True
+                exit_row = df.timestamp.iloc[stop_hit_idx]
+            elif (target < highest) and ((stop < lowest) or (target_hit_idx < stop_hit_idx)):  # target hit
+                target_hit = True
+                exit_row = df.timestamp.iloc[target_hit_idx]
+
+        else:
+            highest = df.high.max()
+            lowest = df.low.min()
+            target_hit_idx = df.low.clip(lower=target).idxmin()
+            stop_hit_idx = df.high.clip(upper=stop).idxmax()
+            if (highest > stop) and ((lowest > target) or (stop_hit_idx < target_hit_idx)):  # stop hit
+                stop_hit = True
+                exit_row = df.timestamp.iloc[stop_hit_idx]
+            elif (lowest < target) and ((highest < stop) or (target_hit_idx < stop_hit_idx)):  # target hit
+                target_hit = True
+                exit_row = df.timestamp.iloc[target_hit_idx]
+
+        if (target_hit or stop_hit) and isinstance(exit_row, pd.Timestamp):
+                closed_time = int(exit_row.timestamp())
+
+        k16.stop()
+
+        return target_hit, stop_hit, closed_time
+
+    def create_oco_trade_dict(self, pair, direction, price, base_size, action, closed_time, state):
+        liability = f"{0 - (base_size * price):.2f}" if direction == 'long' else f"{0 - base_size:.2f}"
+        trade_dict = {'timestamp': closed_time,
+                      'pair': pair,
+                      'direction': direction,
+                      'action': action,
+                      'exe_price': str(price),
+                      'base_size': str(base_size),
+                      'quote_size': str(round(base_size * price, 2)),
+                      'fee': 0,
+                      'fee_currency': 'BNB',
+                      'reason': 'hit hard stop',
+                      'state': state,
+                      'liability': liability
+                      }
+
+        logger.debug(pformat(trade_dict))
+
+        return trade_dict
+
+    def record_closed_oco_sim_trades(self, session, timeframes: list) -> None:
+        """goes through all trades in the sim_trades file and checks their recent price action
+        against their most recent hard_stop to see if any of them would have got stopped out"""
+
+        n = Timer('record_closed_oco_sim_trades')
+        n.start()
+        session.counts.append('rcost')
+
+        check_pairs = list(self.sim_trades.items())
+        for pair, v in check_pairs:  # can't loop through the dictionary directly because i delete items as i go
+            direction = v['position']['direction']
+            base_size = float(v['position']['base_size'])
+            target = float(v['position']['target'])
+            stop = float(v['position']['hard_stop'])
+            stop_time = v['position']['stop_time']
+
+            df = self.get_data(session, pair, timeframes, stop_time)
+            if df.empty:
+                logger.warning(f"RSST couldn't find a valid stop time for {pair} {direction}")
+                logger.warning(f"Stop time on record: {stop_time}")
+                continue
+
+            target_hit, stop_hit, closed_time = self.check_oco_closed(df, direction, target, stop)
+            if (target_hit or stop_hit):
+                action = 'close' if target_hit else 'stop'
+                price = target if target_hit else stop
+                trade_dict = self.create_oco_trade_dict(pair, direction, price, base_size, action, closed_time, 'sim')
+                self.sim_to_closed_sim(session, pair, trade_dict, save_file=False)
+                self.counts_dict[f'sim_{action}_{direction}'] += 1
+
+        self.record_trades(session, 'closed_sim')
+        self.record_trades(session, 'sim')
+
+        n.stop()
+
     # risk ----------------------------------------------------------------------
 
     def realised_pnl(self, trade_record: dict) -> float:
@@ -1998,6 +2090,10 @@ class Agent:
             'pfrd': pfrd,
             'pct_of_full_pos': signal['pct_of_full_pos']}
 
+        if self.oco:
+            sim_order['target'] = signal['target']
+            pos_record['target'] = signal['target']
+
         self.sim_trades[pair] = {'trade': [sim_order], 'position': pos_record, 'signal': signal}
 
         # self.sim_pos[asset].update(self.update_pos(session, pair, size, 'sim'))
@@ -2524,6 +2620,7 @@ class TrailFractals(Agent):
                    f"{self.spacing}_{self.pair_selection}_{self.training_pairs_n}")
         self.ohlc_length = 4035
         self.trail_stop = True
+        self.oco = False
         self.notes = ''
         Agent.__init__(self, session)
         session.features[tf].update(self.features)
@@ -2655,7 +2752,7 @@ class TrailFractals(Agent):
             perf_score = 1.0
 
         inval_scalar = 1 + abs(1 - signal['inval_ratio'])
-        sig_score = signal['confidence'] * rank_score
+        sig_score = max(0, signal['confidence']) * rank_score
         risk_scalar = (sig_score * perf_score) / inval_scalar
         score = round(risk_scalar, 5)
 
@@ -2796,6 +2893,7 @@ class ChannelRun(Agent):
         session.pairs_set.update(self.pairs)
         self.ohlc_length = 4035
         self.trail_stop = False
+        self.oco = True
         self.notes = ''
         Agent.__init__(self, session)
         session.features[tf].update(self.features)
@@ -2926,7 +3024,7 @@ class ChannelRun(Agent):
         combined_long = signal['conf_rf_usdt_l'] - signal['conf_rf_usdt_s']
         combined_short = signal['conf_rf_usdt_s'] - signal['conf_rf_usdt_l']
         confidence = combined_long if signal['bias'] == 'bullish' else combined_short
-        sig_score = confidence * rank_score
+        sig_score = max(0, confidence) * rank_score
 
         inval_scalar = 1 + signal['inval_dist']
         inval_score = self.calc_inval_risk_score(signal['inval_dist']) # TODO maybe use this
@@ -2956,8 +3054,8 @@ class ChannelRun(Agent):
         channel_position = (price - chan_low) / (chan_high - chan_low)
         signal_dict['channel_position'] = channel_position
 
-        entry_l = channel_position < 0.05
-        entry_s = channel_position > 0.95
+        entry_l = channel_position < 0.1
+        entry_s = channel_position > 0.9
 
         atr_lb = 10
         df = ind.atr(df, atr_lb)
@@ -2976,9 +3074,10 @@ class ChannelRun(Agent):
         else:
             return dict()
 
+        signal_dict['target'] = target
         rr = abs((target / price) - 1) / abs((inval / price) - 1)
         signal_dict['rr'] = rr
-        df['rr'] = rr
+        df['rr'] = rr  # broadcasting single value to whole column
 
         # Long model
         long_features = df[self.long_info['features']]

@@ -27,7 +27,7 @@ if not Path('pi_2.txt').exists():
     import mt.update_ohlc
 
 
-def backtest_oco(df_0, side, lookback, trim_ohlc=2000):
+def backtest_oco(df_0, side, lookback, trim_ohlc=2200):
     """i can either target the opposite side of the channel or the mid-point, or both"""
 
     df_0 = df_0.reset_index(drop=True)
@@ -47,39 +47,41 @@ def backtest_oco(df_0, side, lookback, trim_ohlc=2000):
 
         if side == 'long':
             highest = df.high.max()
+            lowest = df.low.min()
             target = df[f"hh_{lookback}"].iloc[0]
             stop = df[f"ll_{lookback}"].iloc[0] - atr
             rr = abs((target / entry) - 1) / abs((stop / entry) - 1)
             target_hit_idx = df.high.clip(upper=target).idxmax()
             stop_hit_idx = df.low.clip(lower=stop).idxmin()
-            if (target > highest) or (stop_hit_idx < target_hit_idx):
+            if (stop > lowest) and ((target > highest) or (stop_hit_idx < target_hit_idx)):  #----------------- stop hit
                 exit_row = stop_hit_idx
                 pnl_cat = 0
                 pnl = (stop - entry) / entry
-            elif target_hit_idx < stop_hit_idx:
+            elif (target < highest) and ((stop < lowest) or (target_hit_idx < stop_hit_idx)):  #------------- target hit
                 exit_row = target_hit_idx
                 pnl_cat = 1
                 pnl = (target - entry) / entry
-            else:
+            else:  #---------------------------------------------------------------------------------------- neither hit
                 exit_row = stop_hit_idx
                 pnl_cat = 0
                 pnl = 0
-        else:
+        else:  # if side == 'short'
+            highest = df.high.max()
             lowest = df.low.min()
             target = df[f"ll_{lookback}"].iloc[0]
             stop = df[f"hh_{lookback}"].iloc[0] + atr
             rr = abs((target / entry) - 1) / abs((stop / entry) - 1)
             target_hit_idx = df.low.clip(lower=target).idxmin()
             stop_hit_idx = df.high.clip(upper=stop).idxmax()
-            if (target < lowest) or (stop_hit_idx < target_hit_idx):
+            if (highest > stop) and ((lowest > target) or (stop_hit_idx < target_hit_idx)):  #----------------- stop hit
                 exit_row = stop_hit_idx
                 pnl_cat = 0
                 pnl = (entry - stop) / entry
-            elif target_hit_idx < stop_hit_idx:
+            elif (lowest < target) and ((highest < stop) or (target_hit_idx < stop_hit_idx)):  #------------- target hit
                 exit_row = target_hit_idx
                 pnl_cat = 1
                 pnl = (entry - target) / entry
-            else:
+            else:  #---------------------------------------------------------------------------------------- neither hit
                 exit_row = stop_hit_idx
                 pnl_cat = 0
                 pnl = 0
@@ -106,7 +108,7 @@ def backtest_oco(df_0, side, lookback, trim_ohlc=2000):
     return results
 
 
-def prepare_strat_data(df, lookback):
+def channel_run_entries(df, lookback):
     df[f"ll_{lookback}"] = df.low.rolling(lookback).min()
     df[f"hh_{lookback}"] = df.high.rolling(lookback).max()
 
@@ -164,12 +166,12 @@ def find_collinear(X_train, corr_thresh):
     return pd.concat(record_collinear, axis=0, ignore_index=True)
 
 
-def generate_dataset(pairs, side, timeframe, lookback, data_len):
+def generate_channel_run_dataset(pairs, side, timeframe, lookback, data_len):
     all_res = []
     for pair in pairs:
         df = mlf.get_data(pair, timeframe)
         df = mlf.add_features(df, timeframe)
-        df = prepare_strat_data(df, lookback)
+        df = channel_run_entries(df, lookback)
         df = df.tail(data_len).reset_index(drop=True)
         res = backtest_oco(df, side, lookback)
         all_res.extend(res)
@@ -178,13 +180,71 @@ def generate_dataset(pairs, side, timeframe, lookback, data_len):
     return res_df.dropna(axis=1)
 
 
+def validate_findings(X_train, X_val, y_train, y_val, sfs_selector, final_features, best_params):
+    X_train = pd.DataFrame(X_train, columns=sfs_selector.k_feature_names_)
+    X_val = pd.DataFrame(X_val, columns=sfs_selector.k_feature_names_)
+    X_train = X_train[final_features]
+    X_val = X_val[final_features]
+    val_model = RandomForestClassifier(
+        n_estimators=int(best_params['n_estimators']),
+        criterion='log_loss',
+        max_depth=int(best_params['max_depth']),
+        min_samples_split=2,
+        max_features=best_params['max_features'],
+        max_samples=best_params['max_samples'],
+        ccp_alpha=best_params['ccp_alpha'],
+        random_state=42,
+        n_jobs=-1
+    )
+    val_model.fit(X_train, y_train)
+    score = val_model.score(X_val, y_val)
+    print(f"Final model validation score: {score:.1%}")
+
+
+def final_rf_train_and_save(X_final, y_final, final_features, best_params, pairs, selection_method, lookback, data_len):
+    X_final = X_final[final_features]
+    final_scaler = MinMaxScaler()
+    X_final = final_scaler.fit_transform(X_final)
+    X_final = pd.DataFrame(X_final, columns=final_features)
+
+    final_model = RandomForestClassifier(
+        n_estimators=int(best_params['n_estimators']),
+        criterion='log_loss',
+        max_depth=int(best_params['max_depth']),
+        min_samples_split=2,
+        max_features=best_params['max_features'],
+        max_samples=best_params['max_samples'],
+        ccp_alpha=best_params['ccp_alpha'],
+        random_state=42,
+        n_jobs=-1
+    )
+
+    final_model.fit(X_final, y_final)
+
+    # save models and info
+    mlf.save_models(
+        "channel_run",
+        f"{lookback}",
+        selection_method,
+        len(pairs),
+        side,
+        timeframe,
+        data_len,
+        final_features,
+        pairs,
+        final_model,
+        final_scaler,
+        len(X_final)
+    )
+
+
 def channel_run_1(side, timeframe, lookback, num_pairs, selection_method, data_len, num_trials):
     loop_start = time.perf_counter()
     print(f"\n- Running Channel Run 1, {side}, {timeframe}, {lookback}, {num_pairs}, {selection_method}")
 
     # generate dataset
     pairs = mlf.get_margin_pairs(selection_method, num_pairs)
-    res_df = generate_dataset(pairs, side, timeframe, lookback, data_len)
+    res_df = generate_channel_run_dataset(pairs, side, timeframe, lookback, data_len)
 
     # split features from labels
     X, y, _ = mlf.features_labels_split(res_df)
@@ -296,60 +356,10 @@ def channel_run_1(side, timeframe, lookback, num_pairs, selection_method, data_l
     print(final_features)
 
     # final validation score before training production model
-    X_train = pd.DataFrame(X_train, columns=sfs_selector.k_feature_names_)
-    X_val = pd.DataFrame(X_val, columns=sfs_selector.k_feature_names_)
-    X_train = X_train[final_features]
-    X_val = X_val[final_features]
-    val_model = RandomForestClassifier(
-        n_estimators=int(best_params['n_estimators']),
-        criterion='log_loss',
-        max_depth=int(best_params['max_depth']),
-        min_samples_split=2,
-        max_features=best_params['max_features'],
-        max_samples=best_params['max_samples'],
-        ccp_alpha=best_params['ccp_alpha'],
-        random_state=42,
-        n_jobs=-1
-    )
-    val_model.fit(X_train, y_train)
-    score = val_model.score(X_val, y_val)
-    print(f"Final model validation score: {score:.1%}")
+    validate_findings(X_train, X_val, y_train, y_val, sfs_selector, final_features, best_params)
 
     # train final model
-    X_final = X_final[final_features]
-    scaler = MinMaxScaler()
-    X_final = scaler.fit_transform(X_final)
-    X_final = pd.DataFrame(X_final, columns=final_features)
-
-    final_model = RandomForestClassifier(
-        n_estimators=int(best_params['n_estimators']),
-        criterion='log_loss',
-        max_depth=int(best_params['max_depth']),
-        min_samples_split=2,
-        max_features=best_params['max_features'],
-        max_samples=best_params['max_samples'],
-        ccp_alpha=best_params['ccp_alpha'],
-        random_state=42,
-        n_jobs=-1
-    )
-
-    final_model.fit(X_final, y_final)
-
-    # save models and info
-    mlf.save_models(
-        "channel_run",
-        f"{lookback}",
-        selection_method,
-        num_pairs,
-        side,
-        timeframe,
-        data_len,
-        final_features,
-        pairs,
-        final_model,
-        scaler,
-        len(X_final)
-    )
+    final_rf_train_and_save(X_final, y_final, final_features, best_params, pairs, selection_method, lookback, data_len)
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start

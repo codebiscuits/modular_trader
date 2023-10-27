@@ -12,9 +12,9 @@ import mt.resources.keys as keys
 from datetime import datetime, timezone
 import joblib
 
-if not Path('/pi_2.txt').exists():
-    from sklearnex import patch_sklearn
-    patch_sklearn()
+# if not Path('/pi_2.txt').exists():
+#     from sklearnex import patch_sklearn
+#     patch_sklearn()
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import QuantileTransformer, MinMaxScaler
@@ -83,7 +83,7 @@ def save_models(strategy, params, sel_method, num_pairs, side, tf, data_len, sel
 
 
 def rank_pairs(selection):
-    with open(f'../recent_{selection}.json', 'r') as file:
+    with open(f'/home/ross/coding/modular_trader/mt/recent_{selection}.json', 'r') as file:
         vols = json.load(file)
 
     return sorted(vols, key=lambda x: vols[x], reverse=True)
@@ -94,7 +94,7 @@ def get_data(pair, timeframe, vwma_periods=24):
     scale before resampling to the desired timeframe.
     vwma_lengths just accounts for timeframe resampling, vwma_periods is a multiplier on that"""
 
-    ohlc_folder = Path('../bin_ohlc_5m')
+    ohlc_folder = Path('/home/ross/coding/modular_trader/bin_ohlc_5m')
     ohlc_path = ohlc_folder / f"{pair}.parquet"
 
     if ohlc_path.exists():
@@ -162,10 +162,10 @@ def feature_selection_1a(X: np.ndarray, y, limit: int, cols: list[str]):
                                                     max_depth=12,
                                                     learning_rate=0.3)
 
-    selector_1 = SFS(estimator=pre_selector_model, k_features=10, forward=True,
+    selector_1 = SFS(estimator=pre_selector_model, k_features=8, forward=True,
                      floating=False, verbose=0, scoring=scorer, n_jobs=-1)
-    selector_2 = SelectKBest(f_classif, k=10)
-    selector_3 = SelectKBest(mutual_info_classif, k=10)
+    selector_2 = SelectKBest(f_classif, k=8)
+    selector_3 = SelectKBest(mutual_info_classif, k=8)
     # selector_4 = SelectKBest(chi2, k=8)
 
     selector_1 = selector_1.fit(X, y)
@@ -601,7 +601,7 @@ def features_labels_split(df):
                  'hma_25', 'hma_50', 'hma_100', 'hma_200', 'lifespan', 'frac_high', 'frac_low', 'inval', 'daily_open',
                  'prev_daily_open', 'prev_daily_high', 'prev_daily_low', 'weekly_open', 'prev_weekly_open',
                  'prev_weekly_high', 'prev_weekly_low', 'bullish_doji', 'bearish_doji', 'entry_l', 'entry_s',
-                 'entry_l_price', 'entry_s_price'],
+                 'entry_l_price', 'entry_s_price', 'hh_200', 'll_200'],
                 axis=1, errors='ignore')#.drop(index=df.index[-1], axis=0)
     y = df.pnl_cat#.shift(-1).drop(index=df.index[-1], axis=0)
     z = df.pnl_r#.shift(-1).drop(index=df.index[-1], axis=0)

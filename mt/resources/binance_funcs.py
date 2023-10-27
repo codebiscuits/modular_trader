@@ -309,7 +309,7 @@ def prepare_ohlc(session, timeframes: list, pair: str) -> dict:
 
     df_dict = {}
     for tf, offset, _ in timeframes:
-        vwma_lengths = {'1h': 12, '4h': 48, '6h': 70, '8h': 96, '12h': 140, '1d': 280}
+        vwma_lengths = {'15m': 3, '30m': 6, '1h': 12, '4h': 48, '6h': 70, '8h': 96, '12h': 140, '1d': 280}
         vwma = ind.vwma(df, vwma_lengths[tf] * 24)
         vwma = vwma[int(vwma_lengths[tf] / 2)::vwma_lengths[tf]].reset_index(drop=True)
 

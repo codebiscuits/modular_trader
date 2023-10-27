@@ -137,7 +137,7 @@ iterations(1, session, 'ETHUSDT', '1m')
 for n, pair in enumerate(pairs):
     # print(n, pair)
     try:
-        logger.debug(pair)
+        # logger.debug(pair)
         df = iterations(n, session, pair, '5m')
     except Exception as e:
         logger.error(f"*** {pair} exception during download, data not downloaded ***")
