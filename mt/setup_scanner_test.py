@@ -13,7 +13,7 @@ from pathlib import Path
 script_start = time.perf_counter()
 
 if not Path('/pi_2.txt').exists():
-    import update_ohlc
+    import mt.update_ohlc
 
 # TODO current (02/04/23) roadmap should be:
 #  * start integrating polars and doing anything else i can to speed things up
@@ -33,11 +33,11 @@ for timeframe, offset, active_agents in session.timeframes:
     # if 'TrailFractals' in active_agents:
         # agents.extend([
         #         TrailFractals(session, timeframe, offset, 5, 2, '1d_volumes', 30),
-        #         TrailFractals(session, timeframe, offset, 5, 2, '1w_volumes', 100),
+        #         TrailFractals(session, timeframe, offset, 5, 2, '1w_volumes', 30),
         #     ])
     if 'ChannelRun' in active_agents:
         agents.extend([
-                ChannelRun(session, timeframe, offset, 200, '1w_volumes', 50),
+                ChannelRun(session, timeframe, offset, 200, '1w_volumes', 150),
             ])
 
 agents = {a.id: a for a in agents}
@@ -50,7 +50,10 @@ logger.info("-*-*-*- Checking all positions for stops and open-risk -*-*-*-")
 real_sim_tps_closes = []
 for agent in agents.values():
     agent.record_stopped_trades(session, session.timeframes)
-    agent.record_stopped_sim_trades(session, session.timeframes)
+    if not agent.oco:
+        agent.record_stopped_sim_trades(session, session.timeframes)
+    else:
+        agent.record_closed_oco_sim_trades(session, session.timeframes)
     real_sim_tps_closes.extend(agent.check_open_risk(session))
     agent.max_positions = agent.set_max_pos()
     agent.total_r_limit = agent.max_positions * 1.7  # TODO need to update reduce_risk and run it before/after set_fixed_ris
