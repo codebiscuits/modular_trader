@@ -519,7 +519,10 @@ class TradingSession:
     def load_mkt_ranks(self):
         filepath = self.mkt_data_r / 'market_ranks.parquet'
 
-        market_ranks = pd.read_parquet(filepath)
+        try:
+            market_ranks = pd.read_parquet(filepath)
+        except FileNotFoundError:
+            return
 
         for pair in market_ranks.index:
             if self.pairs_data.get(pair):
