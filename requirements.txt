@@ -6,14 +6,12 @@ python-binance
 ccxt
 websocket-client
 numpy
-numba
 plotly
 joblib
 pytz
 mlxtend
 imblearn
 scikit-learn
-scikit-learn-intelex
 xgboost
 lightgbm
 optuna
