@@ -116,6 +116,7 @@ def add_feature(df, name, timeframe):
         'kurtosis_50': {'call': kurtosis, 'params': (df, 50)},
         'kurtosis_100': {'call': kurtosis, 'params': (df, 100)},
         'kurtosis_200': {'call': kurtosis, 'params': (df, 200)},
+        'log_returns': {'call': log_returns, 'params': (df, )},
         'num_trades_z_12': {'call': num_trades_z, 'params': (df, 12)},
         'num_trades_z_25': {'call': num_trades_z, 'params': (df, 25)},
         'num_trades_z_50': {'call': num_trades_z, 'params': (df, 50)},

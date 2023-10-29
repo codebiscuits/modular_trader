@@ -47,11 +47,11 @@ def init_client(max_retries: int = 360, delay: int = 5):
     raise Exception(f"Max retries exceeded. Request still failed after {max_retries} attempts.")
 
 
-def save_models(strategy, params, sel_method, num_pairs, side, tf, data_len, selected, pairs, model, scaler, validity):
+def save_models(strategy, param_str, sel_method, num_pairs, side, tf, data_len, selected, pairs, model, scaler, validity):
     folder = Path(f"/home/ross/coding/modular_trader/machine_learning/"
-                  f"models/{strategy}_{params}/{sel_method}_{num_pairs}")
+                  f"models/{strategy}_{param_str}/{sel_method}_{num_pairs}")
     pi_folder = Path(f"/home/ross/coding/pi_2/modular_trader/machine_learning/"
-                      f"models/{strategy}_{params}/{sel_method}_{num_pairs}")
+                      f"models/{strategy}_{param_str}/{sel_method}_{num_pairs}")
     model_file = f"{side}_{tf}_model_1a.sav"
     model_info = f"{side}_{tf}_info_1a.json"
     scaler_file = f"{side}_{tf}_scaler_1a.sav"
@@ -365,6 +365,7 @@ def add_features(df, tf):
     df = features.kurtosis(df, 50)
     df = features.kurtosis(df, 100)
     df = features.kurtosis(df, 200)
+    df = features.log_returns(df)
     df = features.num_trades_z(df, 12)
     df = features.num_trades_z(df, 25)
     df = features.num_trades_z(df, 50)
