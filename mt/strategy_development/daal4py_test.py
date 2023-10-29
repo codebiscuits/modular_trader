@@ -9,9 +9,9 @@ import statistics as stats
 from itertools import product
 import json
 import joblib
-if not Path('/pi_2.txt').exists():
-    from sklearnex import patch_sklearn
-    patch_sklearn()
+# if not Path('/pi_2.txt').exists():
+#     from sklearnex import patch_sklearn
+#     patch_sklearn()
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.preprocessing import MinMaxScaler
