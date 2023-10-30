@@ -44,7 +44,7 @@ def create_dataset(side, tf, frac_width, atr_spacing, thresh):
                           f"None_{frac_width}_{atr_spacing}_{'1d_volumes'}_{30}")
 
     records_path_2 = Path(f"/home/ross/coding/pi_2/modular_trader/records/trail_fractals_{tf}_"
-                          f"None_{frac_width}_{atr_spacing}_{'1w_volumes'}_{100}")
+                          f"None_{frac_width}_{atr_spacing}_{'1w_volumes'}_{30}")
 
     with open(records_path_1 / "closed_trades.json", 'r') as real_file:
         real_records_1 = json.load(real_file)

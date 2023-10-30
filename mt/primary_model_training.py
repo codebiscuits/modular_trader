@@ -394,11 +394,11 @@ timeframes = ['15m', '30m', '1h', '4h', '12h', '1d']
 
 for side, timeframe in product(sides, timeframes):
     if timeframe in ['15m', '30m', '1h', '4h']:
-        # train_primary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 5000, 1000)
-        train_primary('channel_run', side, timeframe, (200, ), 50, '1w_volumes', 5000, 100)
+        train_primary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 5000, 1000)
+        train_primary('channel_run', side, timeframe, (200, ), 50, '1w_volumes', 5000, 1000)
     if timeframe in ['1h', '4h', '12h', '1d']:
-        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 5000, 100)
-        # train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 5000, 1000)
+        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 5000, 1000)
+        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 5000, 1000)
 
 all_end = time.perf_counter()
 all_elapsed = all_end - all_start

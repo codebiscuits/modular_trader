@@ -70,16 +70,16 @@ def save_models(strategy, param_str, sel_method, num_pairs, side, tf, data_len, 
     scaler_path.touch(exist_ok=True)
     joblib.dump(scaler, scaler_path)
 
-    # # save on pi
-    # pi_folder.mkdir(parents=True, exist_ok=True)
-    # joblib.dump(model, pi_folder / model_file)
-    # info_path_pi = pi_folder / model_info
-    # info_path_pi.touch(exist_ok=True)
-    # with open(info_path_pi, 'w') as info:
-    #     json.dump(info_dict, info)
-    # scaler_path = pi_folder / scaler_file
-    # scaler_path.touch(exist_ok=True)
-    # joblib.dump(scaler, scaler_path)
+    # save on pi
+    pi_folder.mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, pi_folder / model_file)
+    info_path_pi = pi_folder / model_info
+    info_path_pi.touch(exist_ok=True)
+    with open(info_path_pi, 'w') as info:
+        json.dump(info_dict, info)
+    scaler_path = pi_folder / scaler_file
+    scaler_path.touch(exist_ok=True)
+    joblib.dump(scaler, scaler_path)
 
 
 def rank_pairs(selection):

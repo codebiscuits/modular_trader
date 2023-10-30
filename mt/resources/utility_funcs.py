@@ -313,25 +313,14 @@ def log(session, agent) -> None:
     else:
         logger.warning(f'*** warning log function not working for {agent.id} ***')
 
-    read_folder = Path(f"{session.records_r}/{agent.id}")
-    read_path = read_folder / "perf_log.json"
+    old_records = agent.perf_log
+    old_records.append(new_record)
+    all_records = old_records
 
     write_folder = Path(f"{session.records_w}/{agent.id}")
     write_folder.mkdir(parents=True, exist_ok=True)
     write_path = write_folder / "perf_log.json"
     write_path.touch(exist_ok=True)
-
-    try:
-        with open(read_path, 'r') as rec_file:
-            old_records = json.load(rec_file)
-    except (FileNotFoundError, JSONDecodeError):
-        old_records = []
-
-    if isinstance(old_records, list):
-        old_records.append(new_record)
-        all_records = old_records
-    else:
-        all_records = [new_record]
 
     try:
         with open(write_path, 'w') as rec_file:
