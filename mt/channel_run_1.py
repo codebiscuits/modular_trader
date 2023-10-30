@@ -7,9 +7,8 @@ import numpy as np
 from datetime import datetime
 import statistics as stats
 from itertools import product
-if not Path('/pi_2.txt').exists():
-    from sklearnex import patch_sklearn
-    patch_sklearn()
+from sklearnex import patch_sklearn, unpatch_sklearn
+patch_sklearn()
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.preprocessing import MinMaxScaler
@@ -53,15 +52,15 @@ def backtest_oco(df_0, side, lookback, trim_ohlc=2200):
             rr = abs((target / entry) - 1) / abs((stop / entry) - 1)
             target_hit_idx = df.high.clip(upper=target).idxmax()
             stop_hit_idx = df.low.clip(lower=stop).idxmin()
-            if (stop > lowest) and ((target > highest) or (stop_hit_idx < target_hit_idx)):  #----------------- stop hit
+            if (stop > lowest) and ((target > highest) or (stop_hit_idx < target_hit_idx)):  # stop hit
                 exit_row = stop_hit_idx
                 pnl_cat = 0
                 pnl = (stop - entry) / entry
-            elif (target < highest) and ((stop < lowest) or (target_hit_idx < stop_hit_idx)):  #------------- target hit
+            elif (target < highest) and ((stop < lowest) or (target_hit_idx < stop_hit_idx)):  # target hit
                 exit_row = target_hit_idx
                 pnl_cat = 1
                 pnl = (target - entry) / entry
-            else:  #---------------------------------------------------------------------------------------- neither hit
+            else:  # neither hit
                 exit_row = stop_hit_idx
                 pnl_cat = 0
                 pnl = 0
@@ -73,15 +72,15 @@ def backtest_oco(df_0, side, lookback, trim_ohlc=2200):
             rr = abs((target / entry) - 1) / abs((stop / entry) - 1)
             target_hit_idx = df.low.clip(lower=target).idxmin()
             stop_hit_idx = df.high.clip(upper=stop).idxmax()
-            if (highest > stop) and ((lowest > target) or (stop_hit_idx < target_hit_idx)):  #----------------- stop hit
+            if (highest > stop) and ((lowest > target) or (stop_hit_idx < target_hit_idx)):  # stop hit
                 exit_row = stop_hit_idx
                 pnl_cat = 0
                 pnl = (entry - stop) / entry
-            elif (lowest < target) and ((highest < stop) or (target_hit_idx < stop_hit_idx)):  #------------- target hit
+            elif (lowest < target) and ((highest < stop) or (target_hit_idx < stop_hit_idx)):  # target hit
                 exit_row = target_hit_idx
                 pnl_cat = 1
                 pnl = (entry - target) / entry
-            else:  #---------------------------------------------------------------------------------------- neither hit
+            else:  # neither hit
                 exit_row = stop_hit_idx
                 pnl_cat = 0
                 pnl = 0
@@ -202,6 +201,7 @@ def validate_findings(X_train, X_val, y_train, y_val, sfs_selector, final_featur
 
 
 def final_rf_train_and_save(X_final, y_final, final_features, best_params, pairs, selection_method, lookback, data_len):
+    unpatch_sklearn()
     X_final = X_final[final_features]
     final_scaler = MinMaxScaler()
     X_final = final_scaler.fit_transform(X_final)
@@ -372,6 +372,7 @@ timeframes = ['15m', '30m', '1h', '4h']
 
 for side, timeframe in product(sides, timeframes):
     channel_run_1(side, timeframe, 200, 150, '1w_volumes', 5000, 1000)
+    channel_run_1(side, timeframe, 200, 50, '1w_volumes', 5000, 1000)
 
 all_end = time.perf_counter()
 all_elapsed = all_end - all_start
