@@ -21,26 +21,25 @@ logger = create_logger('  sessions   ')
 
 
 def get_timeframes() -> list[tuple]:
+    """hour of day is multiplied by 4 so that the hourly timeframes can be compared with the quarter-hourly
+    timeframes"""
+
     qh = datetime.now(timezone.utc).minute // 15  # this represents which quarter-hour is current
     hour = datetime.now(timezone.utc).hour
-    # minute, hour = 0, 0 # for testing all timeframes
+    # qh, hour = 0, 0 # for testing all timeframes
+
     mi = {1: ('15m', None, ('ChannelRun', )),
          2: ('30m', None, ('ChannelRun', ))}
 
-    ho = {1: ('1h', None, ('TrailFractals', 'ChannelRun')),
-         4: ('4h', None, ('TrailFractals', 'ChannelRun')),
-         12: ('12h', None, ('TrailFractals', )),
-         24: ('1d', None, ('TrailFractals', ))}
+    ho = {4: ('1h', None, ('TrailFractals', 'ChannelRun')),
+         16: ('4h', None, ('TrailFractals', 'ChannelRun')),
+         48: ('12h', None, ('TrailFractals', )),
+         96: ('1d', None, ('TrailFractals', ))}
 
-    timeframes = [mi[tf] for tf in mi if qh % tf == 0] + [ho[tf] for tf in ho if hour % tf == 0]
-    # timeframes = [
-    # ('15m', None, ('ChannelRun', )),
-    # ('30m', None, ('ChannelRun', )),
-    # ('1h', None, ('TrailFractals', 'ChannelRun')),
-    # ('4h', None, ('TrailFractals', 'ChannelRun')),
-    # ('12h', None, ('TrailFractals', )),
-    # ('1d', None, ('TrailFractals', ))
-    # ]
+    timeframes = (
+            [mi[tf] for tf in mi if qh % tf == 0] +
+            [ho[tf] for tf in ho if ((hour*4) % tf == 0) and (qh % tf == 0)]
+    )
 
     return timeframes
 
@@ -473,7 +472,7 @@ class TradingSession:
         being used in the current session
         bench refers to the number of periods needed to calculate the longest market benchmark statistics (1 mo roc)"""
 
-        lengths = {'1w': 2016, '3d': 864, '1d': 288, '12h': 144, '6h': 72, '4h': 48, '1h': 12}
+        lengths = {'1w': 2016, '3d': 864, '1d': 288, '12h': 144, '6h': 72, '4h': 48, '1h': 12, '30m': 6, '15m': 3}
         calc_min = (self.max_length + 1) * lengths[timeframes[-1][0]]
         bench = 8928 + 1
         enough = max(bench, calc_min)
