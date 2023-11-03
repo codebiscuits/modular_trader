@@ -7,11 +7,15 @@ import numpy as np
 from datetime import datetime
 import statistics as stats
 from itertools import product
+from mt.resources.loggers import create_logger
+from pprint import pformat
+import json
+import warnings
 from sklearnex import patch_sklearn, unpatch_sklearn
 patch_sklearn()
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, QuantileTransformer
 from sklearn.metrics import fbeta_score
 from sklearn.metrics import confusion_matrix, roc_auc_score, make_scorer
 from sklearn.inspection import permutation_importance
@@ -24,6 +28,13 @@ optuna.logging.set_verbosity(optuna.logging.ERROR)
 
 if not Path('pi_2.txt').exists():
     import mt.update_ohlc
+
+warnings.filterwarnings('ignore')
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
+logger = create_logger('trail_fractals_2', 'trail_fractals_2')
+
+fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
 
 
 def backtest_oco(df_0, side, lookback, trim_ohlc=2200):
@@ -194,6 +205,162 @@ def generate_trail_fractal_dataset(pairs: list, side: str, timeframe: str, strat
     return all_res.dropna(axis=1)
 
 
+def ttv_split(X, y):
+    X_final, y_final = X.copy(), y.copy()
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.4, random_state=11, stratify=y)
+    X_test, X_val, y_test, y_val = train_test_split(X_test, y_test, test_size=0.5, random_state=11, stratify=y_test)
+    print(f"Training dataset: {len(X_train)} observations, Test sets: {len(X_test)}, Final set: {len(X_final)}")
+
+    return X_train, X_test, X_val, y_train, y_test, y_val
+
+
+def scale_features(X_train, X_test, X_val, scaler):
+    original_cols = list(X_train.columns)  # list of strings, names of all features
+    scaler = scaler()
+    X_train = pd.DataFrame(scaler.fit_transform(X_train), columns=original_cols)
+    X_test = pd.DataFrame(scaler.transform(X_test), columns=original_cols)
+    X_val = pd.DataFrame(scaler.transform(X_val), columns=original_cols)
+
+    return X_train, X_test, X_val
+
+
+def eliminate_features(X_train, X_test, X_val, y_train):
+    # remove features with too many missing values
+    nan_condition = X_train.columns[X_train.isnull().mean(axis=0) < 0.1]
+    X_train = X_train[nan_condition]
+    X_test = X_test[nan_condition]
+    X_val = X_val[nan_condition]
+
+    # remove low variance features
+    variance_condition = X_train.columns[X_train.var() > 0.001]
+    X_train = X_train[variance_condition]
+    X_test = X_test[variance_condition]
+    X_val = X_val[variance_condition]
+
+    # remove features that are highly correlated with other features
+    collinear_features = find_collinear(X_train, 0.5)
+    X_train = X_train.drop(list(collinear_features.corr_feature), axis=1)
+    X_test = X_test.drop(list(collinear_features.corr_feature), axis=1)
+    X_val = X_val.drop(list(collinear_features.corr_feature), axis=1)
+
+    # mutual info feature selection
+    print(f"feature selection began: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
+    cols = list(X_train.columns) # list of strings, names of all features
+    selector = SelectKBest(mutual_info_classif, k=15)
+    selector.fit(X_train, y_train)
+    mi_cols_idx = list(selector.get_support(indices=True))
+    selected_columns = [col for i, col in enumerate(cols) if i in mi_cols_idx]
+    X_train = pd.DataFrame(selector.transform(X_train), columns=selected_columns)
+    X_test = pd.DataFrame(selector.transform((X_test)), columns=selected_columns)
+    X_val = pd.DataFrame(selector.transform((X_val)), columns=selected_columns)
+    print(selected_columns)
+
+    return X_train, X_test, X_val, selected_columns
+
+
+def rand_forest_sfs(X_train, X_test, X_val, y_train):
+    sfs_selector_model = RandomForestClassifier()
+    sfs_selector = SFS(estimator=sfs_selector_model, k_features='best', forward=False,
+                         floating=True, verbose=0, scoring='accuracy', n_jobs=-1)
+    sfs_selector = sfs_selector.fit(X_train, y_train)
+    cols_idx = list(sfs_selector.k_feature_idx_)
+    X_train = sfs_selector.transform(X_train)
+    X_test = sfs_selector.transform(X_test)
+    X_val = sfs_selector.transform(X_val)
+
+    return X_train, X_test, X_val, sfs_selector
+
+
+class RFObjective(object):
+    def __init__(self, x_train, x_test, y_train, y_test):
+        # Hold this implementation specific arguments as the fields of the class.
+        self.X_train = x_train
+        self.y_train = y_train
+        self.X_test = x_test
+        self.y_test = y_test
+
+    def __call__(self, trial):
+        # criterion = trial.suggest_categorical('criterion', 'gini', 'log_loss')
+        # min_samples_split = trial.suggest_int("min_samples_split", 2, 10)
+        n_estimators = trial.suggest_int("n_estimators", 50, 150)
+        max_depth = trial.suggest_int("max_depth", 12, 32)
+        max_features = trial.suggest_float("max_features", 0.1, 1.0)
+        max_samples = trial.suggest_float('max_samples', 0.1, 1.0)
+        ccp_alpha = trial.suggest_float('ccp_alpha', 1e-5, 1e-2, log=True)
+
+        # Create and fit random forest model
+        model = RandomForestClassifier(
+            n_estimators=n_estimators,
+            criterion='log_loss',
+            max_depth=max_depth,
+            min_samples_split=2,
+            max_features=max_features,
+            max_samples=max_samples,
+            ccp_alpha=ccp_alpha,
+            random_state=42,
+            n_jobs=-1
+        )
+        model.fit(self.X_train, self.y_train)
+
+        # Score model
+        scores = cross_val_score(model, self.X_test, self.y_test, verbose=0, n_jobs=-1)
+        avg_score = stats.mean(scores)
+
+        return avg_score
+
+
+# def rf_objective(trial):
+#     # criterion = trial.suggest_categorical('criterion', 'gini', 'log_loss')
+#     # min_samples_split = trial.suggest_int("min_samples_split", 2, 10)
+#     n_estimators = trial.suggest_int("n_estimators", 50, 150)
+#     max_depth = trial.suggest_int("max_depth", 12, 32)
+#     max_features = trial.suggest_float("max_features", 0.1, 1.0)
+#     max_samples = trial.suggest_float('max_samples', 0.1, 1.0)
+#     ccp_alpha = trial.suggest_float('ccp_alpha', 1e-5, 1e-2, log=True)
+#
+#     # Create and fit random forest model
+#     model = RandomForestClassifier(
+#         n_estimators=n_estimators,
+#         criterion='log_loss',
+#         max_depth=max_depth,
+#         min_samples_split=2,
+#         max_features=max_features,
+#         max_samples=max_samples,
+#         ccp_alpha=ccp_alpha,
+#         random_state=42,
+#         n_jobs=-1
+#     )
+#     model.fit(X_train, y_train)
+#
+#     # Score model
+#     scores = cross_val_score(model, X_test, y_test, verbose=0, n_jobs=-1)
+#     avg_score = stats.mean(scores)
+#
+#     return avg_score
+
+
+def optimise(objective, num_trials):
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=num_trials, n_jobs=-1)
+    best_trials = [trial.params for trial in study.trials if trial.values[0] >= (study.best_value - 0.001)]
+    best_df = pd.DataFrame(best_trials)
+    best_df.describe()
+
+    return best_df.median(axis=0).to_dict()
+
+
+def rf_perm_importance(X_train, X_test, y_train, y_test, rf_sfs):
+    imp_model = RandomForestClassifier()
+    imp_model.fit(X_train, y_train)
+    importances = permutation_importance(imp_model, X_test, y_test, n_repeats=1000, random_state=42, n_jobs=-1)
+    imp_mean = pd.Series(importances.importances_mean, index=rf_sfs.k_feature_names_)
+    imp_std = pd.Series(importances.importances_std, index=rf_sfs.k_feature_names_)
+    final_features = list(imp_mean.index[imp_mean > 0.01])
+    print(final_features)
+
+    return final_features
+
+
 def validate_findings(X_train, X_val, y_train, y_val, sfs_selector, final_features, best_params):
     X_train = pd.DataFrame(X_train, columns=sfs_selector.k_feature_names_)
     X_val = pd.DataFrame(X_val, columns=sfs_selector.k_feature_names_)
@@ -241,7 +408,7 @@ def final_rf_train_and_save(strat_name, X_final, y_final, final_features, best_p
     strat_params = [str(p) for p in strat_params]
     mlf.save_models(
         strat_name,
-        "_".join(strat_params),
+        "_".join([str(sp) for sp in strat_params]),
         selection_method,
         len(pairs),
         side,
@@ -255,10 +422,72 @@ def final_rf_train_and_save(strat_name, X_final, y_final, final_features, best_p
     )
 
 
+def create_secondary_dataset(strat_name: str, side: str, timeframe: str, strat_params: tuple,
+                    num_pairs: int, selection_method: str, thresh):
+    """the two target columns (pnl and win) are both booleans and mean slightly different things. pnl is True if the
+    final pnl of the trade was above zero, and win is True if the final pnl of the trade was above the threshold"""
+
+    if strat_name == 'trail_fractals':
+        frac_width, atr_spacing = strat_params
+    elif strat_name == 'ChannelRun':
+        lookback = strat_params[0]
+
+    records_path_1 = Path(f"/home/ross/coding/pi_2/modular_trader/records/trail_fractals_{timeframe}_"
+                          f"None_{'_'.join([str(sp) for sp in strat_params])}_{selection_method}_{num_pairs}")
+
+    records_path_2 = Path(f"/home/ross/coding/pi_2/modular_trader/records/trail_fractals_{timeframe}_"
+                          f"None_{'_'.join([str(sp) for sp in strat_params])}_{selection_method}_{num_pairs}")
+
+    with open(records_path_1 / "closed_trades.json", 'r') as real_file:
+        real_records_1 = json.load(real_file)
+    with open(records_path_1 / "closed_sim_trades.json", 'r') as sim_file:
+        sim_records_1 = json.load(sim_file)
+
+    with open(records_path_2 / "closed_trades.json", 'r') as real_file:
+        real_records_2 = json.load(real_file)
+    with open(records_path_2 / "closed_sim_trades.json", 'r') as sim_file:
+        sim_records_2 = json.load(sim_file)
+
+    all_records = real_records_1 | sim_records_1 | real_records_2 | sim_records_2
+    observations = []
+
+    for position in all_records.values():
+        signal = position['signal']
+        if ((signal['direction'] != side) or
+                (signal.get('confidence_l') in [None, 0]) or
+                (signal.get('market_rank_1d') in [None, 0]) or
+                (signal.get('perf_ema4') is None)):
+            continue
+
+        trade = position['trade']
+        pnl = 0.0
+        for t in trade:
+            if t.get('rpnl'):
+                pnl += t['rpnl']
+
+        try:
+            observation = dict(
+                # asset=signal['asset'],
+                conf_l=signal['conf_rf_usdt_l'],
+                conf_s=signal['conf_rf_usdt_s'],
+                inval_ratio=signal['inval_ratio'],
+                mkt_rank_1d=signal['market_rank_1d'],
+                mkt_rank_1w=signal['market_rank_1w'],
+                mkt_rank_1m=signal['market_rank_1m'],
+                pnl=pnl > 0,
+                win=pnl > thresh
+            )
+        except KeyError:
+            logger.debug(pformat(position))
+        observations.append(observation)
+
+    return pd.DataFrame(observations)
+
+
 def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tuple,
                   num_pairs: int, selection_method: str, data_len: int, num_trials: int):
     loop_start = time.perf_counter()
-    print(f"\n- Running {strat_name}, {side}, {timeframe}, {strat_params}, {num_pairs}, {selection_method}")
+    print(f"\n- Running {strat_name}, {side}, {timeframe}, {strat_params}, {num_pairs}, {selection_method} primary")
 
     # generate dataset
     pairs = mlf.get_margin_pairs(selection_method, num_pairs)
@@ -276,116 +505,95 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
     X, y = us.fit_resample(X, y)
 
     # split data for fitting and calibration
-    X_final, y_final = X.copy(), y.copy()
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.4, random_state=11, stratify=y)
-    X_test, X_val, y_test, y_val = train_test_split(X_test, y_test, test_size=0.5, random_state=11, stratify=y_test)
-    print(f"Training dataset: {len(X_train)} observations, Test sets: {len(X_test)}, Final set: {len(X_final)}")
+    X_train, X_test, X_val, y_train, y_test, y_val = ttv_split(X, y)
 
     # feature scaling
-    original_cols = list(X_train.columns) # list of strings, names of all features
-    scaler = MinMaxScaler()
-    X_train = pd.DataFrame(scaler.fit_transform(X_train), columns=original_cols)
-    X_test = pd.DataFrame(scaler.transform(X_test), columns=original_cols)
-    X_val = pd.DataFrame(scaler.transform(X_val), columns=original_cols)
+    X_train, X_test, X_val = scale_features(X_train, X_test, X_val, MinMaxScaler)
 
-    # remove features with too many missing values
-    nan_condition = X_train.columns[X_train.isnull().mean(axis=0) < 0.1]
-    X_train = X_train[nan_condition]
-    X_test = X_test[nan_condition]
-    X_val = X_val[nan_condition]
-
-    # remove low variance features
-    variance_condition = X_train.columns[X_train.var() > 0.001]
-    X_train = X_train[variance_condition]
-    X_test = X_test[variance_condition]
-    X_val = X_val[variance_condition]
-
-    # remove features that are highly correlated with other features
-    collinear_features = find_collinear(X_train, 0.5)
-    X_train = X_train.drop(list(collinear_features.corr_feature), axis=1)
-    X_test = X_test.drop(list(collinear_features.corr_feature), axis=1)
-    X_val = X_val.drop(list(collinear_features.corr_feature), axis=1)
-
-    # mutual info feature selection
-    print(f"feature selection began: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
-    cols = list(X_train.columns) # list of strings, names of all features
-    selector = SelectKBest(mutual_info_classif, k=15)
-    selector.fit(X_train, y_train)
-    mi_cols_idx = list(selector.get_support(indices=True))
-    selected_columns = [col for i, col in enumerate(cols) if i in mi_cols_idx]
-    X_train = pd.DataFrame(selector.transform(X_train), columns=selected_columns)
-    X_test = pd.DataFrame(selector.transform((X_test)), columns=selected_columns)
-    X_val = pd.DataFrame(selector.transform((X_val)), columns=selected_columns)
-    print(selected_columns)
-
-    # sequential feature selection
-    sfs_selector_model = RandomForestClassifier()
-    sfs_selector = SFS(estimator=sfs_selector_model, k_features='best', forward=False,
-                         floating=True, verbose=0, scoring='accuracy', n_jobs=-1)
-    sfs_selector = sfs_selector.fit(X_train, y_train)
-    cols_idx = list(sfs_selector.k_feature_idx_)
-    X_train = sfs_selector.transform(X_train)
-    X_test = sfs_selector.transform(X_test)
-    X_val = sfs_selector.transform(X_val)
+    # feature selection
+    X_train, X_test, X_val, selected_columns = eliminate_features(X_train, X_test, X_val, y_train)
+    X_train, X_test, X_val, rf_sfs = rand_forest_sfs(X_train, X_test, X_val, y_train)
 
     # hyperparameter optimisation
-    def objective(trial):
-        # Suggest values for hyperparameters
-        # criterion = trial.suggest_categorical('criterion', 'gini', 'log_loss')
-        # min_samples_split = trial.suggest_int("min_samples_split", 2, 10)
-        n_estimators = trial.suggest_int("n_estimators", 50, 150)
-        max_depth = trial.suggest_int("max_depth", 12, 32)
-        max_features = trial.suggest_float("max_features", 0.1, 1.0)
-        max_samples = trial.suggest_float('max_samples', 0.1, 1.0)
-        ccp_alpha = trial.suggest_float('ccp_alpha', 1e-5, 1e-2, log=True)
-
-        # Create and fit random forest model
-        model = RandomForestClassifier(
-            n_estimators=n_estimators,
-            criterion='log_loss',
-            max_depth=max_depth,
-            min_samples_split=2,
-            max_features=max_features,
-            max_samples=max_samples,
-            ccp_alpha=ccp_alpha,
-            random_state=42,
-            n_jobs=-1
-        )
-        model.fit(X_train, y_train)
-
-        # Score model
-        scores = cross_val_score(model, X_test, y_test, verbose=0, n_jobs=-1)
-        avg_score = stats.mean(scores)
-
-        # Return score
-        return avg_score
-
-    study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=num_trials, n_jobs=-1)
-    best_trials = [trial.params for trial in study.trials if trial.values[0] >= (study.best_value - 0.001)]
-    best_df = pd.DataFrame(best_trials)
-    best_df.describe()
-    best_params = best_df.median(axis=0).to_dict()
+    best_params = optimise(RFObjective(X_train, X_test, y_train, y_test), num_trials)
 
     # remove features with low permutation importance
-    imp_model = RandomForestClassifier()
-    imp_model.fit(X_train, y_train)
-    importances = permutation_importance(imp_model, X_test, y_test, n_repeats=1000, random_state=42, n_jobs=-1)
-    imp_mean = pd.Series(importances.importances_mean, index=sfs_selector.k_feature_names_)
-    imp_std = pd.Series(importances.importances_std, index=sfs_selector.k_feature_names_)
-    final_features = list(imp_mean.index[imp_mean > 0.01])
-    print(final_features)
+    final_features = rf_perm_importance(X_train, X_test, y_train, y_test, rf_sfs)
 
     # final validation score before training production model
-    validate_findings(X_train, X_val, y_train, y_val, sfs_selector, final_features, best_params)
+    validate_findings(X_train, X_val, y_train, y_val, rf_sfs, final_features, best_params)
 
     # train final model
-    final_rf_train_and_save(strat_name, X_final, y_final, final_features, best_params,
+    final_rf_train_and_save(strat_name, X, y, final_features, best_params,
                             pairs, selection_method, strat_params, data_len)
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
     print(f"TF 1a test time taken: {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
+
+def train_secondary(strat_name: str, side: str, timeframe: str, strat_params: tuple,
+                    num_pairs: int, selection_method: str, thresh: float, num_trials: int):
+
+    loop_start = time.perf_counter()
+    print(f"\n- Running {strat_name} secondary model training, {side}, {timeframe}, {strat_params}, {num_pairs}, "
+          f"{selection_method}")
+
+    pairs = mlf.get_margin_pairs(selection_method, num_pairs)
+    results = create_secondary_dataset(strat_name, side, timeframe, strat_params, num_pairs, selection_method, thresh)
+
+    # split features from labels
+    X = results.drop('win', axis=1)
+    y = results.win  # pnl > threshold
+
+    # balance classes
+    # us = RandomUnderSampler(random_state=0)
+    us = ClusterCentroids(random_state=0)
+    X, y = us.fit_resample(X, y)
+
+    # split off validation set
+    X_train, X_test, X_val, y_train, y_test, y_val = ttv_split(X, y)
+
+    # split off validation labels
+    z_train = X_train.pnl  # pnl > 0
+    X_train = X_train.drop('pnl', axis=1)
+    z_test = X_test.pnl
+    X_test = X_test.drop('pnl', axis=1)
+    z_val = X_val.pnl
+    X_val = X_val.drop('pnl', axis=1)
+    cols = X_train.columns
+
+    warn = f"*** WARNING only {len(X_val)} observations in validation set. ***" if len(X_val) < 30 else ''
+    logger.debug(f"{len(y)} observations in {timeframe} {side} dataset. {warn}")
+
+    print(f"{X.shape = }, {y.shape = }, {X_val.shape = }, {y_val.shape}")
+
+    # feature scaling
+    X_train, X_test, X_val = scale_features(X_train, X_test, X_val, QuantileTransformer)
+
+    # feature selection
+    X_train, X_test, X_val, selected_columns = eliminate_features(X_train, X_test, X_val, y_train)
+    X_train, X_test, X_val, rf_sfs = rand_forest_sfs(X_train, X_test, X_val, y_train)
+
+    # hyperparameter optimisation
+    best_params = optimise(RFObjective(X_train, y_train, X_test, y_test), num_trials)
+
+    # remove features with low permutation importance
+    final_features = rf_perm_importance(X_train, X_test, y_train, y_test, rf_sfs)
+
+    # final validation score before training production model
+    validate_findings(X_train, X_val, y_train, y_val, rf_sfs, final_features, best_params)
+
+    # train final model
+    final_rf_train_and_save(strat_name, X, y, final_features, best_params,
+                            pairs, selection_method, strat_params, 'na')
+
+    loop_end = time.perf_counter()
+    loop_elapsed = loop_end - loop_start
+    print(f"{strat_name} 2 test time taken: {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
+
+
+
+
 
 all_start = time.perf_counter()
 
@@ -395,10 +603,17 @@ timeframes = ['15m', '30m', '1h', '4h', '12h', '1d']
 for side, timeframe in product(sides, timeframes):
     if timeframe in ['15m', '30m', '1h', '4h']:
         train_primary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 5000, 1000)
+        train_secondary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, 1000)
+
         train_primary('channel_run', side, timeframe, (200, ), 50, '1w_volumes', 5000, 1000)
+        train_secondary('channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, 1000)
+
     if timeframe in ['1h', '4h', '12h', '1d']:
         train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 5000, 1000)
+        train_secondary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, 1000)
+
         train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 5000, 1000)
+        train_secondary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, 1000)
 
 all_end = time.perf_counter()
 all_elapsed = all_end - all_start
