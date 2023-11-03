@@ -382,7 +382,7 @@ def validate_findings(X_train, X_val, y_train, y_val, sfs_selector, final_featur
     print(f"Final model validation score: {score:.1%}")
 
 
-def final_rf_train_and_save(strat_name, X_final, y_final, final_features, best_params,
+def final_rf_train_and_save(mode, strat_name, X_final, y_final, final_features, best_params,
                             pairs, selection_method, strat_params, data_len):
     unpatch_sklearn()
     X_final = X_final[final_features]
@@ -407,6 +407,7 @@ def final_rf_train_and_save(strat_name, X_final, y_final, final_features, best_p
     # save models and info
     strat_params = [str(p) for p in strat_params]
     mlf.save_models(
+        mode,
         strat_name,
         "_".join([str(sp) for sp in strat_params]),
         selection_method,
@@ -422,11 +423,7 @@ def final_rf_train_and_save(strat_name, X_final, y_final, final_features, best_p
     )
 
 
-def create_secondary_dataset(strat_name: str, side: str, timeframe: str, strat_params: tuple,
-                    num_pairs: int, selection_method: str, thresh):
-    """the two target columns (pnl and win) are both booleans and mean slightly different things. pnl is True if the
-    final pnl of the trade was above zero, and win is True if the final pnl of the trade was above the threshold"""
-
+def load_secondary_data(strat_name, strat_params, selection_method, num_pairs):
     if strat_name == 'trail_fractals':
         frac_width, atr_spacing = strat_params
     elif strat_name == 'ChannelRun':
@@ -459,15 +456,22 @@ def create_secondary_dataset(strat_name: str, side: str, timeframe: str, strat_p
     except FileNotFoundError:
         sim_records_2 = {}
 
-    all_records = real_records_1 | sim_records_1 | real_records_2 | sim_records_2
-    observations = []
+    return real_records_1 | sim_records_1 | real_records_2 | sim_records_2
 
+
+def create_risk_dataset(strat_name: str, side: str, timeframe: str, strat_params: tuple,
+                    num_pairs: int, selection_method: str, thresh):
+    """the two target columns (pnl and win) are both booleans and mean slightly different things. pnl is True if the
+    final pnl of the trade was above zero, and win is True if the final pnl of the trade was above the threshold"""
+
+    all_records = load_secondary_data(strat_name, strat_params, selection_method, num_pairs)
+
+    observations = []
     for position in all_records.values():
         signal = position['signal']
         if ((signal['direction'] != side) or
                 (signal.get('confidence_l') in [None, 0]) or
-                (signal.get('market_rank_1d') in [None, 0]) or
-                (signal.get('perf_ema4') is None)):
+                (signal.get('market_rank_1d') in [None, 0])):
             continue
 
         trade = position['trade']
@@ -485,6 +489,56 @@ def create_secondary_dataset(strat_name: str, side: str, timeframe: str, strat_p
                 mkt_rank_1d=signal['market_rank_1d'],
                 mkt_rank_1w=signal['market_rank_1w'],
                 mkt_rank_1m=signal['market_rank_1m'],
+                pnl=pnl > 0,
+                win=pnl > thresh
+            )
+        except KeyError:
+            logger.debug(pformat(position))
+        observations.append(observation)
+
+    return pd.DataFrame(observations)
+
+
+def create_perf_dataset(strat_name: str, side: str, timeframe: str, strat_params: tuple,
+                    num_pairs: int, selection_method: str, thresh):
+    """the two target columns (pnl and win) are both booleans and mean slightly different things. pnl is True if the
+    final pnl of the trade was above zero, and win is True if the final pnl of the trade was above the threshold"""
+
+    all_records = load_secondary_data(strat_name, strat_params, selection_method, num_pairs)
+
+    observations = []
+    for position in all_records.values():
+        signal = position['signal']
+        if (signal['direction'] != side) or (signal.get('perf_ema4') is None):
+            continue
+
+        trade = position['trade']
+        pnl = 0.0
+        for t in trade:
+            if t.get('rpnl'):
+                pnl += t['rpnl']
+
+        try:
+            observation = dict(
+                # asset=signal['asset'],
+                perf_ema_4=signal['perf_ema4'],
+                perf_ema_8=signal['perf_ema8'],
+                perf_ema_16=signal['perf_ema16'],
+                perf_ema_32=signal['perf_ema32'],
+                perf_ema_64=signal['perf_ema64'],
+                perf_ema_128=signal['perf_ema128'],
+                perf_ema4_roc=signal['perf_ema4_roc'],
+                perf_ema8_roc=signal['perf_ema8_roc'],
+                perf_ema16_roc=signal['perf_ema16_roc'],
+                perf_ema32_roc=signal['perf_ema32_roc'],
+                perf_ema64_roc=signal['perf_ema64_roc'],
+                perf_ema128_roc=signal['perf_ema128_roc'],
+                perf_sum_4=signal['perf_sum4'],
+                perf_sum_8=signal['perf_sum8'],
+                perf_sum_16=signal['perf_sum16'],
+                perf_sum_32=signal['perf_sum32'],
+                perf_sum_64=signal['perf_sum64'],
+                perf_sum_128=signal['perf_sum128'],
                 pnl=pnl > 0,
                 win=pnl > thresh
             )
@@ -535,22 +589,25 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
     validate_findings(X_train, X_val, y_train, y_val, rf_sfs, final_features, best_params)
 
     # train final model
-    final_rf_train_and_save(strat_name, X, y, final_features, best_params,
+    final_rf_train_and_save('tech', strat_name, X, y, final_features, best_params,
                             pairs, selection_method, strat_params, data_len)
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
     print(f"TF 1a test time taken: {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
 
-def train_secondary(strat_name: str, side: str, timeframe: str, strat_params: tuple,
+def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat_params: tuple,
                     num_pairs: int, selection_method: str, thresh: float, num_trials: int):
+    """this function can be used to train the risk model or the performance model, selected by the mode parameter"""
 
     loop_start = time.perf_counter()
-    print(f"\n- Running {strat_name} secondary model training, {side}, {timeframe}, {strat_params}, {num_pairs}, "
+    print(f"\n- Running {strat_name} {mode} model training, {side}, {timeframe}, {strat_params}, {num_pairs}, "
           f"{selection_method}")
 
-    pairs = mlf.get_margin_pairs(selection_method, num_pairs)
-    results = create_secondary_dataset(strat_name, side, timeframe, strat_params, num_pairs, selection_method, thresh)
+    if mode == 'risk':
+        results = create_risk_dataset(strat_name, side, timeframe, strat_params, num_pairs, selection_method, thresh)
+    elif mode == 'perf':
+        results = create_perf_dataset(strat_name, side, timeframe, strat_params, num_pairs, selection_method, thresh)
 
     if len(results) == 0:
         return
@@ -595,39 +652,41 @@ def train_secondary(strat_name: str, side: str, timeframe: str, strat_params: tu
     final_features = rf_perm_importance(X_train, X_test, y_train, y_test, rf_sfs)
 
     # final validation score before training production model
-    validate_findings(X_train, X_val, y_train, y_val, rf_sfs, final_features, best_params)
+    validate_findings(X_train, X_val, z_train, z_val, rf_sfs, final_features, best_params)
 
     # train final model
-    final_rf_train_and_save(strat_name, X, y, final_features, best_params,
-                            pairs, selection_method, strat_params, 'na')
+    final_rf_train_and_save(mode, strat_name, X, y, final_features, best_params,
+                            [], selection_method, strat_params, 'na')
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
-    print(f"{strat_name} 2 test time taken: {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
-
-
-
+    print(f"{strat_name} {mode} test time taken: {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
 
 
 all_start = time.perf_counter()
 
 sides = ['long', 'short']
 timeframes = ['15m', '30m', '1h', '4h', '12h', '1d']
+num_trials = 10
 
 for side, timeframe in product(sides, timeframes):
     if timeframe in ['15m', '30m', '1h', '4h']:
-        train_secondary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, 1000)
-        train_primary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 5000, 1000)
+        train_primary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 5000, num_trials)
+        train_secondary('risk', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
+        train_secondary('perf', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
 
-        train_primary('channel_run', side, timeframe, (200, ), 50, '1w_volumes', 5000, 1000)
-        train_secondary('channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, 1000)
+        train_primary('channel_run', side, timeframe, (200, ), 50, '1w_volumes', 5000, num_trials)
+        train_secondary('risk', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
+        train_secondary('perf', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
 
     if timeframe in ['1h', '4h', '12h', '1d']:
-        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 5000, 1000)
-        train_secondary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, 1000)
+        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 5000, num_trials)
+        train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
+        train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
 
-        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 5000, 1000)
-        train_secondary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, 1000)
+        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 5000, num_trials)
+        train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
+        train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
 
 all_end = time.perf_counter()
 all_elapsed = all_end - all_start
