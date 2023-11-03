@@ -438,27 +438,26 @@ def create_secondary_dataset(strat_name: str, side: str, timeframe: str, strat_p
     records_path_2 = Path(f"/home/ross/coding/pi_2/modular_trader/records/trail_fractals_{timeframe}_"
                           f"None_{'_'.join([str(sp) for sp in strat_params])}_{selection_method}_{num_pairs}")
 
-    with open(records_path_1 / "closed_trades.json", 'r') as real_file:
-        try:
+    try:
+        with open(records_path_1 / "closed_trades.json", 'r') as real_file:
             real_records_1 = json.load(real_file)
-        except FileNotFoundError:
-            real_records_1 = {}
-    with open(records_path_1 / "closed_sim_trades.json", 'r') as sim_file:
-        try:
+    except FileNotFoundError:
+        real_records_1 = {}
+    try:
+        with open(records_path_1 / "closed_sim_trades.json", 'r') as sim_file:
             sim_records_1 = json.load(sim_file)
-        except FileNotFoundError:
-            sim_records_1 = {}
-
-    with open(records_path_2 / "closed_trades.json", 'r') as real_file:
-        try:
+    except FileNotFoundError:
+        sim_records_1 = {}
+    try:
+        with open(records_path_2 / "closed_trades.json", 'r') as real_file:
             real_records_2 = json.load(real_file)
-        except FileNotFoundError:
-            real_records_2 = {}
-    with open(records_path_2 / "closed_sim_trades.json", 'r') as sim_file:
-        try:
+    except FileNotFoundError:
+        real_records_2 = {}
+    try:
+        with open(records_path_2 / "closed_sim_trades.json", 'r') as sim_file:
             sim_records_2 = json.load(sim_file)
-        except FileNotFoundError:
-            sim_records_2 = {}
+    except FileNotFoundError:
+        sim_records_2 = {}
 
     all_records = real_records_1 | sim_records_1 | real_records_2 | sim_records_2
     observations = []
@@ -553,6 +552,9 @@ def train_secondary(strat_name: str, side: str, timeframe: str, strat_params: tu
     pairs = mlf.get_margin_pairs(selection_method, num_pairs)
     results = create_secondary_dataset(strat_name, side, timeframe, strat_params, num_pairs, selection_method, thresh)
 
+    if len(results) == 0:
+        return
+
     # split features from labels
     X = results.drop('win', axis=1)
     y = results.win  # pnl > threshold
@@ -614,8 +616,8 @@ timeframes = ['15m', '30m', '1h', '4h', '12h', '1d']
 
 for side, timeframe in product(sides, timeframes):
     if timeframe in ['15m', '30m', '1h', '4h']:
-        train_primary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 5000, 1000)
         train_secondary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, 1000)
+        train_primary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 5000, 1000)
 
         train_primary('channel_run', side, timeframe, (200, ), 50, '1w_volumes', 5000, 1000)
         train_secondary('channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, 1000)
