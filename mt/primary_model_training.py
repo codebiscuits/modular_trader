@@ -439,14 +439,26 @@ def create_secondary_dataset(strat_name: str, side: str, timeframe: str, strat_p
                           f"None_{'_'.join([str(sp) for sp in strat_params])}_{selection_method}_{num_pairs}")
 
     with open(records_path_1 / "closed_trades.json", 'r') as real_file:
-        real_records_1 = json.load(real_file)
+        try:
+            real_records_1 = json.load(real_file)
+        except FileNotFoundError:
+            real_records_1 = {}
     with open(records_path_1 / "closed_sim_trades.json", 'r') as sim_file:
-        sim_records_1 = json.load(sim_file)
+        try:
+            sim_records_1 = json.load(sim_file)
+        except FileNotFoundError:
+            sim_records_1 = {}
 
     with open(records_path_2 / "closed_trades.json", 'r') as real_file:
-        real_records_2 = json.load(real_file)
+        try:
+            real_records_2 = json.load(real_file)
+        except FileNotFoundError:
+            real_records_2 = {}
     with open(records_path_2 / "closed_sim_trades.json", 'r') as sim_file:
-        sim_records_2 = json.load(sim_file)
+        try:
+            sim_records_2 = json.load(sim_file)
+        except FileNotFoundError:
+            sim_records_2 = {}
 
     all_records = real_records_1 | sim_records_1 | real_records_2 | sim_records_2
     observations = []
