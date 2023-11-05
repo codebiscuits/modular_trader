@@ -26,13 +26,13 @@ from xgboost import XGBClassifier, DMatrix
 import optuna
 optuna.logging.set_verbosity(optuna.logging.ERROR)
 
-if not Path('pi_2.txt').exists():
-    import mt.update_ohlc
+# if not Path('pi_2.txt').exists():
+#     import mt.update_ohlc
 
 warnings.filterwarnings('ignore')
 warnings.simplefilter(action='ignore', category=FutureWarning)
-
 logger = create_logger('model_training')
+use_local_data = True
 
 fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
 
@@ -147,6 +147,7 @@ def channel_run_entries(df, lookback):
 
 
 def find_collinear(X_train, corr_thresh):
+    print(X_train)
     corr_matrix = X_train.corr()
     # Extract the upper triangle of the correlation matrix
     upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
@@ -252,7 +253,8 @@ def eliminate_features(X_train, X_test, X_val, y_train):
     # mutual info feature selection
     print(f"feature selection began: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
     cols = list(X_train.columns) # list of strings, names of all features
-    selector = SelectKBest(mutual_info_classif, k=15)
+    mi_k = max(min(15, len(cols)-2), len(cols))
+    selector = SelectKBest(mutual_info_classif, k=mi_k)
     selector.fit(X_train, y_train)
     mi_cols_idx = list(selector.get_support(indices=True))
     selected_columns = [col for i, col in enumerate(cols) if i in mi_cols_idx]
@@ -279,7 +281,6 @@ def rand_forest_sfs(X_train, X_test, X_val, y_train):
 
 class RFObjective(object):
     def __init__(self, x_train, x_test, y_train, y_test):
-        # Hold this implementation specific arguments as the fields of the class.
         self.X_train = x_train
         self.y_train = y_train
         self.X_test = x_test
@@ -405,10 +406,12 @@ def load_secondary_data(strat_name, strat_params, selection_method, num_pairs):
     elif strat_name == 'ChannelRun':
         lookback = strat_params[0]
 
-    records_path_1 = Path(f"/home/ross/coding/pi_2/modular_trader/records/trail_fractals_{timeframe}_"
+    root_dir = '/home/ross/coding' if use_local_data else '/home/ross/coding/pi_2'
+
+    records_path_1 = Path(f"{root_dir}/modular_trader/records/trail_fractals_{timeframe}_"
                           f"None_{'_'.join([str(sp) for sp in strat_params])}_{selection_method}_{num_pairs}")
 
-    records_path_2 = Path(f"/home/ross/coding/pi_2/modular_trader/records/trail_fractals_{timeframe}_"
+    records_path_2 = Path(f"{root_dir}/modular_trader/records/trail_fractals_{timeframe}_"
                           f"None_{'_'.join([str(sp) for sp in strat_params])}_{selection_method}_{num_pairs}")
 
     try:
@@ -598,6 +601,10 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
     y = results.win  # pnl > threshold
 
     # balance classes
+
+    if (len(y.unique()) < 2) or (y.value_counts()[False] < 20) or (y.value_counts()[True] < 20):
+        return  # need enough samples in each class for cross-validation etc
+
     # us = RandomUnderSampler(random_state=0)
     us = ClusterCentroids(random_state=0)
     X, y = us.fit_resample(X, y)
@@ -617,8 +624,6 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
     warn = f"*** WARNING only {len(X_val)} observations in validation set. ***" if len(X_val) < 30 else ''
     logger.debug(f"{len(y)} observations in {timeframe} {side} dataset. {warn}")
 
-    print(f"{X.shape = }, {y.shape = }, {X_val.shape = }, {y_val.shape}")
-
     # feature scaling
     X_train, X_test, X_val = scale_features(X_train, X_test, X_val, QuantileTransformer)
 
@@ -626,8 +631,13 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
     X_train, X_test, X_val, selected_columns = eliminate_features(X_train, X_test, X_val, y_train)
     X_train, X_test, X_val, rf_sfs = rand_forest_sfs(X_train, X_test, X_val, y_train)
 
+    print(f"{X.shape = }, {y.shape = }")
+    print(f"{X_train.shape = }, {y_train.shape = }")
+    print(f"{X_test.shape = }, {y_test.shape = }")
+    print(f"{X_val.shape = }, {y_val.shape = }")
+
     # hyperparameter optimisation
-    best_params = optimise(RFObjective(X_train, y_train, X_test, y_test), num_trials)
+    best_params = optimise(RFObjective(X_train, X_test, y_train, y_test), num_trials)
 
     # remove features with low permutation importance
     final_features = rf_perm_importance(X_train, X_test, y_train, y_test, rf_sfs)
@@ -653,20 +663,20 @@ num_trials = 1000
 for side, timeframe in product(sides, timeframes):
     logger.debug(f"Testing {side} {timeframe}")
     if timeframe in ['15m', '30m', '1h', '4h']:
-        train_primary('channel_run', side, timeframe, (200, ), 50, '1w_volumes', 2500, num_trials)
+        # train_primary('channel_run', side, timeframe, (200, ), 50, '1w_volumes', 2500, num_trials)
         train_secondary('risk', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
         train_secondary('perf', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
 
-        train_primary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 2500, num_trials)
+        # train_primary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 2500, num_trials)
         train_secondary('risk', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
         train_secondary('perf', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
 
     if timeframe in ['1h', '4h', '12h', '1d']:
-        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 500, num_trials)
+        # train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 500, num_trials)
         train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
         train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
 
-        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 500, num_trials)
+        # train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 500, num_trials)
         train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
         train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
 
