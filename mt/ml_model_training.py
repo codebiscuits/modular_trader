@@ -8,12 +8,12 @@ from datetime import datetime
 import statistics as stats
 from itertools import product
 from mt.resources.loggers import create_logger
-from pprint import pformat
 import json
 import warnings
 from sklearnex import patch_sklearn, unpatch_sklearn
 patch_sklearn()
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.preprocessing import MinMaxScaler, QuantileTransformer
 from sklearn.metrics import fbeta_score
@@ -32,7 +32,7 @@ if not Path('pi_2.txt').exists():
 warnings.filterwarnings('ignore')
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-logger = create_logger('trail_fractals_2', 'trail_fractals_2')
+logger = create_logger('model_training')
 
 fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
 
@@ -178,14 +178,20 @@ def find_collinear(X_train, corr_thresh):
 
 def generate_channel_run_dataset(pairs: list, side: str, timeframe: str, strat_params: tuple, data_len: int):
     lookback = strat_params[0]
+    logger.debug(f"{datetime.now().strftime('%H:%M:%S')} Starting channel_run get_data for-loop")
+
     all_res = []
-    for pair in pairs:
+    for n, pair in enumerate(pairs):
+        if n % 10 == 0:
+            logger.debug(f"{n} pairs done")
         df = mlf.get_data(pair, timeframe)
         df = mlf.add_features(df, timeframe)
         df = channel_run_entries(df, lookback)
         df = df.tail(data_len).reset_index(drop=True)
         res = backtest_oco(df, side, lookback)
         all_res.extend(res)
+
+    logger.debug(f"{datetime.now().strftime('%H:%M:%S')} Finished channel_run for-loop")
     res_df = pd.DataFrame(all_res).sort_values('timestamp').reset_index(drop=True)
 
     return res_df.dropna(axis=1)
@@ -307,36 +313,6 @@ class RFObjective(object):
         avg_score = stats.mean(scores)
 
         return avg_score
-
-
-# def rf_objective(trial):
-#     # criterion = trial.suggest_categorical('criterion', 'gini', 'log_loss')
-#     # min_samples_split = trial.suggest_int("min_samples_split", 2, 10)
-#     n_estimators = trial.suggest_int("n_estimators", 50, 150)
-#     max_depth = trial.suggest_int("max_depth", 12, 32)
-#     max_features = trial.suggest_float("max_features", 0.1, 1.0)
-#     max_samples = trial.suggest_float('max_samples', 0.1, 1.0)
-#     ccp_alpha = trial.suggest_float('ccp_alpha', 1e-5, 1e-2, log=True)
-#
-#     # Create and fit random forest model
-#     model = RandomForestClassifier(
-#         n_estimators=n_estimators,
-#         criterion='log_loss',
-#         max_depth=max_depth,
-#         min_samples_split=2,
-#         max_features=max_features,
-#         max_samples=max_samples,
-#         ccp_alpha=ccp_alpha,
-#         random_state=42,
-#         n_jobs=-1
-#     )
-#     model.fit(X_train, y_train)
-#
-#     # Score model
-#     scores = cross_val_score(model, X_test, y_test, verbose=0, n_jobs=-1)
-#     avg_score = stats.mean(scores)
-#
-#     return avg_score
 
 
 def optimise(objective, num_trials):
@@ -492,9 +468,11 @@ def create_risk_dataset(strat_name: str, side: str, timeframe: str, strat_params
                 pnl=pnl > 0,
                 win=pnl > thresh
             )
+            observations.append(observation)
         except KeyError:
-            logger.debug(pformat(position))
-        observations.append(observation)
+            # logger.debug("observation couldn't be added because the signal was missing a key")
+            # logger.debug(pformat(position))
+            pass
 
     return pd.DataFrame(observations)
 
@@ -542,9 +520,11 @@ def create_perf_dataset(strat_name: str, side: str, timeframe: str, strat_params
                 pnl=pnl > 0,
                 win=pnl > thresh
             )
+            observations.append(observation)
         except KeyError:
-            logger.debug(pformat(position))
-        observations.append(observation)
+            # logger.debug("observation couldn't be added because the signal was missing a key")
+            # logger.debug(pformat(position))
+            pass
 
     return pd.DataFrame(observations)
 
@@ -552,7 +532,8 @@ def create_perf_dataset(strat_name: str, side: str, timeframe: str, strat_params
 def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tuple,
                   num_pairs: int, selection_method: str, data_len: int, num_trials: int):
     loop_start = time.perf_counter()
-    print(f"\n- Running {strat_name}, {side}, {timeframe}, {strat_params}, {num_pairs}, {selection_method} primary")
+    print(f"\n- {datetime.now().strftime('%H:%M:%S')} Running {strat_name}, {side}, {timeframe}, "
+          f"{', '.join([str(p) for p in strat_params])}, {num_pairs}, {selection_method} primary")
 
     # generate dataset
     pairs = mlf.get_margin_pairs(selection_method, num_pairs)
@@ -594,15 +575,15 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
-    print(f"TF 1a test time taken: {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
+    print(f"{strat_name} Technical test time taken: {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
 
 def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat_params: tuple,
                     num_pairs: int, selection_method: str, thresh: float, num_trials: int):
     """this function can be used to train the risk model or the performance model, selected by the mode parameter"""
 
     loop_start = time.perf_counter()
-    print(f"\n- Running {strat_name} {mode} model training, {side}, {timeframe}, {strat_params}, {num_pairs}, "
-          f"{selection_method}")
+    print(f"\n- {datetime.now().strftime('%H:%M:%S')} Running {strat_name} {mode} model training, {side}, {timeframe}, "
+          f"{', '.join([str(p) for p in strat_params])}, {num_pairs}, {selection_method}")
 
     if mode == 'risk':
         results = create_risk_dataset(strat_name, side, timeframe, strat_params, num_pairs, selection_method, thresh)
@@ -667,24 +648,25 @@ all_start = time.perf_counter()
 
 sides = ['long', 'short']
 timeframes = ['15m', '30m', '1h', '4h', '12h', '1d']
-num_trials = 10
+num_trials = 1000
 
 for side, timeframe in product(sides, timeframes):
+    logger.debug(f"Testing {side} {timeframe}")
     if timeframe in ['15m', '30m', '1h', '4h']:
-        train_primary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 5000, num_trials)
-        train_secondary('risk', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
-        train_secondary('perf', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
-
-        train_primary('channel_run', side, timeframe, (200, ), 50, '1w_volumes', 5000, num_trials)
+        train_primary('channel_run', side, timeframe, (200, ), 50, '1w_volumes', 2500, num_trials)
         train_secondary('risk', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
         train_secondary('perf', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
 
+        train_primary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 2500, num_trials)
+        train_secondary('risk', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
+        train_secondary('perf', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
+
     if timeframe in ['1h', '4h', '12h', '1d']:
-        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 5000, num_trials)
+        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 500, num_trials)
         train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
         train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
 
-        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 5000, num_trials)
+        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 500, num_trials)
         train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
         train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
 
