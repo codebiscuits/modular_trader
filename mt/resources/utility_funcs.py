@@ -281,7 +281,7 @@ def log(session, agent) -> None:
     new_record = {'timestamp': session.now_start,
                   'positions': agent.real_pos, 'trade_counts': agent.counts_dict,
                   'median_spread': stats.median(session.spreads.values()),
-                  'quote_asset': session.quote_asset, 'fr_max': session.fr_max,
+                  'quote_asset': session.quote_asset, 'max_allocation': session.max_allocation,
                   'max_spread': session.max_spread, 'indiv_r_limit': agent.indiv_r_limit,
                   'total_r_limit': agent.total_r_limit, 'target_risk': agent.target_risk,
                   'max_pos': agent.max_positions, 'market_bias': session.market_bias

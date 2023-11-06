@@ -355,16 +355,20 @@ def low_volume_bar(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
 
     return df
 
+powers_of_ten = [10 ** z for z in range(-4, 6)]
 
 def round_numbers_proximity(df: pd.DataFrame) -> pd.DataFrame:
-    nums = [x * y for x in range(1, 10) for y in [10 ** z for z in range(-4, 6)]]
+    nums = [x * y for x in range(1, 10) for y in powers_of_ten]
     df['round_num_prox'] = df.vwma.map(lambda x: min([abs(x - value) / ((x + value) / 2) for value in nums]))
 
     return df
 
 
 def round_numbers_close(df: pd.DataFrame, threshold) -> pd.DataFrame:
-    nums = [x * y for x in range(1, 10) for y in [10 ** z for z in range(-4, 6)]]
+    hh = df.high.max()
+    ll = df.low.min()
+
+    nums = [x * y for x in range(1, 10) for y in powers_of_ten]
     round_num_prox = df.vwma.map(lambda x: min([abs(x - value) / ((x + value) / 2) for value in nums]))
     df[f"round_nums_close_{threshold}"] = (round_num_prox * 100) < threshold
 
@@ -372,14 +376,14 @@ def round_numbers_close(df: pd.DataFrame, threshold) -> pd.DataFrame:
 
 
 def big_round_nums_proximity(df: pd.DataFrame) -> pd.DataFrame:
-    big_nums = [10 ** z for z in range(-4, 6)]
+    big_nums = powers_of_ten
     df['big_round_num_prox'] = df.vwma.map(lambda x: min([abs(x - value) / ((x + value) / 2) for value in big_nums]))
 
     return df
 
 
 def big_round_nums_close(df: pd.DataFrame, threshold) -> pd.DataFrame:
-    big_nums = [10 ** z for z in range(-4, 6)]
+    big_nums = powers_of_ten
     big_round_num_prox = df.vwma.map(lambda x: min([abs(x - value) / ((x + value) / 2) for value in big_nums]))
     df[f"big_round_nums_close_{threshold}"] = (big_round_num_prox * 100) < threshold
 
@@ -388,7 +392,7 @@ def big_round_nums_close(df: pd.DataFrame, threshold) -> pd.DataFrame:
 
 def spooky_nums_proximity(df: pd.DataFrame) -> pd.DataFrame:
     spooky_nums = [8, 13, 39, 69, 88, 420, 666, 888]
-    nums = [x * y for x in spooky_nums for y in [10 ** z for z in range(-4, 6)]]
+    nums = [x * y for x in spooky_nums for y in powers_of_ten]
     df['spooky_num_prox'] = df.vwma.map(lambda x: min([abs(x - value) / ((x + value) / 2) for value in nums]))
 
     return df

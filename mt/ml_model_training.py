@@ -147,7 +147,6 @@ def channel_run_entries(df, lookback):
 
 
 def find_collinear(X_train, corr_thresh):
-    print(X_train)
     corr_matrix = X_train.corr()
     # Extract the upper triangle of the correlation matrix
     upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
@@ -631,11 +630,6 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
     X_train, X_test, X_val, selected_columns = eliminate_features(X_train, X_test, X_val, y_train)
     X_train, X_test, X_val, rf_sfs = rand_forest_sfs(X_train, X_test, X_val, y_train)
 
-    print(f"{X.shape = }, {y.shape = }")
-    print(f"{X_train.shape = }, {y_train.shape = }")
-    print(f"{X_test.shape = }, {y_test.shape = }")
-    print(f"{X_val.shape = }, {y_val.shape = }")
-
     # hyperparameter optimisation
     best_params = optimise(RFObjective(X_train, X_test, y_train, y_test), num_trials)
 
@@ -663,20 +657,20 @@ num_trials = 1000
 for side, timeframe in product(sides, timeframes):
     logger.debug(f"Testing {side} {timeframe}")
     if timeframe in ['15m', '30m', '1h', '4h']:
-        # train_primary('channel_run', side, timeframe, (200, ), 50, '1w_volumes', 2500, num_trials)
+        train_primary('channel_run', side, timeframe, (200,RandomForestClassifier ), 50, '1w_volumes', 2500, num_trials)
         train_secondary('risk', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
         train_secondary('perf', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
 
-        # train_primary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 2500, num_trials)
+        train_primary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 2500, num_trials)
         train_secondary('risk', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
         train_secondary('perf', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
 
     if timeframe in ['1h', '4h', '12h', '1d']:
-        # train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 500, num_trials)
+        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 500, num_trials)
         train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
         train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
 
-        # train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 500, num_trials)
+        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 500, num_trials)
         train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
         train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
 

@@ -3,7 +3,7 @@ from mt.resources.timers import Timer
 from mt.resources import utility_funcs as uf
 from mt.resources import binance_funcs as funcs
 from datetime import datetime, timezone
-from mt.agents import TrailFractals#, ChannelRun
+from mt.agents import TrailFractals, ChannelRun
 from pprint import pprint, pformat
 import mt.sessions as sessions
 from collections import Counter
@@ -17,15 +17,16 @@ if not Path('/pi_2.txt').exists():
 
 # TODO current (02/04/23) roadmap should be:
 #  * start integrating polars and doing anything else i can to speed things up
-#  * get oco entries and trade adds working so i can use other strats
+#  * get trade adds working so i can use other strats
 
 logger = create_logger('setup_scanner')
 
 ########################################################################################################################
 
-session = sessions.TradingSession(0.01)  # this argument is now max position size rather than max fixed risk
+session = sessions.TradingSession(0.01, True)  # fr_max now means max pos size
 
-logger.debug(f'-+-+-+-+-+-+-+-+ {session.now_start} Running Setup Scanner ({session.timeframes}) +-+-+-+-+-+-+-+-')
+logger.debug(f'-+-+-+-+-+-+-+-+ {session.now_start} Running Setup Scanner ({session.timeframes}) +-+-+-+-+-+-+-+-\n')
+logger.info(f'-+-+-+-+-+-+-+-+ {session.now_start} Running Setup Scanner ({session.timeframes}) +-+-+-+-+-+-+-+-\n')
 
 # initialise agents
 agents = []
@@ -35,14 +36,17 @@ for timeframe, offset, active_agents in session.timeframes:
                 TrailFractals(session, timeframe, offset, 5, 2, '1d_volumes', 30),
                 TrailFractals(session, timeframe, offset, 5, 2, '1w_volumes', 30),
             ])
-    # if 'ChannelRun' in active_agents:
-    #     agents.extend([
-    #             ChannelRun(session, timeframe, offset, 200, '1w_volumes', 50),
-    #         ])
+    if 'ChannelRun' in active_agents:
+        agents.extend([
+                ChannelRun(session, timeframe, offset, 200, '1w_volumes', 150),
+                ChannelRun(session, timeframe, offset, 200, '1w_volumes', 50),
+            ])
 
 agents = {a.id: a for a in agents}
 
-# session.name = ' | '.join([n.name for n in agents.values()])
+session.name = ' | '.join([n.id for n in agents.values()])
+logger.debug(session.name)
+logger.info(session.name)
 
 logger.debug("-*-*-*- Checking all positions for stops and open-risk -*-*-*-")
 logger.info("-*-*-*- Checking all positions for stops and open-risk -*-*-*-")
@@ -50,7 +54,10 @@ logger.info("-*-*-*- Checking all positions for stops and open-risk -*-*-*-")
 real_sim_tps_closes = []
 for agent in agents.values():
     agent.record_stopped_trades(session, session.timeframes)
-    agent.record_stopped_sim_trades(session, session.timeframes)
+    if agent.oco:
+        agent.record_closed_oco_sim_trades(session, session.timeframes)
+    else:
+        agent.record_stopped_sim_trades(session, session.timeframes)
     real_sim_tps_closes.extend(agent.check_open_risk(session))
     agent.max_positions = agent.set_max_pos()
     agent.total_r_limit = agent.max_positions * 1.7  # TODO need to update reduce_risk and run it before/after set_fixed_ris
@@ -160,15 +167,6 @@ while raw_signals:
     # TODO 'oco' signals are an alternative to 'open', so they should be treated as such in this section, maybe as a
     #  condition which requires that position is flat and signal['exit'] is oco and bias is either bullish or bearish
 
-    # TODO i need to add conditions so that strategies which trail stops don't have their positions closed by a bias
-    #  flip, only new positions will be opened on  signals. so i might end up with long and short positions open
-    #  simultaneously, but that's ok because each position will be managed and the price will decide which should stay
-    #  open
-
-    # TODO perhaps there should be a flag in each signal that says whether that agent's positions should be closed with
-    #  signals or not, because oco orders should never be managed by signals but trailing stop strategies sometimes have
-    #  close/tp conditions and sometimes don't
-
     if sig_bias == 'bullish':
         if real_position in ['long', 'spot']:
             if sig_agent.trail_stop:
@@ -177,10 +175,12 @@ while raw_signals:
             # check if add is necessary
             # TODO check for low or and make add signals if so
 
-        elif real_position == 'short':
+        elif real_position == 'short' and sig_agent.close_on_signal:
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', 'short'))
             processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', 'long'))
-
+        elif real_position == 'short':
+            logger.debug(f"{sig_agent.id} {sig_pair} already {real_position}, ignoring new signal")
+            logger.info(f"{sig_agent.id} {sig_pair} already {real_position}, ignoring new signal")
         elif real_position == 'flat':
             processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', bullish_pos))
         else:
@@ -193,8 +193,11 @@ while raw_signals:
             # check if add is necessary
             # TODO check for low or and make add signals if so
 
-        elif sim_position == 'short':
+        elif sim_position == 'short' and sig_agent.close_on_signal:
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'sim', 'short'))
+        elif sim_position == 'short':
+            logger.debug(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
+            logger.info(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
         elif sim_position == 'flat':
             pass
         else:
@@ -204,8 +207,11 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'tracked')
 
-        elif tracked_position == 'short':
+        elif tracked_position == 'short' and sig_agent.close_on_signal:
             processed_signals['tracked_close'].append(uf.transform_signal(signal, 'close', 'tracked', 'short'))
+        elif tracked_position == 'short':
+            logger.debug(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
+            logger.info(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
         elif tracked_position == 'flat':
             pass
         else:
@@ -214,11 +220,17 @@ while raw_signals:
     # -------------------------------------------------------------------------------------------------------------------
 
     elif sig_bias == 'bearish':
-        if real_position == 'spot':
+        if real_position == 'spot' and sig_agent.close_on_signal:
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', 'spot'))
-        elif real_position == 'long':
+        elif real_position == 'spot':
+            logger.debug(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
+            logger.info(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
+        elif real_position == 'long' and sig_agent.close_on_signal:
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', 'long'))
             processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', 'short'))
+        elif real_position == 'long':
+            logger.debug(f"{sig_agent.id} {sig_pair} already {real_position}, ignoring new signal")
+            logger.info(f"{sig_agent.id} {sig_pair} already {real_position}, ignoring new signal")
         elif real_position == 'short':
             if sig_agent.trail_stop:
                 sig_agent.move_real_stop(session, signal)
@@ -231,8 +243,11 @@ while raw_signals:
         else:
             logger.error("bearish bias didn't produce a real outcome, logic needs more work")
 
-        if sim_position in ['long', 'spot']:
+        if sim_position in ['long', 'spot'] and sig_agent.close_on_signal:
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'sim', bullish_pos))
+        elif sim_position in ['long', 'spot']:
+            logger.debug(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
+            logger.info(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
         elif sim_position == 'short':
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'sim')
@@ -245,8 +260,11 @@ while raw_signals:
         else:
             logger.error("bearish bias didn't produce a sim outcome, logic needs more work")
 
-        if tracked_position in ['long', 'spot']:
+        if tracked_position in ['long', 'spot'] and sig_agent.close_on_signal:
             processed_signals['tracked_close'].append(uf.transform_signal(signal, 'close', 'tracked', bullish_pos))
+        elif tracked_position in ['long', 'spot']:
+            logger.debug(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
+            logger.info(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
         elif tracked_position == 'short':
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'tracked')
@@ -258,7 +276,7 @@ while raw_signals:
 
     # -------------------------------------------------------------------------------------------------------------------
 
-    elif sig_bias == 'neutral':
+    elif sig_bias == 'neutral' and sig_agent.close_on_signal:
         if real_position in ['long', 'spot']:
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', bullish_pos))
         elif real_position == 'short':
@@ -330,28 +348,54 @@ tp_close_took = tp_close_end - tp_close_start
 logger.debug(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Signal Scores -+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n")
 logger.info(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Signal Scores -+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n")
 
+
+# calculate agent perf scores
 for agent in agents.values():
     agent.calc_rpnls()
-print('creating signal scores:')
+    agent.perf_stats_l = agent.perf_stats('long')
+    agent.perf_stats_s = agent.perf_stats('short')
+
+    agent.perf_score_ml_l = agent.perf_model_prediction('long')
+    agent.perf_score_ml_s = agent.perf_model_prediction('short')
+    agent.perf_score_old_l = agent.perf_manual_prediction('long')
+    agent.perf_score_old_s = agent.perf_manual_prediction('short')
+    agent.perf_score_l = agent.perf_score_old_l if agent.perf_score_validity_l < 30 else agent.perf_score_ml_l
+    agent.perf_score_s = agent.perf_score_old_s if agent.perf_score_validity_s < 30 else agent.perf_score_ml_s
+
+logger.info('creating signal scores:')
 while processed_signals['unassigned']:
     signal = processed_signals['unassigned'].pop()
 
-    signal['validity'] = 0
-    if 'ChannelRun' not in signal['agent']:
-        signal['score_ml'], signal['validity'] = agents[signal['agent']].secondary_prediction(signal)
-    signal['score_old'] = agents[signal['agent']].secondary_manual_prediction(session, signal)
-
-    if signal['validity'] > 30:
-        signal['score'] = signal['score_ml']
+    # record perf stats and perf score
+    if signal['direction'] in ['long', 'spot']:
+        signal.update(agents[signal['agent']].perf_stats_l)
     else:
-        signal['score'] = signal['score_old']
+        signal.update(agents[signal['agent']].perf_stats_s)
 
-    print(f"{signal['agent']}, {signal['pair']}, {signal['tf']}, {signal['direction']}, {signal['validity']}, {signal['score']:.1%}")
+    signal['perf_score'] = (agents[signal['agent']].perf_score_l if signal['direction'] == 'long'
+                            else agents[signal['agent']].perf_score_s)
+    signal['perf_score_ml'] = (agents[signal['agent']].perf_score_ml_l if signal['direction'] == 'long'
+                               else agents[signal['agent']].perf_score_ml_s)
+    signal['perf_validity'] = (agents[signal['agent']].perf_score_validity_l if signal['direction'] == 'long'
+                               else agents[signal['agent']].perf_score_validity_s)
+    signal['perf_score_old'] = (agents[signal['agent']].perf_score_old_l if signal['direction'] == 'long'
+                                else agents[signal['agent']].perf_score_old_s)
 
-    score_threshold = 0.6
+    # record secondary model score
+    signal['score_ml'] = agents[signal['agent']].risk_model_prediction(signal)
+    signal['validity'] = (agents[signal['agent']].secondary_score_validity_l if signal['direction'] == 'long'
+                          else agents[signal['agent']].secondary_score_validity_s)
+    signal['score_old'] = agents[signal['agent']].risk_manual_prediction(signal)
+    signal['score'] = signal['score_ml'] if signal['validity'] > 30 else signal['score_old']
 
+    # calculate position size
     signal['base_size'], signal['quote_size'] = agents[signal['agent']].get_size(session, signal)
 
+    logger.info(f"{signal['agent']}, {signal['pair']}, {signal['tf']}, {signal['direction']}, secondary validity: "
+                f"{signal['validity']}, score: {signal['score']:.1%}, perf score ml: {signal['perf_score_ml']:.1%}, "
+                f"perf_score_old: {signal['perf_score_old']:.1%}\n")
+
+    score_threshold = 0.6
     sim_position = agents[signal['agent']].sim_pos.get(signal['asset'], {'direction': 'flat'})['direction']
     if float(signal['score']) >= score_threshold:
         signal['wanted'] = True
@@ -362,8 +406,8 @@ while processed_signals['unassigned']:
         signal['sim_reasons'] = ['low_score']
         processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', signal['direction']))
 
-logger.info(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Fixed Risk -+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n")
-logger.debug(f"-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Fixed Risk -+-+-+-+-+-+-+-+-+-+-+-+-+-+-")
+logger.info(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Open Risk -+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n")
+logger.debug(f"-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Open Risk -+-+-+-+-+-+-+-+-+-+-+-+-+-+-")
 
 for agent in agents.values():
     agent.calc_tor()
@@ -466,11 +510,12 @@ while unassigned:
         processed_signals['sim_open'].append(s)
     else:
         pfrd = quote_size * abs(1 - s['inval_ratio'])
-        fractional_risk = balance * 0.01
+        fractional_risk = balance * session.frac_risk_limit
         if pfrd > fractional_risk:
             r = fractional_risk / pfrd
             quote_size = quote_size * r
-            logger.info(f"quote size: {quote_size}, inval ratio: {s['inval_ratio']}, pfrd: {pfrd:.2f}.")
+            logger.info(f"Reducing size because PFRD was greater than {session.frac_risk_limit:.1%} of account, new "
+                        f"quote size: {quote_size}, inval ratio: {s['inval_ratio']}, pfrd: {pfrd:.2f}.")
         or_limits[agent.id] += r
         pos_limits[agent.id] += 1
         algo_limits[s['pair']] -= 2 if s['action'] == 'oco' else 1
@@ -624,9 +669,9 @@ logger.info('\n-------------------- Counts --------------------\n')
 logger.info(f"pairs tested: {len(session.pairs_set)}")
 logger.info(pformat(Counter(session.counts)))
 logger.info(f"used-weight: {session.client.response.headers.get('x-mbx-used-weight')}")
-logger.info(f"used-weight-1m: {session.client.response.headers.get('x-mbx-used-weight-1m')}")
+logger.info(f"used-weight-1m: {session.client.response.headers.get('x-mbx-used-weight-1m')}\n")
 logger.debug('-----------------------------------------------\n')
-logger.info('\n-----------------------------------------------\n')
+logger.info('-----------------------------------------------\n')
 
 script_end = time.perf_counter()
 total_time = script_end - script_start
@@ -650,6 +695,6 @@ section_times()
 # uf.plot_call_weights(session)
 
 logger.info(
-    '\n<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>\n\n')
+    '<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>\n\n')
 logger.debug(
     '<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>\n\n')

@@ -87,15 +87,17 @@ class TradingSession:
     open_risk_records = {}
 
     @uf.retry_on_busy()
-    def __init__(self, fr_max):
+    def __init__(self, fr_max, use_local_records):
         t = Timer('session init')
         t.start()
 
         # configure settings and constants
         self.now_start = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
         self.client = Client(keys.bPkey, keys.bSkey, testnet=False)
+        self.use_local_records = use_local_records
         self.last_price_update = 0
-        self.fr_max = fr_max
+        self.max_allocation = fr_max
+        self.frac_risk_limit = 0.01
         self.leverage = 3
         self.name = 'agent names here'
         self.last_price_update = 0
