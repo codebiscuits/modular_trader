@@ -13,12 +13,9 @@ from pycoingecko import CoinGeckoAPI
 from pyarrow import ArrowInvalid
 from mt.resources import keys, indicators as ind, utility_funcs as uf
 from mt.resources.loggers import create_logger
-# from timers import Timer
-# from loggers import create_logger
 from mt.resources.timers import Timer
 
 cg = CoinGeckoAPI()
-# pb = uf.init_pb()
 ctx = getcontext()
 ctx.prec = 12
 logger = create_logger('binance_funcs')
@@ -656,7 +653,6 @@ def borrow_asset_M(session, asset: str, qty: str, live: bool) -> str:
         return qty
 
 
-
 @uf.retry_on_busy()
 def repay_asset_M(session, asset: str, qty: str, live: bool) -> bool:
     """calls the binance api function to repay a margin loan"""
@@ -704,7 +700,7 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float) -> di
                 logger.exception(e)
                 now = datetime.now(timezone=timezone.utc).strftime('%d/%m/%y %H:%M')
                 logger.error(f"current time: {now}, failed to set stop: {trigger} on {pair}")
-                if side == 'long':
+                if side == be.SIDE_SELL:
                     real_curr_price = float(session.client.get_orderbook_ticker(symbol=pair)['bidPrice'])
                     trigger = uf.valid_price(session, pair, real_curr_price * 0.99)
                     limit = uf.valid_price(session, pair, real_curr_price * 0.81)
@@ -760,3 +756,67 @@ def clear_stop_M(session, pair: str, position: dict) -> Tuple[Any, Decimal]:
 
     fc.stop()
     return clear, base_size
+
+
+def set_oco_stop_m(session, pair: str, size: float, side: str, target: float, stop: float) -> dict:
+    """sends a margin oco order to binance and returns the order data"""
+
+    sd = Timer('set_margin_oco_m')
+    sd.start()
+
+    now = datetime.now(timezone.utc).timestamp()
+
+    target = uf.valid_price(session, pair, target)
+
+    curr_price = session.pairs_data[pair]['price']
+    stop_limit = curr_price * 0.81 if side == be.SIDE_SELL else curr_price * 1.19
+    stop_limit = uf.valid_price(session, pair, stop_limit)
+    stop_trigger = uf.valid_price(session, pair, stop)
+    size = uf.valid_size(session, pair, size)
+
+    logger.info(f"setting {pair} stop: {size = } {side = } {stop_trigger = } {target = }")
+    if session.live:
+        try:
+            oco_order = session.client.create_margin_oco_order(
+                symbol=pair,
+                side=side,
+                quantity=size,
+                price=target,
+                stopPrice=stop_trigger,
+                stopLimitPrice=stop_limit,
+                stopLimitTimeInForce=be.TIME_IN_FORCE_GTC
+            )
+            session.pairs_data[pair]['algo_orders'] += 2
+            logger.error(f"New {pair} {side} oco successfuly set at {target}, {stop_trigger}")
+
+        except bx.BinanceAPIException as e:
+            if e.code == -2010:
+                logger.exception(e)
+                now = datetime.now(timezone=timezone.utc).strftime('%d/%m/%y %H:%M')
+                logger.error(f"current time: {now}, failed to set oco: {target}, {stop_trigger} on {pair}")
+                if side == be.SIDE_SELL:
+                    real_curr_price = float(session.client.get_orderbook_ticker(symbol=pair)['bidPrice'])
+                    trigger = uf.valid_price(session, pair, real_curr_price * 0.99)
+                    stop_trigger = uf.valid_price(session, pair, real_curr_price * 0.81)
+                else:
+                    real_curr_price = float(session.client.get_orderbook_ticker(symbol=pair)['askPrice'])
+                    trigger = uf.valid_price(session, pair, real_curr_price * 1.01)
+                    stop_trigger = uf.valid_price(session, pair, real_curr_price * 1.19)
+
+                oco_order = session.client.create_margin_oco_order(
+                    symbol=pair,
+                    side=side,
+                    quantity=size,
+                    price=target,
+                    stopPrice=stop,
+                    stopLimitPrice=stop_trigger,
+                    stopLimitTimeInForce=be.TIME_IN_FORCE_GTC
+                )
+                session.pairs_data[pair]['algo_orders'] += 2
+                logger.error(f"New {pair} {side} oco successfuly set at {target}, {stop_trigger}")
+
+    else:
+        oco_order = {'orderId': 'not live',
+                           'transactTime': now}
+
+    return oco_order
