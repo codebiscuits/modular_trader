@@ -9,11 +9,9 @@ import mt.sessions as sessions
 from collections import Counter
 from mt.resources.loggers import create_logger
 from pathlib import Path
+import mt.update_ohlc
 
 script_start = time.perf_counter()
-
-if not Path('/pi_2.txt').exists():
-    import mt.update_ohlc
 
 # TODO current (02/04/23) roadmap should be:
 #  * start integrating polars and doing anything else i can to speed things up
