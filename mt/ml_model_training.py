@@ -360,7 +360,7 @@ def validate_findings(X_train, X_val, y_train, y_val, sfs_selector, final_featur
 
 def final_rf_train_and_save(mode, strat_name, X_final, y_final, final_features, best_params,
                             pairs, selection_method, strat_params, data_len):
-    unpatch_sklearn()
+    unpatch_sklearn(global_unpatch=True)
     X_final = X_final[final_features]
     final_scaler = MinMaxScaler()
     X_final = final_scaler.fit_transform(X_final)
@@ -652,16 +652,16 @@ all_start = time.perf_counter()
 
 sides = ['long', 'short']
 timeframes = ['15m', '30m', '1h', '4h', '12h', '1d']
-num_trials = 1000
+num_trials = 100
 
 for side, timeframe in product(sides, timeframes):
     logger.debug(f"Testing {side} {timeframe}")
     if timeframe in ['15m', '30m', '1h', '4h']:
-        train_primary('channel_run', side, timeframe, (200, ), 50, '1w_volumes', 2500, num_trials)
+        train_primary('channel_run', side, timeframe, (200, ), 50, '1w_volumes', 500, num_trials)
         train_secondary('risk', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
         train_secondary('perf', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
 
-        train_primary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 2500, num_trials)
+        train_primary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 500, num_trials)
         train_secondary('risk', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
         train_secondary('perf', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
 
