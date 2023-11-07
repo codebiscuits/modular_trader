@@ -10,10 +10,9 @@ from itertools import product
 from mt.resources.loggers import create_logger
 import json
 import warnings
-from sklearnex import patch_sklearn, unpatch_sklearn
-patch_sklearn()
+# from sklearnex import patch_sklearn, unpatch_sklearn
+# patch_sklearn()
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.preprocessing import MinMaxScaler, QuantileTransformer
 from sklearn.metrics import fbeta_score
@@ -26,8 +25,8 @@ from xgboost import XGBClassifier, DMatrix
 import optuna
 optuna.logging.set_verbosity(optuna.logging.ERROR)
 
-# if not Path('pi_2.txt').exists():
-#     import mt.update_ohlc
+if not Path('pi_2.txt').exists():
+    import mt.update_ohlc
 
 warnings.filterwarnings('ignore')
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -366,7 +365,7 @@ def validate_findings(X_train, X_val, y_train, y_val, sfs_selector, final_featur
 def final_rf_train_and_save(mode, strat_name, X_final, y_final, final_features, best_params,
                             pairs, selection_method, strat_params, data_len):
     print(f"final model train and save began: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
-    unpatch_sklearn(global_unpatch=True)
+    # unpatch_sklearn(global_unpatch=True)
     X_final = X_final[final_features]
     final_scaler = MinMaxScaler()
     X_final = final_scaler.fit_transform(X_final)
@@ -659,27 +658,27 @@ all_start = time.perf_counter()
 
 sides = ['long', 'short']
 timeframes = ['15m', '30m', '1h', '4h', '12h', '1d']
-num_trials = 10
+num_trials = 500
 
 for side, timeframe in product(sides, timeframes):
     logger.debug(f"Testing {side} {timeframe}")
     if timeframe in ['15m', '30m', '1h', '4h']:
-        train_primary('channel_run', side, timeframe, (200, ), 50, '1w_volumes', 500, num_trials)
+        train_primary('channel_run', side, timeframe, (200, ), 50, '1w_volumes', 2500, num_trials)
         train_secondary('risk', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
         train_secondary('perf', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
 
-    #     train_primary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 2500, num_trials)
-    #     train_secondary('risk', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
-    #     train_secondary('perf', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
-    #
-    # if timeframe in ['1h', '4h', '12h', '1d']:
-    #     train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 500, num_trials)
-    #     train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
-    #     train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
-    #
-    #     train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 500, num_trials)
-    #     train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
-    #     train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
+        train_primary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 2500, num_trials)
+        train_secondary('risk', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
+        train_secondary('perf', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
+
+    if timeframe in ['1h', '4h', '12h', '1d']:
+        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 500, num_trials)
+        train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
+        train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
+
+        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 500, num_trials)
+        train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
+        train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
 
 all_end = time.perf_counter()
 all_elapsed = all_end - all_start
