@@ -661,18 +661,18 @@ for side, timeframe in product(sides, timeframes):
         train_secondary('risk', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
         train_secondary('perf', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
 
-        train_primary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 500, num_trials)
-        train_secondary('risk', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
-        train_secondary('perf', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
+        # train_primary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 500, num_trials)
+        # train_secondary('risk', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
+        # train_secondary('perf', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
 
-    if timeframe in ['1h', '4h', '12h', '1d']:
-        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 500, num_trials)
-        train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
-        train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
-
-        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 500, num_trials)
-        train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
-        train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
+    # if timeframe in ['1h', '4h', '12h', '1d']:
+    #     train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 500, num_trials)
+    #     train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
+    #     train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
+    #
+    #     train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 500, num_trials)
+    #     train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
+    #     train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
 
 all_end = time.perf_counter()
 all_elapsed = all_end - all_start
