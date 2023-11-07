@@ -68,15 +68,21 @@ class Agent:
             'too_small': 0, 'low_score': 0, 'too_many_pos': 0, 'too_much_or': 0, 'algo_order_limit': 0,
             'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0, 'reduce_risk': 0}
 
-        if self.live:
-            self.perf_log = self.load_perf_log(session)
-            self.open_trades = self.read_open_trade_records(session, 'open')
-            self.sim_trades = self.read_open_trade_records(session, 'sim')
-            self.tracked_trades = self.read_open_trade_records(session, 'tracked')
-            self.closed_trades = self.read_closed_trade_records(session)
-            self.closed_sim_trades = self.read_closed_sim_trade_records(session)
-        else:
-            self.sync_test_records(session)
+        # if self.live:
+        #     self.perf_log = self.load_perf_log(session)
+        #     self.open_trades = self.read_open_trade_records(session, 'open')
+        #     self.sim_trades = self.read_open_trade_records(session, 'sim')
+        #     self.tracked_trades = self.read_open_trade_records(session, 'tracked')
+        #     self.closed_trades = self.read_closed_trade_records(session)
+        #     self.closed_sim_trades = self.read_closed_sim_trade_records(session)
+        # else:
+        #     self.sync_test_records(session)
+        self.perf_log = self.load_perf_log(session)
+        self.open_trades = self.read_open_trade_records(session, 'open')
+        self.sim_trades = self.read_open_trade_records(session, 'sim')
+        self.tracked_trades = self.read_open_trade_records(session, 'tracked')
+        self.closed_trades = self.read_closed_trade_records(session)
+        self.closed_sim_trades = self.read_closed_sim_trade_records(session)
 
         self.real_pos = self.current_positions(session, 'open')
         self.sim_pos = self.current_positions(session, 'sim')
