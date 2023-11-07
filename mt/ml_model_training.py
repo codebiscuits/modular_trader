@@ -545,7 +545,9 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
     # split features from labels
     X, y, _ = mlf.features_labels_split(res_df)
 
-    # undersampling
+    # balance classes
+    if (len(y.unique()) < 2) or (y.value_counts()[False] < 20) or (y.value_counts()[True] < 20):
+        return  # need enough samples in each class for cross-validation etc
     # us = RandomUnderSampler(random_state=0)
     us = ClusterCentroids(random_state=0)
     X, y = us.fit_resample(X, y)
@@ -598,10 +600,8 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
     y = results.win  # pnl > threshold
 
     # balance classes
-
     if (len(y.unique()) < 2) or (y.value_counts()[False] < 20) or (y.value_counts()[True] < 20):
         return  # need enough samples in each class for cross-validation etc
-
     # us = RandomUnderSampler(random_state=0)
     us = ClusterCentroids(random_state=0)
     X, y = us.fit_resample(X, y)
