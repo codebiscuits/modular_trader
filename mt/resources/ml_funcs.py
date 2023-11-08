@@ -602,11 +602,12 @@ def features_labels_split(df):
                  'hma_25', 'hma_50', 'hma_100', 'hma_200', 'lifespan', 'frac_high', 'frac_low', 'inval', 'daily_open',
                  'prev_daily_open', 'prev_daily_high', 'prev_daily_low', 'weekly_open', 'prev_weekly_open',
                  'prev_weekly_high', 'prev_weekly_low', 'bullish_doji', 'bearish_doji', 'entry_l', 'entry_s',
-                 'entry_l_price', 'entry_s_price', 'hh_200', 'll_200'],
-                axis=1, errors='ignore')#.drop(index=df.index[-1], axis=0)
-    y = df.pnl_cat#.shift(-1).drop(index=df.index[-1], axis=0)
-    z = df.pnl_r#.shift(-1).drop(index=df.index[-1], axis=0)
-    # the shift is better done at the point where the pnls are calculated, by this time, the data is no longer true timeseries
+                 'entry_l_price', 'entry_s_price', 'hh_200', 'll_200', 'channel_mid'],
+                axis=1, errors='ignore')
+    y = df.pnl_cat  #.shift(-1).drop(index=df.index[-1], axis=0)
+    z = df.pnl_r  #.shift(-1).drop(index=df.index[-1], axis=0)
+    # don't shift here, the shift is better done at the point where the pnls are calculated. by this time it's
+    # too late, because the data are no longer true timeseries
 
     return X, y, z
 

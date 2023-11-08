@@ -34,7 +34,7 @@ use_local_data = False # if false, uses trade records from the pi
 fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
 
 
-def backtest_oco(df_0, side, lookback, trim_ohlc=2200):
+def backtest_oco(df_0, side, lookback, goal, trim_ohlc=2200):
     """i can either target the opposite side of the channel or the mid-point, or both"""
 
     df_0 = df_0.reset_index(drop=True)
@@ -55,7 +55,10 @@ def backtest_oco(df_0, side, lookback, trim_ohlc=2200):
         if side == 'long':
             highest = df.high.max()
             lowest = df.low.min()
-            target = df[f"hh_{lookback}"].iloc[0]
+            if goal == 'mid':
+                target = df.channel_mid.iloc[0]
+            else:
+                target = df[f"hh_{lookback}"].iloc[0]
             stop = df[f"ll_{lookback}"].iloc[0] - atr
             rr = abs((target / entry) - 1) / abs((stop / entry) - 1)
             target_hit_idx = df.high.clip(upper=target).idxmax()
@@ -75,7 +78,10 @@ def backtest_oco(df_0, side, lookback, trim_ohlc=2200):
         else:  # if side == 'short'
             highest = df.high.max()
             lowest = df.low.min()
-            target = df[f"ll_{lookback}"].iloc[0]
+            if goal == 'mid':
+                target = df.channel_mid.iloc[0]
+            else:
+                target = df[f"ll_{lookback}"].iloc[0]
             stop = df[f"hh_{lookback}"].iloc[0] + atr
             rr = abs((target / entry) - 1) / abs((stop / entry) - 1)
             target_hit_idx = df.low.clip(lower=target).idxmin()
@@ -119,7 +125,7 @@ def channel_run_entries(df, lookback):
     df[f"ll_{lookback}"] = df.low.rolling(lookback).min()
     df[f"hh_{lookback}"] = df.high.rolling(lookback).max()
 
-    # df['channel_mid'] = (df[f"hh_{lookback}"] + df[f"ll_{lookback}"]) / 2
+    df['channel_mid'] = (df[f"hh_{lookback}"] + df[f"ll_{lookback}"]) / 2
     # df['channel_width'] = (df[f"hh_{lookback}"] - df[f"ll_{lookback}"]) / df.channel_mid
 
     # df['broke_support'] = df.low == df[f"ll_{lookback}"]
@@ -176,7 +182,7 @@ def find_collinear(X_train, corr_thresh):
 def generate_channel_run_dataset(pairs: list, side: str, timeframe: str, strat_params: tuple, data_len: int):
     print(f"data generation began: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
 
-    lookback = strat_params[0]
+    lookback, goal = strat_params
 
     all_res = []
     for n, pair in enumerate(pairs):
@@ -184,7 +190,7 @@ def generate_channel_run_dataset(pairs: list, side: str, timeframe: str, strat_p
         df = mlf.add_features(df, timeframe)
         df = channel_run_entries(df, lookback)
         df = df.tail(data_len).reset_index(drop=True)
-        res = backtest_oco(df, side, lookback)
+        res = backtest_oco(df, side, lookback, goal)
         all_res.extend(res)
 
     res_df = pd.DataFrame(all_res).sort_values('timestamp').reset_index(drop=True)
@@ -670,11 +676,20 @@ num_trials = 500
 for side, timeframe in product(sides, timeframes):
     logger.debug(f"Testing {side} {timeframe}")
     if timeframe in ['15m', '30m', '1h', '4h']:
-        train_primary('channel_run', side, timeframe, (200, ), 50, '1w_volumes', 2500, num_trials)
+        train_primary('channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 2500, num_trials)
         train_secondary('risk', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
         train_secondary('perf', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
 
-        train_primary('channel_run', side, timeframe, (200, ), 150, '1w_volumes', 2500, num_trials)
+        train_primary('channel_run', side, timeframe, (200, 'edge'), 150, '1w_volumes', 2500, num_trials)
+        train_secondary('risk', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
+        train_secondary('perf', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
+
+    if timeframe in ['15m', '30m', '1h', '4h']:
+        train_primary('channel_run', side, timeframe, (200, 'mid'), 50, '1w_volumes', 2500, num_trials)
+        train_secondary('risk', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
+        train_secondary('perf', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
+
+        train_primary('channel_run', side, timeframe, (200, 'mid'), 150, '1w_volumes', 2500, num_trials)
         train_secondary('risk', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
         train_secondary('perf', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
 
