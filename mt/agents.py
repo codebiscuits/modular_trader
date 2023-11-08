@@ -68,21 +68,21 @@ class Agent:
             'too_small': 0, 'low_score': 0, 'too_many_pos': 0, 'too_much_or': 0, 'algo_order_limit': 0,
             'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0, 'reduce_risk': 0}
 
-        if self.live:
-            self.perf_log = self.load_perf_log(session)
-            self.open_trades = self.read_open_trade_records(session, 'open')
-            self.sim_trades = self.read_open_trade_records(session, 'sim')
-            self.tracked_trades = self.read_open_trade_records(session, 'tracked')
-            self.closed_trades = self.read_closed_trade_records(session)
-            self.closed_sim_trades = self.read_closed_sim_trade_records(session)
-        else:
-            self.sync_test_records(session)
-        # self.perf_log = self.load_perf_log(session)
-        # self.open_trades = self.read_open_trade_records(session, 'open')
-        # self.sim_trades = self.read_open_trade_records(session, 'sim')
-        # self.tracked_trades = self.read_open_trade_records(session, 'tracked')
-        # self.closed_trades = self.read_closed_trade_records(session)
-        # self.closed_sim_trades = self.read_closed_sim_trade_records(session)
+        # if self.live:
+        #     self.perf_log = self.load_perf_log(session)
+        #     self.open_trades = self.read_open_trade_records(session, 'open')
+        #     self.sim_trades = self.read_open_trade_records(session, 'sim')
+        #     self.tracked_trades = self.read_open_trade_records(session, 'tracked')
+        #     self.closed_trades = self.read_closed_trade_records(session)
+        #     self.closed_sim_trades = self.read_closed_sim_trade_records(session)
+        # else:
+        #     self.sync_test_records(session)
+        self.perf_log = self.load_perf_log(session)
+        self.open_trades = self.read_open_trade_records(session, 'open')
+        self.sim_trades = self.read_open_trade_records(session, 'sim')
+        self.tracked_trades = self.read_open_trade_records(session, 'tracked')
+        self.closed_trades = self.read_closed_trade_records(session)
+        self.closed_sim_trades = self.read_closed_sim_trade_records(session)
 
         self.real_pos = self.current_positions(session, 'open')
         self.sim_pos = self.current_positions(session, 'sim')
@@ -3129,6 +3129,13 @@ class ChannelRun(Agent):
         else:
             return dict()
 
+        stp = self.calc_stop(inval, session.pairs_data[pair]['spread'], price)
+
+        signal_dict['target'] = target
+        rr = abs((target / price) - 1) / abs((stp / price) - 1)
+        signal_dict['rr'] = rr
+        df['rr'] = rr  # broadcasting single value to whole column
+
         # Long model
         long_features = df[self.long_info['features']]
         long_features_scaled = self.long_scaler.transform(long_features)
@@ -3163,13 +3170,6 @@ class ChannelRun(Agent):
 
         created_dt = datetime.fromtimestamp(model_created).astimezone(timezone.utc)
         model_age = datetime.now(timezone.utc) - created_dt
-
-        stp = self.calc_stop(inval, session.pairs_data[pair]['spread'], price)
-
-        signal_dict['target'] = target
-        rr = abs((target / price) - 1) / abs((stp / price) - 1)
-        signal_dict['rr'] = rr
-        df['rr'] = rr  # broadcasting single value to whole column
 
         signal_dict['inval'] = stp
         signal_dict['inval_ratio'] = stp / price
