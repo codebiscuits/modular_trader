@@ -68,21 +68,15 @@ class Agent:
             'too_small': 0, 'low_score': 0, 'too_many_pos': 0, 'too_much_or': 0, 'algo_order_limit': 0,
             'books_too_thin': 0, 'too_much_spread': 0, 'not_enough_usdt': 0, 'reduce_risk': 0}
 
-        # if self.live:
-        #     self.perf_log = self.load_perf_log(session)
-        #     self.open_trades = self.read_open_trade_records(session, 'open')
-        #     self.sim_trades = self.read_open_trade_records(session, 'sim')
-        #     self.tracked_trades = self.read_open_trade_records(session, 'tracked')
-        #     self.closed_trades = self.read_closed_trade_records(session)
-        #     self.closed_sim_trades = self.read_closed_sim_trade_records(session)
-        # else:
-        #     self.sync_test_records(session)
+        # if self.live or session.use_local_records:
         self.perf_log = self.load_perf_log(session)
         self.open_trades = self.read_open_trade_records(session, 'open')
         self.sim_trades = self.read_open_trade_records(session, 'sim')
         self.tracked_trades = self.read_open_trade_records(session, 'tracked')
         self.closed_trades = self.read_closed_trade_records(session)
         self.closed_sim_trades = self.read_closed_sim_trade_records(session)
+        # else:
+        #     self.sync_test_records(session)
 
         self.real_pos = self.current_positions(session, 'open')
         self.sim_pos = self.current_positions(session, 'sim')
@@ -127,29 +121,29 @@ class Agent:
             logger.error(f"{bal_path} was an empty file.")
             return []
 
-    def sync_test_records(self, session) -> None:
-        """takes the perf_log and trade records from the raspberry pi and
-        saves them over the local trade records. only runs when not live"""
-
-        q = Timer('sync_test_records')
-        q.start()
-        real_folder = Path(f"{session.records_r}/{self.id}")
-        test_folder = Path(f'{session.records_w}/{self.id}')
-        if not test_folder.exists():
-            test_folder.mkdir(parents=True)
-        bal_path = Path(real_folder / 'perf_log.json')
-        test_bal = Path(test_folder / 'perf_log.json')
-        test_bal.touch(exist_ok=True)
-
-        if bal_path.exists():
-            try:
-                with open(bal_path, "r") as file:
-                    self.perf_log = json.load(file)
-                with open(test_bal, "w") as file:
-                    json.dump(self.perf_log, file)
-            except JSONDecodeError:
-                # logger.info(f"{bal_path} was an empty file.")
-                self.perf_log = None
+    # def sync_test_records(self, session) -> None:
+    #     """takes the perf_log and trade records from the raspberry pi and
+    #     saves them over the local trade records. only runs when not live"""
+    #
+    #     q = Timer('sync_test_records')
+    #     q.start()
+    #     real_folder = Path(f"{session.records_r}/{self.id}")
+    #     test_folder = Path(f'{session.records_w}/{self.id}')
+    #     if not test_folder.exists():
+    #         test_folder.mkdir(parents=True)
+    #     bal_path = Path(real_folder / 'perf_log.json')
+    #     test_bal = Path(test_folder / 'perf_log.json')
+    #     test_bal.touch(exist_ok=True)
+    #
+    #     if bal_path.exists():
+    #         try:
+    #             with open(bal_path, "r") as file:
+    #                 self.perf_log = json.load(file)
+    #             with open(test_bal, "w") as file:
+    #                 json.dump(self.perf_log, file)
+    #         except JSONDecodeError:
+    #             # logger.info(f"{bal_path} was an empty file.")
+    #             self.perf_log = None
 
         def sync_trades_records(switch):
             w = Timer(f'sync_trades_records-{switch}')
