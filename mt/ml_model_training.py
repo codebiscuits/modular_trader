@@ -469,12 +469,16 @@ def create_risk_dataset(strat_name: str, side: str, timeframe: str, strat_params
                 conf_l=signal['conf_rf_usdt_l'],
                 conf_s=signal['conf_rf_usdt_s'],
                 inval_ratio=signal['inval_ratio'],
+                inval_dist=signal['inval_dist'],
                 mkt_rank_1d=signal['market_rank_1d'],
                 mkt_rank_1w=signal['market_rank_1w'],
                 mkt_rank_1m=signal['market_rank_1m'],
                 pnl=pnl > 0,
                 win=pnl > thresh
             )
+            if strat_name == 'channel_run':
+                observation['rr'] = signal['rr']
+
             observations.append(observation)
         except KeyError:
             # logger.debug("observation couldn't be added because the signal was missing a key")
@@ -562,6 +566,9 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
     # split data for fitting and calibration
     X_train, X_test, X_val, y_train, y_test, y_val = ttv_split(X, y)
 
+    if (y_test.value_counts().iloc[0] < 6) or (y_test.value_counts().iloc[1] < 6):
+        return
+
     # feature scaling
     X_train, X_test, X_val = scale_features(X_train, X_test, X_val, MinMaxScaler)
 
@@ -607,8 +614,7 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
     y = results.win  # pnl > threshold
 
     # balance classes
-    print(y.value_counts())
-    if (len(y.unique()) < 2) or (y.value_counts()[False] < 20) or (y.value_counts()[True] < 20):
+    if (len(y.unique()) < 2) or (y.value_counts().iloc[0] < 20) or (y.value_counts().iloc[1] < 20):
         return  # need enough samples in each class for cross-validation etc
     # us = RandomUnderSampler(random_state=0)
     us = ClusterCentroids(random_state=0)
@@ -616,6 +622,8 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
 
     # split off validation set
     X_train, X_test, X_val, y_train, y_test, y_val = ttv_split(X, y)
+    if (y_test.value_counts().iloc[0] < 6) or (y_test.value_counts().iloc[1] < 6):
+        return
 
     # split off validation labels
     z_train = X_train.pnl  # pnl > 0
