@@ -29,14 +29,14 @@ logger.info(f'-+-+-+-+-+-+-+-+ {session.now_start} Running Setup Scanner ({sessi
 # initialise agents
 agents = []
 for timeframe, offset, active_agents in session.timeframes:
-    # if 'TrailFractals' in active_agents:
-    #     agents.extend([
-    #             TrailFractals(session, timeframe, offset, 5, 2, '1d_volumes', 30),
-    #             TrailFractals(session, timeframe, offset, 5, 2, '1w_volumes', 30),
-    #         ])
+    if 'TrailFractals' in active_agents:
+        agents.extend([
+                TrailFractals(session, timeframe, offset, 5, 2, '1d_volumes', 30),
+                TrailFractals(session, timeframe, offset, 5, 2, '1w_volumes', 30),
+            ])
     if 'ChannelRun' in active_agents:
         agents.extend([
-                # ChannelRun(session, timeframe, offset, 200, '1w_volumes', 150),
+                ChannelRun(session, timeframe, offset, 200, '1w_volumes', 150),
                 ChannelRun(session, timeframe, offset, 200, '1w_volumes', 50),
             ])
 
@@ -379,7 +379,7 @@ while processed_signals['unassigned']:
     signal['perf_score_old'] = (agents[signal['agent']].perf_score_old_l if signal['direction'] == 'long'
                                 else agents[signal['agent']].perf_score_old_s)
 
-    # record secondary model score
+    # record risk model score
     signal['score_ml'] = agents[signal['agent']].risk_model_prediction(signal)
     signal['validity'] = (agents[signal['agent']].secondary_score_validity_l if signal['direction'] == 'long'
                           else agents[signal['agent']].secondary_score_validity_s)
