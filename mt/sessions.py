@@ -137,7 +137,6 @@ class TradingSession:
 
         # load local data and configure settings
         self.mkt_data_r, self.mkt_data_w, self.records_r, self.records_w, self.ohlc_r, self.ohlc_w = self.data_paths()
-        self.sync_records()
         self.save_spreads()
         self.load_mkt_ranks()
         self.max_loan_amounts = {}
