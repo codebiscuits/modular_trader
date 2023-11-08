@@ -3058,20 +3058,21 @@ class TrailFractals(Agent):
 class ChannelRun(Agent):
     """Machine learning strategy that uses OCO orders to manage trades"""
 
-    def __init__(self, session, tf: str, offset: int, lookback: int, pair_selection: str, num_pairs: int) -> None:
+    def __init__(self, session, tf: str, offset: int, lookback: int, goal, pair_selection: str, num_pairs: int) -> None:
         t = Timer('Channel Run init')
         t.start()
         self.mode = 'margin'
         self.tf = tf
         self.offset = offset
         self.lookback = lookback
+        self.goal = goal
         self.trail_stop = False
         self.oco = True
         self.close_on_signal = False
         self.pair_selection = pair_selection
         self.training_pairs_n = num_pairs
-        self.name = f'channel_run_{self.lookback}'
-        self.id = f"ChannelRun_{self.tf}_{self.offset}_{self.lookback}_{self.pair_selection}_{self.training_pairs_n}"
+        self.name = f'channel_run_{self.lookback}_{self.goal}'
+        self.id = f"ChannelRun_{self.tf}_{self.offset}_{self.lookback}_{self.goal}_{self.pair_selection}_{self.training_pairs_n}"
         self.ohlc_length = 4035
         Agent.__init__(self, session)
         session.pairs_set.update(self.pairs)
@@ -3100,6 +3101,7 @@ class ChannelRun(Agent):
         df[f"hh_{self.lookback}"] = df.high.rolling(self.lookback).max()
         chan_high = df[f"hh_{self.lookback}"].iloc[-1]
         chan_low = df[f"ll_{self.lookback}"].iloc[-1]
+        chan_mid = (chan_high + chan_low) / 2
         channel_position = (price - chan_low) / (chan_high - chan_low)
         signal_dict['channel_position'] = channel_position
 
@@ -3111,12 +3113,12 @@ class ChannelRun(Agent):
         atr = df[f"atr-{atr_lb}"].iloc[-1]
 
         if entry_l:
-            target = chan_high
+            target = chan_high if self.goal == 'edge' else chan_mid
             inval = chan_low - atr
             signal_dict['bias'] = 'bullish'
             model_created = self.long_info.get('created')
         elif entry_s:
-            target = chan_low
+            target = chan_low if self.goal == 'edge' else chan_mid
             inval = chan_high + atr
             signal_dict['bias'] = 'bearish'
             model_created = self.short_info.get('created')
