@@ -29,12 +29,12 @@ logger.info(f'-+-+-+-+-+-+-+-+ {session.now_start} Running Setup Scanner ({sessi
 # initialise agents
 agents = []
 for timeframe, offset, active_agents in session.timeframes:
-    if 'TrailFractals' in active_agents:
+    if (session.running_on != 'pi_1') and ('TrailFractals' in active_agents):
         agents.extend([
                 TrailFractals(session, timeframe, offset, 5, 2, '1d_volumes', 30),
                 TrailFractals(session, timeframe, offset, 5, 2, '1w_volumes', 30),
             ])
-    if 'ChannelRun' in active_agents:
+    if (session.running_on != 'pi_2') and ('ChannelRun' in active_agents):
         agents.extend([
                 ChannelRun(session, timeframe, offset, 200, 'edge', '1w_volumes', 150),
                 ChannelRun(session, timeframe, offset, 200, 'edge', '1w_volumes', 50),

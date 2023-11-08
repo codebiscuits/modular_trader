@@ -101,8 +101,12 @@ class Agent:
         return self.id
 
     def load_perf_log(self, session):
+        if session.live:
+            records_r = session.records_r
+        else:
+            records_r = session.records_r[self.pi_path]
 
-        bal_path_1 = Path(f"{session.records_r}/{self.id}/perf_log.json")
+        bal_path_1 = Path(f"{records_r}/{self.id}/perf_log.json")
         bal_path_2 = Path(f"{session.records_w}/{self.id}/perf_log.json")
 
         if session.use_local_records and bal_path_2.exists():
@@ -121,34 +125,44 @@ class Agent:
             logger.error(f"{bal_path} was an empty file.")
             return []
 
-    # def sync_test_records(self, session) -> None:
-    #     """takes the perf_log and trade records from the raspberry pi and
-    #     saves them over the local trade records. only runs when not live"""
-    #
-    #     q = Timer('sync_test_records')
-    #     q.start()
-    #     real_folder = Path(f"{session.records_r}/{self.id}")
-    #     test_folder = Path(f'{session.records_w}/{self.id}')
-    #     if not test_folder.exists():
-    #         test_folder.mkdir(parents=True)
-    #     bal_path = Path(real_folder / 'perf_log.json')
-    #     test_bal = Path(test_folder / 'perf_log.json')
-    #     test_bal.touch(exist_ok=True)
-    #
-    #     if bal_path.exists():
-    #         try:
-    #             with open(bal_path, "r") as file:
-    #                 self.perf_log = json.load(file)
-    #             with open(test_bal, "w") as file:
-    #                 json.dump(self.perf_log, file)
-    #         except JSONDecodeError:
-    #             # logger.info(f"{bal_path} was an empty file.")
-    #             self.perf_log = None
+    def sync_test_records(self, session) -> None:
+        """takes the perf_log and trade records from the raspberry pi and
+        saves them over the local trade records. only runs when not live"""
+
+        q = Timer('sync_test_records')
+        q.start()
+
+        if session.live:
+            records_r = session.records_r
+        else:
+            records_r = session.records_r[self.pi_path]
+        real_folder = Path(f"{records_r}/{self.id}")
+        test_folder = Path(f'{session.records_w}/{self.id}')
+        if not test_folder.exists():
+            test_folder.mkdir(parents=True)
+        bal_path = Path(real_folder / 'perf_log.json')
+        test_bal = Path(test_folder / 'perf_log.json')
+        test_bal.touch(exist_ok=True)
+
+        if bal_path.exists():
+            try:
+                with open(bal_path, "r") as file:
+                    self.perf_log = json.load(file)
+                with open(test_bal, "w") as file:
+                    json.dump(self.perf_log, file)
+            except JSONDecodeError:
+                # logger.info(f"{bal_path} was an empty file.")
+                self.perf_log = None
 
         def sync_trades_records(switch):
             w = Timer(f'sync_trades_records-{switch}')
             w.start()
-            trades_path = Path(f'{session.records_r}/{self.id}/{switch}_trades.json')
+
+            if session.live:
+                records_r = session.records_r
+            else:
+                records_r = session.records_r[self.pi_path]
+            trades_path = Path(f'{records_r}/{self.id}/{switch}_trades.json')
             test_trades = Path(f'{session.records_w}/{self.id}/{switch}_trades.json')
             test_trades.touch(exist_ok=True)
 
@@ -178,7 +192,11 @@ class Agent:
         w = Timer(f'read_open_trade_records-{state}')
         w.start()
 
-        ot_path_1 = Path(f"{session.records_r}/{self.id}/{state}_trades.json")
+        if session.live:
+            records_r = session.records_r
+        else:
+            records_r = session.records_r[self.pi_path]
+        ot_path_1 = Path(f"{records_r}/{self.id}/{state}_trades.json")
         ot_path_2 = Path(f"{session.records_w}/{self.id}/{state}_trades.json")
 
         if session.use_local_records and ot_path_2.exists():
@@ -206,7 +224,11 @@ class Agent:
         e = Timer('read_closed_trade_records')
         e.start()
 
-        ct_path_1 = Path(f"{session.records_r}/{self.id}/closed_trades.json")
+        if session.live:
+            records_r = session.records_r
+        else:
+            records_r = session.records_r[self.pi_path]
+        ct_path_1 = Path(f"{records_r}/{self.id}/closed_trades.json")
         ct_path_2 = Path(f"{session.records_w}/{self.id}/closed_trades.json")
 
         if session.use_local_records and ct_path_2.exists():
@@ -234,7 +256,11 @@ class Agent:
         r = Timer('read_closed_sim_trade_records')
         r.start()
 
-        cs_path_1 = Path(f"{session.records_r}/{self.id}/closed_sim_trades.json")
+        if session.live:
+            records_r = session.records_r
+        else:
+            records_r = session.records_r[self.pi_path]
+        cs_path_1 = Path(f"{records_r}/{self.id}/closed_sim_trades.json")
         cs_path_2 = Path(f"{session.records_w}/{self.id}/closed_sim_trades.json")
 
         if session.use_local_records and cs_path_2.exists():
@@ -2936,6 +2962,7 @@ class TrailFractals(Agent):
         self.name = f'trail_fractals_{self.width}_{self.spacing}'
         self.id = (f"trail_fractals_{self.tf}_{self.offset}_{self.width}_"
                    f"{self.spacing}_{self.pair_selection}_{self.training_pairs_n}")
+        self.pi_path = 1
         Agent.__init__(self, session)
         session.pairs_set.update(self.pairs)
         self.notes = ''
@@ -3074,6 +3101,7 @@ class ChannelRun(Agent):
         self.name = f'channel_run_{self.lookback}_{self.goal}'
         self.id = f"ChannelRun_{self.tf}_{self.offset}_{self.lookback}_{self.goal}_{self.pair_selection}_{self.training_pairs_n}"
         self.ohlc_length = 4035
+        self.pi_path = 0
         Agent.__init__(self, session)
         session.pairs_set.update(self.pairs)
         self.notes = ''

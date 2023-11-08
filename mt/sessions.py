@@ -44,20 +44,17 @@ def get_timeframes() -> list[tuple]:
     return timeframes
 
 
-def set_live() -> bool:
-    """checks whether the script is running on the raspberry pi or another
-    machine and sets the live flag to True or False accordingly"""
-
-    y = Timer('set_live')
-    y.start()
-    live = Path('/pi_downstairs.txt').exists() or Path('/pi_2.txt').exists()
-
-    if live:
-        logger.debug('*** Warning: Live ***')
+def identify_machine() -> str:
+    if Path('/pi_1.txt').exists():
+        return 'pi_1'
+    elif Path('/pi_2.txt').exists():
+        return 'pi_2'
+    elif Path('/laptop.txt').exists():
+        return 'laptop'
+    elif Path('/main_pc.txt').exists():
+        return 'main_pc'
     else:
-        logger.info('*** Warning: Not Live ***')
-    y.stop()
-    return live
+        return 'other'
 
 
 class TradingSession:
@@ -101,7 +98,8 @@ class TradingSession:
         self.leverage = 3
         self.name = 'agent names here'
         self.last_price_update = 0
-        self.live = set_live()
+        self.running_on = identify_machine()
+        self.live = self.set_live()
         self.min_size = 30
         self.timeframes = get_timeframes()
 
@@ -139,6 +137,7 @@ class TradingSession:
 
         # load local data and configure settings
         self.mkt_data_r, self.mkt_data_w, self.records_r, self.records_w, self.ohlc_r, self.ohlc_w = self.data_paths()
+        self.sync_records()
         self.save_spreads()
         self.load_mkt_ranks()
         self.max_loan_amounts = {}
@@ -150,6 +149,21 @@ class TradingSession:
         self.wrpnl_totals = {'spot': 0, 'long': 0, 'short': 0, 'count': 0}
         self.urpnl_totals = {'spot': 0, 'long': 0, 'short': 0, 'count': 0}
         t.stop()
+
+    def set_live(self) -> bool:
+        """checks whether the script is running on the raspberry pi or another
+        machine and sets the live flag to True or False accordingly"""
+
+        y = Timer('set_live')
+        y.start()
+        live = self.running_on in ['pi_1', 'pi_2']
+
+        if live:
+            logger.debug('*** Warning: Live ***')
+        else:
+            logger.info('*** Warning: Not Live ***')
+        y.stop()
+        return live
 
     def track_weights(self, weight):
         """keeps track of total api request weight to make sure I don't go over the limit
@@ -390,12 +404,13 @@ class TradingSession:
         u = Timer('mkt_data_path in session')
         u.start()
 
-        if Path('/pi_2.txt').exists():
+        if self.running_on in ['pi_1', 'pi_2']:
             mkt_data_r = Path('/home/ross/coding/modular_trader/market_data')
             records_r = Path(f'/home/ross/coding/modular_trader/records')
         else:
             mkt_data_r = Path('/home/ross/coding/pi_2/modular_trader/market_data')
-            records_r = Path(f'/home/ross/coding/pi_2/modular_trader/records')
+            records_r = (Path(f'/home/ross/coding/pi_1/modular_trader/records'),
+                         Path(f'/home/ross/coding/pi_2/modular_trader/records'))
 
         mkt_data_w = Path('/home/ross/coding/modular_trader/market_data')
         mkt_data_w.mkdir(parents=True, exist_ok=True)
@@ -406,6 +421,7 @@ class TradingSession:
         ohlc_w.mkdir(exist_ok=True)
 
         return mkt_data_r, mkt_data_w, records_r, records_w, ohlc_r, ohlc_w
+
 
     def set_ohlc_tf(self, tf):
         self.ohlc_tf = tf
