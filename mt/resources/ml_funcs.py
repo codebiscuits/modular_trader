@@ -48,38 +48,27 @@ def init_client(max_retries: int = 360, delay: int = 5):
 
 
 def save_models(mode, strategy, param_str, sel_method, num_pairs, side, tf, data_len, selected, pairs, model, scaler, validity):
-    folder = Path(f"/home/ross/coding/modular_trader/machine_learning/"
-                  f"models/{strategy}_{param_str}/{sel_method}_{num_pairs}")
-    pi_folder = Path(f"/home/ross/coding/pi_2/modular_trader/machine_learning/"
+    locations = ['/', '/pi_1/', '/pi_2/']
+    for location in locations:
+        folder = Path(f"/home/ross/coding{location}modular_trader/machine_learning/"
                       f"models/{strategy}_{param_str}/{sel_method}_{num_pairs}")
-    model_file = f"{side}_{tf}_model_{mode}.sav"
-    model_info = f"{side}_{tf}_info_{mode}.json"
-    scaler_file = f"{side}_{tf}_scaler_{mode}.sav"
+        model_file = f"{side}_{tf}_model_{mode}.sav"
+        model_info = f"{side}_{tf}_info_{mode}.json"
+        scaler_file = f"{side}_{tf}_scaler_{mode}.sav"
 
-    info_dict = {'data_length': data_len, 'features': selected, 'pair_selection': sel_method,
-                 'pairs': pairs, 'created': int(datetime.now(timezone.utc).timestamp()), 'validity': validity}
+        info_dict = {'data_length': data_len, 'features': selected, 'pair_selection': sel_method,
+                     'pairs': pairs, 'created': int(datetime.now(timezone.utc).timestamp()), 'validity': validity}
 
-    # save local copy
-    folder.mkdir(parents=True, exist_ok=True)
-    joblib.dump(model, folder / model_file)
-    info_path = folder / model_info
-    info_path.touch(exist_ok=True)
-    with open(info_path, 'w') as info:
-        json.dump(info_dict, info)
-    scaler_path = folder / scaler_file
-    scaler_path.touch(exist_ok=True)
-    joblib.dump(scaler, scaler_path)
-
-    # save on pi
-    pi_folder.mkdir(parents=True, exist_ok=True)
-    joblib.dump(model, pi_folder / model_file)
-    info_path_pi = pi_folder / model_info
-    info_path_pi.touch(exist_ok=True)
-    with open(info_path_pi, 'w') as info:
-        json.dump(info_dict, info)
-    scaler_path = pi_folder / scaler_file
-    scaler_path.touch(exist_ok=True)
-    joblib.dump(scaler, scaler_path)
+        # save to file
+        folder.mkdir(parents=True, exist_ok=True)
+        joblib.dump(model, folder / model_file)
+        info_path = folder / model_info
+        info_path.touch(exist_ok=True)
+        with open(info_path, 'w') as info:
+            json.dump(info_dict, info)
+        scaler_path = folder / scaler_file
+        scaler_path.touch(exist_ok=True)
+        joblib.dump(scaler, scaler_path)
 
 
 def rank_pairs(selection):

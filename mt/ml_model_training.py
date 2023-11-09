@@ -23,13 +23,13 @@ from xgboost import XGBClassifier, DMatrix
 import optuna
 optuna.logging.set_verbosity(optuna.logging.ERROR)
 
-if not Path('pi_2.txt').exists():
-    import mt.update_ohlc
+# if not Path('pi_2.txt').exists():
+#     import mt.update_ohlc
 
 warnings.filterwarnings('ignore')
 warnings.simplefilter(action='ignore', category=FutureWarning)
 logger = create_logger('model_training')
-use_local_data = False # if false, uses trade records from the pi
+use_local_data = True # if false, uses trade records from the pi
 
 fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
 
@@ -409,41 +409,25 @@ def final_rf_train_and_save(mode, strat_name, X_final, y_final, final_features, 
 
 
 def load_secondary_data(strat_name, strat_params, selection_method, num_pairs):
-    if strat_name == 'trail_fractals':
-        frac_width, atr_spacing = strat_params
-    elif strat_name == 'ChannelRun':
-        lookback = strat_params[0]
 
     root_dir = '/home/ross/coding' if use_local_data else '/home/ross/coding/pi_2'
 
-    records_path_1 = Path(f"{root_dir}/modular_trader/records/trail_fractals_{timeframe}_"
-                          f"None_{'_'.join([str(sp) for sp in strat_params])}_{selection_method}_{num_pairs}")
-
-    records_path_2 = Path(f"{root_dir}/modular_trader/records/trail_fractals_{timeframe}_"
-                          f"None_{'_'.join([str(sp) for sp in strat_params])}_{selection_method}_{num_pairs}")
+    records_path = Path(f"{root_dir}/modular_trader/records/{strat_name}_{timeframe}_None_"
+                        f"{'_'.join([str(sp) for sp in strat_params])}_{selection_method}_{num_pairs}")
+    logger.debug(records_path)
 
     try:
-        with open(records_path_1 / "closed_trades.json", 'r') as real_file:
+        with open(records_path / "closed_trades.json", 'r') as real_file:
             real_records_1 = json.load(real_file)
     except FileNotFoundError:
         real_records_1 = {}
     try:
-        with open(records_path_1 / "closed_sim_trades.json", 'r') as sim_file:
+        with open(records_path / "closed_sim_trades.json", 'r') as sim_file:
             sim_records_1 = json.load(sim_file)
     except FileNotFoundError:
         sim_records_1 = {}
-    try:
-        with open(records_path_2 / "closed_trades.json", 'r') as real_file:
-            real_records_2 = json.load(real_file)
-    except FileNotFoundError:
-        real_records_2 = {}
-    try:
-        with open(records_path_2 / "closed_sim_trades.json", 'r') as sim_file:
-            sim_records_2 = json.load(sim_file)
-    except FileNotFoundError:
-        sim_records_2 = {}
 
-    return real_records_1 | sim_records_1 | real_records_2 | sim_records_2
+    return real_records_1 | sim_records_1
 
 
 def create_risk_dataset(strat_name: str, side: str, timeframe: str, strat_params: tuple,
@@ -498,6 +482,7 @@ def create_perf_dataset(strat_name: str, side: str, timeframe: str, strat_params
     final pnl of the trade was above zero, and win is True if the final pnl of the trade was above the threshold"""
 
     all_records = load_secondary_data(strat_name, strat_params, selection_method, num_pairs)
+    logger.debug(f"perf data length: {len(all_records)}")
 
     observations = []
     for position in all_records.values():
@@ -541,7 +526,10 @@ def create_perf_dataset(strat_name: str, side: str, timeframe: str, strat_params
             # logger.debug(pformat(position))
             pass
 
-    return pd.DataFrame(observations)
+    df = pd.DataFrame(observations)
+    df = df.fillna(0.0)
+
+    return df
 
 
 def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tuple,
@@ -577,14 +565,20 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
     X_train, X_test, X_val = scale_features(X_train, X_test, X_val, MinMaxScaler)
 
     # feature selection
-    X_train, X_test, X_val, selected_columns = eliminate_features(X_train, X_test, X_val, y_train)
-    X_train, X_test, X_val, rf_sfs = rand_forest_sfs(X_train, X_test, X_val, y_train)
+    try:
+        X_train, X_test, X_val, selected_columns = eliminate_features(X_train, X_test, X_val, y_train)
+        X_train, X_test, X_val, rf_sfs = rand_forest_sfs(X_train, X_test, X_val, y_train)
+    except ValueError as e:
+        logger.debug(e)
+        return
 
     # hyperparameter optimisation
     best_params = optimise(RFObjective(X_train, X_test, y_train, y_test), num_trials)
 
     # remove features with low permutation importance
     final_features = rf_perm_importance(X_train, X_test, y_train, y_test, rf_sfs)
+    if len(final_features) == 0:
+        return
 
     # final validation score before training production model
     validate_findings(X_train, X_val, y_train, y_val, rf_sfs, final_features, best_params)
@@ -623,7 +617,12 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
         return  # need enough samples in each class for cross-validation etc
     # us = RandomUnderSampler(random_state=0)
     us = ClusterCentroids(random_state=0)
-    X, y = us.fit_resample(X, y)
+    try:
+        X, y = us.fit_resample(X, y)
+    except ValueError:
+        print(X)
+
+    logger.debug(f"Length of dataset: {len(y)}")
 
     # split off validation set
     X_train, X_test, X_val, y_train, y_test, y_val = ttv_split(X, y)
@@ -646,14 +645,20 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
     X_train, X_test, X_val = scale_features(X_train, X_test, X_val, QuantileTransformer)
 
     # feature selection
-    X_train, X_test, X_val, selected_columns = eliminate_features(X_train, X_test, X_val, y_train)
-    X_train, X_test, X_val, rf_sfs = rand_forest_sfs(X_train, X_test, X_val, y_train)
+    try:
+        X_train, X_test, X_val, selected_columns = eliminate_features(X_train, X_test, X_val, y_train)
+        X_train, X_test, X_val, rf_sfs = rand_forest_sfs(X_train, X_test, X_val, y_train)
+    except ValueError as e:
+        logger.debug(e)
+        return
 
     # hyperparameter optimisation
     best_params = optimise(RFObjective(X_train, X_test, y_train, y_test), num_trials)
 
     # remove features with low permutation importance
     final_features = rf_perm_importance(X_train, X_test, y_train, y_test, rf_sfs)
+    if len(final_features) == 0:
+        return
 
     # final validation score before training production model
     validate_findings(X_train, X_val, z_train, z_val, rf_sfs, final_features, best_params)
@@ -673,34 +678,37 @@ sides = ['long', 'short']
 timeframes = ['15m', '30m', '1h', '4h', '12h', '1d']
 num_trials = 500
 
+# TODO i need to write a 'retrain_primary' function that just fits a model with preselected features and params to the
+#  new data, which i can run with the secondary training every day, and run the full train_primary once a week
+
 for side, timeframe in product(sides, timeframes):
     logger.debug(f"Testing {side} {timeframe}")
     if timeframe in ['15m', '30m', '1h', '4h']:
-        train_primary('channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 2500, num_trials)
-        train_secondary('risk', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
-        train_secondary('perf', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
+        # train_primary('channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 2500, num_trials)
+        train_secondary('risk', 'ChannelRun', side, timeframe, (200, 'edge'), 50, '1w_volumes', 0.4, num_trials)
+        train_secondary('perf', 'ChannelRun', side, timeframe, (200, 'edge'), 50, '1w_volumes', 0.4, num_trials)
 
-        train_primary('channel_run', side, timeframe, (200, 'edge'), 150, '1w_volumes', 2500, num_trials)
-        train_secondary('risk', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
-        train_secondary('perf', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
+        # train_primary('channel_run', side, timeframe, (200, 'edge'), 150, '1w_volumes', 2500, num_trials)
+        train_secondary('risk', 'ChannelRun', side, timeframe, (200, 'edge'), 150, '1w_volumes', 0.4, num_trials)
+        train_secondary('perf', 'ChannelRun', side, timeframe, (200, 'edge'), 150, '1w_volumes', 0.4, num_trials)
 
-    if timeframe in ['15m', '30m', '1h', '4h']:
-        train_primary('channel_run', side, timeframe, (200, 'mid'), 50, '1w_volumes', 2500, num_trials)
-        train_secondary('risk', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
-        train_secondary('perf', 'channel_run', side, timeframe, (200, ), 50, '1w_volumes', 0.4, num_trials)
+    # if timeframe in ['15m', '30m', '1h', '4h']:
+    #     train_primary('channel_run', side, timeframe, (200, 'mid'), 50, '1w_volumes', 2500, num_trials)
+    #     train_secondary('risk', 'ChannelRun', side, timeframe, (200, 'mid'), 50, '1w_volumes', 0.4, num_trials)
+    #     train_secondary('perf', 'ChannelRun', side, timeframe, (200, 'mid'), 50, '1w_volumes', 0.4, num_trials)
+    #
+    #     train_primary('channel_run', side, timeframe, (200, 'mid'), 150, '1w_volumes', 2500, num_trials)
+    #     train_secondary('risk', 'ChannelRun', side, timeframe, (200, 'mid'), 150, '1w_volumes', 0.4, num_trials)
+    #     train_secondary('perf', 'ChannelRun', side, timeframe, (200, 'mid'), 150, '1w_volumes', 0.4, num_trials)
 
-        train_primary('channel_run', side, timeframe, (200, 'mid'), 150, '1w_volumes', 2500, num_trials)
-        train_secondary('risk', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
-        train_secondary('perf', 'channel_run', side, timeframe, (200, ), 150, '1w_volumes', 0.4, num_trials)
-
-    if timeframe in ['1h', '4h', '12h', '1d']:
-        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 500, num_trials)
-        train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
-        train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
-
-        train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 500, num_trials)
-        train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
-        train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
+    # if timeframe in ['1h', '4h', '12h', '1d']:
+    #     # train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 500, num_trials)
+    #     train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
+    #     train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
+    #
+    #     # train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 500, num_trials)
+    #     train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
+    #     train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
 
 all_end = time.perf_counter()
 all_elapsed = all_end - all_start
