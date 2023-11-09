@@ -12,16 +12,7 @@ sync_client = Client()
 session = TradingSession(0.1, True)
 logger = create_logger('async_update_ohlc', 'async_update_ohlc')
 
-# Get all symbols
-for sym in session.info['symbols']:
-    if sym['status'] != 'TRADING':
-        dead_symbol = sym['symbol']
-        fp = Path(f"{session.ohlc_w}/{dead_symbol}.parquet")
-        if fp.exists():
-            fp.unlink()
 
-pairs = list(session.pairs_data.keys())
-# pairs = pairs[:50]
 
 async def stitch(pair, klines, all_data):
     cols = ['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'close_time',
@@ -64,7 +55,7 @@ async def stitch(pair, klines, all_data):
 
     return extra_data
 
-async def main():
+async def main(pairs):
     async_client = await AsyncClient.create()
 
     logger.debug(f"{len(pairs) = }")
@@ -113,15 +104,36 @@ async def main():
 
     await async_client.close_connection()
 
-    extra_df = pd.DataFrame(extras)
-    extra_df['rank_1d'] = extra_df['roc_1d'].rank(pct=True)
-    extra_df['rank_1w'] = extra_df['roc_1w'].rank(pct=True)
-    extra_df['rank_1m'] = extra_df['roc_1m'].rank(pct=True)
-    print(extra_df)
-    extra_df.to_parquet()
+    return pd.DataFrame(extras)
 
 
 start = perf()
-asyncio.run(main())
+
+# Get all symbols
+for sym in session.info['symbols']:
+    if sym['status'] != 'TRADING':
+        dead_symbol = sym['symbol']
+        fp = Path(f"{session.ohlc_w}/{dead_symbol}.parquet")
+        if fp.exists():
+            fp.unlink()
+all_pairs = list(session.pairs_data.keys())
+
+pairs_0 = all_pairs[::4]
+pairs_1 = all_pairs[1::4]
+pairs_2 = all_pairs[2::4]
+pairs_3 = all_pairs[3::4]
+
+extra_df_1 = asyncio.run(main(pairs_0))
+extra_df_2 = asyncio.run(main(pairs_1))
+extra_df_3 = asyncio.run(main(pairs_2))
+extra_df_4 = asyncio.run(main(pairs_3))
+
+extra_df = pd.concat([extra_df_1, extra_df_2, extra_df_3, extra_df_4], ignore_index=True)
+extra_df['rank_1d'] = extra_df['roc_1d'].rank(pct=True)
+extra_df['rank_1w'] = extra_df['roc_1w'].rank(pct=True)
+extra_df['rank_1m'] = extra_df['roc_1m'].rank(pct=True)
+print(extra_df)
+extra_df.to_parquet()
+
 elapsed = perf() - start
 print(f"Time taken: {int(elapsed // 60)}m {elapsed % 60:.2f}s")
