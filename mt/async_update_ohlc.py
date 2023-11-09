@@ -2,8 +2,7 @@ import asyncio
 import pandas as pd
 from binance import Client, AsyncClient
 from time import perf_counter as perf
-from pprint import pformat
-from resources.loggers import create_logger
+from mt.resources.loggers import create_logger
 from pyarrow import ArrowInvalid
 from datetime import datetime, timezone
 from mt.sessions import TradingSession
