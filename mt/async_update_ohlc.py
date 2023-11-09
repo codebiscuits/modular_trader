@@ -4,62 +4,123 @@ from binance import Client, AsyncClient
 from time import perf_counter as perf
 from pprint import pformat
 from resources.loggers import create_logger
-
-# TODO maybe work out a workflow where it loads maybe all files from disk, checks how much new data they each need,
-#  separates the ones which need 500 periods or less (get_klines will be sufficient for them) and does them in batches
-#  of 20 or 30 or whatever - download the data, stitch together, save the file, then move on to the next batch, then it
-#  does others that need longer updates and any new ones it doesn't have at all.
+from pyarrow import ArrowInvalid
+from datetime import datetime, timezone
+from mt.sessions import TradingSession
+from pathlib import Path
 
 sync_client = Client()
-
+session = TradingSession(0.1, True)
 logger = create_logger('async_update_ohlc', 'async_update_ohlc')
 
+# Get all symbols
+for sym in session.info['symbols']:
+    if sym['status'] != 'TRADING':
+        dead_symbol = sym['symbol']
+        fp = Path(f"{session.ohlc_w}/{dead_symbol}.parquet")
+        if fp.exists():
+            fp.unlink()
+
+pairs = list(session.pairs_data.keys())
+# pairs = pairs[:50]
+
+async def stitch(pair, klines, all_data):
+    cols = ['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'close_time',
+            'quote_vol', 'num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol', 'ignore']
+    new_df = pd.DataFrame(klines, columns=cols)
+    new_df['timestamp'] = new_df['timestamp'] * 1000000
+    new_df = new_df.astype(float)
+    new_df['timestamp'] = pd.to_datetime(new_df['timestamp'])
+
+    # check df is localised to UTC
+    try:
+        new_df['timestamp'] = new_df.timestamp.dt.tz_localize('UTC')
+    except TypeError:
+        pass
+
+    new_df = new_df.drop(['close_time', 'ignore'], axis=1)
+
+    old_data = all_data[pair]['ohlc']
+
+    if old_data is not None:
+        old_data = old_data.loc[old_data.timestamp < new_df.timestamp.iloc[0]]
+        df = pd.concat([old_data, new_df], axis=0, ignore_index=True)
+    else:
+        df = new_df
+
+    extra_data = {'pair': pair}
+    extra_data['roc_1d'] = df.close.rolling(12).mean().ffill().pct_change(288).iloc[-1]
+    extra_data['roc_1w'] = df.close.rolling(84).mean().ffill().pct_change(2016).iloc[-1]
+    extra_data['roc_1m'] = df.close.rolling(360).mean().ffill().pct_change(8640).iloc[-1]
+
+    extra_data['volume_1d'] = df.tail(288).quote_vol.sum()
+    extra_data['volume_1w'] = df.tail(2016).quote_vol.sum()
+    extra_data['volatility_1d'] = df.tail(288).close.ffill().pct_change().std()
+    extra_data['volatility_1w'] = df.tail(2016).close.ffill().pct_change().std()
+
+    extra_data['length'] = len(df)
+
+    ohlc_w = Path(f'{session.ohlc_w}/{pair}.parquet')
+    df.to_parquet(ohlc_w)
+
+    return extra_data
+
 async def main():
-    client = await AsyncClient.create()
+    async_client = await AsyncClient.create()
 
-    # Get all symbols
-    info = await client.get_exchange_info()
-
-    pairs = [pair['symbol'] for pair in info.get('symbols') if ((pair['quoteAsset'] == 'USDT') and (pair['status'] == 'TRADING'))]
     logger.debug(f"{len(pairs) = }")
+    all_data = {}
+    for pair in pairs:
+        ohlc_r = Path(f'{session.ohlc_r}/{pair}.parquet')
+        ohlc_w = Path(f'{session.ohlc_w}/{pair}.parquet')
+        try:
+            old_df = pd.read_parquet(ohlc_r)
+            last_timestamp = old_df.timestamp.iloc[-1].timestamp()
+            now = datetime.now(timezone.utc).timestamp()
+            data_age = int((now - last_timestamp) / 300)  # dividing by 300 shows how many 5min periods have passed
+        except (ArrowInvalid, OSError):
+            logger.exception(f"Problem reading {pair} parquet file, downloading from scratch.")
+            ohlc_r.unlink()
+            old_df = None
+            data_age = 1001
+            print(f"failed to load {pair} ohlc")
+
+        all_data[pair] = {'ohlc': old_df, 'age': max(data_age, 5)}
 
     # Create a list of tasks to download the klines
     tasks = []
     for symbol in pairs:
-        tasks.append(asyncio.create_task(client.get_historical_klines(symbol=symbol,
-                                                                      interval=Client.KLINE_INTERVAL_1HOUR,
-                                                                      start_str="4 years ago UTC")))
-        # tasks.append(asyncio.create_task(client.get_klines(symbol=symbol, interval=Client.KLINE_INTERVAL_5MINUTE)))
+        if all_data[symbol]['age'] <= 1000:
+            # print(f"quick downloading {symbol}")
+            tasks.append(asyncio.create_task(async_client.get_klines(symbol=symbol,
+                                                                     interval=Client.KLINE_INTERVAL_5MINUTE,
+                                                                     limit=all_data[symbol]['age'])))
+        else:
+            print(f"slow downloading {symbol}")
+            tasks.append(asyncio.create_task(async_client.get_historical_klines(symbol=symbol,
+                                                                                interval=Client.KLINE_INTERVAL_5MINUTE,
+                                                                                start_str="6 years ago UTC")))
 
     # Await the completion of all tasks
     results = await asyncio.gather(*tasks)
-    print(f"used-weight: {client.response.headers['x-mbx-used-weight']}")
-    print(f"used-weight-1m: {client.response.headers['x-mbx-used-weight-1m']}")
+    print(f"used-weight: {async_client.response.headers['x-mbx-used-weight']}")
+    print(f"used-weight-1m: {async_client.response.headers['x-mbx-used-weight-1m']}")
 
-    # Create a dictionary to store the dataframes
-    df_dict = {}
+    # stitch them all together
+    stitch_tasks = []
     for pair, klines in zip(pairs, results):
-        cols = ['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'close_time',
-                'quote_vol', 'num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol', 'ignore']
-        df = pd.DataFrame(klines, columns=cols)
-        df['timestamp'] = df['timestamp'] * 1000000
-        df = df.astype(float)
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        stitch_tasks.append(asyncio.create_task(stitch(pair, klines, all_data)))
+    extras = await asyncio.gather(*stitch_tasks)
 
-        # check df is localised to UTC
-        try:
-            print(f"funcs get_bin_ohlc - {pair} ohlc data wasn't timezone aware, fixing now.")
-            df['timestamp'] = df.timestamp.dt.tz_localize('UTC')
-        except TypeError:
-            pass
+    await async_client.close_connection()
 
-        df = df.drop(['close_time', 'ignore'], axis=1)
+    extra_df = pd.DataFrame(extras)
+    extra_df['rank_1d'] = extra_df['roc_1d'].rank(pct=True)
+    extra_df['rank_1w'] = extra_df['roc_1w'].rank(pct=True)
+    extra_df['rank_1m'] = extra_df['roc_1m'].rank(pct=True)
+    print(extra_df)
+    extra_df.to_parquet()
 
-        print(f"{pair} {len(df) = }")
-
-        df.to_parquet(f"bin_ohlc_5m/{pair}_5m.parquet")
-
-    await client.close_connection()
 
 start = perf()
 asyncio.run(main())
