@@ -176,7 +176,10 @@ def find_collinear(X_train, corr_thresh):
         # Add to dataframe
         record_collinear.append(temp_df)
 
-    return pd.concat(record_collinear, axis=0, ignore_index=True)
+    if record_collinear:
+        return pd.concat(record_collinear, axis=0, ignore_index=True)
+    else:
+        return None
 
 
 def generate_channel_run_dataset(pairs: list, side: str, timeframe: str, strat_params: tuple, data_len: int):
@@ -250,9 +253,10 @@ def eliminate_features(X_train, X_test, X_val, y_train):
 
     # remove features that are highly correlated with other features
     collinear_features = find_collinear(X_train, 0.5)
-    X_train = X_train.drop(list(collinear_features.corr_feature), axis=1)
-    X_test = X_test.drop(list(collinear_features.corr_feature), axis=1)
-    X_val = X_val.drop(list(collinear_features.corr_feature), axis=1)
+    if collinear_features:
+        X_train = X_train.drop(list(collinear_features.corr_feature), axis=1)
+        X_test = X_test.drop(list(collinear_features.corr_feature), axis=1)
+        X_val = X_val.drop(list(collinear_features.corr_feature), axis=1)
 
     # mutual info feature selection
     cols = list(X_train.columns) # list of strings, names of all features
@@ -408,7 +412,7 @@ def final_rf_train_and_save(mode, strat_name, X_final, y_final, final_features, 
     )
 
 
-def load_secondary_data(strat_name, strat_params, selection_method, num_pairs):
+def load_secondary_data(strat_name, timeframe, strat_params, selection_method, num_pairs):
 
     root_dir = '/home/ross/coding' if use_local_data else '/home/ross/coding/pi_2'
 
@@ -435,7 +439,7 @@ def create_risk_dataset(strat_name: str, side: str, timeframe: str, strat_params
     """the two target columns (pnl and win) are both booleans and mean slightly different things. pnl is True if the
     final pnl of the trade was above zero, and win is True if the final pnl of the trade was above the threshold"""
 
-    all_records = load_secondary_data(strat_name, strat_params, selection_method, num_pairs)
+    all_records = load_secondary_data(strat_name, timeframe, strat_params, selection_method, num_pairs)
 
     observations = []
     for position in all_records.values():
@@ -456,7 +460,6 @@ def create_risk_dataset(strat_name: str, side: str, timeframe: str, strat_params
                 # asset=signal['asset'],
                 conf_l=signal['conf_rf_usdt_l'],
                 conf_s=signal['conf_rf_usdt_s'],
-                inval_ratio=signal['inval_ratio'],
                 inval_dist=signal['inval_dist'],
                 mkt_rank_1d=signal['market_rank_1d'],
                 mkt_rank_1w=signal['market_rank_1w'],
@@ -481,7 +484,7 @@ def create_perf_dataset(strat_name: str, side: str, timeframe: str, strat_params
     """the two target columns (pnl and win) are both booleans and mean slightly different things. pnl is True if the
     final pnl of the trade was above zero, and win is True if the final pnl of the trade was above the threshold"""
 
-    all_records = load_secondary_data(strat_name, strat_params, selection_method, num_pairs)
+    all_records = load_secondary_data(strat_name, timeframe, strat_params, selection_method, num_pairs)
     logger.debug(f"perf data length: {len(all_records)}")
 
     observations = []
@@ -540,7 +543,7 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
 
     # generate dataset
     pairs = mlf.get_margin_pairs(selection_method, num_pairs)
-    if strat_name == 'channel_run':
+    if strat_name == 'ChannelRun':
         res_df = generate_channel_run_dataset(pairs, side, timeframe, strat_params, data_len)
     elif strat_name == 'trail_fractals':
         res_df = generate_trail_fractal_dataset(pairs, side, timeframe, strat_params, data_len)
@@ -672,44 +675,45 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
     print(f"{strat_name} {mode} test time taken: {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
 
 
-all_start = time.perf_counter()
+if __name__ == '__main__':
+    all_start = time.perf_counter()
 
-sides = ['long', 'short']
-timeframes = ['15m', '30m', '1h', '4h', '12h', '1d']
-num_trials = 500
+    sides = ['long', 'short']
+    timeframes = ['15m', '30m', '1h', '4h', '12h', '1d']
+    num_trials = 500
 
-# TODO i need to write a 'retrain_primary' function that just fits a model with preselected features and params to the
-#  new data, which i can run with the secondary training every day, and run the full train_primary once a week
+    # TODO i need to write a 'retrain_primary' function that just fits a model with preselected features and params to the
+    #  new data, which i can run with the secondary training every day, and run the full train_primary once a week
 
-for side, timeframe in product(sides, timeframes):
-    logger.debug(f"Testing {side} {timeframe}")
-    if timeframe in ['15m', '30m', '1h', '4h']:
-        # train_primary('channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 2500, num_trials)
-        train_secondary('risk', 'ChannelRun', side, timeframe, (200, 'edge'), 50, '1w_volumes', 0.4, num_trials)
-        train_secondary('perf', 'ChannelRun', side, timeframe, (200, 'edge'), 50, '1w_volumes', 0.4, num_trials)
+    for side, timeframe in product(sides, timeframes):
+        logger.debug(f"Testing {side} {timeframe}")
+        if timeframe in ['15m', '30m', '1h', '4h']:
+            # train_primary('ChannelRun', side, timeframe, (200, 'edge'), 50, '1w_volumes', 2500, num_trials)
+            train_secondary('risk', 'ChannelRun', side, timeframe, (200, 'edge'), 50, '1w_volumes', 0.4, num_trials)
+            train_secondary('perf', 'ChannelRun', side, timeframe, (200, 'edge'), 50, '1w_volumes', 0.4, num_trials)
 
-        # train_primary('channel_run', side, timeframe, (200, 'edge'), 150, '1w_volumes', 2500, num_trials)
-        train_secondary('risk', 'ChannelRun', side, timeframe, (200, 'edge'), 150, '1w_volumes', 0.4, num_trials)
-        train_secondary('perf', 'ChannelRun', side, timeframe, (200, 'edge'), 150, '1w_volumes', 0.4, num_trials)
+            # train_primary('ChannelRun', side, timeframe, (200, 'edge'), 150, '1w_volumes', 2500, num_trials)
+            train_secondary('risk', 'ChannelRun', side, timeframe, (200, 'edge'), 150, '1w_volumes', 0.4, num_trials)
+            train_secondary('perf', 'ChannelRun', side, timeframe, (200, 'edge'), 150, '1w_volumes', 0.4, num_trials)
 
-    # if timeframe in ['15m', '30m', '1h', '4h']:
-    #     train_primary('channel_run', side, timeframe, (200, 'mid'), 50, '1w_volumes', 2500, num_trials)
-    #     train_secondary('risk', 'ChannelRun', side, timeframe, (200, 'mid'), 50, '1w_volumes', 0.4, num_trials)
-    #     train_secondary('perf', 'ChannelRun', side, timeframe, (200, 'mid'), 50, '1w_volumes', 0.4, num_trials)
-    #
-    #     train_primary('channel_run', side, timeframe, (200, 'mid'), 150, '1w_volumes', 2500, num_trials)
-    #     train_secondary('risk', 'ChannelRun', side, timeframe, (200, 'mid'), 150, '1w_volumes', 0.4, num_trials)
-    #     train_secondary('perf', 'ChannelRun', side, timeframe, (200, 'mid'), 150, '1w_volumes', 0.4, num_trials)
+        if timeframe in ['15m', '30m', '1h', '4h']:
+            train_primary('ChannelRun', side, timeframe, (200, 'mid'), 50, '1w_volumes', 2500, num_trials)
+            train_secondary('risk', 'ChannelRun', side, timeframe, (200, 'mid'), 50, '1w_volumes', 0.4, num_trials)
+            train_secondary('perf', 'ChannelRun', side, timeframe, (200, 'mid'), 50, '1w_volumes', 0.4, num_trials)
 
-    # if timeframe in ['1h', '4h', '12h', '1d']:
-    #     # train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 500, num_trials)
-    #     train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
-    #     train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
-    #
-    #     # train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 500, num_trials)
-    #     train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
-    #     train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
+            train_primary('ChannelRun', side, timeframe, (200, 'mid'), 150, '1w_volumes', 2500, num_trials)
+            train_secondary('risk', 'ChannelRun', side, timeframe, (200, 'mid'), 150, '1w_volumes', 0.4, num_trials)
+            train_secondary('perf', 'ChannelRun', side, timeframe, (200, 'mid'), 150, '1w_volumes', 0.4, num_trials)
 
-all_end = time.perf_counter()
-all_elapsed = all_end - all_start
-print(f"Total time taken: {int(all_elapsed // 3600)}h {int(all_elapsed // 60) % 60}m {int(all_elapsed % 60)}s")
+        if timeframe in ['1h', '4h', '12h', '1d']:
+            # train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 500, num_trials)
+            train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
+            train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
+
+            # train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 500, num_trials)
+            train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
+            train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
+
+    all_end = time.perf_counter()
+    all_elapsed = all_end - all_start
+    print(f"Total time taken: {int(all_elapsed // 3600)}h {int(all_elapsed // 60) % 60}m {int(all_elapsed % 60)}s")
