@@ -525,7 +525,7 @@ def create_perf_dataset(strat_name: str, side: str, timeframe: str, strat_params
 def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tuple,
                   num_pairs: int, selection_method: str, data_len: int, num_trials: int):
     loop_start = time.perf_counter()
-    print(f"\n- {datetime.now().strftime('%H:%M:%S')} Running {strat_name}, {side}, {timeframe}, "
+    print(f"\n- {datetime.now().strftime('%H:%M:%S')} Running {strat_name} primary model, {side}, {timeframe}, "
           f"{', '.join([str(p) for p in strat_params])}, {num_pairs}, {selection_method} primary")
 
     # generate dataset
