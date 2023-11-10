@@ -118,17 +118,14 @@ for sym in session.info['symbols']:
             fp.unlink()
 all_pairs = list(session.pairs_data.keys())
 
-pairs_0 = all_pairs[::4]
-pairs_1 = all_pairs[1::4]
-pairs_2 = all_pairs[2::4]
-pairs_3 = all_pairs[3::4]
+divs = 6
+extra_dfs = []
+for div in range(divs):
+    print(f"division {div+1} of {divs}")
+    pairs = all_pairs[div::divs]
+    extra_dfs.append(asyncio.run(main(pairs)))
 
-extra_df_1 = asyncio.run(main(pairs_0))
-extra_df_2 = asyncio.run(main(pairs_1))
-extra_df_3 = asyncio.run(main(pairs_2))
-extra_df_4 = asyncio.run(main(pairs_3))
-
-extra_df = pd.concat([extra_df_1, extra_df_2, extra_df_3, extra_df_4], ignore_index=True)
+extra_df = pd.concat(extra_dfs, ignore_index=True)
 extra_df['rank_1d'] = extra_df['roc_1d'].rank(pct=True)
 extra_df['rank_1w'] = extra_df['roc_1w'].rank(pct=True)
 extra_df['rank_1m'] = extra_df['roc_1m'].rank(pct=True)
