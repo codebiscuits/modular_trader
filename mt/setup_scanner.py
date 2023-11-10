@@ -9,9 +9,9 @@ import mt.sessions as sessions
 from collections import Counter
 from mt.resources.loggers import create_logger
 from pathlib import Path
-import mt.async_update_ohlc
 
 script_start = time.perf_counter()
+# import mt.async_update_ohlc
 
 # TODO current (02/04/23) roadmap should be:
 #  * start integrating polars and doing anything else i can to speed things up
@@ -350,11 +350,14 @@ logger.info(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Signal Scores -+-+-+-+
 # calculate agent perf scores
 for agent in agents.values():
     agent.calc_rpnls()
+
+    # record perf stats as agent attributes
     agent.perf_stats_lw = agent.perf_stats('long_wanted')
     agent.perf_stats_sw = agent.perf_stats('short_wanted')
     agent.perf_stats_luw = agent.perf_stats('long_unwanted')
     agent.perf_stats_suw = agent.perf_stats('short_unwanted')
 
+    # make predictions
     agent.perf_score_ml_l = agent.perf_model_prediction('long')
     agent.perf_score_ml_s = agent.perf_model_prediction('short')
     agent.perf_score_old_l = agent.perf_manual_prediction('long_wanted')
@@ -366,11 +369,13 @@ logger.info('creating signal scores:')
 while processed_signals['unassigned']:
     signal = processed_signals['unassigned'].pop()
 
-    # record perf stats and perf score
+    # record perf stats and perf score in signal dictionaries
     if signal['direction'] in ['long', 'spot']:
         signal.update(agents[signal['agent']].perf_stats_lw)
+        signal.update(agents[signal['agent']].perf_stats_luw)
     else:
         signal.update(agents[signal['agent']].perf_stats_sw)
+        signal.update(agents[signal['agent']].perf_stats_suw)
 
     signal['perf_score'] = (agents[signal['agent']].perf_score_l if signal['direction'] == 'long'
                             else agents[signal['agent']].perf_score_s)

@@ -1122,27 +1122,26 @@ class Agent:
         )
 
     def perf_stats(self, direction):
+        d = 'uw_' if 'unwanted' in direction else ''
         perf_stats = {}
-        perf_stats['perf_ema4'] = self.pnls[direction]['ema_4']
-        perf_stats['perf_ema8'] = self.pnls[direction]['ema_8']
-        perf_stats['perf_ema16'] = self.pnls[direction]['ema_16']
-        perf_stats['perf_ema32'] = self.pnls[direction]['ema_32']
-        perf_stats['perf_ema64'] = self.pnls[direction]['ema_64']
-        perf_stats['perf_ema128'] = self.pnls[direction]['ema_128']
-
-        perf_stats['perf_ema4_roc'] = self.pnls[direction]['ema_4_roc']
-        perf_stats['perf_ema8_roc'] = self.pnls[direction]['ema_8_roc']
-        perf_stats['perf_ema16_roc'] = self.pnls[direction]['ema_16_roc']
-        perf_stats['perf_ema32_roc'] = self.pnls[direction]['ema_32_roc']
-        perf_stats['perf_ema64_roc'] = self.pnls[direction]['ema_64_roc']
-        perf_stats['perf_ema128_roc'] = self.pnls[direction]['ema_128_roc']
-
-        perf_stats['perf_sum4'] = self.pnls[direction]['sum_4']
-        perf_stats['perf_sum8'] = self.pnls[direction]['sum_8']
-        perf_stats['perf_sum16'] = self.pnls[direction]['sum_16']
-        perf_stats['perf_sum32'] = self.pnls[direction]['sum_32']
-        perf_stats['perf_sum64'] = self.pnls[direction]['sum_64']
-        perf_stats['perf_sum128'] = self.pnls[direction]['sum_128']
+        perf_stats[f'{d}perf_ema4'] = self.pnls[direction]['ema_4']
+        perf_stats[f'{d}perf_ema8'] = self.pnls[direction]['ema_8']
+        perf_stats[f'{d}perf_ema16'] = self.pnls[direction]['ema_16']
+        perf_stats[f'{d}perf_ema32'] = self.pnls[direction]['ema_32']
+        perf_stats[f'{d}perf_ema64'] = self.pnls[direction]['ema_64']
+        perf_stats[f'{d}perf_ema128'] = self.pnls[direction]['ema_128']
+        perf_stats[f'{d}perf_ema4_roc'] = self.pnls[direction]['ema_4_roc']
+        perf_stats[f'{d}perf_ema8_roc'] = self.pnls[direction]['ema_8_roc']
+        perf_stats[f'{d}perf_ema16_roc'] = self.pnls[direction]['ema_16_roc']
+        perf_stats[f'{d}perf_ema32_roc'] = self.pnls[direction]['ema_32_roc']
+        perf_stats[f'{d}perf_ema64_roc'] = self.pnls[direction]['ema_64_roc']
+        perf_stats[f'{d}perf_ema128_roc'] = self.pnls[direction]['ema_128_roc']
+        perf_stats[f'{d}perf_sum4'] = self.pnls[direction]['sum_4']
+        perf_stats[f'{d}perf_sum8'] = self.pnls[direction]['sum_8']
+        perf_stats[f'{d}perf_sum16'] = self.pnls[direction]['sum_16']
+        perf_stats[f'{d}perf_sum32'] = self.pnls[direction]['sum_32']
+        perf_stats[f'{d}perf_sum64'] = self.pnls[direction]['sum_64']
+        perf_stats[f'{d}perf_sum128'] = self.pnls[direction]['sum_128']
 
         return perf_stats
 
@@ -1347,20 +1346,26 @@ class Agent:
                     perf_stats_w['perf_sum4'], perf_stats_w['perf_sum8'], perf_stats_w['perf_sum16'],
                     perf_stats_w['perf_sum32'], perf_stats_w['perf_sum64'], perf_stats_w['perf_sum128'],
 
-                    # perf_stats_uw['perf_ema4'], perf_stats_uw['perf_ema8'], perf_stats_uw['perf_ema16'],
-                    # perf_stats_uw['perf_ema32'], perf_stats_uw['perf_ema64'], perf_stats_uw['perf_ema128'],
-                    # perf_stats_uw['perf_ema4_roc'], perf_stats_uw['perf_ema8_roc'], perf_stats_uw['perf_ema16_roc'],
-                    # perf_stats_uw['perf_ema32_roc'],
-                    # perf_stats_uw['perf_ema64_roc'], perf_stats_uw['perf_ema128_roc'],
-                    # perf_stats_uw['perf_sum4'], perf_stats_uw['perf_sum8'], perf_stats_uw['perf_sum16'],
-                    # perf_stats_uw['perf_sum32'], perf_stats_uw['perf_sum64'], perf_stats_uw['perf_sum128'],
-
+                    perf_stats_uw['uw_perf_ema4'], perf_stats_uw['uw_perf_ema8'], perf_stats_uw['uw_perf_ema16'],
+                    perf_stats_uw['uw_perf_ema32'], perf_stats_uw['uw_perf_ema64'], perf_stats_uw['uw_perf_ema128'],
+                    perf_stats_uw['uw_perf_ema4_roc'], perf_stats_uw['uw_perf_ema8_roc'], perf_stats_uw['uw_perf_ema16_roc'],
+                    perf_stats_uw['uw_perf_ema32_roc'],
+                    perf_stats_uw['uw_perf_ema64_roc'], perf_stats_uw['uw_perf_ema128_roc'],
+                    perf_stats_uw['uw_perf_sum4'], perf_stats_uw['uw_perf_sum8'], perf_stats_uw['uw_perf_sum16'],
+                    perf_stats_uw['uw_perf_sum32'], perf_stats_uw['uw_perf_sum64'], perf_stats_uw['uw_perf_sum128'],
                     ]
 
         names = ['perf_ema_4', 'perf_ema_8', 'perf_ema_16', 'perf_ema_32', 'perf_ema_64', 'perf_ema_128',
                  'perf_ema_4_roc', 'perf_ema_8_roc', 'perf_ema_16_roc', 'perf_ema_32_roc', 'perf_ema_64_roc',
                  'perf_ema_128_roc',
                  'perf_sum_4', 'perf_sum_8', 'perf_sum_16', 'perf_sum_32', 'perf_sum_64', 'perf_sum_128',
+
+                 'uw_perf_ema_4', 'uw_perf_ema_8', 'uw_perf_ema_16', 'uw_perf_ema_32', 'uw_perf_ema_64',
+                 'uw_perf_ema_128',
+                 'uw_perf_ema_4_roc', 'uw_perf_ema_8_roc', 'uw_perf_ema_16_roc', 'uw_perf_ema_32_roc',
+                 'uw_perf_ema_64_roc', 'uw_perf_ema_128_roc',
+                 'uw_perf_sum_4', 'uw_perf_sum_8', 'uw_perf_sum_16', 'uw_perf_sum_32', 'uw_perf_sum_64',
+                 'uw_perf_sum_128',
                  ]
         data = np.array(features).reshape(1, -1)
 
