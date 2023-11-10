@@ -358,7 +358,7 @@ def validate_findings(X_train, X_val, y_train, y_val, sfs_selector, final_featur
 
 
 def final_rf_train_and_save(mode, strat_name, X_final, y_final, final_features, best_params,
-                            pairs, selection_method, strat_params, data_len):
+                            pairs, num_pairs, selection_method, strat_params, data_len):
     print(f"final model train and save began: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
 
     X_final = X_final[final_features]
@@ -387,7 +387,7 @@ def final_rf_train_and_save(mode, strat_name, X_final, y_final, final_features, 
         strat_name,
         "_".join([str(sp) for sp in strat_params]),
         selection_method,
-        len(pairs),
+        num_pairs,
         side,
         timeframe,
         data_len,
@@ -530,7 +530,7 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
 
     # generate dataset
     pairs = mlf.get_margin_pairs(selection_method, num_pairs)
-    if strat_name == 'ChannelRun':
+    if strat_name == 'channel_run':
         res_df = generate_channel_run_dataset(pairs, side, timeframe, strat_params, data_len)
     elif strat_name == 'trail_fractals':
         res_df = generate_trail_fractal_dataset(pairs, side, timeframe, strat_params, data_len)
@@ -575,7 +575,7 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
 
     # train final model
     final_rf_train_and_save('tech', strat_name, X, y, final_features, best_params,
-                            pairs, selection_method, strat_params, data_len)
+                            pairs, num_pairs, selection_method, strat_params, data_len)
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
@@ -655,7 +655,7 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
 
     # train final model
     final_rf_train_and_save(mode, strat_name, X, y, final_features, best_params,
-                            [], selection_method, strat_params, 'na')
+                            [], num_pairs, selection_method, strat_params, 'na')
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
@@ -675,29 +675,20 @@ if __name__ == '__main__':
     for side, timeframe in product(sides, timeframes):
         logger.debug(f"Testing {side} {timeframe}")
         if timeframe in ['15m', '30m', '1h', '4h']:
-            # train_primary('ChannelRun', side, timeframe, (200, 'edge'), 50, '1w_volumes', 2500, num_trials)
-            train_secondary('risk', 'ChannelRun', side, timeframe, (200, 'edge'), 50, '1w_volumes', 0.4, num_trials)
-            train_secondary('perf', 'ChannelRun', side, timeframe, (200, 'edge'), 50, '1w_volumes', 0.4, num_trials)
+            train_primary('channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 2500, num_trials)
+            train_secondary('risk', 'channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 0.4, num_trials)
+            train_secondary('perf', 'channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 0.4, num_trials)
 
-            # train_primary('ChannelRun', side, timeframe, (200, 'edge'), 150, '1w_volumes', 2500, num_trials)
-            train_secondary('risk', 'ChannelRun', side, timeframe, (200, 'edge'), 150, '1w_volumes', 0.4, num_trials)
-            train_secondary('perf', 'ChannelRun', side, timeframe, (200, 'edge'), 150, '1w_volumes', 0.4, num_trials)
-
-        if timeframe in ['15m', '30m', '1h', '4h']:
-            train_primary('ChannelRun', side, timeframe, (200, 'mid'), 50, '1w_volumes', 2500, num_trials)
-            train_secondary('risk', 'ChannelRun', side, timeframe, (200, 'mid'), 50, '1w_volumes', 0.4, num_trials)
-            train_secondary('perf', 'ChannelRun', side, timeframe, (200, 'mid'), 50, '1w_volumes', 0.4, num_trials)
-
-            train_primary('ChannelRun', side, timeframe, (200, 'mid'), 150, '1w_volumes', 2500, num_trials)
-            train_secondary('risk', 'ChannelRun', side, timeframe, (200, 'mid'), 150, '1w_volumes', 0.4, num_trials)
-            train_secondary('perf', 'ChannelRun', side, timeframe, (200, 'mid'), 150, '1w_volumes', 0.4, num_trials)
+            train_primary('channel_run', side, timeframe, (200, 'mid'), 50, '1w_volumes', 2500, num_trials)
+            train_secondary('risk', 'channel_run', side, timeframe, (200, 'mid'), 50, '1w_volumes', 0.4, num_trials)
+            train_secondary('perf', 'channel_run', side, timeframe, (200, 'mid'), 50, '1w_volumes', 0.4, num_trials)
 
         if timeframe in ['1h', '4h', '12h', '1d']:
-            # train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 500, num_trials)
+            train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 500, num_trials)
             train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
             train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
 
-            # train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 500, num_trials)
+            train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 500, num_trials)
             train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
             train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
 
