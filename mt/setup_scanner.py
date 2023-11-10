@@ -411,6 +411,8 @@ while processed_signals['unassigned']:
         signal['sim_reasons'] = ['low_score']
         processed_signals['sim_open'].append(uf.transform_signal(signal, 'open', 'sim', signal['direction']))
 
+    logger.info(pformat(signal))
+
 logger.info(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Open Risk -+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n")
 logger.debug(f"-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Open Risk -+-+-+-+-+-+-+-+-+-+-+-+-+-+-")
 
@@ -693,13 +695,12 @@ def section_times():
     logger.info(f"Executing Sim Open Signals took: {int(sim_open_took // 60)}m {int(sim_open_took % 60)}s")
     logger.info(f"Logging took: {int(log_elapsed // 60)}m {int(log_elapsed % 60)}s")
     logger.info(f"Total time taken: {int(total_time // 60)}m {int(total_time % 60)}s")
+    logger.debug(f"Total time taken: {int(total_time // 60)}m {int(total_time % 60)}s")
 
 
 section_times()
 
 # uf.plot_call_weights(session)
 
-logger.info(
-    '<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>\n\n')
-logger.debug(
-    '<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>-<=>\n\n')
+logger.info(f"\n{'-<==>-'*20}\n\n{'-<==>-'*20}\n\n{'-<==>-'*20}")
+logger.debug(f"\n{'-<==>-'*20}\n\n{'-<==>-'*20}\n\n{'-<==>-'*20}")

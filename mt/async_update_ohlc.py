@@ -13,7 +13,6 @@ session = TradingSession(0.1, True)
 logger = create_logger('async_update_ohlc', 'async_update_ohlc')
 
 
-
 async def stitch(pair, klines, all_data):
     cols = ['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'close_time',
             'quote_vol', 'num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol', 'ignore']
@@ -38,22 +37,21 @@ async def stitch(pair, klines, all_data):
     else:
         df = new_df
 
-    extra_data = {'pair': pair}
-    extra_data['roc_1d'] = df.close.rolling(12).mean().ffill().pct_change(288).iloc[-1]
-    extra_data['roc_1w'] = df.close.rolling(84).mean().ffill().pct_change(2016).iloc[-1]
-    extra_data['roc_1m'] = df.close.rolling(360).mean().ffill().pct_change(8640).iloc[-1]
-
-    extra_data['volume_1d'] = df.tail(288).quote_vol.sum()
-    extra_data['volume_1w'] = df.tail(2016).quote_vol.sum()
-    extra_data['volatility_1d'] = df.tail(288).close.ffill().pct_change().std()
-    extra_data['volatility_1w'] = df.tail(2016).close.ffill().pct_change().std()
-
-    extra_data['length'] = len(df)
+    extra_data = {'pair': pair,
+                  'roc_1d': df.close.rolling(12).mean().ffill().pct_change(288).iloc[-1],
+                  'roc_1w': df.close.rolling(84).mean().ffill().pct_change(2016).iloc[-1],
+                  'roc_1m': df.close.rolling(360).mean().ffill().pct_change(8640).iloc[-1],
+                  'volume_1d': df.tail(288).quote_vol.sum(),
+                  'volume_1w': df.tail(2016).quote_vol.sum(),
+                  'volatility_1d': df.tail(288).close.ffill().pct_change().std(),
+                  'volatility_1w': df.tail(2016).close.ffill().pct_change().std(),
+                  'length': len(df)}
 
     ohlc_w = Path(f'{session.ohlc_w}/{pair}.parquet')
     df.to_parquet(ohlc_w)
 
     return extra_data
+
 
 async def main(pairs):
     async_client = await AsyncClient.create()
@@ -62,7 +60,6 @@ async def main(pairs):
     all_data = {}
     for pair in pairs:
         ohlc_r = Path(f'{session.ohlc_r}/{pair}.parquet')
-        ohlc_w = Path(f'{session.ohlc_w}/{pair}.parquet')
         try:
             old_df = pd.read_parquet(ohlc_r)
             last_timestamp = old_df.timestamp.iloc[-1].timestamp()
@@ -73,7 +70,7 @@ async def main(pairs):
             ohlc_r.unlink()
             old_df = None
             data_age = 1001
-            print(f"failed to load {pair} ohlc")
+            logger.info(f"failed to load {pair} ohlc")
 
         all_data[pair] = {'ohlc': old_df, 'age': max(data_age, 5)}
 
@@ -86,15 +83,15 @@ async def main(pairs):
                                                                      interval=Client.KLINE_INTERVAL_5MINUTE,
                                                                      limit=all_data[symbol]['age'])))
         else:
-            print(f"slow downloading {symbol}")
+            logger.info(f"slow downloading {symbol}")
             tasks.append(asyncio.create_task(async_client.get_historical_klines(symbol=symbol,
                                                                                 interval=Client.KLINE_INTERVAL_5MINUTE,
                                                                                 start_str="6 years ago UTC")))
 
     # Await the completion of all tasks
     results = await asyncio.gather(*tasks)
-    print(f"used-weight: {async_client.response.headers['x-mbx-used-weight']}")
-    print(f"used-weight-1m: {async_client.response.headers['x-mbx-used-weight-1m']}")
+    logger.info(f"used-weight: {async_client.response.headers['x-mbx-used-weight']}")
+    logger.info(f"used-weight-1m: {async_client.response.headers['x-mbx-used-weight-1m']}")
 
     # stitch them all together
     stitch_tasks = []
@@ -121,7 +118,7 @@ all_pairs = list(session.pairs_data.keys())
 divs = 6
 extra_dfs = []
 for div in range(divs):
-    print(f"division {div+1} of {divs}")
+    logger.info(f"division {div + 1} of {divs}")
     pairs = all_pairs[div::divs]
     extra_dfs.append(asyncio.run(main(pairs)))
 
@@ -134,4 +131,4 @@ mkt_info_path = Path("/home/ross/coding/modular_trader/market_data/market_info.p
 extra_df.to_parquet(mkt_info_path)
 
 elapsed = perf() - start
-print(f"Time taken: {int(elapsed // 60)}m {elapsed % 60:.2f}s")
+logger.info(f"Time taken: {int(elapsed // 60)}m {elapsed % 60:.2f}s")
