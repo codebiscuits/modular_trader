@@ -132,8 +132,9 @@ extra_df = pd.concat([extra_df_1, extra_df_2, extra_df_3, extra_df_4], ignore_in
 extra_df['rank_1d'] = extra_df['roc_1d'].rank(pct=True)
 extra_df['rank_1w'] = extra_df['roc_1w'].rank(pct=True)
 extra_df['rank_1m'] = extra_df['roc_1m'].rank(pct=True)
-print(extra_df)
-extra_df.to_parquet()
+# print(extra_df)
+mkt_info_path = Path("/home/ross/coding/modular_trader/market_data/market_info.parquet")
+extra_df.to_parquet(mkt_info_path)
 
 elapsed = perf() - start
 print(f"Time taken: {int(elapsed // 60)}m {elapsed % 60:.2f}s")

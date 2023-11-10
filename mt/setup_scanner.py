@@ -9,7 +9,7 @@ import mt.sessions as sessions
 from collections import Counter
 from mt.resources.loggers import create_logger
 from pathlib import Path
-import mt.update_ohlc
+import mt.async_update_ohlc
 
 script_start = time.perf_counter()
 
@@ -21,11 +21,11 @@ logger = create_logger('setup_scanner')
 
 ########################################################################################################################
 
-session = sessions.TradingSession(0.01, False)  # fr_max now means max pos size
+session = sessions.TradingSession(0.01, True)  # fr_max now means max pos size
 
 logger.debug(f'-+-+-+-+-+-+-+-+ {session.now_start} Running Setup Scanner ({session.timeframes}) +-+-+-+-+-+-+-+-\n')
 logger.info(f'-+-+-+-+-+-+-+-+ {session.now_start} Running Setup Scanner ({session.timeframes}) +-+-+-+-+-+-+-+-\n')
-
+print(1)
 # initialise agents
 agents = []
 for timeframe, offset, active_agents in session.timeframes:
@@ -36,10 +36,10 @@ for timeframe, offset, active_agents in session.timeframes:
             ])
     if (session.running_on != 'pi_2') and ('ChannelRun' in active_agents):
         agents.extend([
-                ChannelRun(session, timeframe, offset, 200, 'edge', '1w_volumes', 150),
                 ChannelRun(session, timeframe, offset, 200, 'edge', '1w_volumes', 50),
+                ChannelRun(session, timeframe, offset, 200, 'mid', '1w_volumes', 50),
             ])
-
+print(2)
 agents = {a.id: a for a in agents}
 
 session.name = ' | '.join([n.id for n in agents.values()])
@@ -48,7 +48,7 @@ logger.info(session.name)
 
 logger.debug("-*-*-*- Checking all positions for stops and open-risk -*-*-*-")
 logger.info("-*-*-*- Checking all positions for stops and open-risk -*-*-*-")
-
+print(3)
 real_sim_tps_closes = []
 for agent in agents.values():
     agent.record_stopped_trades(session, session.timeframes)
@@ -60,7 +60,7 @@ for agent in agents.values():
     agent.max_positions = agent.set_max_pos()
     agent.total_r_limit = agent.max_positions * 1.7  # TODO need to update reduce_risk and run it before/after set_fixed_ris
 session.save_open_risk_stats()
-
+print(4)
 init_end = time.perf_counter()
 init_elapsed = init_end - script_start
 
@@ -350,13 +350,15 @@ logger.info(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Signal Scores -+-+-+-+
 # calculate agent perf scores
 for agent in agents.values():
     agent.calc_rpnls()
-    agent.perf_stats_l = agent.perf_stats('long')
-    agent.perf_stats_s = agent.perf_stats('short')
+    agent.perf_stats_lw = agent.perf_stats('long_wanted')
+    agent.perf_stats_sw = agent.perf_stats('short_wanted')
+    agent.perf_stats_luw = agent.perf_stats('long_unwanted')
+    agent.perf_stats_suw = agent.perf_stats('short_unwanted')
 
     agent.perf_score_ml_l = agent.perf_model_prediction('long')
     agent.perf_score_ml_s = agent.perf_model_prediction('short')
-    agent.perf_score_old_l = agent.perf_manual_prediction('long')
-    agent.perf_score_old_s = agent.perf_manual_prediction('short')
+    agent.perf_score_old_l = agent.perf_manual_prediction('long_wanted')
+    agent.perf_score_old_s = agent.perf_manual_prediction('short_wanted')
     agent.perf_score_l = agent.perf_score_old_l if agent.perf_score_validity_l < 30 else agent.perf_score_ml_l
     agent.perf_score_s = agent.perf_score_old_s if agent.perf_score_validity_s < 30 else agent.perf_score_ml_s
 
@@ -366,9 +368,9 @@ while processed_signals['unassigned']:
 
     # record perf stats and perf score
     if signal['direction'] in ['long', 'spot']:
-        signal.update(agents[signal['agent']].perf_stats_l)
+        signal.update(agents[signal['agent']].perf_stats_lw)
     else:
-        signal.update(agents[signal['agent']].perf_stats_s)
+        signal.update(agents[signal['agent']].perf_stats_sw)
 
     signal['perf_score'] = (agents[signal['agent']].perf_score_l if signal['direction'] == 'long'
                             else agents[signal['agent']].perf_score_s)
@@ -381,8 +383,8 @@ while processed_signals['unassigned']:
 
     # record risk model score
     signal['score_ml'] = agents[signal['agent']].risk_model_prediction(signal)
-    signal['validity'] = (agents[signal['agent']].secondary_score_validity_l if signal['direction'] == 'long'
-                          else agents[signal['agent']].secondary_score_validity_s)
+    signal['validity'] = (agents[signal['agent']].risk_score_validity_l if signal['direction'] == 'long'
+                          else agents[signal['agent']].risk_score_validity_s)
     signal['score_old'] = agents[signal['agent']].risk_manual_prediction(signal)
     signal['score'] = signal['score_ml'] if signal['validity'] > 30 else signal['score_old']
 

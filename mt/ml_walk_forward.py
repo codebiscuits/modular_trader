@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
-import entry_modelling as em
-import ml_funcs as mlf
+from mt.strategy_development import entry_modelling as em
+from mt.resources import ml_funcs as mlf
 import plotly.express as px
 import plotly.graph_objects as go
 import time

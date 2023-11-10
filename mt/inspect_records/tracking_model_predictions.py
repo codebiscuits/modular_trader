@@ -5,13 +5,12 @@ import trade_records_funcs as trf
 from itertools import product
 from pprint import pprint
 from collections import Counter
-from resources.loggers import create_logger
+from mt.resources.loggers import create_logger
 import statistics as stats
 
 from sklearn.metrics import fbeta_score, make_scorer
 scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
 
-# pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
 pd.set_option('display.precision', 4)

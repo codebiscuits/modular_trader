@@ -139,6 +139,7 @@ class TradingSession:
         self.mkt_data_r, self.mkt_data_w, self.records_r, self.records_w, self.ohlc_r, self.ohlc_w = self.data_paths()
         self.save_spreads()
         self.load_mkt_ranks()
+        self.load_mkt_info()
         self.max_loan_amounts = {}
         self.pairs_set = set()
         self.book_data = {}
@@ -537,6 +538,7 @@ class TradingSession:
 
         try:
             market_ranks = pd.read_parquet(filepath)
+            logger.debug(market_ranks.tail())
         except FileNotFoundError:
             return
 
@@ -545,6 +547,28 @@ class TradingSession:
                 self.pairs_data[pair]['market_rank_1d'] = market_ranks.at[pair, 'rank_1d']
                 self.pairs_data[pair]['market_rank_1w'] = market_ranks.at[pair, 'rank_1w']
                 self.pairs_data[pair]['market_rank_1m'] = market_ranks.at[pair, 'rank_1m']
+
+    def load_mkt_info(self):
+        filepath = self.mkt_data_r / 'market_info.parquet'
+
+        try:
+            market_info = pd.read_parquet(filepath)
+            logger.debug(market_info.tail())
+        except FileNotFoundError:
+            return
+
+        # for pair in market_info.index:
+        #     if self.pairs_data.get(pair):
+        #         self.pairs_data[pair]['roc_1d'] = market_info.at[pair, 'roc_1d']
+        #         self.pairs_data[pair]['roc_1w'] = market_info.at[pair, 'roc_1w']
+        #         self.pairs_data[pair]['roc_1m'] = market_info.at[pair, 'roc_1m']
+        #         self.pairs_data[pair]['volume_1d'] = market_info.at[pair, 'volume_1d']
+        #         self.pairs_data[pair]['volume_1w'] = market_info.at[pair, 'volume_1w']
+        #         self.pairs_data[pair]['volatility_1d'] = market_info.at[pair, 'volatility_1d']
+        #         self.pairs_data[pair]['volatility_1w'] = market_info.at[pair, 'volatility_1w']
+        #         self.pairs_data[pair]['market_rank_1d'] = market_info.at[pair, 'rank_1d']
+        #         self.pairs_data[pair]['market_rank_1w'] = market_info.at[pair, 'rank_1w']
+        #         self.pairs_data[pair]['market_rank_1m'] = market_info.at[pair, 'rank_1m']
 
     def compute_features(self, df: pd.DataFrame, tf: str) -> pd.DataFrame:
         """takes the set of features that need to be calculated and applies them to the dataframe"""

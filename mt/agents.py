@@ -92,7 +92,7 @@ class Agent:
         session.max_length = max(session.min_length, self.ohlc_length)
         self.model_folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/{self.name}")
         self.primary_folder = self.model_folder / f"{self.pair_selection}_{self.training_pairs_n}"
-        self.load_technical_model_data(session, self.tf)
+        self.load_technical_model_data(session)
         self.load_risk_model_data()
         self.load_perf_model_data()
         t.stop()
@@ -1057,25 +1057,25 @@ class Agent:
         reduce = max(ideal, fr_inc)
         return max((fr_prev - reduce), 0)
 
-    def get_pnls(self, direction: str) -> dict:
+    def get_pnls(self, direction: str, wanted: bool) -> dict:
         """ retrieves the pnls of all closed (real and wanted sim) trades for the agent, then collates the pnls into a
         dataframe, and calculates several moving averages on them. it then returns a dictionary of the latest row of
         those moving averages"""
 
         all_rpnls = []
         for a, b in self.closed_trades.items():
-            wanted = (b['trade'][0]['state'] == 'real') or (b['trade'][0]['wanted'])
+            trade_wanted = (b['trade'][0]['state'] == 'real') or (b['trade'][0]['wanted'])
             right_direction = b['trade'][0]['direction'] == direction
-            if wanted and right_direction:
+            if (trade_wanted == wanted) and right_direction:
                 rpnl = 0
                 for t in b['trade']:
                     if t.get('rpnl'):
                         rpnl += float(t['rpnl'])
                 all_rpnls.append((int(a), rpnl))
         for a, b in self.closed_sim_trades.items():
-            wanted = b['trade'][0]['wanted']
+            trade_wanted = b['trade'][0]['wanted']
             right_direction = b['trade'][0]['direction'] == direction
-            if wanted and right_direction:
+            if (trade_wanted == wanted) and right_direction:
                 rpnl = 0
                 for t in b['trade']:
                     if t.get('rpnl'):
@@ -1113,9 +1113,12 @@ class Agent:
 
     def calc_rpnls(self):
         self.pnls = dict(
-            spot=self.get_pnls('spot'),
-            long=self.get_pnls('long'),
-            short=self.get_pnls('short'),
+            spot_wanted=self.get_pnls('spot', True),
+            long_wanted=self.get_pnls('long', True),
+            short_wanted=self.get_pnls('short', True),
+            spot_unwanted=self.get_pnls('spot', False),
+            long_unwanted=self.get_pnls('long', False),
+            short_unwanted=self.get_pnls('short', False),
         )
 
     def perf_stats(self, direction):
@@ -1170,7 +1173,9 @@ class Agent:
         self.num_open_positions = len(self.or_list)
         u.stop()
 
-    def load_technical_model_data(self, session, tf):
+    # machine learning ----------------------------------------------------------------------
+
+    def load_technical_model_data(self, session):
         # paths
         self.long_model_path = self.primary_folder / f"long_{self.tf}_model_tech.sav"
         long_scaler_path = self.primary_folder / f"long_{self.tf}_scaler_tech.sav"
@@ -1192,7 +1197,7 @@ class Agent:
 
         self.pairs = self.long_info['pairs']
         self.features = set(self.long_info['features'] + self.short_info['features'])
-        session.features[tf].update(self.features)
+        session.features[self.tf].update(self.features)
 
     def load_risk_model_data(self):
         # paths
@@ -1205,35 +1210,33 @@ class Agent:
         short_model_info = self.model_folder / f"short_{self.tf}_info_risk.json"
 
         if long_model_file.exists():
-            self.long_model_2 = XGBClassifier()
-            self.long_model_2.load_model(long_model_file)
-            self.long_scaler_2 = joblib.load(long_scaler_file)
+            self.long_risk_model = joblib.load(long_model_file)
+            self.long_risk_scaler = joblib.load(long_scaler_file)
             with open(long_model_info, 'r') as ip:
-                self.long_info_2 = json.load(ip)
+                self.long_risk_info = json.load(ip)
 
-            self.short_model_2 = XGBClassifier()
-            self.short_model_2.load_model(short_model_file)
-            self.short_scaler_2 = joblib.load(short_scaler_file)
+            self.short_risk_model = joblib.load(short_model_file)
+            self.short_risk_scaler = joblib.load(short_scaler_file)
             with open(short_model_info, 'r') as ip:
-                self.short_info_2 = json.load(ip)
+                self.short_risk_info = json.load(ip)
 
-            self.features_2 = set(self.long_info_2['features'] + self.short_info_2['features'])
+            self.risk_features = set(self.long_risk_info['features'] + self.short_risk_info['features'])
 
-            self.secondary_score_validity_l = self.long_info_2['validity']
-            self.secondary_score_validity_s = self.short_info_2['validity']
+            self.risk_score_validity_l = self.long_risk_info['validity']
+            self.risk_score_validity_s = self.short_risk_info['validity']
         else:
-            self.secondary_score_validity_l = 0
-            self.secondary_score_validity_s = 0
+            self.risk_score_validity_l = 0
+            self.risk_score_validity_s = 0
 
     def load_perf_model_data(self):
         # paths
-        long_perf_model_path = self.primary_folder / f"long_{self.tf}_perf_model_perf.json"
-        long_perf_scaler_path = self.primary_folder / f"long_{self.tf}_perf_scaler_perf.sav"
-        long_perf_info_path = self.primary_folder / f"long_{self.tf}_perf_info_perf.json"
+        long_perf_model_path = self.primary_folder / f"long_{self.tf}_model_perf.json"
+        long_perf_scaler_path = self.primary_folder / f"long_{self.tf}_scaler_perf.sav"
+        long_perf_info_path = self.primary_folder / f"long_{self.tf}_info_perf.json"
 
-        short_perf_model_path = self.primary_folder / f"short_{self.tf}_perf_model_perf.json"
-        short_perf_scaler_path = self.primary_folder / f"short_{self.tf}_perf_scaler_perf.sav"
-        short_perf_info_path = self.primary_folder / f"short_{self.tf}_perf_info_perf.json"
+        short_perf_model_path = self.primary_folder / f"short_{self.tf}_model_perf.json"
+        short_perf_scaler_path = self.primary_folder / f"short_{self.tf}_scaler_perf.sav"
+        short_perf_info_path = self.primary_folder / f"short_{self.tf}_info_perf.json"
 
         if long_perf_model_path.exists():
             self.long_perf_model = joblib.load(long_perf_model_path)
@@ -1259,10 +1262,10 @@ class Agent:
     def risk_model_prediction(self, signal):
         direction = signal['direction']
 
-        if direction == 'long' and self.secondary_score_validity_l == 0:
+        if direction == 'long' and self.risk_score_validity_l == 0:
             logger.debug(f"secondary prediction {direction} short circuit, score 0")
             return 0
-        elif direction == 'short' and self.secondary_score_validity_s == 0:
+        elif direction == 'short' and self.risk_score_validity_s == 0:
             logger.debug(f"secondary prediction {direction} short circuit, score 0")
             return 0
 
@@ -1278,23 +1281,22 @@ class Agent:
         features = [conf_rf_usdt_l, conf_rf_usdt_s, inval_ratio, mkt_rank_1d, mkt_rank_1w, mkt_rank_1m]
         names = ['conf_rf_usdt_l', 'conf_rf_usdt_s', 'inval_ratio', 'mkt_rank_1d', 'mkt_rank_1w', 'mkt_rank_1m']
         data = np.array(features).reshape(1, -1)
-        self.long_features_2_idx = [i for i, f in enumerate(names) if f in self.long_info_2['features']]
-        self.short_features_2_idx = [i for i, f in enumerate(names) if f in self.short_info_2['features']]
+
+        self.long_risk_features_idx = [i for i, f in enumerate(names) if f in self.long_risk_info['features']]
+        self.short_risk_features_idx = [i for i, f in enumerate(names) if f in self.short_risk_info['features']]
 
         if direction == 'long':
-            long_data = self.long_scaler_2.transform(data)
-            long_data = long_data[:, self.long_features_2_idx]
-            score = float(self.long_model_2.predict_proba(long_data)[-1, 0])
-            score_1 = float(self.long_model_2.predict_proba(long_data)[-1, 1])
-            print(f"secondary score 0: {score:.1%}, secondary score 1: {score_1:.1%}")
+            long_data = self.long_risk_scaler.transform(data)
+            long_data = long_data[:, self.long_risk_features_idx]
+            score = float(self.long_risk_model.predict_proba(long_data)[-1, 1])
+            print(f"risk score: {score:.1%}")
         else:
-            short_data = self.short_scaler_2.transform(data)
-            short_data = short_data[:, self.short_features_2_idx]
-            score = float(self.short_model_2.predict_proba(short_data)[-1, 0])
-            score_1 = float(self.short_model_2.predict_proba(short_data)[-1, 1])
-            print(f"secondary score 0: {score:.1%}, secondary score 1: {score_1:.1%}")
+            short_data = self.short_risk_scaler.transform(data)
+            short_data = short_data[:, self.short_risk_features_idx]
+            score = float(self.short_risk_model.predict_proba(short_data)[-1, 1])
+            print(f"risk score: {score:.1%}")
 
-        return min(1, max(0.001, score_1))
+        return min(1, max(0.001, score))
 
     def risk_manual_prediction(self, signal):
 
@@ -1315,7 +1317,10 @@ class Agent:
         confidence = combined_l if sig_bias == 'bullish' else combined_s
         sig_score = min(max(0, confidence), 1)
         inval_scalar = 1 + abs(1 - signal['inval_ratio'])
-        risk_scalar = sig_score * rank_score / inval_scalar
+        if 'channel_run' in self.name:
+            risk_scalar = max(min(5 * sig_score * rank_score / inval_scalar, 1), 0)
+        else:
+            risk_scalar = max(min(2 * sig_score * rank_score / inval_scalar, 1), 0)
         score = round(risk_scalar, 5)
 
         logger.debug(f"secondary manual score: {score:.1%}")
@@ -1331,15 +1336,25 @@ class Agent:
             logger.debug(f"{self.id} predict perf {direction} short circuit, score 0")
             return 0
 
-        perf_stats = self.perf_stats_l if direction == 'long' else self.perf_stats_s
+        perf_stats_w = self.perf_stats_lw if direction == 'long' else self.perf_stats_sw
+        perf_stats_uw = self.perf_stats_luw if direction == 'long' else self.perf_stats_suw
 
-        features = [perf_stats['perf_ema4'], perf_stats['perf_ema8'], perf_stats['perf_ema16'], perf_stats['perf_ema32'],
-                    perf_stats['perf_ema64'], perf_stats['perf_ema128'],
-                    perf_stats['perf_ema4_roc'], perf_stats['perf_ema8_roc'], perf_stats['perf_ema16_roc'],
-                    perf_stats['perf_ema32_roc'],
-                    perf_stats['perf_ema64_roc'], perf_stats['perf_ema128_roc'],
-                    perf_stats['perf_sum4'], perf_stats['perf_sum8'], perf_stats['perf_sum16'], perf_stats['perf_sum32'],
-                    perf_stats['perf_sum64'], perf_stats['perf_sum128'],
+        features = [perf_stats_w['perf_ema4'], perf_stats_w['perf_ema8'], perf_stats_w['perf_ema16'],
+                    perf_stats_w['perf_ema32'], perf_stats_w['perf_ema64'], perf_stats_w['perf_ema128'],
+                    perf_stats_w['perf_ema4_roc'], perf_stats_w['perf_ema8_roc'], perf_stats_w['perf_ema16_roc'],
+                    perf_stats_w['perf_ema32_roc'],
+                    perf_stats_w['perf_ema64_roc'], perf_stats_w['perf_ema128_roc'],
+                    perf_stats_w['perf_sum4'], perf_stats_w['perf_sum8'], perf_stats_w['perf_sum16'],
+                    perf_stats_w['perf_sum32'], perf_stats_w['perf_sum64'], perf_stats_w['perf_sum128'],
+
+                    # perf_stats_uw['perf_ema4'], perf_stats_uw['perf_ema8'], perf_stats_uw['perf_ema16'],
+                    # perf_stats_uw['perf_ema32'], perf_stats_uw['perf_ema64'], perf_stats_uw['perf_ema128'],
+                    # perf_stats_uw['perf_ema4_roc'], perf_stats_uw['perf_ema8_roc'], perf_stats_uw['perf_ema16_roc'],
+                    # perf_stats_uw['perf_ema32_roc'],
+                    # perf_stats_uw['perf_ema64_roc'], perf_stats_uw['perf_ema128_roc'],
+                    # perf_stats_uw['perf_sum4'], perf_stats_uw['perf_sum8'], perf_stats_uw['perf_sum16'],
+                    # perf_stats_uw['perf_sum32'], perf_stats_uw['perf_sum64'], perf_stats_uw['perf_sum128'],
+
                     ]
 
         names = ['perf_ema_4', 'perf_ema_8', 'perf_ema_16', 'perf_ema_32', 'perf_ema_64', 'perf_ema_128',
@@ -1348,10 +1363,11 @@ class Agent:
                  'perf_sum_4', 'perf_sum_8', 'perf_sum_16', 'perf_sum_32', 'perf_sum_64', 'perf_sum_128',
                  ]
         data = np.array(features).reshape(1, -1)
+
         self.long_perf_features_idx = [i for i, f in enumerate(names) if f in self.long_perf_info['features']]
         self.short_perf_features_idx = [i for i, f in enumerate(names) if f in self.short_perf_info['features']]
 
-        perf_score = 0 # make ml prediction here
+        perf_score = 0
 
         return perf_score
 

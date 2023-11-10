@@ -3,7 +3,6 @@ from pushbullet import Pushbullet
 from pathlib import Path
 import trade_records_funcs as trf
 
-pb = Pushbullet('o.H4ZkitbaJgqx9vxo5kL2MMwnlANcloxT')
 pd.set_option('display.max_rows', None)
 pd.set_option('display.expand_frame_repr', False)
 pd.set_option('display.precision', 4)
@@ -12,7 +11,7 @@ records_folder_1 = Path('/home/ross/coding/pi_down/modular_trader/records')
 records_folder_2 = Path('/home/ross/coding/pi_2/modular_trader/records')
 
 def print_positions(data, name):
-    print(f'\n{name} open positions:')
+    print(f'\n{name} closed positions:')
     if data:
         for k, v in data.items():
             print(f"\n{'-'*20}\n{k}")

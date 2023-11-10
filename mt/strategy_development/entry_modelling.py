@@ -47,7 +47,7 @@ def project_pnl(df, side, method) -> pd.DataFrame:
 
     res_list = []
     if method['type'] == 'trail_atr':
-        res_list = trail_atr(df, method['len'], method['mult'])
+        res_list = mlf.trail_atr(df, method['len'], method['mult'])
     if method['type'] == 'trail_fractal':
         res_list = mlf.trail_fractal(df, method['width'], method['atr_spacing'], side)
     if method['type'] == 'oco':
@@ -263,7 +263,7 @@ if __name__ == '__main__':
         res_list = []
         for frac_width, spacing in product(frac_widths, atr_spacings):
             all_res = pd.DataFrame()
-            pairs = mlf.rank_pairs()
+            pairs = mlf.rank_pairs('1w_volumes')
             for i in range(num_pairs):
                 df = pd.DataFrame()
                 while len(df) < data_len:
@@ -279,6 +279,7 @@ if __name__ == '__main__':
                 exit_method['width'] = frac_width
                 exit_method['atr_spacing'] = spacing
                 res_df = project_pnl(df_loop, side, exit_method)
+                print(res_df.head())
                 all_res = pd.concat([all_res, res_df], axis=0)
 
             X, y, z = mlf.features_labels_split(all_res)

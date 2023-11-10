@@ -6,6 +6,8 @@ from itertools import product
 def load_all(folder: Path, types: list[str]):
     all_data = {}
     for agent, state in product(folder.glob('*'), types):
+        if not agent.is_dir():
+            continue
         filepath = folder / agent.parts[7] / f'{state}_trades.json'
 
         try:
