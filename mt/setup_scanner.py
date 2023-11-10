@@ -25,21 +25,21 @@ session = sessions.TradingSession(0.01, True)  # fr_max now means max pos size
 
 logger.debug(f'-+-+-+-+-+-+-+-+ {session.now_start} Running Setup Scanner ({session.timeframes}) +-+-+-+-+-+-+-+-\n')
 logger.info(f'-+-+-+-+-+-+-+-+ {session.now_start} Running Setup Scanner ({session.timeframes}) +-+-+-+-+-+-+-+-\n')
-print(1)
+
 # initialise agents
 agents = []
 for timeframe, offset, active_agents in session.timeframes:
-    if (session.running_on != 'pi_1') and ('TrailFractals' in active_agents):
+    if 'TrailFractals' in active_agents:
         agents.extend([
                 TrailFractals(session, timeframe, offset, 5, 2, '1d_volumes', 30),
                 TrailFractals(session, timeframe, offset, 5, 2, '1w_volumes', 30),
             ])
-    if (session.running_on != 'pi_2') and ('ChannelRun' in active_agents):
+    if 'ChannelRun' in active_agents:
         agents.extend([
                 ChannelRun(session, timeframe, offset, 200, 'edge', '1w_volumes', 50),
                 ChannelRun(session, timeframe, offset, 200, 'mid', '1w_volumes', 50),
             ])
-print(2)
+
 agents = {a.id: a for a in agents}
 
 session.name = ' | '.join([n.id for n in agents.values()])
@@ -48,7 +48,7 @@ logger.info(session.name)
 
 logger.debug("-*-*-*- Checking all positions for stops and open-risk -*-*-*-")
 logger.info("-*-*-*- Checking all positions for stops and open-risk -*-*-*-")
-print(3)
+
 real_sim_tps_closes = []
 for agent in agents.values():
     agent.record_stopped_trades(session, session.timeframes)
@@ -60,7 +60,7 @@ for agent in agents.values():
     agent.max_positions = agent.set_max_pos()
     agent.total_r_limit = agent.max_positions * 1.7  # TODO need to update reduce_risk and run it before/after set_fixed_ris
 session.save_open_risk_stats()
-print(4)
+
 init_end = time.perf_counter()
 init_elapsed = init_end - script_start
 
