@@ -56,7 +56,6 @@ async def stitch(pair, klines, all_data):
 async def main(pairs):
     async_client = await AsyncClient.create()
 
-    logger.debug(f"{len(pairs) = }")
     all_data = {}
     for pair in pairs:
         ohlc_r = Path(f'{session.ohlc_r}/{pair}.parquet')
@@ -105,6 +104,8 @@ async def main(pairs):
 
 
 start = perf()
+now_start = datetime.now(tz=timezone.utc).strftime("%d-%m-%y %H:%M:%S")
+logger.info(f"Async Update OHLC starting at {now_start}\n")
 
 # Get all symbols
 for sym in session.info['symbols']:
@@ -131,4 +132,4 @@ mkt_info_path = Path("/home/ross/coding/modular_trader/market_data/market_info.p
 extra_df.to_parquet(mkt_info_path)
 
 elapsed = perf() - start
-logger.info(f"Time taken: {int(elapsed // 60)}m {elapsed % 60:.2f}s")
+logger.info(f"Time taken: {int(elapsed // 60)}m {elapsed % 60:.2f}s\n\n")
