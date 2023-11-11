@@ -29,7 +29,7 @@ optuna.logging.set_verbosity(optuna.logging.ERROR)
 warnings.filterwarnings('ignore')
 warnings.simplefilter(action='ignore', category=FutureWarning)
 logger = create_logger('model_training')
-use_local_data = True # if false, uses trade records from the pi
+use_local_data = False # if false, uses trade records from the pi
 
 fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
 
@@ -401,7 +401,7 @@ def final_rf_train_and_save(mode, strat_name, X_final, y_final, final_features, 
 
 def load_secondary_data(strat_name, timeframe, strat_params, selection_method, num_pairs):
 
-    root_dir = '/home/ross/coding' if use_local_data else '/home/ross/coding/pi_2'
+    root_dir = '/home/ross/coding' if use_local_data else '/home/ross/coding/pi_1'
 
     records_path = Path(f"{root_dir}/modular_trader/records/{strat_name}_{timeframe}_None_"
                         f"{'_'.join([str(sp) for sp in strat_params])}_{selection_method}_{num_pairs}")
