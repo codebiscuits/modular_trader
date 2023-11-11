@@ -11,7 +11,7 @@ from mt.resources.loggers import create_logger
 from pathlib import Path
 
 script_start = time.perf_counter()
-# import mt.async_update_ohlc
+import mt.async_update_ohlc
 
 # TODO current (02/04/23) roadmap should be:
 #  * start integrating polars and doing anything else i can to speed things up
