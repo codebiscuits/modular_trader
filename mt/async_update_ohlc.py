@@ -64,9 +64,9 @@ async def main(pairs):
             last_timestamp = old_df.timestamp.iloc[-1].timestamp()
             now = datetime.now(timezone.utc).timestamp()
             data_age = int((now - last_timestamp) / 300)  # dividing by 300 shows how many 5min periods have passed
-        except (ArrowInvalid, OSError):
-            logger.exception(f"Problem reading {pair} parquet file, downloading from scratch.")
+        except (ArrowInvalid, OSError, FileNotFoundError):
             ohlc_r.unlink()
+            logger.exception(f"Problem reading {pair} parquet file, downloading from scratch.")
             old_df = None
             data_age = 1001
             logger.info(f"failed to load {pair} ohlc")
