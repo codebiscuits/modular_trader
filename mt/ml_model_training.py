@@ -477,7 +477,7 @@ def create_perf_dataset(strat_name: str, side: str, timeframe: str, strat_params
     observations = []
     for position in all_records.values():
         signal = position['signal']
-        if (signal['direction'] != side) or (signal.get('perf_ema4') is None) or (signal['wanted'] == False):
+        if (signal['direction'] != side) or (signal.get('perf_ema4') is None):# or (signal['wanted'] == False):
             continue
 
         trade = position['trade']
@@ -665,9 +665,7 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
 if __name__ == '__main__':
     all_start = time.perf_counter()
 
-    sides = ['long',
-             # 'short'
-             ]
+    sides = ['long', 'short']
     timeframes = ['15m', '30m', '1h', '4h', '12h', '1d']
     num_trials = 500
 
