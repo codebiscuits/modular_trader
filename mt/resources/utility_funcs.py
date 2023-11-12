@@ -165,10 +165,7 @@ def market_benchmark(session) -> None:
         if not isinstance(df, pd.DataFrame):
             try:
                 df = pd.read_parquet(session.ohlc_r / f"{x}.parquet")
-            except ArrowInvalid:
-                logger.error(f"market benchmark: couldn't get any ohlc data for {x}")
-                continue
-            except FileNotFoundError:
+            except (ArrowInvalid, OSError, FileNotFoundError):
                 logger.error(f"market benchmark: couldn't get any ohlc data for {x}")
                 continue
 
