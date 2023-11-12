@@ -28,7 +28,7 @@ def get_timeframes() -> list[tuple]:
     hour = datetime.now(timezone.utc).hour
     # qh, hour = 0, 0 # for testing all timeframes
 
-    mi = {1: ('15m', None, ('ChannelRun', )),
+    mi = {#1: ('15m', None, ('ChannelRun', )),
          2: ('30m', None, ('ChannelRun', ))}
 
     ho = {4: ('1h', None, ('TrailFractals', 'ChannelRun')),
