@@ -404,7 +404,7 @@ class TradingSession:
         u.start()
 
         if self.running_on == 'pi_1':
-            ohlc_r = Path(f'/home/ross/coding/pi_2/modular_trader/bin_ohlc_{self.ohlc_tf}')
+            ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
             mkt_data_r = Path('/home/ross/coding/modular_trader/market_data')
             records_r = Path(f'/home/ross/coding/modular_trader/records')
         elif self.running_on == 'pi_2':
