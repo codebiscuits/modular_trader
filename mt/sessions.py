@@ -28,7 +28,7 @@ def get_timeframes() -> list[tuple]:
     hour = datetime.now(timezone.utc).hour
     # qh, hour = 0, 0 # for testing all timeframes
 
-    mi = {1: ('15m', None, ('ChannelRun', )),
+    mi = {#1: ('15m', None, ('ChannelRun', )),
          2: ('30m', None, ('ChannelRun', ))}
 
     ho = {4: ('1h', None, ('TrailFractals', 'ChannelRun')),
@@ -404,7 +404,7 @@ class TradingSession:
         u.start()
 
         if self.running_on == 'pi_1':
-            ohlc_r = Path(f'/home/ross/coding/pi_2/modular_trader/bin_ohlc_{self.ohlc_tf}')
+            ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
             mkt_data_r = Path('/home/ross/coding/modular_trader/market_data')
             records_r = Path(f'/home/ross/coding/modular_trader/records')
         elif self.running_on == 'pi_2':
