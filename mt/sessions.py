@@ -403,10 +403,16 @@ class TradingSession:
         u = Timer('mkt_data_path in session')
         u.start()
 
-        if self.running_on in ['pi_1', 'pi_2']:
+        if self.running_on == 'pi_1':
+            ohlc_r = Path(f'/home/ross/coding/pi_2/modular_trader/bin_ohlc_{self.ohlc_tf}')
+            mkt_data_r = Path('/home/ross/coding/modular_trader/market_data')
+            records_r = Path(f'/home/ross/coding/modular_trader/records')
+        elif self.running_on == 'pi_2':
+            ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
             mkt_data_r = Path('/home/ross/coding/modular_trader/market_data')
             records_r = Path(f'/home/ross/coding/modular_trader/records')
         else:
+            ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
             mkt_data_r = Path('/home/ross/coding/pi_2/modular_trader/market_data')
             records_r = (Path(f'/home/ross/coding/pi_1/modular_trader/records'),
                          Path(f'/home/ross/coding/pi_2/modular_trader/records'))
@@ -415,7 +421,6 @@ class TradingSession:
         mkt_data_w.mkdir(parents=True, exist_ok=True)
         records_w = Path(f'/home/ross/coding/modular_trader/records')
         records_w.mkdir(exist_ok=True)
-        ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
         ohlc_w = Path(f"/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}")
         ohlc_w.mkdir(exist_ok=True)
 

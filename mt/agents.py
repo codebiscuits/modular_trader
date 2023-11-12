@@ -1825,7 +1825,7 @@ class Agent:
         open_order['action'] = "open"
         open_order['direction'] = signal['direction']
         open_order['state'] = 'real'
-        open_order['score'] = 'signal score'
+        open_order['score'] = signal['score']
         open_order['hard_stop'] = str(signal['inval'])
 
         pfrd = signal['quote_size'] * abs(1 - signal['inval_ratio'])
