@@ -3120,9 +3120,8 @@ class ChannelRun(Agent):
         self.pair_selection = pair_selection
         self.training_pairs_n = num_pairs
         self.name = f'channel_run_{self.lookback}_{self.goal}'
-        self.id = f"ChannelRun_{self.tf}_{self.offset}_{self.lookback}_{self.goal}_{self.pair_selection}_{self.training_pairs_n}"
+        self.id = f"channel_run_{self.tf}_{self.offset}_{self.lookback}_{self.goal}_{self.pair_selection}_{self.training_pairs_n}"
         self.ohlc_length = 4035
-        self.pi_path = 0
         Agent.__init__(self, session)
         session.pairs_set.update(self.pairs)
         self.notes = ''
