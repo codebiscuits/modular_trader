@@ -28,7 +28,7 @@ def get_timeframes() -> list[tuple]:
     hour = datetime.now(timezone.utc).hour
     # qh, hour = 0, 0 # for testing all timeframes
 
-    mi = {#1: ('15m', None, ('ChannelRun', )),
+    mi = {1: ('15m', None, ('ChannelRun', )),
          2: ('30m', None, ('ChannelRun', ))}
 
     ho = {4: ('1h', None, ('TrailFractals', 'ChannelRun')),
@@ -99,7 +99,7 @@ class TradingSession:
         self.name = 'agent names here'
         self.last_price_update = 0
         self.running_on = identify_machine()
-        self.live = self.set_live()
+        self.live = True  # self.set_live()
         self.min_size = 30
         self.timeframes = get_timeframes()
 
@@ -403,19 +403,23 @@ class TradingSession:
         u = Timer('mkt_data_path in session')
         u.start()
 
-        if self.running_on == 'pi_1':
-            ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
-            mkt_data_r = Path('/home/ross/coding/modular_trader/market_data')
-            records_r = Path(f'/home/ross/coding/modular_trader/records')
-        elif self.running_on == 'pi_2':
-            ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
-            mkt_data_r = Path('/home/ross/coding/modular_trader/market_data')
-            records_r = Path(f'/home/ross/coding/modular_trader/records')
-        else:
-            ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
-            mkt_data_r = Path('/home/ross/coding/pi_2/modular_trader/market_data')
-            records_r = (Path(f'/home/ross/coding/pi_1/modular_trader/records'),
-                         Path(f'/home/ross/coding/pi_2/modular_trader/records'))
+        ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
+        mkt_data_r = Path('/home/ross/coding/modular_trader/market_data')
+        records_r = Path(f'/home/ross/coding/modular_trader/records')
+
+        # if self.running_on == 'pi_1':
+        #     ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
+        #     mkt_data_r = Path('/home/ross/coding/modular_trader/market_data')
+        #     records_r = Path(f'/home/ross/coding/modular_trader/records')
+        # elif self.running_on == 'pi_2':
+        #     ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
+        #     mkt_data_r = Path('/home/ross/coding/modular_trader/market_data')
+        #     records_r = Path(f'/home/ross/coding/modular_trader/records')
+        # else:
+        #     ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
+        #     mkt_data_r = Path('/home/ross/coding/pi_2/modular_trader/market_data')
+        #     records_r = (Path(f'/home/ross/coding/pi_1/modular_trader/records'),
+        #                  Path(f'/home/ross/coding/pi_2/modular_trader/records'))
 
         mkt_data_w = Path('/home/ross/coding/modular_trader/market_data')
         mkt_data_w.mkdir(parents=True, exist_ok=True)

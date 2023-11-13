@@ -21,6 +21,7 @@ from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 from imblearn.under_sampling import RandomUnderSampler, ClusterCentroids
 from xgboost import XGBClassifier, DMatrix
 import optuna
+
 optuna.logging.set_verbosity(optuna.logging.ERROR)
 
 # if not Path('pi_2.txt').exists():
@@ -29,7 +30,7 @@ optuna.logging.set_verbosity(optuna.logging.ERROR)
 warnings.filterwarnings('ignore')
 warnings.simplefilter(action='ignore', category=FutureWarning)
 logger = create_logger('model_training')
-use_local_data = False # if false, uses trade records from the pi
+use_local_data = True  # if false, uses trade records from the pi
 
 fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
 
@@ -246,8 +247,8 @@ def eliminate_features(X_train, X_test, X_val, y_train):
         X_val = X_val.drop(collinear_features, axis=1)
 
     # mutual info feature selection
-    cols = list(X_train.columns) # list of strings, names of all features
-    mi_k = max(min(15, len(cols)-2), len(cols))
+    cols = list(X_train.columns)  # list of strings, names of all features
+    mi_k = max(min(15, len(cols) - 2), len(cols))
     selector = SelectKBest(mutual_info_classif, k=mi_k)
     selector.fit(X_train, y_train)
     mi_cols_idx = list(selector.get_support(indices=True))
@@ -264,7 +265,7 @@ def rand_forest_sfs(X_train, X_test, X_val, y_train):
     print(f"sequential feature selection began: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
     sfs_selector_model = RandomForestClassifier()
     sfs_selector = SFS(estimator=sfs_selector_model, k_features='best', forward=False,
-                         floating=True, verbose=0, scoring='accuracy', n_jobs=-1)
+                       floating=True, verbose=0, scoring='accuracy', n_jobs=-1)
     sfs_selector = sfs_selector.fit(X_train, y_train)
     cols_idx = list(sfs_selector.k_feature_idx_)
     X_train = sfs_selector.transform(X_train)
@@ -400,7 +401,6 @@ def final_rf_train_and_save(mode, strat_name, X_final, y_final, final_features, 
 
 
 def load_secondary_data(strat_name, timeframe, strat_params, selection_method, num_pairs):
-
     root_dir = '/home/ross/coding' if use_local_data else '/home/ross/coding/pi_1'
 
     records_path = Path(f"{root_dir}/modular_trader/records/{strat_name}_{timeframe}_None_"
@@ -422,7 +422,7 @@ def load_secondary_data(strat_name, timeframe, strat_params, selection_method, n
 
 
 def create_risk_dataset(strat_name: str, side: str, timeframe: str, strat_params: tuple,
-                    num_pairs: int, selection_method: str, thresh):
+                        num_pairs: int, selection_method: str, thresh):
     """the two target columns (pnl and win) are both booleans and mean slightly different things. pnl is True if the
     final pnl of the trade was above zero, and win is True if the final pnl of the trade was above the threshold"""
 
@@ -467,7 +467,7 @@ def create_risk_dataset(strat_name: str, side: str, timeframe: str, strat_params
 
 
 def create_perf_dataset(strat_name: str, side: str, timeframe: str, strat_params: tuple,
-                    num_pairs: int, selection_method: str, thresh):
+                        num_pairs: int, selection_method: str, thresh):
     """the two target columns (pnl and win) are both booleans and mean slightly different things. pnl is True if the
     final pnl of the trade was above zero, and win is True if the final pnl of the trade was above the threshold"""
 
@@ -477,7 +477,8 @@ def create_perf_dataset(strat_name: str, side: str, timeframe: str, strat_params
     observations = []
     for position in all_records.values():
         signal = position['signal']
-        if (signal['direction'] != side) or (signal.get('perf_ema4') is None):# or (signal['wanted'] == False):
+        wanted = signal.get('wanted', True)
+        if (signal['direction'] != side) or (signal.get('perf_ema4') is None) or (wanted is False):
             continue
 
         trade = position['trade']
