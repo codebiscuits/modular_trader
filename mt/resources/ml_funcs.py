@@ -119,14 +119,16 @@ def get_margin_pairs(method, num_pairs):
     start_pair = 0
     pairs = rank_pairs(method)
 
-    with open('/home/ross/coding/modular_trader/ohlc_lengths.json', 'r') as file:
-        ohlc_lengths = json.load(file)
+    market_info = pd.read_parquet('/home/ross/coding/modular_trader/market_data/market_info.parquet')
 
     client = init_client()
     exc_info = client.get_exchange_info()
     symbol_margin = {i['symbol']: i['isMarginTradingAllowed'] for i in exc_info['symbols'] if
                      i['quoteAsset'] == 'USDT'}
-    pairs = [p for p in pairs if symbol_margin[p] and (ohlc_lengths[p] > 4032)]
+    pairs = [p for p in pairs if symbol_margin[p]
+             and (market_info.at[p, 'length'] > 4032)
+             and (market_info.at[p, 'volatility_1w'] > 0.0003)
+             ]
 
     return pairs[start_pair:start_pair + num_pairs]
 
