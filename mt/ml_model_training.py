@@ -427,6 +427,7 @@ def create_risk_dataset(strat_name: str, side: str, timeframe: str, strat_params
     final pnl of the trade was above zero, and win is True if the final pnl of the trade was above the threshold"""
 
     all_records = load_secondary_data(strat_name, timeframe, strat_params, selection_method, num_pairs)
+    logger.debug(f"risk data length: {len(all_records)}")
 
     observations = []
     for position in all_records.values():
@@ -674,7 +675,7 @@ if __name__ == '__main__':
     #  new data, which i can run with the secondary training every day, and run the full train_primary once a week
 
     for side, timeframe in product(sides, timeframes):
-        logger.debug(f"Testing {side} {timeframe}")
+        print(f"\n\n*******\nTesting {side} {timeframe}\n*******\n")
         if timeframe in ['15m', '30m', '1h', '4h']:
             train_primary('channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 2500, num_trials)
             train_secondary('risk', 'channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 0.4, num_trials)
