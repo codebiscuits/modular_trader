@@ -38,9 +38,9 @@ async def stitch(pair, klines, all_data):
         df = new_df
 
     extra_data = {'pair': pair,
-                  'roc_1d': df.close.rolling(12).mean().ffill().pct_change(288).iloc[-1],
-                  'roc_1w': df.close.rolling(84).mean().ffill().pct_change(2016).iloc[-1],
-                  'roc_1m': df.close.rolling(360).mean().ffill().pct_change(8640).iloc[-1],
+                  'roc_1d': df.close.rolling(12).mean().ffill().pct_change(288, fill_method=None).iloc[-1],
+                  'roc_1w': df.close.rolling(84).mean().ffill().pct_change(2016, fill_method=None).iloc[-1],
+                  'roc_1m': df.close.rolling(360).mean().ffill().pct_change(8640, fill_method=None).iloc[-1],
                   'volume_1d': df.tail(288).quote_vol.sum(),
                   'volume_1w': df.tail(2016).quote_vol.sum(),
                   'volatility_1d': df.tail(288).close.ffill().pct_change().std(),
@@ -138,5 +138,5 @@ mkt_info_path = Path("/home/ross/coding/modular_trader/market_data/market_info.p
 extra_df.to_parquet(mkt_info_path)
 
 elapsed = perf() - start
-logger.debug(f"Time taken: {int(elapsed // 60)}m {elapsed % 60:.2f}s\n\n")
+logger.debug(f"Time taken: {int(elapsed // 60)}m {elapsed % 60:.2f}s")
 logger.info(f"Time taken: {int(elapsed // 60)}m {elapsed % 60:.2f}s\n\n")
