@@ -542,15 +542,19 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
 
     # balance classes
     if (len(y.unique()) < 2) or (y.value_counts().iloc[0] < 20) or (y.value_counts().iloc[1] < 20):
+        logger.debug('stopped - not enough samples in both classes for cross-validation etc')
         return  # need enough samples in each class for cross-validation etc
     # us = RandomUnderSampler(random_state=0)
     us = ClusterCentroids(random_state=0)
     X, y = us.fit_resample(X, y)
 
+    logger.debug(f"Length of dataset: {len(y)}")
+
     # split data for fitting and calibration
     X_train, X_test, X_val, y_train, y_test, y_val = ttv_split(X, y)
 
     if (y_test.value_counts().iloc[0] < 6) or (y_test.value_counts().iloc[1] < 6):
+        logger.debug('stopped - not enough samples in both classes for cross-validation etc')
         return
 
     # feature scaling
@@ -570,6 +574,7 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
     # remove features with low permutation importance
     final_features = rf_perm_importance(X_train, X_test, y_train, y_test, rf_sfs)
     if len(final_features) == 0:
+        logger.debug('stopped - no features have any predictive power')
         return
 
     # final validation score before training production model
@@ -598,6 +603,7 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
         results = create_perf_dataset(strat_name, side, timeframe, strat_params, num_pairs, selection_method, thresh)
 
     if len(results) == 0:
+        logger.debug('stopped - no samples in dataset')
         return
 
     # split features from labels
@@ -606,19 +612,22 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
 
     # balance classes
     if (len(y.unique()) < 2) or (y.value_counts().iloc[0] < 20) or (y.value_counts().iloc[1] < 20):
+        logger.debug('stopped - not enough samples in both classes for cross-validation etc')
         return  # need enough samples in each class for cross-validation etc
     # us = RandomUnderSampler(random_state=0)
     us = ClusterCentroids(random_state=0)
     try:
         X, y = us.fit_resample(X, y)
     except ValueError:
-        print(X)
+        logger.debug(X)
+        return
 
     logger.debug(f"Length of dataset: {len(y)}")
 
     # split off validation set
     X_train, X_test, X_val, y_train, y_test, y_val = ttv_split(X, y)
     if (y_test.value_counts().iloc[0] < 6) or (y_test.value_counts().iloc[1] < 6):
+        logger.debug('stopped - not enough samples in both classes for cross-validation etc')
         return
 
     # split off validation labels
@@ -650,6 +659,7 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
     # remove features with low permutation importance
     final_features = rf_perm_importance(X_train, X_test, y_train, y_test, rf_sfs)
     if len(final_features) == 0:
+        logger.debug('stopped - no features have any predictive power')
         return
 
     # final validation score before training production model
