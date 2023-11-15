@@ -527,7 +527,7 @@ def create_perf_dataset(strat_name: str, side: str, timeframe: str, strat_params
 def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tuple,
                   num_pairs: int, selection_method: str, data_len: int, num_trials: int):
     loop_start = time.perf_counter()
-    print(f"\n- {datetime.now().strftime('%H:%M:%S')} Running {strat_name} primary model, {side}, {timeframe}, "
+    print(f"\n*1* {datetime.now().strftime('%H:%M:%S')} Running {strat_name} primary model, {side}, {timeframe}, "
           f"{', '.join([str(p) for p in strat_params])}, {num_pairs}, {selection_method} primary")
 
     # generate dataset
@@ -594,8 +594,8 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
     """this function can be used to train the risk model or the performance model, selected by the mode parameter"""
 
     loop_start = time.perf_counter()
-    print(f"\n- {datetime.now().strftime('%H:%M:%S')} Running {strat_name} {mode} model training, {side}, {timeframe}, "
-          f"{', '.join([str(p) for p in strat_params])}, {num_pairs}, {selection_method}")
+    print(f"\n*{2 if mode == 'risk' else 3}* {datetime.now().strftime('%H:%M:%S')} Running {strat_name} {mode} model "
+          f"training, {side}, {timeframe}, {', '.join([str(p) for p in strat_params])}, {num_pairs}, {selection_method}")
 
     if mode == 'risk':
         results = create_risk_dataset(strat_name, side, timeframe, strat_params, num_pairs, selection_method, thresh)
