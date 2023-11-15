@@ -26,7 +26,7 @@ def get_timeframes() -> list[tuple]:
 
     qh = datetime.now(timezone.utc).minute // 15  # this represents which quarter-hour is current
     hour = datetime.now(timezone.utc).hour
-    qh, hour = 0, 0 # for testing all timeframes
+    # qh, hour = 0, 0 # for testing all timeframes
 
     mi = {1: ('15m', None, ('ChannelRun', )),
          2: ('30m', None, ('ChannelRun', ))}
