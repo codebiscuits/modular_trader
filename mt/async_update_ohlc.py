@@ -138,4 +138,5 @@ mkt_info_path = Path("/home/ross/coding/modular_trader/market_data/market_info.p
 extra_df.to_parquet(mkt_info_path)
 
 elapsed = perf() - start
+logger.debug(f"Time taken: {int(elapsed // 60)}m {elapsed % 60:.2f}s\n\n")
 logger.info(f"Time taken: {int(elapsed // 60)}m {elapsed % 60:.2f}s\n\n")
