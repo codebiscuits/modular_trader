@@ -758,7 +758,7 @@ def clear_stop_M(session, pair: str, position: dict) -> Tuple[Any, Decimal]:
     return clear, base_size
 
 
-def set_oco_stop_m(session, pair: str, size: float, side: str, target: float, stop: float) -> dict:
+def set_oco_m(session, pair: str, size: float, side: str, target: float, stop: float) -> dict:
     """sends a margin oco order to binance and returns the order data"""
 
     sd = Timer('set_margin_oco_m')

@@ -346,7 +346,7 @@ tp_close_took = tp_close_end - tp_close_start
 logger.debug(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Signal Scores -+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n")
 logger.info(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Signal Scores -+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n")
 
-
+risk_validity, perf_validity = 30, 30
 # calculate agent perf scores
 for agent in agents.values():
     agent.calc_rpnls()
@@ -360,10 +360,10 @@ for agent in agents.values():
     # make predictions
     agent.perf_score_ml_l = agent.perf_model_prediction('long')
     agent.perf_score_ml_s = agent.perf_model_prediction('short')
-    agent.perf_score_old_l = agent.perf_manual_prediction('long_wanted')
-    agent.perf_score_old_s = agent.perf_manual_prediction('short_wanted')
-    agent.perf_score_l = agent.perf_score_old_l if agent.perf_score_validity_l < 30 else agent.perf_score_ml_l
-    agent.perf_score_s = agent.perf_score_old_s if agent.perf_score_validity_s < 30 else agent.perf_score_ml_s
+    agent.perf_score_old_l = 0  # agent.perf_manual_prediction('long_wanted')
+    agent.perf_score_old_s = 0  # agent.perf_manual_prediction('short_wanted')
+    agent.perf_score_l = agent.perf_score_old_l if agent.perf_score_validity_l < perf_validity else agent.perf_score_ml_l
+    agent.perf_score_s = agent.perf_score_old_s if agent.perf_score_validity_s < perf_validity else agent.perf_score_ml_s
 
 logger.info('creating signal scores:')
 while processed_signals['unassigned']:
@@ -390,8 +390,8 @@ while processed_signals['unassigned']:
     signal['score_ml'] = agents[signal['agent']].risk_model_prediction(signal)
     signal['validity'] = (agents[signal['agent']].risk_score_validity_l if signal['direction'] == 'long'
                           else agents[signal['agent']].risk_score_validity_s)
-    signal['score_old'] = agents[signal['agent']].risk_manual_prediction(signal)
-    signal['score'] = signal['score_ml'] if signal['validity'] > 30 else signal['score_old']
+    signal['score_old'] = 1  # agents[signal['agent']].risk_manual_prediction(signal)
+    signal['score'] = signal['score_ml'] if signal['validity'] > risk_validity else signal['score_old']
 
     # calculate position size
     signal['base_size'], signal['quote_size'] = agents[signal['agent']].get_size(session, signal)

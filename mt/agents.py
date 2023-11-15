@@ -17,6 +17,7 @@ import sys
 from pyarrow import ArrowInvalid
 import joblib
 from xgboost import XGBClassifier
+import plotly.graph_objects as go
 
 ctx = getcontext()
 ctx.prec = 12
@@ -639,8 +640,8 @@ class Agent:
                 session.store_ohlc(df, pair, timeframes)
 
         # try:  # this try/except block can be removed when the problem is solved
-        stop_dt = datetime.fromtimestamp(stop_time / 1000).astimezone(timezone.utc)
-        df = df.loc[df.timestamp > stop_dt].reset_index(drop=True)
+        stop_dt = datetime.fromtimestamp((stop_time / 1000) - 300).astimezone(timezone.utc)  # -300s for previous 5min
+        df = df.loc[df.timestamp >= stop_dt].reset_index(drop=True)
         # except ValueError as e:
         #     logger.exception(f"ValueError for {pair} sim stop time: {e.args}")
         #     logger.error(pformat(self.sim_trades[pair]))
@@ -792,23 +793,25 @@ class Agent:
 
         print(f"{target_hit = } {stop_hit = }")
         if not (stop_hit or target_hit):
-            print('nothing hit')
+            print('nothing hit\n')
             return target_hit, stop_hit, closed_time
         elif stop_hit and target_hit:
             logger.debug(f"{target_hit_idx = } {stop_hit_idx = }")
             if target_hit_idx < stop_hit_idx:
                 exit_row = df.timestamp.iloc[target_hit_idx]
+                stop_hit = False
             else:
                 exit_row = df.timestamp.iloc[stop_hit_idx]
+                target_hit = False
         elif stop_hit:
             exit_row = df.timestamp.iloc[stop_hit_idx]
         elif target_hit:
             exit_row = df.timestamp.iloc[target_hit_idx]
 
         if direction == 'long':
-            logger.debug(f"{target = } {highest = } {target_hit = } {stop = } {lowest = } {stop_hit = }")
+            logger.debug(f"{target = } {highest = } {target_hit = } {stop = } {lowest = } {stop_hit = } {exit_row = }")
         else:
-            logger.debug(f"{target = } {lowest = } {target_hit = } {stop = } {highest = } {stop_hit = }")
+            logger.debug(f"{target = } {lowest = } {target_hit = } {stop = } {highest = } {stop_hit = } {exit_row = }")
 
         if isinstance(exit_row, pd.Timestamp):
             closed_time = int(exit_row.timestamp())
@@ -819,6 +822,34 @@ class Agent:
         k16.stop()
 
         return target_hit, stop_hit, closed_time
+
+    def plot_oco_trade(self, df, pair, entry, target, stop, target_hit, stop_hit, closed_time):
+        fig = go.Figure(data=go.Ohlc(x=df['timestamp'],
+                                     open=df['open'],
+                                     high=df['high'],
+                                     low=df['low'],
+                                     close=df['close']))
+
+        fig.add_trace(go.Scatter(x=[df.timestamp.min()], y=[entry], mode='markers',
+                                 marker=dict(color='blue', size=10), name='entry'))
+        fig.add_shape(type='line', x0=df.timestamp.min(), x1=df.timestamp.max(), y0=target, y1=target,
+                      line=dict(color='green', width=2), name='target')
+        fig.add_shape(type='line', x0=df.timestamp.min(), x1=df.timestamp.max(), y0=stop, y1=stop,
+                      line=dict(color='red', width=2), name='stop')
+
+        if closed_time:
+            closed_dt = datetime.fromtimestamp(closed_time).strftime('%d/%m %H:%M:%S')
+        else:
+            closed_dt = closed_time
+        declaration = (f"target hit, {closed_dt = }" if target_hit
+                       else f"stop hit, {closed_dt = }" if stop_hit
+        else f"neither hit, {closed_time = }")
+        fig.update(layout_xaxis_rangeslider_visible=False)
+        fig.update_layout(width=1920, height=1080, title=f"{self.id} {pair} {declaration}")
+
+        plots_folder = Path('/home/ross/coding/modular_trader/test_channel_run_plots')
+        plots_folder.mkdir(parents=True, exist_ok=True)
+        fig.write_image(plots_folder / f"{self.id}_{pair}.png")
 
     def create_oco_trade_dict(self, pair, direction, price, base_size, action, closed_time, state):
         liability = f"{0 - (base_size * price):.2f}" if direction == 'long' else f"{0 - base_size:.2f}"
@@ -839,8 +870,8 @@ class Agent:
         return trade_dict
 
     def record_closed_oco_sim_trades(self, session, timeframes: list) -> None:
-        """goes through all trades in the sim_trades file and checks their recent price action
-        against their most recent hard_stop to see if any of them would have got stopped out"""
+        """goes through all oco trades in the sim_trades file and checks their recent price action
+        against their target and stop to see if any of them would have closed"""
 
         n = Timer('record_closed_oco_sim_trades')
         n.start()
@@ -867,6 +898,8 @@ class Agent:
                 continue
 
             target_hit, stop_hit, closed_time = self.check_oco_closed(df, direction, target, stop)
+            if session.running_on == 'laptop' and (target_hit or stop_hit):
+                self.plot_oco_trade(df, pair, v['trade'][0]['exe_price'], target, stop, target_hit, stop_hit, closed_time)
             if target_hit or stop_hit:
                 action = 'close' if target_hit else 'stop'
                 price = target if target_hit else stop
@@ -1262,10 +1295,10 @@ class Agent:
         direction = signal['direction']
 
         if direction == 'long' and self.risk_score_validity_l == 0:
-            logger.debug(f"secondary prediction {direction} short circuit, score 0")
+            logger.debug(f"{self.id} risk prediction {direction} short circuit, score 0")
             return 0
         elif direction == 'short' and self.risk_score_validity_s == 0:
-            logger.debug(f"secondary prediction {direction} short circuit, score 0")
+            logger.debug(f"{self.id} risk prediction {direction} short circuit, score 0")
             return 0
 
         conf_rf_usdt_l = signal['conf_rf_usdt_l']
@@ -1288,14 +1321,14 @@ class Agent:
             long_data = self.long_risk_scaler.transform(data)
             long_data = long_data[:, self.long_risk_features_idx]
             score = float(self.long_risk_model.predict_proba(long_data)[-1, 1])
-            print(f"risk score: {score:.1%}")
+            print(f"{self.id} {direction} ml risk score: {score:.1%}")
         else:
             short_data = self.short_risk_scaler.transform(data)
             short_data = short_data[:, self.short_risk_features_idx]
             score = float(self.short_risk_model.predict_proba(short_data)[-1, 1])
-            print(f"risk score: {score:.1%}")
+            print(f"{self.id} {direction} ml risk score: {score:.1%}")
 
-        return min(1, max(0.001, score))
+        return min(1.0, max(0.001, score))
 
     def risk_manual_prediction(self, signal):
 
@@ -1329,10 +1362,10 @@ class Agent:
     def perf_model_prediction(self, direction):
 
         if direction == 'long' and self.perf_score_validity_l == 0:
-            logger.debug(f"{self.id} predict perf {direction} short circuit, score 0")
+            logger.debug(f"{self.id} perf prediction {direction} short circuit, score 0")
             return 0
         elif direction == 'short' and self.perf_score_validity_s == 0:
-            logger.debug(f"{self.id} predict perf {direction} short circuit, score 0")
+            logger.debug(f"{self.id} perf prediction {direction} short circuit, score 0")
             return 0
 
         perf_stats_w = self.perf_stats_lw if direction == 'long' else self.perf_stats_sw
@@ -1372,9 +1405,18 @@ class Agent:
         self.long_perf_features_idx = [i for i, f in enumerate(names) if f in self.long_perf_info['features']]
         self.short_perf_features_idx = [i for i, f in enumerate(names) if f in self.short_perf_info['features']]
 
-        perf_score = 0
+        if direction == 'long':
+            long_data = self.long_perf_scaler.transform(data)
+            long_data = long_data[:, self.long_perf_features_idx]
+            score = float(self.long_perf_model.predict_proba(long_data)[-1, 1])
+            print(f"{self.id} {direction} ml perf score: {score:.1%}")
+        else:
+            short_data = self.short_perf_scaler.transform(data)
+            short_data = short_data[:, self.short_perf_features_idx]
+            score = float(self.short_perf_model.predict_proba(short_data)[-1, 1])
+            print(f"{self.id} {direction} ml perf score: {score:.1%}")
 
-        return perf_score
+        return min(1.0, max(0.001, score))
 
     def perf_manual_prediction(self, direction):
         perf_ema4 = self.pnls[direction]['ema_4']
@@ -1827,6 +1869,8 @@ class Agent:
         open_order['state'] = 'real'
         open_order['score'] = signal['score']
         open_order['hard_stop'] = str(signal['inval'])
+        if self.oco:
+            open_order['target'] = str(signal['target'])
 
         pfrd = signal['quote_size'] * abs(1 - signal['inval_ratio'])
         self.open_trades[pair]['position']['pfrd'] = str(pfrd)
@@ -1838,13 +1882,32 @@ class Agent:
 
         return open_order
 
+    def open_set_oco(self, session, pair, target, stp, open_order, direction):
+        # stop_size = float(open_order.get('base_size'))
+        stop_size = open_order.get('base_size')  # this is a string, go back to using above line if this causes bugs
+
+        if direction == 'long':
+            oco_order = funcs.set_oco_m(session, pair, stop_size, be.SIDE_SELL, target, stp)
+        else:
+            oco_order = funcs.set_oco_m(session, pair, stop_size, be.SIDE_BUY, target, stp)
+
+        open_order['stop_id'] = oco_order.get('orderId')
+        self.open_trades[pair]['position']['hard_stop'] = str(stp)
+        self.open_trades[pair]['position']['init_hard_stop'] = str(stp)
+        self.open_trades[pair]['position']['target'] = str(target)
+        self.open_trades[pair]['position']['stop_id'] = oco_order.get('orderId')
+        self.open_trades[pair]['position']['stop_time'] = int(oco_order.get('transactTime'))
+        self.open_trades[pair]['placeholder']['stop_id'] = oco_order.get('orderId')
+        self.open_trades[pair]['placeholder']['stop_time'] = int(oco_order.get('transactTime'))
+        self.open_trades[pair]['placeholder']['completed'] = 'set_oco'
+
     def open_set_stop(self, session, pair, stp, open_order, direction):
         # stop_size = float(open_order.get('base_size'))
         stop_size = open_order.get('base_size')  # this is a string, go back to using above line if this causes bugs
 
         if direction == 'long':
             stop_order = funcs.set_stop_M(session, pair, stop_size, be.SIDE_SELL, stp)
-        elif direction == 'short':
+        else:
             stop_order = funcs.set_stop_M(session, pair, stop_size, be.SIDE_BUY, stp)
 
         open_order['stop_id'] = stop_order.get('orderId')
@@ -1931,7 +1994,10 @@ class Agent:
         if stage <= 2:
             if stage == 2:
                 open_order = placeholder['open_order']
-            self.open_set_stop(session, pair, stp, open_order, direction)
+            if self.oco:
+                self.open_set_oco(self, session, pair, signal['target'], stp, open_order, direction)
+            else:
+                self.open_set_stop(session, pair, stp, open_order, direction)
         if stage <= 3:
             self.open_save_records(session, pair)
             self.open_update_real_pos_usdtM_counts(session, pair, size, inval_ratio, direction)
