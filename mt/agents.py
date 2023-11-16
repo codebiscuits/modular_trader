@@ -639,12 +639,9 @@ class Agent:
                 source += ' and exchange'
                 session.store_ohlc(df, pair, timeframes)
 
-        # try:  # this try/except block can be removed when the problem is solved
+        # cut off all data before what i'm interested in
         stop_dt = datetime.fromtimestamp((stop_time / 1000) - 300).astimezone(timezone.utc)  # -300s for previous 5min
         df = df.loc[df.timestamp >= stop_dt].reset_index(drop=True)
-        # except ValueError as e:
-        #     logger.exception(f"ValueError for {pair} sim stop time: {e.args}")
-        #     logger.error(pformat(self.sim_trades[pair]))
 
         rsst_gd.stop()
 
@@ -780,6 +777,7 @@ class Agent:
                 stop_hit = True
                 stop_hit_idx = df.low.clip(lower=stop).idxmin()
             if highest > target:
+                logger.debug('*** TARGET HIT ***')
                 target_hit = True
                 target_hit_idx = df.high.clip(upper=target).idxmax()
         else:
@@ -788,12 +786,13 @@ class Agent:
                 stop_hit = True
                 stop_hit_idx = df.high.clip(upper=stop).idxmax()
             if lowest < target:
+                logger.debug('*** TARGET HIT ***')
                 target_hit = True
                 target_hit_idx = df.low.clip(lower=target).idxmin()
 
-        print(f"{target_hit = } {stop_hit = }")
+        logger.debug(f"{target_hit = } {stop_hit = }")
         if not (stop_hit or target_hit):
-            print('nothing hit\n')
+            logger.debug('nothing hit\n')
             return target_hit, stop_hit, closed_time
         elif stop_hit and target_hit:
             logger.debug(f"{target_hit_idx = } {stop_hit_idx = }")
@@ -898,7 +897,7 @@ class Agent:
                 continue
 
             target_hit, stop_hit, closed_time = self.check_oco_closed(df, direction, target, stop)
-            if session.running_on == 'laptop' and (target_hit or stop_hit):
+            if session.running_on == 'laptop' and target_hit:
                 self.plot_oco_trade(df, pair, v['trade'][0]['exe_price'], target, stop, target_hit, stop_hit, closed_time)
             if target_hit or stop_hit:
                 action = 'close' if target_hit else 'stop'
@@ -2584,8 +2583,8 @@ class Agent:
         k7.stop()
 
     def sim_to_closed_sim(self, session, pair, close_order, save_file):
-        logger.debug('running sim_to_closed_sim')
-        logger.info('running sim_to_closed_sim')
+        # logger.debug('running sim_to_closed_sim')
+        # logger.info('running sim_to_closed_sim')
 
         self.sim_trades[pair]['trade'].append(close_order)
 
@@ -2622,7 +2621,7 @@ class Agent:
         price = session.pairs_data[pair]['price']
         sim_bal = float(self.sim_trades[pair]['position']['base_size'])
 
-        # logger.info(f"{self.id} sim close {pair} {direction} @ {price}")
+        logger.info(f"{self.id} sim close {pair} {direction} @ {price}")
 
         # execute order
         now = datetime.now(timezone.utc)
@@ -2640,11 +2639,53 @@ class Agent:
                        'fee_currency': 'BNB',
                        'state': 'sim'}
 
+        if self.oco:
+            self.plot_oco_trade_2(session, pair)
+
         self.sim_to_closed_sim(session, pair, close_order, save_file=True)
 
         self.counts_dict[f'sim_close_{direction}'] += 1
 
         k6.stop()
+
+    def plot_oco_trade_2(self, session, pair):
+        signal = self.sim_trades[pair]['signal']
+        trade = self.sim_trades[pair]['trade']
+
+        entry = float(trade[0]['exe_price'])
+        exit = float(trade[-1]['exe_price'])
+        trade_start = trade[0]['timestamp']
+        trade_end = trade[-1]['timestamp']
+        target = trade[0]['target']
+        stop = signal['inval']
+
+        df = self.get_data(session, pair, session.timeframes, trade_start)
+
+        # cut off all data after what i'm interested in
+        end_dt = datetime.fromtimestamp((trade_end / 1000) + 300).astimezone(timezone.utc)  # +300s for subsequent 5min
+        df = df.loc[df.timestamp <= end_dt].reset_index(drop=True)
+
+        fig = go.Figure(data=go.Ohlc(x=df['timestamp'],
+                                     open=df['open'],
+                                     high=df['high'],
+                                     low=df['low'],
+                                     close=df['close']))
+
+        fig.add_trace(go.Scatter(x=[trade_start], y=[entry], mode='markers',
+                                 marker=dict(color='blue', size=15), name='entry'))
+        fig.add_trace(go.Scatter(x=[trade_end], y=[exit], mode='markers',
+                                 marker=dict(color='yellow', size=10), name='exit'))
+        fig.add_shape(type='line', x0=df.timestamp.min(), x1=df.timestamp.max(), y0=target, y1=target,
+                      line=dict(color='green', width=2), name='target')
+        fig.add_shape(type='line', x0=df.timestamp.min(), x1=df.timestamp.max(), y0=stop, y1=stop,
+                      line=dict(color='red', width=2), name='stop')
+
+        fig.update(layout_xaxis_rangeslider_visible=False)
+        fig.update_layout(width=1920, height=1080, title=f"{self.id} {pair} {end_dt}")
+
+        plots_folder = Path('/home/ross/coding/modular_trader/sim_close_plots')
+        plots_folder.mkdir(parents=True, exist_ok=True)
+        fig.write_image(plots_folder / f"{self.id}_{pair}.png")
 
     # tracked ----------------------------------------------------------------------------------------------------------
 
@@ -3242,9 +3283,14 @@ class ChannelRun(Agent):
         stp = self.calc_stop(inval, session.pairs_data[pair]['spread'], price)
 
         signal_dict['target'] = target
-        rr = abs((target / price) - 1) / abs((stp / price) - 1)
+        risk = abs((stp / price) - 1)
+        reward = abs((target / price) - 1)
+        rr = reward / risk
         signal_dict['rr'] = rr
         df['rr'] = rr  # broadcasting single value to whole column
+
+        if reward < 0.003:  # i don't want to be taking trades that could barely cover fees
+            return dict()
 
         # Long model
         long_features = df[self.long_info['features']]

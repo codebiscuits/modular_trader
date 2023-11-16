@@ -133,13 +133,15 @@ def get_bin_ohlc(pair: str, timeframe: str, span: str = "2 years ago UTC", sessi
     abc = Timer('all binance calls')
     abc.start()
 
-    if session:
-        session.track_weights(1)
-        klines = session.client.get_historical_klines(pair, tf_dict.get(timeframe), span)
-    else:
+    if session is None:
         client = Client(keys.bPkey, keys.bSkey)
         klines = client.get_historical_klines(pair, tf_dict.get(timeframe), span)
+    else:
+        session.track_weights(1)
+        klines = session.client.get_historical_klines(pair, tf_dict.get(timeframe), span)
+
     abc.stop()
+
     cols = ['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'close_time',
             'quote_vol', 'num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol', 'ignore']
     df = pd.DataFrame(klines, columns=cols)

@@ -687,6 +687,10 @@ if __name__ == '__main__':
     for side, timeframe in product(sides, timeframes):
         print(f"\n\n*******\nTesting {side} {timeframe}\n*******\n")
         if timeframe in ['15m', '30m', '1h', '4h']:
+            train_primary('channel_run', side, timeframe, (100, 'edge'), 50, '1w_volumes', 2500, num_trials)
+            train_secondary('risk', 'channel_run', side, timeframe, (100, 'edge'), 50, '1w_volumes', 0.4, num_trials)
+            train_secondary('perf', 'channel_run', side, timeframe, (100, 'edge'), 50, '1w_volumes', 0.4, num_trials)
+
             train_primary('channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 2500, num_trials)
             train_secondary('risk', 'channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 0.4, num_trials)
             train_secondary('perf', 'channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 0.4, num_trials)

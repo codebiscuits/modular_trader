@@ -40,22 +40,20 @@ volatilities_1d = {}
 volatilities_1w = {}
 lengths = {}
 
-def from_scratch(session, pair, tf):
-    y = 2 if tf == '1m' else 6
+def from_scratch(pair, tf):
+    y = 2 if tf == '1m' else 4
     df_start = time.perf_counter()
-    df = funcs.get_ohlc(pair, tf, f'{y} years ago UTC', session)
+    df = funcs.get_ohlc(pair, tf, f'{y} years ago UTC')
     df_end = time.perf_counter()
     elapsed = df_end - df_start
     logger.info(f'downloaded {pair} from scratch, took {int(elapsed // 60)}m {elapsed % 60:.1f}s')
     return df
 
 
-def iterations(n, session, pair, tf):
+def iterations(n, pair, tf):
     # print(f"{n} {pair} {tf}")
-    session.set_ohlc_tf(tf)
-    # print(session.ohlc_data)
-    ohlc_r = Path(f'{session.ohlc_r}/{pair}.parquet')
-    ohlc_w = Path(f'{session.ohlc_w}/{pair}.parquet')
+    ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{tf}/{pair}.parquet')
+    ohlc_w = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{tf}/{pair}.parquet')
     # print(filepath)
     # -------------------- if theres already some local data -------------------------#
     if ohlc_r.exists():
@@ -69,22 +67,22 @@ def iterations(n, session, pair, tf):
             logger.error(f"Problem reading {pair} parquet file, downloading from scratch.")
             logger.exception(e)
             ohlc_r.unlink()
-            df = from_scratch(session, pair, tf)
+            df = from_scratch(pair, tf)
 
         # df = pd.read_parquet(filepath)
 
         if len(df) > 2:
-            df = funcs.update_ohlc(pair, tf, df, session)
+            df = funcs.update_ohlc(pair, tf, df)
     # -------------------- if theres no local data yet -------------------------#
     else:
-        df = from_scratch(session, pair, tf)
+        df = from_scratch(pair, tf)
         # print(f'{n} downloaded {pair} from scratch')
 
-    # max_dict = {'1m': 1051200, '5m': 210240, '1h': 17520}
-    # max_len = max_dict[tf]  # returns 2 years worth of timeframe periods
-    # if len(df) > max_len:
-    #     # print(f"trimming ohlc from {len(df)} to {max_len}")
-    #     df = df.tail(max_len).reset_index(drop=True)
+    max_dict = {'1m': 1_051_200, '5m': 420_000}  # 2 years worth of 1m periods, 4 years worth of 5m periods
+    max_len = max_dict[tf]
+    if len(df) > max_len:
+        # print(f"trimming ohlc from {len(df)} to {max_len}")
+        df = df.tail(max_len).reset_index(drop=True)
 
     df['timestamp'] = pd.to_datetime(df['timestamp'])
 

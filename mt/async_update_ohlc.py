@@ -13,7 +13,7 @@ session = TradingSession(0.1, True)
 logger = create_logger('async_update_ohlc', 'async_update_ohlc')
 
 
-async def stitch(pair, klines, all_data):
+async def stitch(pair, klines, all_data, tf):
     cols = ['timestamp', 'open', 'high', 'low', 'close', 'base_vol', 'close_time',
             'quote_vol', 'num_trades', 'taker_buy_base_vol', 'taker_buy_quote_vol', 'ignore']
     new_df = pd.DataFrame(klines, columns=cols)
@@ -37,6 +37,12 @@ async def stitch(pair, klines, all_data):
     else:
         df = new_df
 
+    max_dict = {'1m': 1_051_200, '5m': 420_000}  # 2 years worth of 1m periods, 4 years worth of 5m periods
+    max_len = max_dict[tf]
+    if len(df) > max_len:
+        # print(f"trimming ohlc from {len(df)} to {max_len}")
+        df = df.tail(max_len).reset_index(drop=True)
+
     extra_data = {'pair': pair,
                   'roc_1d': df.close.rolling(12).mean().ffill().pct_change(288, fill_method=None).iloc[-1],
                   'roc_1w': df.close.rolling(84).mean().ffill().pct_change(2016, fill_method=None).iloc[-1],
@@ -47,13 +53,13 @@ async def stitch(pair, klines, all_data):
                   'volatility_1w': df.tail(2016).close.ffill().pct_change().std(),
                   'length': len(df)}
 
-    ohlc_w = Path(f'{session.ohlc_w}/{pair}.parquet')
+    ohlc_w = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{tf}/{pair}.parquet')
     df.to_parquet(ohlc_w)
 
     return extra_data
 
 
-async def main(pairs):
+async def main(pairs, tf):
     async_client = await AsyncClient.create()
 
     all_data = {}
@@ -65,7 +71,7 @@ async def main(pairs):
             now = datetime.now(timezone.utc).timestamp()
             data_age = int((now - last_timestamp) / 300)  # dividing by 300 shows how many 5min periods have passed
         except FileNotFoundError:
-            logger.exception(f"{pair} parquet file missing, downloading from scratch.")
+            logger.error(f"{pair} parquet file missing, downloading from scratch.")
             old_df = None
             data_age = 1001
             logger.info(f"failed to load {pair} ohlc")
@@ -79,17 +85,22 @@ async def main(pairs):
         all_data[pair] = {'ohlc': old_df, 'age': max(data_age, 5)}
 
     # Create a list of tasks to download the klines
+    if tf == '1m':
+        interval = Client.KLINE_INTERVAL_1MINUTE
+    elif tf == '5m':
+        interval = Client.KLINE_INTERVAL_5MINUTE
+
     tasks = []
     for symbol in pairs:
         if all_data[symbol]['age'] <= 1000:
             # print(f"quick downloading {symbol}")
             tasks.append(asyncio.create_task(async_client.get_klines(symbol=symbol,
-                                                                     interval=Client.KLINE_INTERVAL_5MINUTE,
+                                                                     interval=interval,
                                                                      limit=all_data[symbol]['age'])))
         else:
             logger.info(f"slow downloading {symbol}")
             tasks.append(asyncio.create_task(async_client.get_historical_klines(symbol=symbol,
-                                                                                interval=Client.KLINE_INTERVAL_5MINUTE,
+                                                                                interval=interval,
                                                                                 start_str="6 years ago UTC")))
 
     # Await the completion of all tasks
@@ -100,7 +111,7 @@ async def main(pairs):
     # stitch them all together
     stitch_tasks = []
     for pair, klines in zip(pairs, results):
-        stitch_tasks.append(asyncio.create_task(stitch(pair, klines, all_data)))
+        stitch_tasks.append(asyncio.create_task(stitch(pair, klines, all_data, tf)))
     extras = await asyncio.gather(*stitch_tasks)
 
     await async_client.close_connection()
@@ -126,7 +137,7 @@ extra_dfs = []
 for div in range(divs):
     logger.info(f"division {div + 1} of {divs}")
     pairs = all_pairs[div::divs]
-    extra_dfs.append(asyncio.run(main(pairs)))
+    extra_dfs.append(asyncio.run(main(pairs, '5m')))
 
 extra_df = pd.concat(extra_dfs, ignore_index=True)
 extra_df['rank_1d'] = extra_df['roc_1d'].rank(pct=True)

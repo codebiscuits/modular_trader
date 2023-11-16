@@ -173,7 +173,8 @@ while raw_signals:
             # check if add is necessary
             # TODO check for low or and make add signals if so
 
-        elif real_position == 'short' and sig_agent.close_on_signal:
+        elif (real_position == 'short') and sig_agent.close_on_signal:
+            logger.debug(f"closing {sig_agent.id} {sig_pair} real short on signal")
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', 'short'))
             processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', 'long'))
         elif real_position == 'short':
@@ -191,11 +192,12 @@ while raw_signals:
             # check if add is necessary
             # TODO check for low or and make add signals if so
 
-        elif sim_position == 'short' and sig_agent.close_on_signal:
+        elif (sim_position == 'short') and sig_agent.close_on_signal:
+            logger.debug(f"closing {sig_agent.id} {sig_pair} sim short on signal")
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'sim', 'short'))
         elif sim_position == 'short':
-            logger.debug(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
-            logger.info(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
+            logger.debug(f"{sig_agent.id} {sig_pair} already {sim_position}, ignoring new signal")
+            logger.info(f"{sig_agent.id} {sig_pair} already {sim_position}, ignoring new signal")
         elif sim_position == 'flat':
             pass
         else:
@@ -205,11 +207,12 @@ while raw_signals:
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'tracked')
 
-        elif tracked_position == 'short' and sig_agent.close_on_signal:
+        elif (tracked_position == 'short') and sig_agent.close_on_signal:
+            logger.debug(f"closing {sig_agent.id} {sig_pair} tracked short on signal")
             processed_signals['tracked_close'].append(uf.transform_signal(signal, 'close', 'tracked', 'short'))
         elif tracked_position == 'short':
-            logger.debug(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
-            logger.info(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
+            logger.debug(f"{sig_agent.id} {sig_pair} already {tracked_position}, ignoring new signal")
+            logger.info(f"{sig_agent.id} {sig_pair} already {tracked_position}, ignoring new signal")
         elif tracked_position == 'flat':
             pass
         else:
@@ -218,12 +221,14 @@ while raw_signals:
     # -------------------------------------------------------------------------------------------------------------------
 
     elif sig_bias == 'bearish':
-        if real_position == 'spot' and sig_agent.close_on_signal:
+        if (real_position == 'spot') and sig_agent.close_on_signal:
+            logger.debug(f"closing {sig_agent.id} {sig_pair} real spot on signal")
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', 'spot'))
         elif real_position == 'spot':
             logger.debug(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
             logger.info(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
-        elif real_position == 'long' and sig_agent.close_on_signal:
+        elif (real_position == 'long') and sig_agent.close_on_signal:
+            logger.debug(f"closing {sig_agent.id} {sig_pair} real long on signal")
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', 'long'))
             processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', 'short'))
         elif real_position == 'long':
@@ -241,11 +246,12 @@ while raw_signals:
         else:
             logger.error("bearish bias didn't produce a real outcome, logic needs more work")
 
-        if sim_position in ['long', 'spot'] and sig_agent.close_on_signal:
+        if (sim_position in ['long', 'spot']) and sig_agent.close_on_signal:
+            logger.debug(f"closing {sig_agent.id} {sig_pair} sim {bullish_pos} on signal")
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'sim', bullish_pos))
         elif sim_position in ['long', 'spot']:
-            logger.debug(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
-            logger.info(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
+            logger.debug(f"{sig_agent.id} {sig_pair} already {sim_position}, ignoring new signal")
+            logger.info(f"{sig_agent.id} {sig_pair} already {sim_position}, ignoring new signal")
         elif sim_position == 'short':
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'sim')
@@ -258,11 +264,12 @@ while raw_signals:
         else:
             logger.error("bearish bias didn't produce a sim outcome, logic needs more work")
 
-        if tracked_position in ['long', 'spot'] and sig_agent.close_on_signal:
+        if (tracked_position in ['long', 'spot']) and sig_agent.close_on_signal:
+            logger.debug(f"closing {sig_agent.id} {sig_pair} tracked {bullish_pos} on signal")
             processed_signals['tracked_close'].append(uf.transform_signal(signal, 'close', 'tracked', bullish_pos))
         elif tracked_position in ['long', 'spot']:
-            logger.debug(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
-            logger.info(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
+            logger.debug(f"{sig_agent.id} {sig_pair} already {tracked_position}, ignoring new signal")
+            logger.info(f"{sig_agent.id} {sig_pair} already {tracked_position}, ignoring new signal")
         elif tracked_position == 'short':
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'tracked')
@@ -274,10 +281,12 @@ while raw_signals:
 
     # -------------------------------------------------------------------------------------------------------------------
 
-    elif sig_bias == 'neutral' and sig_agent.close_on_signal:
+    elif (sig_bias == 'neutral') and sig_agent.close_on_signal:
         if real_position in ['long', 'spot']:
+            logger.debug(f"closing {sig_agent.id} {sig_pair} real {bullish_pos} on signal")
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', bullish_pos))
         elif real_position == 'short':
+            logger.debug(f"closing {sig_agent.id} {sig_pair} real short on signal")
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', 'short'))
         elif real_position == 'flat':
             pass
@@ -285,8 +294,10 @@ while raw_signals:
             logger.error("neutral bias didn't produce a real outcome, logic needs more work")
 
         if sim_position in ['long', 'spot']:
+            logger.debug(f"closing {sig_agent.id} {sig_pair} sim {bullish_pos} on signal")
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'sim', bullish_pos))
         elif sim_position == 'short':
+            logger.debug(f"closing {sig_agent.id} {sig_pair} sim short on signal")
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'sim', 'short'))
         elif sim_position == 'flat':
             pass
@@ -294,8 +305,10 @@ while raw_signals:
             logger.error("neutral bias didn't produce a sim outcome, logic needs more work")
 
         if tracked_position in ['long', 'spot']:
+            logger.debug(f"closing {sig_agent.id} {sig_pair} tracked {bullish_pos} on signal")
             processed_signals['tracked_close'].append(uf.transform_signal(signal, 'close', 'tracked', bullish_pos))
         elif tracked_position == 'short':
+            logger.debug(f"closing {sig_agent.id} {sig_pair} tracked short on signal")
             processed_signals['tracked_close'].append(uf.transform_signal(signal, 'close', 'tracked', 'short'))
         elif tracked_position == 'flat':
             pass
@@ -321,12 +334,18 @@ checked_signals = uf.remove_duplicates(processed_signals['real_sim_tp_close'])
 logger.debug(f"{len(checked_signals) = }")
 
 for signal in checked_signals:
-    if signal['state'] == 'real':
-        logger.debug('')
-        logger.debug(f"Executing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} "
-                     f"{signal['direction']}")
-        logger.info(f"\nExecuting {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} "
-                    f"{signal['direction']}")
+    logger.debug('')
+    if agents[signal['agent']].oco:
+        logger.debug(f"Ignoring {signal['action']} signal for {agents[signal['agent']].id}")
+        continue
+
+    # if signal['state'] == 'real':
+    logger.debug(f"Executing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} "
+                 f"{signal['direction']}")
+    logger.info(f"\nExecuting {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} "
+                f"{signal['direction']}")
+    logger.info(pformat(signal))
+
     if signal['action'] in ['close', 'stop']:  # TODO stop signals could be added in here
         agents[signal['agent']].close_pos(session, signal)
     elif signal['action'] == 'tp':
