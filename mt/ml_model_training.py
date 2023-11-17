@@ -126,7 +126,7 @@ def channel_run_entries(df, lookback):
     df[f"ll_{lookback}"] = df.low.rolling(lookback).min()
     df[f"hh_{lookback}"] = df.high.rolling(lookback).max()
 
-    df['channel_mid'] = (df[f"hh_{lookback}"] + df[f"ll_{lookback}"]) / 2
+    df[f'channel_mid_{lookback}'] = (df[f"hh_{lookback}"] + df[f"ll_{lookback}"]) / 2
     # df['channel_width'] = (df[f"hh_{lookback}"] - df[f"ll_{lookback}"]) / df.channel_mid
 
     # df['broke_support'] = df.low == df[f"ll_{lookback}"]
@@ -135,7 +135,7 @@ def channel_run_entries(df, lookback):
     # df['close_above_sup'] = df.close > df[f"ll_{lookback}"].shift()
     # df['close_below_res'] = df.close < df[f"hh_{lookback}"].shift()
 
-    df['channel_position'] = (df.close - df[f"ll_{lookback}"]) / (df[f"hh_{lookback}"] - df[f"ll_{lookback}"])
+    df[f'channel_position_{lookback}'] = (df.close - df[f"ll_{lookback}"]) / (df[f"hh_{lookback}"] - df[f"ll_{lookback}"])
 
     df['entry_l'] = df.channel_position < 0.05
     df['entry_s'] = df.channel_position > 0.95

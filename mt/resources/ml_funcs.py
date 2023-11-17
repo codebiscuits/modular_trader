@@ -72,7 +72,7 @@ def save_models(mode, strategy, param_str, sel_method, num_pairs, side, tf, data
 
 
 def rank_pairs(selection):
-    with open(f'/home/ross/coding/modular_trader/mt/recent_{selection}.json', 'r') as file:
+    with open(f'/home/ross/coding/modular_trader/market_data/recent_{selection}.json', 'r') as file:
         vols = json.load(file)
 
     return sorted(vols, key=lambda x: vols[x], reverse=True)
@@ -310,6 +310,7 @@ def add_features(df, tf):
     df = features.channel_mid_width(df, 50)
     df = features.channel_mid_width(df, 100)
     df = features.channel_mid_width(df, 200)
+    df = features.channel_position(df, 200)
     df = features.daily_open_ratio(df)
     df = features.daily_roc(df, tf)
     df = features.day_of_week(df)
@@ -593,7 +594,8 @@ def features_labels_split(df):
                  'hma_25', 'hma_50', 'hma_100', 'hma_200', 'lifespan', 'frac_high', 'frac_low', 'inval', 'daily_open',
                  'prev_daily_open', 'prev_daily_high', 'prev_daily_low', 'weekly_open', 'prev_weekly_open',
                  'prev_weekly_high', 'prev_weekly_low', 'bullish_doji', 'bearish_doji', 'entry_l', 'entry_s',
-                 'entry_l_price', 'entry_s_price', 'hh_200', 'll_200', 'channel_mid'],
+                 'entry_l_price', 'entry_s_price', 'hh_100', 'll_100', 'hh_200', 'll_200', 'channel_mid',
+                 'channel_mid_100', 'channel_mid_200'],
                 axis=1, errors='ignore')
     y = df.pnl_cat  #.shift(-1).drop(index=df.index[-1], axis=0)
     z = df.pnl_r  #.shift(-1).drop(index=df.index[-1], axis=0)

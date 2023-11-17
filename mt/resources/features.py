@@ -62,6 +62,7 @@ def add_feature(df, name, timeframe):
         'chan_mid_width_50': {'call': channel_mid_width, 'params': (df, 50)},
         'chan_mid_width_100': {'call': channel_mid_width, 'params': (df, 100)},
         'chan_mid_width_200': {'call': channel_mid_width, 'params': (df, 200)},
+        'channel_position': {'call': channel_position, 'params': (df, 200)},
         'daily_open_ratio': {'call': daily_open_ratio, 'params': (df,)},
         'roc_1d': {'call': daily_roc, 'params': (df, timeframe)},
         'day_of_week': {'call': day_of_week, 'params': (df,)},
@@ -232,6 +233,15 @@ def add_feature(df, name, timeframe):
 
     if feature:
         df = feature['call'](*feature['params'])
+
+    return df
+
+
+def channel_position(df, lookback):
+    ll = df.low.rolling(lookback).min()
+    hh = df.high.rolling(lookback).max()
+    df['channel_position'] = (df.close - ll) / (hh - ll)
+    df[f'channel_position_{lookback}'] = (df.close - ll) / (hh - ll)
 
     return df
 
