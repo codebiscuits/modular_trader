@@ -48,7 +48,9 @@ def init_client(max_retries: int = 360, delay: int = 5):
 
 
 def save_models(mode, strategy, param_str, sel_method, num_pairs, side, tf, data_len, selected, pairs, model, scaler, validity):
-    locations = ['/', '/pi_1/', '/pi_2/']
+    locations = ['/',
+                 # '/pi_1/',
+                 '/pi_2/']
     for location in locations:
         folder = Path(f"/home/ross/coding{location}modular_trader/machine_learning/"
                       f"models/{strategy}_{param_str}/{sel_method}_{num_pairs}")

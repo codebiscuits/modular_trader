@@ -24,8 +24,9 @@ import optuna
 
 optuna.logging.set_verbosity(optuna.logging.ERROR)
 
-# if not Path('pi_2.txt').exists():
-#     import mt.update_ohlc
+if not Path('pi_2.txt').exists():
+    import mt.update_ohlc
+    import mt.async_update_ohlc
 
 warnings.filterwarnings('ignore')
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -57,7 +58,7 @@ def backtest_oco(df_0, side, lookback, goal, trim_ohlc=2200):
             highest = df.high.max()
             lowest = df.low.min()
             if goal == 'mid':
-                target = df.channel_mid.iloc[0]
+                target = df[f"channel_mid_{lookback}"].iloc[0]
             else:
                 target = df[f"hh_{lookback}"].iloc[0]
             stop = df[f"ll_{lookback}"].iloc[0] - atr
@@ -80,7 +81,7 @@ def backtest_oco(df_0, side, lookback, goal, trim_ohlc=2200):
             highest = df.high.max()
             lowest = df.low.min()
             if goal == 'mid':
-                target = df.channel_mid.iloc[0]
+                target = df[f"channel_mid_{lookback}"].iloc[0]
             else:
                 target = df[f"ll_{lookback}"].iloc[0]
             stop = df[f"hh_{lookback}"].iloc[0] + atr
@@ -127,7 +128,7 @@ def channel_run_entries(df, lookback):
     df[f"hh_{lookback}"] = df.high.rolling(lookback).max()
 
     df[f'channel_mid_{lookback}'] = (df[f"hh_{lookback}"] + df[f"ll_{lookback}"]) / 2
-    # df['channel_width'] = (df[f"hh_{lookback}"] - df[f"ll_{lookback}"]) / df.channel_mid
+    # df['channel_width'] = (df[f"hh_{lookback}"] - df[f"ll_{lookback}"]) / df[f"channel_mid_{lookback}"]
 
     # df['broke_support'] = df.low == df[f"ll_{lookback}"]
     # df['broke_resistance'] = df.high == df[f"hh_{lookback}"]

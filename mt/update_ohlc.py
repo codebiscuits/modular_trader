@@ -107,7 +107,7 @@ def mkt_rank(rocs_dict):
 
 # TODO maybe combine mkt_rank, volumes and volatilities into one dataframe and save as one parquet file
 def save_volumes(vols, period):
-    vol_path = Path(f'recent_1{period}_volumes.json')
+    vol_path = Path(f'/home/ross/coding/modular_trader/market_data/recent_1{period}_volumes.json')
     vol_path.touch(exist_ok=True)
 
     with open(vol_path, 'w') as file:
@@ -115,7 +115,7 @@ def save_volumes(vols, period):
 
 
 def save_volatilities(vols, period):
-    vol_path = Path(f'recent_1{period}_volatilities.json')
+    vol_path = Path(f'/home/ross/coding/modular_trader/market_data/recent_1{period}_volatilities.json')
     vol_path.touch(exist_ok=True)
 
     with open(vol_path, 'w') as file:
@@ -123,21 +123,21 @@ def save_volatilities(vols, period):
 
 
 def save_lengths(lengths: dict):
-    len_path = Path(f"../ohlc_lengths.json")
+    len_path = Path("/home/ross/coding/modular_trader/market_data/ohlc_lengths.json")
     len_path.touch(exist_ok=True)
 
     with open(len_path, 'w') as file:
         json.dump(lengths, file)
 
 
-iterations(0, session, 'BTCUSDT', '1m')
-iterations(1, session, 'ETHUSDT', '1m')
+iterations(0, 'BTCUSDT', '1m')
+iterations(1, 'ETHUSDT', '1m')
 
 for n, pair in enumerate(pairs):
     # print(n, pair)
     try:
         # logger.debug(pair)
-        df = iterations(n, session, pair, '5m')
+        df = iterations(n, pair, '5m')
     except Exception as e:
         logger.error(f"*** {pair} exception during download, data not downloaded ***")
         logger.exception(e)
