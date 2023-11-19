@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 import statistics as stats
 import requests
-from pprint import pformat
+from pprint import pprint, pformat
 from decimal import Decimal, getcontext
 # from timers import Timer
 # from loggers import create_logger
@@ -275,13 +275,20 @@ def strat_benchmark(session, agent) -> dict:
 def log(session, agent) -> None:
     """records all data from the session as a line in the perf_log.json file"""
 
+    num_wanted_pos = len(agent.real_pos.keys()) + len([k for k, v in agent.sim_pos.items() if v.get('wanted')])
+    if not session.trade_sizes: # just in case it's still an empty list
+        session.trade_sizes = [0, 0, 0]
+
     new_record = {'timestamp': session.now_start,
                   'positions': agent.real_pos, 'trade_counts': agent.counts_dict,
                   'median_spread': stats.median(session.spreads.values()),
                   'quote_asset': session.quote_asset, 'max_allocation': session.max_allocation,
                   'max_spread': session.max_spread, 'indiv_r_limit': agent.indiv_r_limit,
                   'total_r_limit': agent.total_r_limit, 'target_risk': agent.target_risk,
-                  'max_pos': agent.max_positions, 'market_bias': session.market_bias
+                  'max_pos': agent.max_positions, 'market_bias': session.market_bias,
+                  'real_open_risk': agent.total_open_risk, 'wanted_open_risk': agent.wanted_open_risk,
+                  'num_wanted_pos': num_wanted_pos, 'avg_open_size': stats.mean(session.trade_sizes),
+                  'max_open_size': max(session.trade_sizes)
                   }
 
     if agent.mode == 'spot':

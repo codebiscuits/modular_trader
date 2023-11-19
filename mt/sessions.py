@@ -79,12 +79,13 @@ class TradingSession:
     spot_bals = {}
     margin_lvl = 0.0
     margin_bals = {}
+    trade_sizes = []
     spot_orders = []
     margin_orders = []
     open_risk_records = {}
 
     @uf.retry_on_busy()
-    def __init__(self, fr_max, use_local_records):
+    def __init__(self, max_allo, max_lev, use_local_records):
         t = Timer('session init')
         t.start()
 
@@ -93,9 +94,9 @@ class TradingSession:
         self.client = Client(keys.bPkey, keys.bSkey, testnet=False)
         self.use_local_records = use_local_records
         self.last_price_update = 0
-        self.max_allocation = fr_max
+        self.max_allocation = max_allo
         self.frac_risk_limit = 0.01
-        self.leverage = 3
+        self.leverage = max_lev
         self.name = 'agent names here'
         self.last_price_update = 0
         self.running_on = identify_machine()
@@ -134,6 +135,8 @@ class TradingSession:
             self.top_up_bnb_s(15)
         if self.margin_bal > 30:
             self.top_up_bnb_m(15)
+        logger.debug(f"Max size for new positions this session: {self.max_allocation * self.margin_bal:.2f} USDT")
+        logger.info(f"Max size for new positions this session: {self.max_allocation * self.margin_bal:.2f} USDT")
 
         # load local data and configure settings
         self.mkt_data_r, self.mkt_data_w, self.records_r, self.records_w, self.ohlc_r, self.ohlc_w = self.data_paths()
@@ -469,7 +472,7 @@ class TradingSession:
 
         counted = Counter(order_symbols)
         for p, v in self.pairs_data.items():
-            v['algo_orders'] = 0 if p not in counted else counted[p]
+            self.pairs_data[p]['algo_orders'] = 0 if p not in counted else counted[p]
 
         x7.stop()
 

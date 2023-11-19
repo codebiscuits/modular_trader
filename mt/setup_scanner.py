@@ -21,7 +21,7 @@ logger = create_logger('setup_scanner')
 
 ########################################################################################################################
 
-session = sessions.TradingSession(0.01, True)  # fr_max now means max pos size
+session = sessions.TradingSession(0.01, 4, True)
 
 logger.debug(f'-+-+-+-+-+-+-+-+ {session.now_start} Running Setup Scanner ({session.timeframes}) +-+-+-+-+-+-+-+-\n')
 logger.info(f'-+-+-+-+-+-+-+-+ {session.now_start} Running Setup Scanner ({session.timeframes}) +-+-+-+-+-+-+-+-\n')
@@ -36,6 +36,7 @@ for timeframe, offset, active_agents in session.timeframes:
             ])
     if 'ChannelRun' in active_agents:
         agents.extend([
+                ChannelRun(session, timeframe, offset, 100, 'edge', '1w_volumes', 50),
                 ChannelRun(session, timeframe, offset, 200, 'edge', '1w_volumes', 50),
                 ChannelRun(session, timeframe, offset, 200, 'mid', '1w_volumes', 50),
             ])
@@ -51,12 +52,13 @@ logger.info("-*-*-*- Checking all positions for stops and open-risk -*-*-*-")
 
 real_sim_tps_closes = []
 for agent in agents.values():
-    agent.record_stopped_trades(session, session.timeframes)
     if agent.oco:
+        agent.record_closed_oco_trades(session, session.timeframes)
         agent.record_closed_oco_sim_trades(session, session.timeframes)
     else:
+        agent.record_stopped_trades(session, session.timeframes)
         agent.record_stopped_sim_trades(session, session.timeframes)
-    real_sim_tps_closes.extend(agent.check_open_risk(session))
+        real_sim_tps_closes.extend(agent.check_open_risk(session))
     agent.max_positions = agent.set_max_pos()
     agent.total_r_limit = agent.max_positions * 1.7  # TODO need to update reduce_risk and run it before/after set_fixed_ris
 session.save_open_risk_stats()
@@ -178,8 +180,9 @@ while raw_signals:
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', 'short'))
             processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', 'long'))
         elif real_position == 'short':
-            logger.debug(f"{sig_agent.id} {sig_pair} already {real_position}, ignoring new signal")
-            logger.info(f"{sig_agent.id} {sig_pair} already {real_position}, ignoring new signal")
+            # logger.debug(f"{sig_agent.id} {sig_pair} already {real_position}, ignoring new signal")
+            # logger.info(f"{sig_agent.id} {sig_pair} already {real_position}, ignoring new signal")
+            continue
         elif real_position == 'flat':
             processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', bullish_pos))
         else:
@@ -196,8 +199,9 @@ while raw_signals:
             logger.debug(f"closing {sig_agent.id} {sig_pair} sim short on signal")
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'sim', 'short'))
         elif sim_position == 'short':
-            logger.debug(f"{sig_agent.id} {sig_pair} already {sim_position}, ignoring new signal")
-            logger.info(f"{sig_agent.id} {sig_pair} already {sim_position}, ignoring new signal")
+            # logger.debug(f"{sig_agent.id} {sig_pair} already {sim_position}, ignoring new signal")
+            # logger.info(f"{sig_agent.id} {sig_pair} already {sim_position}, ignoring new signal")
+            continue
         elif sim_position == 'flat':
             pass
         else:
@@ -211,8 +215,9 @@ while raw_signals:
             logger.debug(f"closing {sig_agent.id} {sig_pair} tracked short on signal")
             processed_signals['tracked_close'].append(uf.transform_signal(signal, 'close', 'tracked', 'short'))
         elif tracked_position == 'short':
-            logger.debug(f"{sig_agent.id} {sig_pair} already {tracked_position}, ignoring new signal")
-            logger.info(f"{sig_agent.id} {sig_pair} already {tracked_position}, ignoring new signal")
+            # logger.debug(f"{sig_agent.id} {sig_pair} already {tracked_position}, ignoring new signal")
+            # logger.info(f"{sig_agent.id} {sig_pair} already {tracked_position}, ignoring new signal")
+            continue
         elif tracked_position == 'flat':
             pass
         else:
@@ -225,15 +230,17 @@ while raw_signals:
             logger.debug(f"closing {sig_agent.id} {sig_pair} real spot on signal")
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', 'spot'))
         elif real_position == 'spot':
-            logger.debug(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
-            logger.info(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
+            # logger.debug(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
+            # logger.info(f"{sig_agent.id} doesn't close on bias flip, ignoring new signal")
+            continue
         elif (real_position == 'long') and sig_agent.close_on_signal:
             logger.debug(f"closing {sig_agent.id} {sig_pair} real long on signal")
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'real', 'long'))
             processed_signals['unassigned'].append(uf.transform_signal(signal, 'open', 'real', 'short'))
         elif real_position == 'long':
-            logger.debug(f"{sig_agent.id} {sig_pair} already {real_position}, ignoring new signal")
-            logger.info(f"{sig_agent.id} {sig_pair} already {real_position}, ignoring new signal")
+            # logger.debug(f"{sig_agent.id} {sig_pair} already {real_position}, ignoring new signal")
+            # logger.info(f"{sig_agent.id} {sig_pair} already {real_position}, ignoring new signal")
+            continue
         elif real_position == 'short':
             if sig_agent.trail_stop:
                 sig_agent.move_real_stop(session, signal)
@@ -250,8 +257,9 @@ while raw_signals:
             logger.debug(f"closing {sig_agent.id} {sig_pair} sim {bullish_pos} on signal")
             processed_signals['real_sim_tp_close'].append(uf.transform_signal(signal, 'close', 'sim', bullish_pos))
         elif sim_position in ['long', 'spot']:
-            logger.debug(f"{sig_agent.id} {sig_pair} already {sim_position}, ignoring new signal")
-            logger.info(f"{sig_agent.id} {sig_pair} already {sim_position}, ignoring new signal")
+            # logger.debug(f"{sig_agent.id} {sig_pair} already {sim_position}, ignoring new signal")
+            # logger.info(f"{sig_agent.id} {sig_pair} already {sim_position}, ignoring new signal")
+            continue
         elif sim_position == 'short':
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'sim')
@@ -268,8 +276,9 @@ while raw_signals:
             logger.debug(f"closing {sig_agent.id} {sig_pair} tracked {bullish_pos} on signal")
             processed_signals['tracked_close'].append(uf.transform_signal(signal, 'close', 'tracked', bullish_pos))
         elif tracked_position in ['long', 'spot']:
-            logger.debug(f"{sig_agent.id} {sig_pair} already {tracked_position}, ignoring new signal")
-            logger.info(f"{sig_agent.id} {sig_pair} already {tracked_position}, ignoring new signal")
+            # logger.debug(f"{sig_agent.id} {sig_pair} already {tracked_position}, ignoring new signal")
+            # logger.info(f"{sig_agent.id} {sig_pair} already {tracked_position}, ignoring new signal")
+            continue
         elif tracked_position == 'short':
             if sig_agent.trail_stop:
                 sig_agent.move_non_real_stop(session, signal, 'tracked')
@@ -334,9 +343,9 @@ checked_signals = uf.remove_duplicates(processed_signals['real_sim_tp_close'])
 logger.debug(f"{len(checked_signals) = }")
 
 for signal in checked_signals:
-    logger.debug('')
+    # logger.debug('')
     if agents[signal['agent']].oco:
-        logger.debug(f"Ignoring {signal['action']} signal for {agents[signal['agent']].id}")
+        # logger.debug(f"Ignoring {signal['action']} signal for {agents[signal['agent']].id}")
         continue
 
     # if signal['state'] == 'real':
@@ -362,7 +371,7 @@ tp_close_took = tp_close_end - tp_close_start
 # -#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 # calculate fixed risk for each agent using wanted rpnl
 
-logger.debug(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Signal Scores -+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n")
+logger.debug(f"-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Signal Scores -+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n")
 logger.info(f"\n-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Signal Scores -+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n")
 
 risk_validity, perf_validity = 30, 30
@@ -567,15 +576,19 @@ logger.debug(f"-+-+-+-+-+-+-+-+-+- Executing {len(processed_signals['real_open']
 
 remaining_borrow = session.check_margin_lvl()
 
+real_opened = 0
 for signal in processed_signals['real_open']:
+    session.trade_sizes.append(signal['quote_size'])
+
     if signal['mode'] == 'spot':
         agents[signal['agent']].open_real_s(session, signal, 0)
+        real_opened += 1
 
     elif signal['quote_size'] > (remaining_borrow - 100):
         signal['state'] = 'sim'
         signal['sim_reasons'] = ['too_much_leverage']
         processed_signals['sim_open'].append(signal)
-        logger.info("changed real open signal to sim, borrow limit reached")
+        # logger.debug("changed real open signal to sim, borrow limit reached")
 
     else:
         logger.debug(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} "
@@ -584,9 +597,12 @@ for signal in processed_signals['real_open']:
                     f"{signal['direction']}")
         successful = agents[signal['agent']].open_real_M(session, signal, 0)
         if successful:
+            real_opened += 1
             remaining_borrow -= signal['quote_size']
             logger.info(f"remaining_borrow: {remaining_borrow:.2f}")
 
+remainder = len(processed_signals['real_open']) - real_opened
+logger.debug(f"Executed {real_opened} real opens, sent {remainder} to sim opens")
 # when they are all finished, update records once
 
 real_open_end = time.perf_counter()
@@ -604,6 +620,7 @@ logger.info(f"\n-+-+-+-+-+-+-+-+-+-+-+- Executing {len(sim_opens)} Sim Opens -+-
 logger.debug(f"-+-+-+-+-+-+-+-+-+-+-+- Executing {len(sim_opens)} Sim Opens -+-+-+-+-+-+-+-+-+-+-+-")
 
 for signal in sim_opens:
+    session.trade_sizes.append(signal['quote_size'])
     # logger.debug(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} "
     #              f"{signal['direction']}")
     # logger.debug(f"Sim reason: {signal['sim_reasons']}, score: {float(signal['score']):.1%}")
@@ -719,5 +736,5 @@ section_times()
 
 # uf.plot_call_weights(session)
 
-logger.info(f"\n{'-<==>-'*20}\n\n{'-<==>-'*20}\n\n{'-<==>-'*20}")
-logger.debug(f"\n{'-<==>-'*20}\n\n{'-<==>-'*20}\n\n{'-<==>-'*20}")
+logger.info(f"\n{'-<==>-'*20}\n\n{'-<==>-'*20}\n\n{'-<==>-'*20}\n")
+logger.debug(f"\n{'-<==>-'*20}\n\n{'-<==>-'*20}\n\n{'-<==>-'*20}\n")

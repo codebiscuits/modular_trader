@@ -354,6 +354,7 @@ class Agent:
 
         if not order:
             logger.info(f'No orders on binance for {pair}')
+            order = 'no order found on binance'
 
         # insert placeholder record
         placeholder = {'action': "stop",
@@ -514,9 +515,6 @@ class Agent:
                     order = {'executedQty': base_size}
                     self.save_records(session, pair, stop_dict, order)
                     self.counts_dict[f'real_stop_{direction}'] += 1
-                else:
-                    # logger.info(f"{self.id} {pair} {direction} still open")
-                    pass
                 continue
 
             if sid is None:
@@ -589,6 +587,153 @@ class Agent:
         self.record_trades(session, 'open')
 
         m.stop()
+
+    # record closed_oco trades -------------------------------------------
+
+    @uf.retry_on_busy()
+    def find_oco_order(self, session, pair, sid):
+        if sid == 'not live':
+            return dict()
+        # logger.info('get_margin_order')
+        session.track_weights(10)
+        abc = Timer('all binance calls')
+        abc.start()
+        order = session.client.get_margin_order(symbol=pair, orderId=sid)
+        abc.stop()
+        session.counts.append('get_margin_order')
+
+        if not order:
+            logger.info(f'No orders on binance for {pair}')
+            order = 'no order found on binance'
+
+        # insert placeholder record
+        now = datetime.now(timezone.utc).strftime(timestring)
+        placeholder = {'direction': self.open_trades[pair]['position']['direction'],
+                       'state': 'real',
+                       'pair': pair,
+                       'order': order,
+                       'utc_datetime': now,
+                       'completed': 'find_order'
+                       }
+        self.open_trades[pair]['placeholder'] = placeholder
+
+        return order
+
+    def create_target_dict(self, session, pair, order, target_size):
+        target_dict = funcs.create_stop_dict(session, order)
+        target_dict['action'] = "close"
+        target_dict['direction'] = self.open_trades[pair]['position']['direction']
+        target_dict['state'] = 'real'
+        target_dict['reason'] = 'hit target'
+        target_dict['liability'] = uf.update_liability(self.open_trades[pair], target_size, 'reduce')
+
+        if float(target_dict['liability']) > (float(target_size) * 0.01):
+            logger.warning(
+                f"+++ WARNING {self.id} {pair} target hit, liability record doesn't add up. Recorded value: "
+                f"{target_dict['liability']} +++")
+
+        return target_dict
+    @uf.retry_on_busy()
+    def record_closed_oco_trades(self, session, timeframes) -> None:
+        m = Timer('record_closed_oco_trades')
+        m.start()
+
+        # get a list of (pair, stop_id, stop_time) for all open_trades records
+        old_ids = list(self.open_trades.items())
+
+        for pair, v in old_ids:
+            target_id = v['position']['target_id']
+            stop_id = v['position']['stop_id']
+            oco_id = v['position']['oco_id']
+            direction = v['position']['direction']
+            stop_time = v['position']['stop_time']
+            if stop_id == 'not live':
+                # logger.info(f"{pair} record non-live")
+                df = self.get_data(session, pair, timeframes, stop_time)
+                target = v['position']['target']
+                stop = float(v['position']['hard_stop'])
+                target_hit, stop_hit, closed_time = self.check_oco_closed(pair, df, direction, target, stop)
+
+                oco_dict = {
+                    'timestamp': int(stop_time),
+                    'pair': pair,
+                    'base_size': base_size,
+                    'executedQty': base_size,
+                    'fee': "0",
+                    'fee_currency': 'BNB',
+                    'direction': direction,
+                    'state': 'real',
+                    'live': False,
+                    'liability': v['position']['liability'] * -1,
+                }
+
+                if target_hit:
+                    logger.info(f"{self.id} {pair} real {direction} stopped out")
+                    base_size = float(v['position']['base_size'])
+                    oco_dict.update({
+                        'trig_price': target,
+                        'limit_price': target,
+                        'exe_price': target,
+                        'quote_size': str(base_size * target),
+                        'action': 'close',
+                        'reason': 'hit target',
+                    })
+                elif stop_hit:
+                    logger.info(f"{self.id} {pair} real {direction} stopped out")
+                    base_size = float(v['position']['base_size'])
+                    oco_dict.update({
+                        'trig_price': stop,
+                        'limit_price': stop,
+                        'exe_price': stop,
+                        'quote_size': str(base_size * stop),
+                        'action': 'stop',
+                        'reason': 'hit hard stop',
+                    })
+
+                    order = {'executedQty': base_size}
+                    self.save_records(session, pair, oco_dict, order)
+                    self.counts_dict[f'real_stop_{direction}'] += 1
+                continue
+
+            if stop_id is None:
+                # TODO repair trade records should be fixing positions without a stop so they don't get this far
+                continue
+
+            session.track_weights(10)
+            abc = Timer('all binance calls')
+            abc.start()
+            stop_order = self.find_oco_order(session, pair, stop_id)
+            abc.stop()
+            session.counts.append('get_margin_order')
+
+            if stop_order.get('status') == 'NEW':
+                logger.info(f"RCOT {self.id} {pair} trade still open")
+                del self.open_trades[pair]['placeholder']
+                continue
+
+            elif stop_order.get('status') == 'FILLED':
+                logger.info(f"RCOT {self.id} {pair} stop hit")
+                stop_size = self.repay_stop(session, pair, stop_order)
+                stop_dict = self.create_stop_dict(session, pair, stop_order, stop_size)
+                self.save_records(session, pair, stop_dict, stop_order)
+
+                self.counts_dict[f'real_stop_{direction}'] += 1
+
+            elif stop_order.get('status') == 'EXPIRED':
+                logger.info(f"RCOT {self.id} {pair} target hit")
+                target_order = self.find_oco_order(session, pair, target_id)
+                target_size = self.repay_stop(session, pair, target_order)
+                target_dict = self.create_target_dict(session, pair, target_order, target_size)
+                self.save_records(session, pair, target_dict, stop_order)
+
+                self.counts_dict[f'real_close_{direction}'] += 1
+
+            else:
+                logger.error(f"RCOT {self.id} {pair} oco order not closed or open")
+                logger.debug(pformat(session.client.get_margin_oco_order(orderListId=oco_id)))
+
+        self.record_trades(session, 'closed')
+        self.record_trades(session, 'open')
 
     # record stopped sim trades ----------------------------------------------
 
@@ -762,40 +907,34 @@ class Agent:
 
         n.stop()
 
-    def check_oco_closed(self, df, direction, target, stop):
+    # record closed oco sim ---------------------------------------------------
+
+    def check_oco_closed(self, pair, df, direction, target, stop):
         func_name = sys._getframe().f_code.co_name
         k16 = Timer(f'{func_name}')
         k16.start()
-        logger.debug('running check_oco_closed')
 
         target_hit, stop_hit, exit_row, closed_time = False, False, None, None
         highest = df.high.max()
         lowest = df.low.min()
         if direction == 'long':
-            logger.debug(f"{target = } {highest = } {stop = } {lowest = }")
             if lowest < stop:
                 stop_hit = True
                 stop_hit_idx = df.low.clip(lower=stop).idxmin()
             if highest > target:
-                logger.debug('*** TARGET HIT ***')
                 target_hit = True
                 target_hit_idx = df.high.clip(upper=target).idxmax()
         else:
-            logger.debug(f"{target = } {lowest = } {stop = } {highest = }")
             if highest > stop:
                 stop_hit = True
                 stop_hit_idx = df.high.clip(upper=stop).idxmax()
             if lowest < target:
-                logger.debug('*** TARGET HIT ***')
                 target_hit = True
                 target_hit_idx = df.low.clip(lower=target).idxmin()
 
-        logger.debug(f"{target_hit = } {stop_hit = }")
         if not (stop_hit or target_hit):
-            logger.debug('nothing hit\n')
             return target_hit, stop_hit, closed_time
         elif stop_hit and target_hit:
-            logger.debug(f"{target_hit_idx = } {stop_hit_idx = }")
             if target_hit_idx < stop_hit_idx:
                 exit_row = df.timestamp.iloc[target_hit_idx]
                 stop_hit = False
@@ -807,22 +946,14 @@ class Agent:
         elif target_hit:
             exit_row = df.timestamp.iloc[target_hit_idx]
 
-        if direction == 'long':
-            logger.debug(f"{target = } {highest = } {target_hit = } {stop = } {lowest = } {stop_hit = } {exit_row = }")
-        else:
-            logger.debug(f"{target = } {lowest = } {target_hit = } {stop = } {highest = } {stop_hit = } {exit_row = }")
-
         if isinstance(exit_row, pd.Timestamp):
             closed_time = int(exit_row.timestamp())
-            logger.debug(f"{closed_time = }\n")
-        else:
-            logger.debug(f"{exit_row = }\n")
 
         k16.stop()
 
         return target_hit, stop_hit, closed_time
 
-    def plot_oco_trade(self, df, pair, entry, target, stop, target_hit, stop_hit, closed_time):
+    def plot_oco_trade(self, df, pair, state, entry, target, stop, target_hit, stop_hit, closed_time):
         fig = go.Figure(data=go.Ohlc(x=df['timestamp'],
                                      open=df['open'],
                                      high=df['high'],
@@ -844,7 +975,7 @@ class Agent:
                        else f"stop hit, {closed_dt = }" if stop_hit
         else f"neither hit, {closed_time = }")
         fig.update(layout_xaxis_rangeslider_visible=False)
-        fig.update_layout(width=1920, height=1080, title=f"{self.id} {pair} {declaration}")
+        fig.update_layout(width=1920, height=1080, title=f"{self.id} {pair} {state} {declaration}")
 
         plots_folder = Path('/home/ross/coding/modular_trader/test_channel_run_plots')
         plots_folder.mkdir(parents=True, exist_ok=True)
@@ -884,31 +1015,23 @@ class Agent:
             try:
                 target = float(v['position']['target'])
             except KeyError:
+                logger.debug(f"{self.id} no target found in record for {pair}")
                 logger.debug(pformat(v))
             stop = float(v['position']['hard_stop'])
             stop_time = v['position']['stop_time']
-            logger.info('')
-            logger.info(f"RCOST checking {self.name} {pair} open sim position")
 
             df = self.get_data(session, pair, timeframes, stop_time)
-            if df.empty:
-                logger.warning(f"RCOST couldn't find a valid stop time for {pair} {direction}")
-                logger.warning(f"Stop time on record: {stop_time}")
-                continue
 
-            target_hit, stop_hit, closed_time = self.check_oco_closed(df, direction, target, stop)
+            target_hit, stop_hit, closed_time = self.check_oco_closed(pair, df, direction, target, stop)
             if session.running_on == 'laptop' and target_hit:
-                self.plot_oco_trade(df, pair, v['trade'][0]['exe_price'], target, stop, target_hit, stop_hit, closed_time)
+                self.plot_oco_trade(df, pair, v['position']['state'], v['trade'][0]['exe_price'], target, stop,
+                                    target_hit, stop_hit, closed_time)
             if target_hit or stop_hit:
                 action = 'close' if target_hit else 'stop'
                 price = target if target_hit else stop
-                logger.debug(f"**** {self.name} {self.tf} RCOST recorded {pair} {direction} trade {action}\n")
-                logger.info(f"**** {self.name} {self.tf} RCOST recorded {pair} {direction} trade {action}\n")
                 trade_dict = self.create_oco_trade_dict(pair, direction, price, base_size, action, closed_time, 'sim')
                 self.sim_to_closed_sim(session, pair, trade_dict, save_file=False)
                 self.counts_dict[f'sim_{action}_{direction}'] += 1
-            else:
-                logger.info(f"{self.name} RCOST did not record any action for {pair}\n")
 
         self.record_trades(session, 'closed_sim')
         self.record_trades(session, 'sim')
@@ -1076,9 +1199,9 @@ class Agent:
             signals.append(signal)
 
             if state == 'real':
-                logger.debug(f"{state} {pair} open risk out of bounds, or: {open_risk['r']:.1f}R. "
+                logger.debug(f"{self.name} {state} {pair} open risk out of bounds, or: {open_risk['r']:.1f}R. "
                              f"Size: {current_value:.2f}USDT so action is {signal['action']}")
-                logger.info(f"{state} {pair} open risk out of bounds, or: {open_risk['r']:.1f}R. "
+                logger.info(f"{self.name} {state} {pair} open risk out of bounds, or: {open_risk['r']:.1f}R. "
                             f"Size: {current_value:.2f}USDT so action is {signal['action']}")
 
         return signals
@@ -1142,7 +1265,6 @@ class Agent:
 
         return rpnl_df.to_dict(orient='records')[-1]
 
-
     def calc_rpnls(self):
         self.pnls = dict(
             spot_wanted=self.get_pnls('spot', True),
@@ -1188,7 +1310,7 @@ class Agent:
         opnls = [v.get('pnl_R') for k, v in self.real_pos.items() if k != 'USDT']
         if opnls:
             avg_open_pnl = stats.median(opnls)
-        logger.debug(f"set_max_pos calculates {avg_open_pnl = }")
+        logger.debug(f"{self.id} set_max_pos calculates {avg_open_pnl = }")
         max_pos = 6 if avg_open_pnl <= 0 else 12
         p.stop()
         return max_pos
@@ -1202,6 +1324,9 @@ class Agent:
         self.or_list = [float(v.get('or_R')) for v in self.real_pos.values() if v.get('or_R')]
         self.total_open_risk = sum(self.or_list)
         self.num_open_positions = len(self.or_list)
+
+        sim_wanted_tor = sum([float(v.get('or_R')) for v in self.sim_pos.values() if v.get('or_R') and v['wanted']])
+        self.wanted_open_risk = self.total_open_risk + sim_wanted_tor
         u.stop()
 
     # machine learning ----------------------------------------------------------------------
@@ -1294,10 +1419,10 @@ class Agent:
         direction = signal['direction']
 
         if direction == 'long' and self.risk_score_validity_l == 0:
-            logger.debug(f"{self.id} risk prediction {direction} short circuit, score 0")
+            # logger.debug(f"{self.id} risk prediction {direction} short circuit, score 0")
             return 0
         elif direction == 'short' and self.risk_score_validity_s == 0:
-            logger.debug(f"{self.id} risk prediction {direction} short circuit, score 0")
+            # logger.debug(f"{self.id} risk prediction {direction} short circuit, score 0")
             return 0
 
         conf_rf_usdt_l = signal['conf_rf_usdt_l']
@@ -1361,10 +1486,10 @@ class Agent:
     def perf_model_prediction(self, direction):
 
         if direction == 'long' and self.perf_score_validity_l == 0:
-            logger.debug(f"{self.id} perf prediction {direction} short circuit, score 0")
+            # logger.debug(f"{self.id} perf prediction {direction} short circuit, score 0")
             return 0
         elif direction == 'short' and self.perf_score_validity_s == 0:
-            logger.debug(f"{self.id} perf prediction {direction} short circuit, score 0")
+            # logger.debug(f"{self.id} perf prediction {direction} short circuit, score 0")
             return 0
 
         perf_stats_w = self.perf_stats_lw if direction == 'long' else self.perf_stats_sw
@@ -1380,7 +1505,8 @@ class Agent:
 
                     perf_stats_uw['uw_perf_ema4'], perf_stats_uw['uw_perf_ema8'], perf_stats_uw['uw_perf_ema16'],
                     perf_stats_uw['uw_perf_ema32'], perf_stats_uw['uw_perf_ema64'], perf_stats_uw['uw_perf_ema128'],
-                    perf_stats_uw['uw_perf_ema4_roc'], perf_stats_uw['uw_perf_ema8_roc'], perf_stats_uw['uw_perf_ema16_roc'],
+                    perf_stats_uw['uw_perf_ema4_roc'], perf_stats_uw['uw_perf_ema8_roc'],
+                    perf_stats_uw['uw_perf_ema16_roc'],
                     perf_stats_uw['uw_perf_ema32_roc'],
                     perf_stats_uw['uw_perf_ema64_roc'], perf_stats_uw['uw_perf_ema128_roc'],
                     perf_stats_uw['uw_perf_sum4'], perf_stats_uw['uw_perf_sum8'], perf_stats_uw['uw_perf_sum16'],
@@ -1890,15 +2016,26 @@ class Agent:
         else:
             oco_order = funcs.set_oco_m(session, pair, stop_size, be.SIDE_BUY, target, stp)
 
-        open_order['stop_id'] = oco_order.get('orderId')
-        self.open_trades[pair]['position']['hard_stop'] = str(stp)
-        self.open_trades[pair]['position']['init_hard_stop'] = str(stp)
-        self.open_trades[pair]['position']['target'] = str(target)
-        self.open_trades[pair]['position']['stop_id'] = oco_order.get('orderId')
-        self.open_trades[pair]['position']['stop_time'] = int(oco_order.get('transactTime'))
-        self.open_trades[pair]['placeholder']['stop_id'] = oco_order.get('orderId')
-        self.open_trades[pair]['placeholder']['stop_time'] = int(oco_order.get('transactTime'))
+        for report in oco_order['orderReports']:
+            if report['type'] == 'LIMIT_MAKER':
+                target_details = report
+            elif report['type'] == 'STOP_LOSS_LIMIT':
+                stop_details = report
+
+        self.open_trades[pair]['position']['oco_id'] = oco_order['orderListId']
+        self.open_trades[pair]['position']['hard_stop'] = stop_details['stopPrice']
+        self.open_trades[pair]['position']['init_hard_stop'] = stop_details['stopPrice']
+        self.open_trades[pair]['position']['target'] = target_details['price']
+        self.open_trades[pair]['position']['target_id'] = target_details['orderId']
+        self.open_trades[pair]['position']['stop_id'] = stop_details['orderId']
+        self.open_trades[pair]['position']['stop_time'] = oco_order.get('transactionTime')
+        self.open_trades[pair]['placeholder']['oco_id'] = oco_order['orderListId']
+        self.open_trades[pair]['placeholder']['target_id'] = target_details['orderId']
+        self.open_trades[pair]['placeholder']['stop_id'] = stop_details['orderId']
+        self.open_trades[pair]['placeholder']['stop_time'] = oco_order.get('transactionTime')
         self.open_trades[pair]['placeholder']['completed'] = 'set_oco'
+
+        session.pairs_data[pair]['algo_orders'] += 2
 
     def open_set_stop(self, session, pair, stp, open_order, direction):
         # stop_size = float(open_order.get('base_size'))
@@ -1909,7 +2046,8 @@ class Agent:
         else:
             stop_order = funcs.set_stop_M(session, pair, stop_size, be.SIDE_BUY, stp)
 
-        open_order['stop_id'] = stop_order.get('orderId')
+        # TODO if stop order ids start going missing, it might be because i commented this line (16/11/2023)
+        # open_order['stop_id'] = stop_order.get('orderId')
         self.open_trades[pair]['position']['hard_stop'] = str(stp)
         self.open_trades[pair]['position']['init_hard_stop'] = str(stp)
         self.open_trades[pair]['position']['stop_id'] = stop_order.get('orderId')
@@ -1917,6 +2055,8 @@ class Agent:
         self.open_trades[pair]['placeholder']['stop_id'] = stop_order.get('orderId')
         self.open_trades[pair]['placeholder']['stop_time'] = int(stop_order.get('transactTime'))
         self.open_trades[pair]['placeholder']['completed'] = 'set_stop'
+
+        session.pairs_data[pair]['algo_orders'] += 1
 
     def open_save_records(self, session, pair):
         del self.open_trades[pair]['placeholder']['completed']
@@ -1972,6 +2112,7 @@ class Agent:
             self.create_record(signal)
             successful = self.omf_borrow(session, pair, size, direction)
             if not successful:
+                logger.debug('borrow unsuccessful')
                 del self.open_trades[pair]
                 return False
             try:
@@ -1994,7 +2135,7 @@ class Agent:
             if stage == 2:
                 open_order = placeholder['open_order']
             if self.oco:
-                self.open_set_oco(self, session, pair, signal['target'], stp, open_order, direction)
+                self.open_set_oco(session, pair, signal['target'], stp, open_order, direction)
             else:
                 self.open_set_stop(session, pair, stp, open_order, direction)
         if stage <= 3:
@@ -3337,8 +3478,9 @@ class ChannelRun(Agent):
         signal_dict['model_age'] = model_age.total_seconds()
         signal_dict['conf_rf_usdt_l'] = long_confidence
         signal_dict['conf_rf_usdt_s'] = short_confidence
-        signal_dict['confidence_l'] = long_confidence # if theres more than one ml model, this is where i combine them
-        signal_dict['confidence_s'] = short_confidence # so that i can have a universal 'confidence' for the secondary manual
+        signal_dict['confidence_l'] = long_confidence  # if theres more than one ml model, this is where i combine them
+        signal_dict[
+            'confidence_s'] = short_confidence  # so that i can have a universal 'confidence' for the secondary manual
         signal_dict['market_rank_1d'] = session.pairs_data[pair]['market_rank_1d']
         signal_dict['market_rank_1w'] = session.pairs_data[pair]['market_rank_1w']
         signal_dict['market_rank_1m'] = session.pairs_data[pair]['market_rank_1m']

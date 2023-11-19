@@ -41,7 +41,6 @@ tf_dict = {'1m': Client.KLINE_INTERVAL_1MINUTE,
 def get_max_borrow(session, asset: str) -> float:
     abc = Timer('all binance calls')
     abc.start()
-    logger.debug('running get_max_borrow')
     session.track_weights(50)
     try:
         limits = session.client.get_max_margin_loan(asset=asset)
