@@ -25,7 +25,7 @@ import optuna
 optuna.logging.set_verbosity(optuna.logging.ERROR)
 
 if not Path('pi_2.txt').exists():
-    import mt.update_ohlc
+    # import mt.update_ohlc
     import mt.async_update_ohlc
 
 warnings.filterwarnings('ignore')
@@ -138,8 +138,8 @@ def channel_run_entries(df, lookback):
 
     df[f'channel_position_{lookback}'] = (df.close - df[f"ll_{lookback}"]) / (df[f"hh_{lookback}"] - df[f"ll_{lookback}"])
 
-    df['entry_l'] = df.channel_position < 0.05
-    df['entry_s'] = df.channel_position > 0.95
+    df['entry_l'] = df.channel_position < 0.1
+    df['entry_s'] = df.channel_position > 0.9
 
     # df['entry_l_price'] = df.close.loc[df.entry_l]
     # df['entry_s_price'] = df.close.loc[df.entry_s]
@@ -691,6 +691,10 @@ if __name__ == '__main__':
             train_primary('channel_run', side, timeframe, (100, 'edge'), 50, '1w_volumes', 2500, num_trials)
             train_secondary('risk', 'channel_run', side, timeframe, (100, 'edge'), 50, '1w_volumes', 0.4, num_trials)
             train_secondary('perf', 'channel_run', side, timeframe, (100, 'edge'), 50, '1w_volumes', 0.4, num_trials)
+
+            train_primary('channel_run', side, timeframe, (100, 'mid'), 50, '1w_volumes', 2500, num_trials)
+            train_secondary('risk', 'channel_run', side, timeframe, (100, 'mid'), 50, '1w_volumes', 0.4, num_trials)
+            train_secondary('perf', 'channel_run', side, timeframe, (100, 'mid'), 50, '1w_volumes', 0.4, num_trials)
 
             train_primary('channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 2500, num_trials)
             train_secondary('risk', 'channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 0.4, num_trials)
