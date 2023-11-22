@@ -664,6 +664,10 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
     X = results.drop('win', axis=1)
     y = results.win  # pnl > threshold
 
+    X['mkt_rank_1d'] = X.mkt_rank_1d.fillna(0.5)
+    X['mkt_rank_1w'] = X.mkt_rank_1w.fillna(0.5)
+    X['mkt_rank_1m'] = X.mkt_rank_1m.fillna(0.5)
+
     # balance classes
     if (len(y.unique()) < 2) or (y.value_counts().iloc[0] < 20) or (y.value_counts().iloc[1] < 20):
         logger.debug('stopped - not enough samples in both classes for cross-validation etc')
@@ -672,7 +676,8 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
     us = ClusterCentroids(random_state=0)
     try:
         X, y = us.fit_resample(X, y)
-    except ValueError:
+    except ValueError as e:
+        logger.debug(e)
         logger.debug(X)
         return
 
