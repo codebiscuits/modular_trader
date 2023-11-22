@@ -4,7 +4,7 @@ from pathlib import Path
 import mt.resources.ml_funcs as mlf
 import mt.resources.indicators as ind
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timezone
 import statistics as stats
 from itertools import product
 from mt.resources.loggers import create_logger
@@ -25,7 +25,7 @@ import optuna
 optuna.logging.set_verbosity(optuna.logging.ERROR)
 
 if not Path('pi_2.txt').exists():
-    import mt.update_ohlc
+    # import mt.update_ohlc
     import mt.async_update_ohlc
 
 warnings.filterwarnings('ignore')
@@ -319,7 +319,6 @@ def optimise(objective, num_trials):
     study.optimize(objective, n_trials=num_trials, n_jobs=-1)
     best_trials = [trial.params for trial in study.trials if trial.values[0] >= (study.best_value - 0.001)]
     best_df = pd.DataFrame(best_trials)
-    best_df.describe()
 
     return best_df.median(axis=0).to_dict()
 
@@ -337,7 +336,7 @@ def rf_perm_importance(X_train, X_test, y_train, y_test, rf_sfs):
     return final_features
 
 
-def validate_findings(X_train, X_val, y_train, y_val, sfs_selector, final_features, best_params):
+def validate_findings(X_train, X_val, y_train, y_val, sfs_selector, final_features, best_params, fb_scorer):
     print(f"model validation began: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
     X_train = pd.DataFrame(X_train, columns=sfs_selector.k_feature_names_)
     X_val = pd.DataFrame(X_val, columns=sfs_selector.k_feature_names_)
@@ -355,8 +354,15 @@ def validate_findings(X_train, X_val, y_train, y_val, sfs_selector, final_featur
         n_jobs=-1
     )
     val_model.fit(X_train, y_train)
-    score = val_model.score(X_val, y_val)
-    print(f"Final model validation score: {score:.1%}")
+    train_score = val_model.score(X_train, y_train)
+    val_score = val_model.score(X_val, y_val)
+
+    fb_train = fb_scorer(val_model, X_train, y_train)
+    fb_val = fb_scorer(val_model, X_val, y_val)
+
+    print(f"Final model validation accuracy: {val_score:.1%}, f beta: {fb_val:.1%}")
+
+    return train_score, val_score, fb_train, fb_val
 
 
 def final_rf_train_and_save(mode, strat_name, X_final, y_final, final_features, best_params,
@@ -579,7 +585,8 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
         return
 
     # final validation score before training production model
-    validate_findings(X_train, X_val, y_train, y_val, rf_sfs, final_features, best_params)
+    train_score, val_score, fb_train, fb_val = validate_findings(X_train, X_val, y_train, y_val, rf_sfs, final_features,
+                                                                 best_params, fb_scorer)
 
     # train final model
     final_rf_train_and_save('tech', strat_name, X, y, final_features, best_params,
@@ -588,6 +595,21 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
     print(f"{strat_name} Technical test time taken: {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
+
+    return dict(
+        strat_name=strat_name,
+        side=side,
+        timeframe=timeframe,
+        strat_params=strat_params,
+        num_pairs=num_pairs,
+        selection_method=selection_method,
+        n_final_features=len(final_features),
+        total_time=loop_elapsed,
+        train_score=train_score,
+        val_score=val_score,
+        fb_train=fb_train,
+        fb_val=fb_val
+    )
 
 
 def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat_params: tuple,
@@ -664,7 +686,8 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
         return
 
     # final validation score before training production model
-    validate_findings(X_train, X_val, z_train, z_val, rf_sfs, final_features, best_params)
+    train_score, val_score, fb_train, fb_val = validate_findings(X_train, X_val, z_train, z_val, rf_sfs, final_features,
+                                                                 best_params, fb_scorer)
 
     # train final model
     final_rf_train_and_save(mode, strat_name, X, y, final_features, best_params,
@@ -673,6 +696,21 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
     print(f"{strat_name} {mode} test time taken: {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
+
+    return dict(
+        strat_name=strat_name,
+        side=side,
+        timeframe=timeframe,
+        strat_params=strat_params,
+        num_pairs=num_pairs,
+        selection_method=selection_method,
+        n_final_features=len(final_features),
+        total_time=loop_elapsed,
+        train_score=train_score,
+        val_score=val_score,
+        fb_train=fb_train,
+        fb_val=fb_val
+    )
 
 
 if __name__ == '__main__':
@@ -685,29 +723,39 @@ if __name__ == '__main__':
     # TODO i need to write a 'retrain_primary' function that just fits a model with preselected features and params to the
     #  new data, which i can run with the secondary training every day, and run the full train_primary once a week
 
+    all_stats = []
+
     for side, timeframe in product(sides, timeframes):
         print(f"\n\n*******\nTesting {side} {timeframe}\n*******\n")
         if timeframe in ['15m', '30m', '1h', '4h']:
-            train_primary('channel_run', side, timeframe, (100, 'edge'), 50, '1w_volumes', 2500, num_trials)
-            train_secondary('risk', 'channel_run', side, timeframe, (100, 'edge'), 50, '1w_volumes', 0.4, num_trials)
-            train_secondary('perf', 'channel_run', side, timeframe, (100, 'edge'), 50, '1w_volumes', 0.4, num_trials)
+            all_stats.append(train_primary('channel_run', side, timeframe, (100, 'edge'), 50, '1w_volumes', 2500, num_trials))
+            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (100, 'edge'), 50, '1w_volumes', 0.4, num_trials))
+            all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (100, 'edge'), 50, '1w_volumes', 0.4, num_trials))
 
-            train_primary('channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 2500, num_trials)
-            train_secondary('risk', 'channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 0.4, num_trials)
-            train_secondary('perf', 'channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 0.4, num_trials)
+            all_stats.append(train_primary('channel_run', side, timeframe, (100, 'mid'), 50, '1w_volumes', 2500, num_trials))
+            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (100, 'mid'), 50, '1w_volumes', 0.4, num_trials))
+            all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (100, 'mid'), 50, '1w_volumes', 0.4, num_trials))
 
-            train_primary('channel_run', side, timeframe, (200, 'mid'), 50, '1w_volumes', 2500, num_trials)
-            train_secondary('risk', 'channel_run', side, timeframe, (200, 'mid'), 50, '1w_volumes', 0.4, num_trials)
-            train_secondary('perf', 'channel_run', side, timeframe, (200, 'mid'), 50, '1w_volumes', 0.4, num_trials)
+            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 2500, num_trials))
+            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 0.4, num_trials))
+            all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 0.4, num_trials))
+
+            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'mid'), 50, '1w_volumes', 2500, num_trials))
+            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'mid'), 50, '1w_volumes', 0.4, num_trials))
+            all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (200, 'mid'), 50, '1w_volumes', 0.4, num_trials))
 
         if timeframe in ['1h', '4h', '12h', '1d']:
-            train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 500, num_trials)
-            train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
-            train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials)
+            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 500, num_trials))
+            all_stats.append(train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials))
+            all_stats.append(train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials))
 
-            train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 500, num_trials)
-            train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
-            train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials)
+            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 500, num_trials))
+            all_stats.append(train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials))
+            all_stats.append(train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials))
+
+    stats_df = pd.DataFrame().from_records(all_stats)
+    now_date = datetime.now(tz=timezone.utc).strftime('%d-%m-%y')
+    stats_df.to_parquet(f'/home/ross/coding/modular_trader/machine_learning/training_stats_{now_date}.parquet')
 
     all_end = time.perf_counter()
     all_elapsed = all_end - all_start
