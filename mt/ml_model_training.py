@@ -789,6 +789,7 @@ if __name__ == '__main__':
             all_stats.append(train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials))
             all_stats.append(train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials))
 
+    all_stats = [record for record in all_stats if record is not None]
     stats_df = pd.DataFrame().from_records(all_stats)
     now_date = datetime.now(tz=timezone.utc).strftime('%d-%m-%y')
     stats_df.to_parquet(f'/home/ross/coding/modular_trader/machine_learning/training_stats_{now_date}.parquet')
