@@ -111,8 +111,8 @@ def get_data(pair, timeframe, vwma_periods=24):
     df = funcs.resample_ohlc(timeframe, None, df).tail(len(vwma)).reset_index(drop=True)
     df['vwma'] = vwma
 
-    if timeframe == '1h':
-        df = df.tail(8760).reset_index(drop=True)
+    # if timeframe == '1h':
+    #     df = df.tail(8760).reset_index(drop=True)
 
     return df
 
@@ -226,6 +226,8 @@ def trail_fractal(df_0: pd.DataFrame, width: int, spacing: int, side: str, trim_
     df_0[f'fractal_trend_age_{side}'] = ind.consec_condition(trend_condition)
 
     # loop through potential entries
+    count = 0
+    exit_idxs = []
     results = []
     for row in rows:
         df = df_0[row:row + trim_ohlc].copy().reset_index(drop=True)
@@ -264,12 +266,14 @@ def trail_fractal(df_0: pd.DataFrame, width: int, spacing: int, side: str, trim_
         )
 
         results.append(row_data | row_res)
+        exit_idxs.append(exit_row)
 
         msg = f"trade lifespans getting close to trimmed ohlc length ({lifespan / trim_ohlc:.1%}), increase trim ohlc"
         if lifespan / trim_ohlc > 0.5:
             print(msg)
+            count += 1
 
-    return results
+    return results, exit_idxs, count
 
 
 

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import statistics as stats
 from itertools import product
 from mt.resources.loggers import create_logger
+import plotly.graph_objects as go
 import json
 import warnings
 from sklearn.ensemble import RandomForestClassifier
@@ -46,6 +47,8 @@ def backtest_oco(df_0, side, lookback, goal, trim_ohlc=2200):
     # identify potential entries
     rows = list(df_0.loc[df_0[f"entry_{side[0]}"]].index)
 
+    count = 0
+    exit_idxs = []
     results = []
     for row in rows:
         if row == len(df_0) - 1:
@@ -116,11 +119,15 @@ def backtest_oco(df_0, side, lookback, goal, trim_ohlc=2200):
 
         results.append(row_data | row_res)
 
-        msg = f"trade lifespans getting close to trimmed ohlc length ({exit_row / trim_ohlc:.1%}), increase trim ohlc"
+        msg = (f"trade lifespans getting close to trimmed ohlc length, {exit_row = } ({exit_row / trim_ohlc:.1%}), "
+               f"increase trim ohlc")
         if exit_row / trim_ohlc > 0.9:
             print(msg)
+            count += 1
 
-    return results
+        exit_idxs.append(exit_row)  # this is to look at the distributions of how much trimmed ohlc data is being used
+
+    return results, exit_idxs, count
 
 
 def channel_run_entries(df, lookback):
@@ -177,15 +184,26 @@ def generate_channel_run_dataset(pairs: list, side: str, timeframe: str, strat_p
     lookback, goal = strat_params
 
     all_res = []
+    all_exit_idx = []
     for n, pair in enumerate(pairs):
         df = mlf.get_data(pair, timeframe)
         df = mlf.add_features(df, timeframe)
         df = channel_run_entries(df, lookback)
         df = df.tail(data_len).reset_index(drop=True)
-        res = backtest_oco(df, side, lookback, goal)
+        res, exit_idxs, count = backtest_oco(df, side, lookback, goal)
         all_res.extend(res)
+        all_exit_idx.extend(exit_idxs)
 
     res_df = pd.DataFrame(all_res).sort_values('timestamp').reset_index(drop=True)
+
+    # save plot of exit_row distribution
+    trace = go.Histogram(x=all_exit_idx, xbins=dict(start=min(all_exit_idx), size=0.05, end=max(all_exit_idx)),
+                         marker=dict(color='rgb(37, 150, 190)'))
+    layout = go.Layout(title=f"Distribution of exit row from backtest_oco. {data_len = }")
+    plot_path = Path("/home/ross/coding/modular_trader/machine_learning/exit_idx_distrib")
+    plot_path.mkdir(parents=True, exist_ok=True)
+    fig = go.Figure(data=go.Histogram(trace), layout=layout)
+    fig.write_image(plot_path / f"channel_run_{side}_{timeframe}_{lookback}_{goal}.png")
 
     return res_df.dropna(axis=1)
 
@@ -194,14 +212,27 @@ def generate_trail_fractal_dataset(pairs: list, side: str, timeframe: str, strat
     print(f"data generation began: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
 
     width, atr_spacing = strat_params
+
     all_res = pd.DataFrame()
+    all_exit_idx = []
     for pair in pairs:
         df = mlf.get_data(pair, timeframe).tail(data_len + 200).reset_index(drop=True)
         df = mlf.add_features(df, timeframe).tail(data_len).reset_index(drop=True)
-        res_list = mlf.trail_fractal(df, width, atr_spacing, side)
+        res_list, exit_idxs, count = mlf.trail_fractal(df, width, atr_spacing, side)
         res_df = pd.DataFrame(res_list).dropna(axis=0).reset_index(drop=True)
         all_res = pd.concat([all_res, res_df], axis=0, ignore_index=True)
+        all_exit_idx.extend(exit_idxs)
+
     all_res = all_res.sort_values('timestamp').reset_index(drop=True)
+
+    # save plot of exit_row distribution
+    trace = go.Histogram(x=all_exit_idx, xbins=dict(start=min(all_exit_idx), size=0.05, end=max(all_exit_idx)),
+                         marker=dict(color='rgb(37, 150, 190)'))
+    layout = go.Layout(title=f"Distribution of exit row from backtest_trail_fractal. {data_len = }")
+    plot_path = Path("/home/ross/coding/modular_trader/machine_learning/exit_idx_distrib")
+    plot_path.mkdir(parents=True, exist_ok=True)
+    fig = go.Figure(data=go.Histogram(trace), layout=layout)
+    fig.write_image(plot_path / f"trail_fractals_{side}_{timeframe}_{width}_{atr_spacing}.png")
 
     return all_res.dropna(axis=1)
 
