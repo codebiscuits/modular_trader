@@ -135,8 +135,8 @@ class TradingSession:
             self.top_up_bnb_s(15)
         if self.margin_bal > 30:
             self.top_up_bnb_m(15)
-        logger.debug(f"Max size for new positions this session: {self.max_allocation * self.margin_bal:.2f} USDT")
-        logger.info(f"Max size for new positions this session: {self.max_allocation * self.margin_bal:.2f} USDT")
+        logger.debug(f"Max size for new positions this session: {self.max_allocation * self.margin_bal:.2f} USDT\n")
+        logger.info(f"Max size for new positions this session: {self.max_allocation * self.margin_bal:.2f} USDT\n")
 
         # load local data and configure settings
         self.mkt_data_r, self.mkt_data_w, self.records_r, self.records_w, self.ohlc_r, self.ohlc_w = self.data_paths()
@@ -247,14 +247,14 @@ class TradingSession:
         limits = self.info['rateLimits']
 
         old_limits = [{'rateLimitType': 'REQUEST_WEIGHT', 'interval': 'MINUTE', 'intervalNum': 1, 'limit': 6000},
-                      {'rateLimitType': 'ORDERS', 'interval': 'SECOND', 'intervalNum': 10, 'limit': 50},
-                      {'rateLimitType': 'ORDERS', 'interval': 'DAY', 'intervalNum': 1, 'limit': 160000},
+                      {'rateLimitType': 'ORDERS', 'interval': 'SECOND', 'intervalNum': 10, 'limit': 100},
+                      {'rateLimitType': 'ORDERS', 'interval': 'DAY', 'intervalNum': 1, 'limit': 200000},
                       {'rateLimitType': 'RAW_REQUESTS', 'interval': 'MINUTE', 'intervalNum': 5, 'limit': 61000}]
 
         if limits != old_limits:
             note = 'binance rate limits have changed, check and adjust session definition'
-            logger.debug('\n****************\n\n', note, '\n\n****************\n')
-            logger.warning('\n****************\n\n', note, '\n\n****************\n')
+            logger.debug(f'\n****************\n\n {note} \n\n****************\n')
+            logger.warning(f'\n****************\n\n {note} \n\n****************\n')
 
         for limit in limits:
             if limit['interval'] == 'MINUTE':
