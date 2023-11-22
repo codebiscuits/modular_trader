@@ -138,8 +138,8 @@ def channel_run_entries(df, lookback):
 
     df[f'channel_position_{lookback}'] = (df.close - df[f"ll_{lookback}"]) / (df[f"hh_{lookback}"] - df[f"ll_{lookback}"])
 
-    df['entry_l'] = df.channel_position < 0.05
-    df['entry_s'] = df.channel_position > 0.95
+    df['entry_l'] = df.channel_position < 0.1
+    df['entry_s'] = df.channel_position > 0.9
 
     # df['entry_l_price'] = df.close.loc[df.entry_l]
     # df['entry_s_price'] = df.close.loc[df.entry_s]

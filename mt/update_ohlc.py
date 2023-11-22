@@ -17,7 +17,7 @@ logger = create_logger('update_ohlc', 'update_ohlc')
 now = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
 
 # session = LightSession()
-session = TradingSession(0.1, True)
+session = TradingSession(0.1, 1, True)
 
 logger.debug(f"{'-:-' * 10} {now} UTC running update_ohlc {'-:-' * 10}")
 logger.debug(f"ohlc read path: {session.ohlc_r}")
