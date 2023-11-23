@@ -470,11 +470,14 @@ def create_risk_dataset(strat_name: str, side: str, timeframe: str, strat_params
     observations = []
     for position in all_records.values():
         signal = position['signal']
+
+        # remove irrelevant/unusable signals
         if ((signal['direction'] != side) or
                 (signal.get('confidence_l') in [None, 0]) or
                 (signal.get('market_rank_1d') in [None, 0])):
             continue
 
+        # sum up trade rpnl
         trade = position['trade']
         pnl = 0.0
         for t in trade:
@@ -500,7 +503,7 @@ def create_risk_dataset(strat_name: str, side: str, timeframe: str, strat_params
         except KeyError:
             # logger.debug("observation couldn't be added because the signal was missing a key")
             # logger.debug(pformat(position))
-            pass
+            continue
 
     return pd.DataFrame(observations)
 
@@ -631,7 +634,7 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
         strat_name=strat_name,
         side=side,
         timeframe=timeframe,
-        strat_params=strat_params,
+        strat_params=f"{strat_params[0]}_{strat_params[1]}",
         num_pairs=num_pairs,
         selection_method=selection_method,
         n_final_features=len(final_features),
@@ -664,9 +667,10 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
     X = results.drop('win', axis=1)
     y = results.win  # pnl > threshold
 
-    X['mkt_rank_1d'] = X.mkt_rank_1d.fillna(0.5)
-    X['mkt_rank_1w'] = X.mkt_rank_1w.fillna(0.5)
-    X['mkt_rank_1m'] = X.mkt_rank_1m.fillna(0.5)
+    if mode == 'risk':
+        X['mkt_rank_1d'] = X.mkt_rank_1d.fillna(0.5)
+        X['mkt_rank_1w'] = X.mkt_rank_1w.fillna(0.5)
+        X['mkt_rank_1m'] = X.mkt_rank_1m.fillna(0.5)
 
     # balance classes
     if (len(y.unique()) < 2) or (y.value_counts().iloc[0] < 20) or (y.value_counts().iloc[1] < 20):
@@ -737,7 +741,7 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
         strat_name=strat_name,
         side=side,
         timeframe=timeframe,
-        strat_params=strat_params,
+        strat_params=f"{strat_params[0]}_{strat_params[1]}",
         num_pairs=num_pairs,
         selection_method=selection_method,
         n_final_features=len(final_features),
