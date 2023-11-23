@@ -707,12 +707,11 @@ class Agent:
             session.counts.append('get_margin_order')
 
             if stop_order.get('status') == 'NEW':
-                logger.info(f"RCOT {self.id} {pair} trade still open")
                 del self.open_trades[pair]['placeholder']
                 continue
 
             elif stop_order.get('status') == 'FILLED':
-                logger.info(f"RCOT {self.id} {pair} stop hit")
+                # logger.info(f"RCOT {self.id} {pair} stop hit")
                 stop_size = self.repay_stop(session, pair, stop_order)
                 stop_dict = self.create_stop_dict(session, pair, stop_order, stop_size)
                 self.save_records(session, pair, stop_dict, stop_order)
@@ -720,7 +719,7 @@ class Agent:
                 self.counts_dict[f'real_stop_{direction}'] += 1
 
             elif stop_order.get('status') == 'EXPIRED':
-                logger.info(f"RCOT {self.id} {pair} target hit")
+                # logger.info(f"RCOT {self.id} {pair} target hit")
                 target_order = self.find_oco_order(session, pair, target_id)
                 target_size = self.repay_stop(session, pair, target_order)
                 target_dict = self.create_target_dict(session, pair, target_order, target_size)
@@ -901,6 +900,8 @@ class Agent:
                                                     'sim')
                 self.sim_to_closed_sim(session, pair, trade_dict, save_file=False)
                 self.counts_dict[f'sim_stop_{direction}'] += 1
+                # if session.running_on == 'laptop':
+                #     self.plot_trailing_stop_trade(df, pair, v['position']['state'], v['trade'][0]['exe_price'], stop, stop_hit_time)
 
         self.record_trades(session, 'closed_sim')
         self.record_trades(session, 'sim')
@@ -953,7 +954,7 @@ class Agent:
 
         return target_hit, stop_hit, closed_time
 
-    def plot_oco_trade(self, df, pair, state, entry, target, stop, target_hit, stop_hit, closed_time):
+    def plot_oco_trade(self, df, pair, state, rr, entry, target, stop, target_hit, stop_hit, closed_time):
         fig = go.Figure(data=go.Ohlc(x=df['timestamp'],
                                      open=df['open'],
                                      high=df['high'],
@@ -975,11 +976,13 @@ class Agent:
                        else f"stop hit, {closed_dt = }" if stop_hit
         else f"neither hit, {closed_time = }")
         fig.update(layout_xaxis_rangeslider_visible=False)
-        fig.update_layout(width=1920, height=1080, title=f"{self.id} {pair} {state} {declaration}")
+        fig.update_layout(width=1920, height=1080, title=f"{self.id} {pair} {state} {declaration} RR: {rr:.1f}")
 
-        plots_folder = Path('/home/ross/coding/modular_trader/test_channel_run_plots')
+        outcome = 'win' if target_hit else 'loss' if stop_hit else 'none'
+        now = datetime.now(tz=timezone.utc).strftime("%d-%m_%H-%M")
+        plots_folder = Path(f'/home/ross/coding/modular_trader/plot_trades/{self.id}_plots_{outcome}')
         plots_folder.mkdir(parents=True, exist_ok=True)
-        fig.write_image(plots_folder / f"{self.id}_{pair}.png")
+        fig.write_image(plots_folder / f"{pair}_{now}.png")
 
     def create_oco_trade_dict(self, pair, direction, price, base_size, action, closed_time, state):
         liability = f"{0 - (base_size * price):.2f}" if direction == 'long' else f"{0 - base_size:.2f}"
@@ -1008,7 +1011,7 @@ class Agent:
         session.counts.append('rcost')
 
         check_pairs = list(self.sim_trades.items())
-        logger.info(f"{self.name} RCOST checking {len(check_pairs)} positions")
+        # logger.info(f"{self.name} RCOST checking {len(check_pairs)} positions")
         for pair, v in check_pairs:  # can't loop through the dictionary directly because i delete items as i go
             direction = v['position']['direction']
             base_size = float(v['position']['base_size'])
@@ -1023,8 +1026,11 @@ class Agent:
             df = self.get_data(session, pair, timeframes, stop_time)
 
             target_hit, stop_hit, closed_time = self.check_oco_closed(pair, df, direction, target, stop)
-            if session.running_on == 'laptop' and target_hit:
-                self.plot_oco_trade(df, pair, v['position']['state'], v['trade'][0]['exe_price'], target, stop,
+            if session.running_on == 'laptop' and (target_hit or stop_hit):
+                exe_price = v['trade'][0]['exe_price']
+                state = v['position']['state']
+                rr = v['signal']['rr'] if target_hit else -1 if stop_hit else 0
+                self.plot_oco_trade(df, pair, state, rr, exe_price, target, stop,
                                     target_hit, stop_hit, closed_time)
             if target_hit or stop_hit:
                 action = 'close' if target_hit else 'stop'
@@ -1058,8 +1064,8 @@ class Agent:
         init_stop = float(position['init_hard_stop'])
         final_exit = float(trades[-1].get('exe_price'))
 
-        r_val = (entry - init_stop) / entry
-        trade_pnl = (final_exit - entry) / entry
+        r_val = ((entry - init_stop) / entry) + 0.0015
+        trade_pnl = ((final_exit - entry) / entry) - 0.0015
         trade_r = round(trade_pnl / r_val, 3)
         scalar = position['pct_of_full_pos']
         realised_r = trade_r * scalar
@@ -1278,24 +1284,24 @@ class Agent:
     def perf_stats(self, direction):
         d = 'uw_' if 'unwanted' in direction else ''
         perf_stats = {}
-        perf_stats[f'{d}perf_ema4'] = self.pnls[direction]['ema_4']
-        perf_stats[f'{d}perf_ema8'] = self.pnls[direction]['ema_8']
-        perf_stats[f'{d}perf_ema16'] = self.pnls[direction]['ema_16']
-        perf_stats[f'{d}perf_ema32'] = self.pnls[direction]['ema_32']
-        perf_stats[f'{d}perf_ema64'] = self.pnls[direction]['ema_64']
-        perf_stats[f'{d}perf_ema128'] = self.pnls[direction]['ema_128']
+        perf_stats[f'{d}perf_ema_4'] = self.pnls[direction]['ema_4']
+        perf_stats[f'{d}perf_ema_8'] = self.pnls[direction]['ema_8']
+        perf_stats[f'{d}perf_ema_16'] = self.pnls[direction]['ema_16']
+        perf_stats[f'{d}perf_ema_32'] = self.pnls[direction]['ema_32']
+        perf_stats[f'{d}perf_ema_64'] = self.pnls[direction]['ema_64']
+        perf_stats[f'{d}perf_ema_128'] = self.pnls[direction]['ema_128']
         perf_stats[f'{d}perf_ema4_roc'] = self.pnls[direction]['ema_4_roc']
         perf_stats[f'{d}perf_ema8_roc'] = self.pnls[direction]['ema_8_roc']
         perf_stats[f'{d}perf_ema16_roc'] = self.pnls[direction]['ema_16_roc']
         perf_stats[f'{d}perf_ema32_roc'] = self.pnls[direction]['ema_32_roc']
         perf_stats[f'{d}perf_ema64_roc'] = self.pnls[direction]['ema_64_roc']
         perf_stats[f'{d}perf_ema128_roc'] = self.pnls[direction]['ema_128_roc']
-        perf_stats[f'{d}perf_sum4'] = self.pnls[direction]['sum_4']
-        perf_stats[f'{d}perf_sum8'] = self.pnls[direction]['sum_8']
-        perf_stats[f'{d}perf_sum16'] = self.pnls[direction]['sum_16']
-        perf_stats[f'{d}perf_sum32'] = self.pnls[direction]['sum_32']
-        perf_stats[f'{d}perf_sum64'] = self.pnls[direction]['sum_64']
-        perf_stats[f'{d}perf_sum128'] = self.pnls[direction]['sum_128']
+        perf_stats[f'{d}perf_sum_4'] = self.pnls[direction]['sum_4']
+        perf_stats[f'{d}perf_sum_8'] = self.pnls[direction]['sum_8']
+        perf_stats[f'{d}perf_sum_16'] = self.pnls[direction]['sum_16']
+        perf_stats[f'{d}perf_sum_32'] = self.pnls[direction]['sum_32']
+        perf_stats[f'{d}perf_sum_64'] = self.pnls[direction]['sum_64']
+        perf_stats[f'{d}perf_sum_128'] = self.pnls[direction]['sum_128']
 
         return perf_stats
 
@@ -1310,7 +1316,6 @@ class Agent:
         opnls = [v.get('pnl_R') for k, v in self.real_pos.items() if k != 'USDT']
         if opnls:
             avg_open_pnl = stats.median(opnls)
-        logger.debug(f"{self.id} set_max_pos calculates {avg_open_pnl = }")
         max_pos = 6 if avg_open_pnl <= 0 else 12
         p.stop()
         return max_pos
@@ -1357,11 +1362,11 @@ class Agent:
 
     def load_risk_model_data(self):
         # paths
-        long_model_file = self.model_folder / f"long_{self.tf}_model_risk.json"
+        long_model_file = self.model_folder / f"long_{self.tf}_model_risk.sav"
         long_scaler_file = self.model_folder / f"long_{self.tf}_scaler_risk.sav"
         long_model_info = self.model_folder / f"long_{self.tf}_info_risk.json"
 
-        short_model_file = self.model_folder / f"short_{self.tf}_model_risk.json"
+        short_model_file = self.model_folder / f"short_{self.tf}_model_risk.sav"
         short_scaler_file = self.model_folder / f"short_{self.tf}_scaler_risk.sav"
         short_model_info = self.model_folder / f"short_{self.tf}_info_risk.json"
 
@@ -1386,11 +1391,11 @@ class Agent:
 
     def load_perf_model_data(self):
         # paths
-        long_perf_model_path = self.primary_folder / f"long_{self.tf}_model_perf.json"
+        long_perf_model_path = self.primary_folder / f"long_{self.tf}_model_perf.sav"
         long_perf_scaler_path = self.primary_folder / f"long_{self.tf}_scaler_perf.sav"
         long_perf_info_path = self.primary_folder / f"long_{self.tf}_info_perf.json"
 
-        short_perf_model_path = self.primary_folder / f"short_{self.tf}_model_perf.json"
+        short_perf_model_path = self.primary_folder / f"short_{self.tf}_model_perf.sav"
         short_perf_scaler_path = self.primary_folder / f"short_{self.tf}_scaler_perf.sav"
         short_perf_info_path = self.primary_folder / f"short_{self.tf}_info_perf.json"
 
@@ -1436,21 +1441,25 @@ class Agent:
 
         features = [conf_rf_usdt_l, conf_rf_usdt_s, inval_ratio, mkt_rank_1d, mkt_rank_1w, mkt_rank_1m]
         names = ['conf_rf_usdt_l', 'conf_rf_usdt_s', 'inval_ratio', 'mkt_rank_1d', 'mkt_rank_1w', 'mkt_rank_1m']
-        data = np.array(features).reshape(1, -1)
 
-        self.long_risk_features_idx = [i for i, f in enumerate(names) if f in self.long_risk_info['features']]
-        self.short_risk_features_idx = [i for i, f in enumerate(names) if f in self.short_risk_info['features']]
+        # data = np.array(features).reshape(1, -1)
+        # self.long_risk_features_idx = [i for i, f in enumerate(names) if f in self.long_risk_info['features']]
+        # self.short_risk_features_idx = [i for i, f in enumerate(names) if f in self.short_risk_info['features']]
+
+        data = pd.DataFrame(data=features, index=[0], columns=names)
 
         if direction == 'long':
-            long_data = self.long_risk_scaler.transform(data)
-            long_data = long_data[:, self.long_risk_features_idx]
+            # long_data = data[:, self.long_risk_features_idx]
+            long_data = data[self.long_risk_info['features']]
+            long_data = self.long_risk_scaler.transform(long_data)
             score = float(self.long_risk_model.predict_proba(long_data)[-1, 1])
-            print(f"{self.id} {direction} ml risk score: {score:.1%}")
+            logger.debug(f"{self.id} {direction} ml risk score: {score:.1%}")
         else:
-            short_data = self.short_risk_scaler.transform(data)
-            short_data = short_data[:, self.short_risk_features_idx]
+            # short_data = data[:, self.short_risk_features_idx]
+            short_data = data[self.short_risk_info['features']]
+            short_data = self.short_risk_scaler.transform(short_data)
             score = float(self.short_risk_model.predict_proba(short_data)[-1, 1])
-            print(f"{self.id} {direction} ml risk score: {score:.1%}")
+            logger.debug(f"{self.id} {direction} ml risk score: {score:.1%}")
 
         return min(1.0, max(0.001, score))
 
@@ -1495,52 +1504,28 @@ class Agent:
         perf_stats_w = self.perf_stats_lw if direction == 'long' else self.perf_stats_sw
         perf_stats_uw = self.perf_stats_luw if direction == 'long' else self.perf_stats_suw
 
-        features = [perf_stats_w['perf_ema4'], perf_stats_w['perf_ema8'], perf_stats_w['perf_ema16'],
-                    perf_stats_w['perf_ema32'], perf_stats_w['perf_ema64'], perf_stats_w['perf_ema128'],
-                    perf_stats_w['perf_ema4_roc'], perf_stats_w['perf_ema8_roc'], perf_stats_w['perf_ema16_roc'],
-                    perf_stats_w['perf_ema32_roc'],
-                    perf_stats_w['perf_ema64_roc'], perf_stats_w['perf_ema128_roc'],
-                    perf_stats_w['perf_sum4'], perf_stats_w['perf_sum8'], perf_stats_w['perf_sum16'],
-                    perf_stats_w['perf_sum32'], perf_stats_w['perf_sum64'], perf_stats_w['perf_sum128'],
+        features = {'ignore': [0]} | perf_stats_w | perf_stats_uw
+        data = pd.DataFrame().from_dict(data=features, orient='columns')
 
-                    perf_stats_uw['uw_perf_ema4'], perf_stats_uw['uw_perf_ema8'], perf_stats_uw['uw_perf_ema16'],
-                    perf_stats_uw['uw_perf_ema32'], perf_stats_uw['uw_perf_ema64'], perf_stats_uw['uw_perf_ema128'],
-                    perf_stats_uw['uw_perf_ema4_roc'], perf_stats_uw['uw_perf_ema8_roc'],
-                    perf_stats_uw['uw_perf_ema16_roc'],
-                    perf_stats_uw['uw_perf_ema32_roc'],
-                    perf_stats_uw['uw_perf_ema64_roc'], perf_stats_uw['uw_perf_ema128_roc'],
-                    perf_stats_uw['uw_perf_sum4'], perf_stats_uw['uw_perf_sum8'], perf_stats_uw['uw_perf_sum16'],
-                    perf_stats_uw['uw_perf_sum32'], perf_stats_uw['uw_perf_sum64'], perf_stats_uw['uw_perf_sum128'],
-                    ]
+        try:
+            if direction == 'long':
+                # long_data = data[:, self.long_perf_features_idx]
+                long_data = data[self.long_perf_info['features']]
+                long_data = self.long_perf_scaler.transform(long_data)
+                long_data = pd.DataFrame(data=long_data, columns=self.long_perf_info['features'])
+                score = float(self.long_perf_model.predict_proba(long_data)[-1, 1])
+                # logger.debug(f"{self.id} {direction} ml perf score: {score:.1%}")
+            else:
+                # short_data = data[:, self.short_perf_features_idx]
+                short_data = data[self.short_perf_info['features']]
+                short_data = self.short_perf_scaler.transform(short_data)
+                short_data = pd.DataFrame(data=short_data, columns=self.short_perf_info['features'])
+                score = float(self.short_perf_model.predict_proba(short_data)[-1, 1])
+                # logger.debug(f"{self.id} {direction} ml perf score: {score:.1%}")
+        except ValueError:
+            logger.exception(f"{self.id} ")
 
-        names = ['perf_ema_4', 'perf_ema_8', 'perf_ema_16', 'perf_ema_32', 'perf_ema_64', 'perf_ema_128',
-                 'perf_ema_4_roc', 'perf_ema_8_roc', 'perf_ema_16_roc', 'perf_ema_32_roc', 'perf_ema_64_roc',
-                 'perf_ema_128_roc',
-                 'perf_sum_4', 'perf_sum_8', 'perf_sum_16', 'perf_sum_32', 'perf_sum_64', 'perf_sum_128',
-
-                 'uw_perf_ema_4', 'uw_perf_ema_8', 'uw_perf_ema_16', 'uw_perf_ema_32', 'uw_perf_ema_64',
-                 'uw_perf_ema_128',
-                 'uw_perf_ema_4_roc', 'uw_perf_ema_8_roc', 'uw_perf_ema_16_roc', 'uw_perf_ema_32_roc',
-                 'uw_perf_ema_64_roc', 'uw_perf_ema_128_roc',
-                 'uw_perf_sum_4', 'uw_perf_sum_8', 'uw_perf_sum_16', 'uw_perf_sum_32', 'uw_perf_sum_64',
-                 'uw_perf_sum_128',
-                 ]
-        data = np.array(features).reshape(1, -1)
-
-        self.long_perf_features_idx = [i for i, f in enumerate(names) if f in self.long_perf_info['features']]
-        self.short_perf_features_idx = [i for i, f in enumerate(names) if f in self.short_perf_info['features']]
-
-        if direction == 'long':
-            long_data = self.long_perf_scaler.transform(data)
-            long_data = long_data[:, self.long_perf_features_idx]
-            score = float(self.long_perf_model.predict_proba(long_data)[-1, 1])
-            print(f"{self.id} {direction} ml perf score: {score:.1%}")
-        else:
-            short_data = self.short_perf_scaler.transform(data)
-            short_data = short_data[:, self.short_perf_features_idx]
-            score = float(self.short_perf_model.predict_proba(short_data)[-1, 1])
-            print(f"{self.id} {direction} ml perf score: {score:.1%}")
-
+        logger.debug(f"{self.id} {direction} ml perf score before clipping: {score}")
         return min(1.0, max(0.001, score))
 
     def perf_manual_prediction(self, direction):

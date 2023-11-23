@@ -15,7 +15,7 @@ def extract_info(trade_record):
     open = trade_record['trade'][0]
     close = trade_record['trade'][-1]
 
-    return dict(
+    info =  dict(
         pair=signal['pair'],
         sig_trig=signal['trig_price'],
         sig_inval=signal['inval'],
@@ -23,25 +23,31 @@ def extract_info(trade_record):
 
         direction=open['direction'],
         open_price=open['exe_price'],
-        open_time=datetime.fromtimestamp(float(open['timestamp'])).astimezone(timezone.utc),
+        open_dt=datetime.fromtimestamp(float(open['timestamp'])).astimezone(timezone.utc),
         open_stop=open['hard_stop'],
 
         close_price=close['exe_price'],
-        close_time=datetime.fromtimestamp(float(close['timestamp'])).astimezone(timezone.utc),
+        close_dt=datetime.fromtimestamp(float(close['timestamp'])).astimezone(timezone.utc),
         close_action=close['action'],
         rpnl=close['rpnl']
     )
+
+    if open.get('target'):
+        info['open_target'] = open['target']
+
+    return info
 
 
 def get_ohlc(pair, start, end):
     start_dt = start - timedelta(hours=1, minutes=15)
     end_dt = end + timedelta(hours=1, minutes=15)
 
-    df = pd.read_parquet(f"/home/ross/Documents/backtester_2021/bin_ohlc_5m/{pair}.parquet")
+    df = pd.read_parquet(f"/home/ross/coding/modular_trader/bin_ohlc_5m/{pair}.parquet")
 
     data = df[(start_dt <= df.timestamp) & (df.timestamp <= end_dt)]
 
     return data
+
 
 def plot_trade(agent_name, df, info):
     fig = go.Figure(data=go.Ohlc(x=df['timestamp'],
@@ -56,9 +62,9 @@ def plot_trade(agent_name, df, info):
     pair = info['pair']
     direction = info['direction']
     close_type = info['close_action']
-    entry_dt = info['open_time']
+    entry_dt = info['open_dt']
     entry_price = info['open_price']
-    exit_dt = info['close_time']
+    exit_dt = info['close_dt']
     exit_price = info['close_price']
     stop = info['sig_inval']
 
@@ -82,10 +88,44 @@ def plot_trade(agent_name, df, info):
     fig.write_image(f"{plot_folder}/{pair}.png")
 
 
-folder_path = Path('/home/ross/Documents/backtester_2021/records')
+def plot_oco_trade(agent, df, info):
+
+    pair = info['pair']
+    entry = info['open_price']
+    exit = info['close_price']
+    target = info['open_target']
+    stop = info['open_stop']
+
+    start = info['open_dt']
+    end = info['close_dt']
+
+    fig = go.Figure(data=go.Ohlc(x=df['timestamp'],
+                                 open=df['open'],
+                                 high=df['high'],
+                                 low=df['low'],
+                                 close=df['close']))
+
+    fig.add_trace(go.Scatter(x=[start], y=[entry], mode='markers',
+                             marker=dict(color='blue', size=10), name='entry'))
+    fig.add_trace(go.Scatter(x=[end], y=[exit], mode='markers',
+                             marker=dict(color='yellow', size=10), name='exit'))
+    fig.add_shape(type='line', x0=df.timestamp.min(), x1=df.timestamp.max(), y0=target, y1=target,
+                  line=dict(color='green', width=2), name='target')
+    fig.add_shape(type='line', x0=df.timestamp.min(), x1=df.timestamp.max(), y0=stop, y1=stop,
+                  line=dict(color='red', width=2), name='stop')
+
+    fig.update(layout_xaxis_rangeslider_visible=False)
+    fig.update_layout(width=1920, height=1080, title=f"{agent} {pair}")
+
+    plots_folder = Path('/home/ross/coding/modular_trader/closed_oco_plots')
+    plots_folder.mkdir(parents=True, exist_ok=True)
+    fig.write_image(plots_folder / f"{agent}_{pair}.png")
+
+
+folder_path = Path('/home/ross/coding/modular_trader/records')
 for fp in folder_path.glob('*'):
     agent = fp.parts[-1]
-    # print(agent)
+    print(agent)
     records = None
     with open(fp / 'closed_sim_trades.json', 'r') as file:
         try:
@@ -105,7 +145,10 @@ for fp in folder_path.glob('*'):
                 print('')
                 # pprint(info)
                 df = get_ohlc(info['pair'], info['open_time'], info['close_time'])
-                plot_trade(agent, df, info)
+                if 'channel_run' in fp:
+                    plot_oco_trade(agent, df, info)
+                else:
+                    plot_trade(agent, df, info)
                 # print(df)
                 print(info['pair'], info['rpnl'])
             # elif info:

@@ -288,7 +288,8 @@ def log(session, agent) -> None:
                   'max_pos': agent.max_positions, 'market_bias': session.market_bias,
                   'real_open_risk': agent.total_open_risk, 'wanted_open_risk': agent.wanted_open_risk,
                   'num_wanted_pos': num_wanted_pos, 'avg_open_size': stats.mean(session.trade_sizes),
-                  'max_open_size': max(session.trade_sizes)
+                  'max_open_size': max(session.trade_sizes), 'used_ml_perf_l': agent.use_ml_perf_l,
+                  'used_ml_perf_s': agent.use_ml_perf_s
                   }
 
     if agent.mode == 'spot':
