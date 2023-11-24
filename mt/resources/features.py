@@ -133,6 +133,11 @@ def add_feature(df, name, timeframe):
         'recent_vd_div_2': {'call': vol_delta_div, 'params': (df, 2)},
         'recent_vd_div_3': {'call': vol_delta_div, 'params': (df, 3)},
         'recent_vd_div_4': {'call': vol_delta_div, 'params': (df, 4)},
+        'regime_osc_1_12': {'call': regime_osc_1, 'params': (df, 12)},
+        'regime_osc_1_25': {'call': regime_osc_1, 'params': (df, 25)},
+        'regime_osc_1_50': {'call': regime_osc_1, 'params': (df, 50)},
+        'regime_osc_1_100': {'call': regime_osc_1, 'params': (df, 100)},
+        'regime_osc_1_200': {'call': regime_osc_1, 'params': (df, 200)},
         'round_num_prox': {'call': round_numbers_proximity, 'params': (df,)},
         'big_round_num_prox': {'call': big_round_nums_proximity, 'params': (df,)},
         'spooky_num_prox': {'call': spooky_nums_proximity, 'params': (df,)},
@@ -811,6 +816,12 @@ def num_trades_z(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
 
 def lagged_returns(df: pd.DataFrame, lag: int) -> pd.DataFrame:
     rtns = df.close.ffill().pct_change()
+
+
+def regime_osc_1(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
+    df[f"regime_osc_1_{lookback}"] = ind.regime_osc_1(df, lookback)
+
+    return df
 
 # def rolling_poc(df: pd.DataFrame, lookback: int=24) -> pd.DataFrame:
 #     data = df.loc[:, ['close', 'base_vol']]

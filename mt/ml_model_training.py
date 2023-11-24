@@ -77,9 +77,9 @@ def backtest_oco(df_0, side, lookback, goal, trim_ohlc=2200):
                 pnl_cat = 1
                 pnl = (target - entry) / entry
             else:  # neither hit
-                exit_row = stop_hit_idx
-                pnl_cat = 0
-                pnl = 0
+                exit_row = df.index[-1]
+                logger.debug(f'backtester running out of ohlc data at {exit_row} periods')
+                continue
         else:  # if side == 'short'
             highest = df.high.max()
             lowest = df.low.min()
@@ -89,8 +89,8 @@ def backtest_oco(df_0, side, lookback, goal, trim_ohlc=2200):
                 target = df[f"ll_{lookback}"].iloc[0]
             stop = df[f"hh_{lookback}"].iloc[0] + atr
             rr = abs((target / entry) - 1) / abs((stop / entry) - 1)
-            target_hit_idx = df.low.clip(lower=target).idxmin()
-            stop_hit_idx = df.high.clip(upper=stop).idxmax()
+            target_hit_idx = df.low.clip(lower=target).idxmin()  # returns index of earliest instance of lowest value
+            stop_hit_idx = df.high.clip(upper=stop).idxmax()  # returns index of earliest instance of highest value
             if (highest > stop) and ((lowest > target) or (stop_hit_idx < target_hit_idx)):  # stop hit
                 exit_row = stop_hit_idx
                 pnl_cat = 0
@@ -100,12 +100,12 @@ def backtest_oco(df_0, side, lookback, goal, trim_ohlc=2200):
                 pnl_cat = 1
                 pnl = (entry - target) / entry
             else:  # neither hit
-                exit_row = stop_hit_idx
-                pnl_cat = 0
-                pnl = 0
+                exit_row = df.index[-1]
+                logger.debug(f'backtester running out of ohlc data at {exit_row} periods')
+                continue
 
         row_data = df_0.iloc[row - 1].to_dict()
-        pnl_pct = pnl - (2 * 0.0015)  # subtract trading fees and slippage estimate
+        pnl_pct = pnl - (3 * 0.0015)  # subtract trading fees and estimate for slippage + spread
 
         row_res = dict(
             # idx=row,
@@ -119,9 +119,9 @@ def backtest_oco(df_0, side, lookback, goal, trim_ohlc=2200):
 
         results.append(row_data | row_res)
 
-        msg = (f"trade lifespans getting close to trimmed ohlc length, {exit_row = } ({exit_row / trim_ohlc:.1%}), "
-               f"increase trim ohlc")
-        if exit_row / trim_ohlc > 0.9:
+        msg = (f"trade lifespans getting close to trimmed ohlc length ({trim_ohlc = }), {exit_row = }, {len(df) = } "
+               f"({exit_row / len(df):.1%})")
+        if exit_row / len(df) > 0.9:
             print(msg)
             count += 1
 
@@ -239,7 +239,7 @@ def generate_trail_fractal_dataset(pairs: list, side: str, timeframe: str, strat
 
 def ttv_split(X, y):
     X_final, y_final = X.copy(), y.copy()
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.4, random_state=11, stratify=y)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_state=11, stratify=y)
     X_test, X_val, y_test, y_val = train_test_split(X_test, y_test, test_size=0.5, random_state=11, stratify=y_test)
     print(f"Training dataset: {len(X_train)} observations, Test sets: {len(X_test)}, Final set: {len(X_final)}")
 
@@ -279,8 +279,8 @@ def eliminate_features(X_train, X_test, X_val, y_train):
         X_val = X_val.drop(collinear_features, axis=1)
 
     # mutual info feature selection
-    cols = list(X_train.columns)  # list of strings, names of all features
-    mi_k = max(min(15, len(cols) - 2), len(cols))
+    cols: list[str] = list(X_train.columns)  # names of all features
+    mi_k = len(cols) if len(cols) in [1, 2] else min(int(len(cols) * 0.8), 15)  # 15 max, 1 or 2 min, otherwise 80%
     selector = SelectKBest(mutual_info_classif, k=mi_k)
     selector.fit(X_train, y_train)
     mi_cols_idx = list(selector.get_support(indices=True))
@@ -768,6 +768,14 @@ if __name__ == '__main__':
     for side, timeframe in product(sides, timeframes):
         print(f"\n\n*******\nTesting {side} {timeframe}\n*******\n")
         if timeframe in ['15m', '30m', '1h', '4h']:
+            all_stats.append(train_primary('channel_run', side, timeframe, (50, 'edge'), 50, '1w_volumes', 2500, num_trials))
+            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (50, 'edge'), 50, '1w_volumes', 0.4, num_trials))
+            all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (50, 'edge'), 50, '1w_volumes', 0.4, num_trials))
+
+            all_stats.append(train_primary('channel_run', side, timeframe, (50, 'mid'), 50, '1w_volumes', 2500, num_trials))
+            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (50, 'mid'), 50, '1w_volumes', 0.4, num_trials))
+            all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (50, 'mid'), 50, '1w_volumes', 0.4, num_trials))
+
             all_stats.append(train_primary('channel_run', side, timeframe, (100, 'edge'), 50, '1w_volumes', 2500, num_trials))
             all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (100, 'edge'), 50, '1w_volumes', 0.4, num_trials))
             all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (100, 'edge'), 50, '1w_volumes', 0.4, num_trials))

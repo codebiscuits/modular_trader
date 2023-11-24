@@ -619,3 +619,14 @@ def htf_pivots(df: pd.DataFrame, htf: str, base_tf: str) -> pd.DataFrame:
     df[f'{htf}_pivot_r3'] = htf_df.pivot_r3.resample(tf_map[base_tf]).interpolate(method='pad')
 
     return df
+
+
+def regime_osc_1(df: pd.DataFrame, lookback: int) -> pd.Series:
+    """got this from someone on twitter who said it was from TC2000, whatever that is"""
+
+    hh = df.high.rolling(lookback).max()
+    ll = df.low.rolling(lookback).min()
+    avgh = df.high.rolling(lookback).mean()
+    avgl = df.low.rolling(lookback).mean()
+
+    return 100 * lookback * (hh - ll) / (avgh - avgl)
