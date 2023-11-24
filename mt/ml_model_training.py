@@ -238,10 +238,13 @@ def generate_trail_fractal_dataset(pairs: list, side: str, timeframe: str, strat
 
 
 def ttv_split(X, y):
-    X_final, y_final = X.copy(), y.copy()
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_state=11, stratify=y)
-    X_test, X_val, y_test, y_val = train_test_split(X_test, y_test, test_size=0.5, random_state=11, stratify=y_test)
-    print(f"Training dataset: {len(X_train)} observations, Test sets: {len(X_test)}, Final set: {len(X_final)}")
+    """first retains a copy of the full set to train the final model on, then performs stratified split into train and
+    test sets, then further splits test set into test and validation sets"""
+    split = 0.5 if len(X) < 80 else 0.6  # if there aren't many observations, it puts a bit more in the test sets
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=split, random_state=11, stratify=y)
+    X_test, X_val, y_test, y_val = train_test_split(X_test, y_test, train_size=0.5, random_state=11, stratify=y_test)
+    print(f"Training dataset: {len(X_train)} observations, Test sets: {len(X_test)}, Final set: {len(X)}")
 
     return X_train, X_test, X_val, y_train, y_test, y_val
 
@@ -599,7 +602,7 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
         return
 
     # feature scaling
-    X_train, X_test, X_val = scale_features(X_train, X_test, X_val, MinMaxScaler)
+    X_train, X_test, X_val = scale_features(X_train, X_test, X_val, QuantileTransformer)
 
     # feature selection
     try:
