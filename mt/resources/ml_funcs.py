@@ -117,8 +117,8 @@ def get_data(pair, timeframe, vwma_periods=24):
     return df
 
 
-def get_margin_pairs(method, num_pairs, timeframe):
-    lengths = {'15m': 603, '30m': 1206, '1h': 2412, '4h': 9648, '12h': 28944, '1d': 57888}  # how many 5m periods to 201
+def get_margin_pairs(method, num_pairs, timeframe, data_len):
+    mult = {'15m': 3, '30m': 6, '1h': 12, '4h': 48, '12h': 144, '1d': 288}  # how many 5m periods to get data_len
 
     start_pair = 0
     pairs = rank_pairs(method)
@@ -130,7 +130,7 @@ def get_margin_pairs(method, num_pairs, timeframe):
     symbol_margin = {i['symbol']: i['isMarginTradingAllowed'] for i in exc_info['symbols'] if
                      i['quoteAsset'] == 'USDT'}
     pairs = [p for p in pairs if symbol_margin[p]
-             and (market_info.at[p, 'length'] > lengths[timeframe])
+             and (market_info.at[p, 'length'] > (data_len * mult[timeframe]))
              and (market_info.at[p, 'volatility_1w'] > 0.0003)
              ]
 
@@ -213,7 +213,7 @@ def feature_selection_1a(X: np.ndarray, y, limit: int, cols: list[str]):
     return selector
 
 
-def trail_fractal(df_0: pd.DataFrame, width: int, spacing: int, side: str, trim_ohlc: int=1000, r_threshold: float=0.5):
+def trail_fractal(df_0: pd.DataFrame, width: int, spacing: int, side: str, trim_ohlc: int=200, r_threshold: float=0.5):
     """r_threshold is how much pnl a trade must make for the model to consider it a profitable trade.
     higher values will train the model to target only the trades which produce higher profits, but will also limit
     the number of true positives to train the model on """

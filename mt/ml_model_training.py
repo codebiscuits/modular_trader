@@ -578,7 +578,7 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
           f"{', '.join([str(p) for p in strat_params])}, {num_pairs}, {selection_method} primary")
 
     # generate dataset
-    pairs = mlf.get_margin_pairs(selection_method, num_pairs)
+    pairs = mlf.get_margin_pairs(selection_method, num_pairs, timeframe, data_len)
     if strat_name == 'channel_run':
         res_df = generate_channel_run_dataset(pairs, side, timeframe, strat_params, data_len)
     elif strat_name == 'trail_fractals':
@@ -799,11 +799,11 @@ if __name__ == '__main__':
             all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (200, 'mid'), 50, '1w_volumes', 0.4, num_trials))
 
         if timeframe in ['1h', '4h', '12h', '1d']:
-            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 200, num_trials))
+            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 2500, num_trials))
             all_stats.append(train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials))
             all_stats.append(train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials))
 
-            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 200, num_trials))
+            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 2500, num_trials))
             all_stats.append(train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials))
             all_stats.append(train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials))
 
