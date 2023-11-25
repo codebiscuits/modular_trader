@@ -178,6 +178,21 @@ def find_collinear(X_train, corr_thresh):
     return list(set(record_collinear))
 
 
+def plot_exit_row_dist(name, side, timeframe, all_exit_idx, data_len, param_1, param_2):
+    trace = go.Histogram(x=all_exit_idx,
+                         nbinsx=25,
+                         autobinx=False,
+                         xbins=dict(start=min(all_exit_idx),
+                                    end=max(all_exit_idx)),
+                         marker=dict(color='rgb(37, 150, 190)'),
+                         histnorm='percent')
+    layout = go.Layout(title=f"Distribution of exit row from backtest_trail_fractal. {data_len = }")
+    plot_path = Path("/home/ross/coding/modular_trader/machine_learning/exit_idx_distrib")
+    plot_path.mkdir(parents=True, exist_ok=True)
+    fig = go.Figure(data=go.Histogram(trace), layout=layout)
+    fig.write_image(plot_path / f"{name}_{side}_{timeframe}_{param_1}_{param_2}.png")
+
+
 def generate_channel_run_dataset(pairs: list, side: str, timeframe: str, strat_params: tuple, data_len: int):
     print(f"data generation began: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
 
@@ -197,13 +212,7 @@ def generate_channel_run_dataset(pairs: list, side: str, timeframe: str, strat_p
     res_df = pd.DataFrame(all_res).sort_values('timestamp').reset_index(drop=True)
 
     # save plot of exit_row distribution
-    trace = go.Histogram(x=all_exit_idx, xbins=dict(start=min(all_exit_idx), size=0.05, end=max(all_exit_idx)),
-                         marker=dict(color='rgb(37, 150, 190)'))
-    layout = go.Layout(title=f"Distribution of exit row from backtest_oco. {data_len = }")
-    plot_path = Path("/home/ross/coding/modular_trader/machine_learning/exit_idx_distrib")
-    plot_path.mkdir(parents=True, exist_ok=True)
-    fig = go.Figure(data=go.Histogram(trace), layout=layout)
-    fig.write_image(plot_path / f"channel_run_{side}_{timeframe}_{lookback}_{goal}.png")
+    plot_exit_row_dist('channel_run', side, timeframe, all_exit_idx, data_len, lookback, goal)
 
     return res_df.dropna(axis=1)
 
@@ -226,13 +235,7 @@ def generate_trail_fractal_dataset(pairs: list, side: str, timeframe: str, strat
     all_res = all_res.sort_values('timestamp').reset_index(drop=True)
 
     # save plot of exit_row distribution
-    trace = go.Histogram(x=all_exit_idx, xbins=dict(start=min(all_exit_idx), size=0.05, end=max(all_exit_idx)),
-                         marker=dict(color='rgb(37, 150, 190)'))
-    layout = go.Layout(title=f"Distribution of exit row from backtest_trail_fractal. {data_len = }")
-    plot_path = Path("/home/ross/coding/modular_trader/machine_learning/exit_idx_distrib")
-    plot_path.mkdir(parents=True, exist_ok=True)
-    fig = go.Figure(data=go.Histogram(trace), layout=layout)
-    fig.write_image(plot_path / f"trail_fractals_{side}_{timeframe}_{width}_{atr_spacing}.png")
+    plot_exit_row_dist('trail_fractals', side, timeframe, all_exit_idx, data_len, width, atr_spacing)
 
     return all_res.dropna(axis=1)
 
@@ -796,11 +799,11 @@ if __name__ == '__main__':
             all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (200, 'mid'), 50, '1w_volumes', 0.4, num_trials))
 
         if timeframe in ['1h', '4h', '12h', '1d']:
-            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 500, num_trials))
+            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 200, num_trials))
             all_stats.append(train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials))
             all_stats.append(train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials))
 
-            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 500, num_trials))
+            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 200, num_trials))
             all_stats.append(train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials))
             all_stats.append(train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials))
 
