@@ -201,7 +201,7 @@ def generate_channel_run_dataset(pairs: list, side: str, timeframe: str, strat_p
     all_res = []
     all_exit_idx = []
     for n, pair in enumerate(pairs):
-        df = mlf.get_data(pair, timeframe)
+        df = mlf.get_data(pair, timeframe).tail(data_len + 200).reset_index(drop=True)
         df = mlf.add_features(df, timeframe)
         df = channel_run_entries(df, lookback)
         df = df.tail(data_len).reset_index(drop=True)
@@ -578,7 +578,7 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
           f"{', '.join([str(p) for p in strat_params])}, {num_pairs}, {selection_method} primary")
 
     # generate dataset
-    pairs = mlf.get_margin_pairs(selection_method, num_pairs, timeframe, data_len)
+    pairs = mlf.get_margin_pairs(selection_method, num_pairs, data_len)
     if strat_name == 'channel_run':
         res_df = generate_channel_run_dataset(pairs, side, timeframe, strat_params, data_len)
     elif strat_name == 'trail_fractals':
@@ -773,37 +773,42 @@ if __name__ == '__main__':
 
     for side, timeframe in product(sides, timeframes):
         print(f"\n\n*******\nTesting {side} {timeframe}\n*******\n")
+
+        n = {'15m': 1500, '30m': 1000, '1h': 750, '4h': 500, '12h': 400, '1d': 365}  # how many tf periods to end up with
+        mult = {'15m': 3, '30m': 6, '1h': 12, '4h': 48, '12h': 144, '1d': 288}  # how many 5m periods to get data_len
+        data_len = n[timeframe] * mult[timeframe]
+
         if timeframe in ['15m', '30m', '1h', '4h']:
-            all_stats.append(train_primary('channel_run', side, timeframe, (50, 'edge'), 50, '1w_volumes', 2500, num_trials))
+            all_stats.append(train_primary('channel_run', side, timeframe, (50, 'edge'), 50, '1w_volumes', data_len, num_trials))
             all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (50, 'edge'), 50, '1w_volumes', 0.4, num_trials))
             all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (50, 'edge'), 50, '1w_volumes', 0.4, num_trials))
 
-            all_stats.append(train_primary('channel_run', side, timeframe, (50, 'mid'), 50, '1w_volumes', 2500, num_trials))
+            all_stats.append(train_primary('channel_run', side, timeframe, (50, 'mid'), 50, '1w_volumes', data_len, num_trials))
             all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (50, 'mid'), 50, '1w_volumes', 0.4, num_trials))
             all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (50, 'mid'), 50, '1w_volumes', 0.4, num_trials))
 
-            all_stats.append(train_primary('channel_run', side, timeframe, (100, 'edge'), 50, '1w_volumes', 2500, num_trials))
+            all_stats.append(train_primary('channel_run', side, timeframe, (100, 'edge'), 50, '1w_volumes', data_len, num_trials))
             all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (100, 'edge'), 50, '1w_volumes', 0.4, num_trials))
             all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (100, 'edge'), 50, '1w_volumes', 0.4, num_trials))
 
-            all_stats.append(train_primary('channel_run', side, timeframe, (100, 'mid'), 50, '1w_volumes', 2500, num_trials))
+            all_stats.append(train_primary('channel_run', side, timeframe, (100, 'mid'), 50, '1w_volumes', data_len, num_trials))
             all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (100, 'mid'), 50, '1w_volumes', 0.4, num_trials))
             all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (100, 'mid'), 50, '1w_volumes', 0.4, num_trials))
 
-            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 2500, num_trials))
+            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', data_len, num_trials))
             all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 0.4, num_trials))
             all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (200, 'edge'), 50, '1w_volumes', 0.4, num_trials))
 
-            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'mid'), 50, '1w_volumes', 2500, num_trials))
+            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'mid'), 50, '1w_volumes', data_len, num_trials))
             all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'mid'), 50, '1w_volumes', 0.4, num_trials))
             all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (200, 'mid'), 50, '1w_volumes', 0.4, num_trials))
 
         if timeframe in ['1h', '4h', '12h', '1d']:
-            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 2500, num_trials))
+            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', data_len, num_trials))
             all_stats.append(train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials))
             all_stats.append(train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials))
 
-            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 2500, num_trials))
+            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', data_len, num_trials))
             all_stats.append(train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials))
             all_stats.append(train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials))
 

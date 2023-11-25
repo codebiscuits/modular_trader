@@ -117,8 +117,7 @@ def get_data(pair, timeframe, vwma_periods=24):
     return df
 
 
-def get_margin_pairs(method, num_pairs, timeframe, data_len):
-    mult = {'15m': 3, '30m': 6, '1h': 12, '4h': 48, '12h': 144, '1d': 288}  # how many 5m periods to get data_len
+def get_margin_pairs(method, num_pairs, data_len):
 
     start_pair = 0
     pairs = rank_pairs(method)
@@ -130,7 +129,7 @@ def get_margin_pairs(method, num_pairs, timeframe, data_len):
     symbol_margin = {i['symbol']: i['isMarginTradingAllowed'] for i in exc_info['symbols'] if
                      i['quoteAsset'] == 'USDT'}
     pairs = [p for p in pairs if symbol_margin[p]
-             and (market_info.at[p, 'length'] > (data_len * mult[timeframe]))
+             and (market_info.at[p, 'length'] > data_len)
              and (market_info.at[p, 'volatility_1w'] > 0.0003)
              ]
 
