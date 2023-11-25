@@ -608,7 +608,7 @@ def features_labels_split(df):
                  'prev_daily_open', 'prev_daily_high', 'prev_daily_low', 'weekly_open', 'prev_weekly_open',
                  'prev_weekly_high', 'prev_weekly_low', 'bullish_doji', 'bearish_doji', 'entry_l', 'entry_s',
                  'entry_l_price', 'entry_s_price', 'll_50', 'hh_50', 'hh_100', 'll_100', 'hh_200', 'll_200',
-                 'channel_mid', 'channel_mid_100', 'channel_mid_200'],
+                 'channel_mid', 'channel_mid_50', 'channel_mid_100', 'channel_mid_200'],
                 axis=1, errors='ignore')
     y = df.pnl_cat  #.shift(-1).drop(index=df.index[-1], axis=0)
     z = df.pnl_r  #.shift(-1).drop(index=df.index[-1], axis=0)
