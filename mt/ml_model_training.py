@@ -78,7 +78,7 @@ def backtest_oco(df_0, side, lookback, goal, trim_ohlc=2200):
                 pnl = (target - entry) / entry
             else:  # neither hit
                 exit_row = df.index[-1]
-                logger.debug(f'backtester running out of ohlc data at {exit_row} periods')
+                # logger.debug(f'backtester running out of ohlc data at {exit_row} periods')
                 continue
         else:  # if side == 'short'
             highest = df.high.max()
@@ -202,9 +202,8 @@ def generate_channel_run_dataset(pairs: list, side: str, timeframe: str, strat_p
     all_exit_idx = []
     for n, pair in enumerate(pairs):
         df = mlf.get_data(pair, timeframe).tail(data_len + 200).reset_index(drop=True)
-        df = mlf.add_features(df, timeframe)
+        df = mlf.add_features(df, timeframe).tail(data_len).reset_index(drop=True)
         df = channel_run_entries(df, lookback)
-        df = df.tail(data_len).reset_index(drop=True)
         res, exit_idxs, count = backtest_oco(df, side, lookback, goal)
         all_res.extend(res)
         all_exit_idx.extend(exit_idxs)
@@ -776,7 +775,7 @@ if __name__ == '__main__':
 
         n = {'15m': 1500, '30m': 1000, '1h': 750, '4h': 500, '12h': 400, '1d': 365}  # how many tf periods to end up with
         mult = {'15m': 3, '30m': 6, '1h': 12, '4h': 48, '12h': 144, '1d': 288}  # how many 5m periods to get data_len
-        data_len = n[timeframe] * mult[timeframe]
+        data_len = n[timeframe]# * mult[timeframe]
 
         if timeframe in ['15m', '30m', '1h', '4h']:
             all_stats.append(train_primary('channel_run', side, timeframe, (50, 'edge'), 50, '1w_volumes', data_len, num_trials))

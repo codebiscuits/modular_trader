@@ -96,10 +96,10 @@ def get_data(pair, timeframe, vwma_periods=24):
             print('Error:\n', e)
             print(f"Problem reading {pair} parquet file, downloading from scratch.")
             ohlc_path.unlink()
-            df = funcs.get_ohlc(pair, '5m', '2 years ago UTC')
+            df = funcs.get_ohlc(pair, '5m', '6 years ago UTC')
             df.to_parquet(ohlc_path)
     else:
-        df = funcs.get_ohlc(pair, '5m', '2 years ago UTC')
+        df = funcs.get_ohlc(pair, '5m', '6 years ago UTC')
         ohlc_folder.mkdir(parents=True, exist_ok=True)
         df.to_parquet(ohlc_path)
         # print("Downloaded OHLC from internet")
