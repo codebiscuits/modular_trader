@@ -24,9 +24,9 @@ def get_timeframes() -> list[tuple]:
     """hour of day is multiplied by 4 so that the hourly timeframes can be compared with the quarter-hourly
     timeframes"""
 
-    # qh = datetime.now(timezone.utc).minute // 15  # this represents which quarter-hour is current
-    # hour = datetime.now(timezone.utc).hour
-    qh, hour = 0, 0 # for testing all timeframes
+    qh = datetime.now(timezone.utc).minute // 15  # this represents which quarter-hour is current
+    hour = datetime.now(timezone.utc).hour
+    # qh, hour = 0, 0 # for testing all timeframes
 
     mi = {1: ('15m', None, ('ChannelRun', )),
          2: ('30m', None, ('ChannelRun', ))}
@@ -85,7 +85,7 @@ class TradingSession:
     open_risk_records = {}
 
     @uf.retry_on_busy()
-    def __init__(self, max_allo, max_lev, use_local_records):
+    def __init__(self, max_allo, max_fr, max_lev, use_local_records):
         t = Timer('session init')
         t.start()
 
@@ -95,13 +95,13 @@ class TradingSession:
         self.use_local_records = use_local_records
         self.last_price_update = 0
         self.max_allocation = max_allo
-        self.frac_risk_limit = 0.01
+        self.frac_risk_limit = max_fr
         self.leverage = max_lev
         self.name = 'agent names here'
         self.last_price_update = 0
         self.running_on = identify_machine()
         self.live = True  # self.set_live()
-        self.min_size = 30
+        self.min_size = 20
         self.timeframes = get_timeframes()
 
         # get data from exchange
@@ -135,8 +135,10 @@ class TradingSession:
             self.top_up_bnb_s(15)
         if self.margin_bal > 30:
             self.top_up_bnb_m(15)
-        logger.debug(f"Max size for new positions this session: {self.max_allocation * self.margin_bal:.2f} USDT\n")
-        logger.info(f"Max size for new positions this session: {self.max_allocation * self.margin_bal:.2f} USDT\n")
+        logger.debug(f"Max size for new positions this session: {self.max_allocation * self.margin_bal * self.leverage:.2f} USDT\n")
+        logger.info(f"Max size for new positions this session: {self.max_allocation * self.margin_bal * self.leverage:.2f} USDT\n")
+        logger.debug(f"Max fixed-risk for new positions this session: {self.frac_risk_limit * self.margin_bal:.2f} USDT\n")
+        logger.info(f"Max fixed-risk for new positions this session: {self.frac_risk_limit * self.margin_bal:.2f} USDT\n")
 
         # load local data and configure settings
         self.mkt_data_r, self.mkt_data_w, self.records_r, self.records_w, self.ohlc_r, self.ohlc_w = self.data_paths()

@@ -24,7 +24,7 @@ now_start = datetime.now(tz=timezone.utc).strftime("%d/%m/%y %H:%M")
 logger.debug(f'-+-+-+-+-+-+-+-+ {now_start} Running Setup Scanner +-+-+-+-+-+-+-+-\n')
 logger.info(f'-+-+-+-+-+-+-+-+ {now_start} Running Setup Scanner +-+-+-+-+-+-+-+-\n')
 
-session = sessions.TradingSession(0.01, 4, True)
+session = sessions.TradingSession(0.03, 0.003, 3, True)
 
 # initialise agents
 agents = []
@@ -36,10 +36,17 @@ for timeframe, offset, active_agents in session.timeframes:
             ])
     if 'ChannelRun' in active_agents:
         agents.extend([
-                ChannelRun(session, timeframe, offset, 100, 'edge', '1w_volumes', 50),
-                ChannelRun(session, timeframe, offset, 100, 'mid', '1w_volumes', 50),
-                ChannelRun(session, timeframe, offset, 200, 'edge', '1w_volumes', 50),
-                ChannelRun(session, timeframe, offset, 200, 'mid', '1w_volumes', 50),
+                ChannelRun(session, timeframe, offset, 50, 'edge', 'edge', '1w_volumes', 50),
+                # ChannelRun(session, timeframe, offset, 50, 'mid', 'edge', '1w_volumes', 50),
+                ChannelRun(session, timeframe, offset, 50, 'edge', 'mid', '1w_volumes', 50),
+
+                ChannelRun(session, timeframe, offset, 100, 'edge', 'edge', '1w_volumes', 50),
+                # ChannelRun(session, timeframe, offset, 100, 'mid', 'edge', '1w_volumes', 50),
+                ChannelRun(session, timeframe, offset, 100, 'edge', 'mid', '1w_volumes', 50),
+
+                ChannelRun(session, timeframe, offset, 200, 'edge', 'edge', '1w_volumes', 50),
+                # ChannelRun(session, timeframe, offset, 200, 'mid', 'edge', '1w_volumes', 50),
+                ChannelRun(session, timeframe, offset, 200, 'edge', 'mid', '1w_volumes', 50),
             ])
 
 agents = {a.id: a for a in agents}
@@ -385,6 +392,9 @@ for agent in agents.values():
     agent.perf_score_l = agent.perf_score_ml_l if agent.use_ml_perf_l else agent.perf_score_old_l
     agent.perf_score_s = agent.perf_score_ml_s if agent.use_ml_perf_s else agent.perf_score_old_s
 
+for agent in agents.values():
+    logger.debug(f"{agent.id} ml perf scores: Long: {agent.perf_score_ml_l:.1%}, Short: {agent.perf_score_ml_s:.1%}")
+
 logger.debug('creating signal scores:')
 while processed_signals['unassigned']:
     signal = processed_signals['unassigned'].pop()
@@ -414,11 +424,11 @@ while processed_signals['unassigned']:
     signal['score'] = signal['score_ml'] if signal['validity'] > risk_validity else signal['score_old']
 
     # calculate position size
-    signal['base_size'], signal['quote_size'] = agents[signal['agent']].get_size(session, signal)
+    signal['base_size'], signal['quote_size'] = agents[signal['agent']].get_fr_size(session, signal)
 
     logger.info(f"{signal['agent']}, {signal['pair']}, {signal['tf']}, {signal['direction']}, secondary validity: "
                 f"{signal['validity']}, score: {signal['score']:.1%}, perf score ml: {signal['perf_score_ml']:.1%}, "
-                f"perf_score_old: {signal['perf_score_old']:.1%}\n")
+                f"perf_score_old: {signal['perf_score_old']:.1%}")
 
     score_threshold = 0.6
     sim_position = agents[signal['agent']].sim_pos.get(signal['asset'], {'direction': 'flat'})['direction']
@@ -501,9 +511,10 @@ while unassigned:
         quote_size = usdt_depth
         logger.debug(f"{s['pair']} books too thin, reducing size from {quote_size:.3} to {usdt_depth:.3}")
 
-    if quote_size > (balance * 0.1):
-        r = (balance * 0.1) / quote_size
-        quote_size = balance * 0.1
+    capital = balance if s['mode'] == 'spot' else balance * session.leverage
+    if quote_size > (capital * session.max_allocation):
+        r = (capital * session.max_allocation) / quote_size
+        quote_size = capital * session.max_allocation
 
     if or_limits[agent.id] >= agent.total_r_limit:
         sim_reasons.append('too_much_or')

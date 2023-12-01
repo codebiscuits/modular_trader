@@ -92,7 +92,9 @@ class Agent:
         session.min_length = min(session.min_length, self.ohlc_length)
         session.max_length = max(session.min_length, self.ohlc_length)
         self.model_folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/{self.name}")
-        self.primary_folder = self.model_folder / f"{self.pair_selection}_{self.training_pairs_n}"
+        self.variation_folder = self.model_folder / f"{self.pair_selection}_{self.training_pairs_n}"
+        if not self.variation_folder.exists():
+            logger.debug(f"{self.id} can't find ml models in {self.variation_folder}")
         self.load_technical_model_data(session)
         self.load_risk_model_data()
         self.load_perf_model_data()
@@ -1064,8 +1066,8 @@ class Agent:
         init_stop = float(position['init_hard_stop'])
         final_exit = float(trades[-1].get('exe_price'))
 
-        r_val = ((entry - init_stop) / entry) + 0.0015
-        trade_pnl = ((final_exit - entry) / entry) - 0.0015
+        r_val = ((entry - init_stop) / entry) * 1.0015
+        trade_pnl = ((final_exit - entry) / entry) / 1.0015
         trade_r = round(trade_pnl / r_val, 3)
         scalar = position['pct_of_full_pos']
         realised_r = trade_r * scalar
@@ -1268,6 +1270,7 @@ class Agent:
         rpnl_df['sum_32'] = rpnl_df.rpnl.rolling(32).sum()
         rpnl_df['sum_64'] = rpnl_df.rpnl.rolling(64).sum()
         rpnl_df['sum_128'] = rpnl_df.rpnl.rolling(128).sum()
+        # TODO rolling sharpe, sortino and sqn. where a moving avg is needed, use emas so theres always a value
 
         return rpnl_df.to_dict(orient='records')[-1]
 
@@ -1316,7 +1319,7 @@ class Agent:
         opnls = [v.get('pnl_R') for k, v in self.real_pos.items() if k != 'USDT']
         if opnls:
             avg_open_pnl = stats.median(opnls)
-        max_pos = 6 if avg_open_pnl <= 0 else 12
+        max_pos = 2 if avg_open_pnl <= 0 else 3
         p.stop()
         return max_pos
 
@@ -1338,13 +1341,13 @@ class Agent:
 
     def load_technical_model_data(self, session):
         # paths
-        self.long_model_path = self.primary_folder / f"long_{self.tf}_model_tech.sav"
-        long_scaler_path = self.primary_folder / f"long_{self.tf}_scaler_tech.sav"
-        long_info_path = self.primary_folder / f"long_{self.tf}_info_tech.json"
+        self.long_model_path = self.variation_folder / f"long_{self.tf}_model_tech.sav"
+        long_scaler_path = self.variation_folder / f"long_{self.tf}_scaler_tech.sav"
+        long_info_path = self.variation_folder / f"long_{self.tf}_info_tech.json"
 
-        self.short_model_path = self.primary_folder / f"short_{self.tf}_model_tech.sav"
-        short_scaler_path = self.primary_folder / f"short_{self.tf}_scaler_tech.sav"
-        short_info_path = self.primary_folder / f"short_{self.tf}_info_tech.json"
+        self.short_model_path = self.variation_folder / f"short_{self.tf}_model_tech.sav"
+        short_scaler_path = self.variation_folder / f"short_{self.tf}_scaler_tech.sav"
+        short_info_path = self.variation_folder / f"short_{self.tf}_info_tech.json"
 
         self.long_model = joblib.load(self.long_model_path)
         self.long_scaler = joblib.load(long_scaler_path)
@@ -1362,63 +1365,73 @@ class Agent:
 
     def load_risk_model_data(self):
         # paths
-        long_model_file = self.model_folder / f"long_{self.tf}_model_risk.sav"
-        long_scaler_file = self.model_folder / f"long_{self.tf}_scaler_risk.sav"
-        long_model_info = self.model_folder / f"long_{self.tf}_info_risk.json"
+        long_model_file = self.variation_folder / f"long_{self.tf}_model_risk.sav"
+        long_scaler_file = self.variation_folder / f"long_{self.tf}_scaler_risk.sav"
+        long_model_info = self.variation_folder / f"long_{self.tf}_info_risk.json"
 
-        short_model_file = self.model_folder / f"short_{self.tf}_model_risk.sav"
-        short_scaler_file = self.model_folder / f"short_{self.tf}_scaler_risk.sav"
-        short_model_info = self.model_folder / f"short_{self.tf}_info_risk.json"
+        short_model_file = self.variation_folder / f"short_{self.tf}_model_risk.sav"
+        short_scaler_file = self.variation_folder / f"short_{self.tf}_scaler_risk.sav"
+        short_model_info = self.variation_folder / f"short_{self.tf}_info_risk.json"
 
         if long_model_file.exists():
             self.long_risk_model = joblib.load(long_model_file)
             self.long_risk_scaler = joblib.load(long_scaler_file)
             with open(long_model_info, 'r') as ip:
                 self.long_risk_info = json.load(ip)
+            self.risk_score_validity_l = self.long_risk_info['validity']
+            long_risk_features = self.long_risk_info['features']
+        else:
+            self.risk_score_validity_l = 0
+            long_risk_features = []
 
+        if short_model_file.exists():
             self.short_risk_model = joblib.load(short_model_file)
             self.short_risk_scaler = joblib.load(short_scaler_file)
             with open(short_model_info, 'r') as ip:
                 self.short_risk_info = json.load(ip)
-
-            self.risk_features = set(self.long_risk_info['features'] + self.short_risk_info['features'])
-
-            self.risk_score_validity_l = self.long_risk_info['validity']
             self.risk_score_validity_s = self.short_risk_info['validity']
+            short_risk_features = self.short_risk_info['features']
         else:
-            self.risk_score_validity_l = 0
             self.risk_score_validity_s = 0
+            short_risk_features = []
+
+        self.risk_features = set(long_risk_features + short_risk_features)
 
     def load_perf_model_data(self):
         # paths
-        long_perf_model_path = self.primary_folder / f"long_{self.tf}_model_perf.sav"
-        long_perf_scaler_path = self.primary_folder / f"long_{self.tf}_scaler_perf.sav"
-        long_perf_info_path = self.primary_folder / f"long_{self.tf}_info_perf.json"
+        long_perf_model_path = self.variation_folder / f"long_{self.tf}_model_perf.sav"
+        long_perf_scaler_path = self.variation_folder / f"long_{self.tf}_scaler_perf.sav"
+        long_perf_info_path = self.variation_folder / f"long_{self.tf}_info_perf.json"
 
-        short_perf_model_path = self.primary_folder / f"short_{self.tf}_model_perf.sav"
-        short_perf_scaler_path = self.primary_folder / f"short_{self.tf}_scaler_perf.sav"
-        short_perf_info_path = self.primary_folder / f"short_{self.tf}_info_perf.json"
+        short_perf_model_path = self.variation_folder / f"short_{self.tf}_model_perf.sav"
+        short_perf_scaler_path = self.variation_folder / f"short_{self.tf}_scaler_perf.sav"
+        short_perf_info_path = self.variation_folder / f"short_{self.tf}_info_perf.json"
 
         if long_perf_model_path.exists():
             self.long_perf_model = joblib.load(long_perf_model_path)
             self.long_perf_scaler = joblib.load(long_perf_scaler_path)
             with open(long_perf_info_path, 'r') as ip:
                 self.long_perf_info = json.load(ip)
+            self.perf_score_validity_l = self.long_perf_info['validity']
+            long_perf_features = self.long_perf_info['features']
+        else:
+            self.perf_score_ml_l = 0
+            self.perf_score_validity_l = 0
+            long_perf_features = []
 
+        if short_perf_model_path.exists():
             self.short_perf_model = joblib.load(short_perf_model_path)
             self.short_perf_scaler = joblib.load(short_perf_scaler_path)
             with open(short_perf_info_path, 'r') as ip:
                 self.short_perf_info = json.load(ip)
-
-            self.perf_features = set(self.long_perf_info['features'] + self.short_perf_info['features'])
-
-            self.perf_score_validity_l = self.long_perf_info['validity']
             self.perf_score_validity_s = self.short_perf_info['validity']
+            short_perf_features = self.short_perf_info['features']
         else:
-            self.perf_score_ml_l = 0
             self.perf_score_ml_s = 0
-            self.perf_score_validity_l = 0
             self.perf_score_validity_s = 0
+            short_perf_features = []
+
+        self.perf_features = set(long_perf_features + short_perf_features)
 
     def risk_model_prediction(self, signal):
         direction = signal['direction']
@@ -1430,36 +1443,45 @@ class Agent:
             # logger.debug(f"{self.id} risk prediction {direction} short circuit, score 0")
             return 0
 
-        conf_rf_usdt_l = signal['conf_rf_usdt_l']
-        conf_rf_usdt_s = signal['conf_rf_usdt_s']
+        features = {'ignore': [0],
+                    'conf_rf_usdt_l': signal['conf_rf_usdt_l'],
+                    'conf_rf_usdt_s': signal['conf_rf_usdt_s'],
+                    'conf_l': signal['confidence_l'],
+                    'conf_s': signal['confidence_s'],
+                    'inval_ratio': signal['inval_ratio'],
+                    'inval_dist': signal['inval_dist'],
+                    'mkt_rank_1d': signal.get('market_rank_1d', 0.5),
+                    'mkt_rank_1w': signal.get('market_rank_1w', 0.5),
+                    'mkt_rank_1m': signal.get('market_rank_1m', 0.5),
+                    'rr': signal.get('rr')
+                    }
 
-        inval_ratio = signal['inval_ratio']
+        data = pd.DataFrame().from_dict(data=features, orient='columns')
 
-        mkt_rank_1d = signal.get('market_rank_1d', 1)
-        mkt_rank_1w = signal.get('market_rank_1w', 1)
-        mkt_rank_1m = signal.get('market_rank_1m', 1)
-
-        features = [conf_rf_usdt_l, conf_rf_usdt_s, inval_ratio, mkt_rank_1d, mkt_rank_1w, mkt_rank_1m]
-        names = ['conf_rf_usdt_l', 'conf_rf_usdt_s', 'inval_ratio', 'mkt_rank_1d', 'mkt_rank_1w', 'mkt_rank_1m']
-
-        # data = np.array(features).reshape(1, -1)
-        # self.long_risk_features_idx = [i for i, f in enumerate(names) if f in self.long_risk_info['features']]
-        # self.short_risk_features_idx = [i for i, f in enumerate(names) if f in self.short_risk_info['features']]
-
-        data = pd.DataFrame(data=features, index=[0], columns=names)
-
-        if direction == 'long':
-            # long_data = data[:, self.long_risk_features_idx]
-            long_data = data[self.long_risk_info['features']]
-            long_data = self.long_risk_scaler.transform(long_data)
-            score = float(self.long_risk_model.predict_proba(long_data)[-1, 1])
-            logger.debug(f"{self.id} {direction} ml risk score: {score:.1%}")
-        else:
-            # short_data = data[:, self.short_risk_features_idx]
-            short_data = data[self.short_risk_info['features']]
-            short_data = self.short_risk_scaler.transform(short_data)
-            score = float(self.short_risk_model.predict_proba(short_data)[-1, 1])
-            logger.debug(f"{self.id} {direction} ml risk score: {score:.1%}")
+        try:
+            if direction == 'long':
+                long_data = data[self.long_risk_info['features']]
+                long_data = self.long_risk_scaler.transform(long_data)
+                long_data = pd.DataFrame(long_data, columns=self.long_risk_info['features'])
+                score = float(self.long_risk_model.predict_proba(long_data)[-1, 1])
+                # logger.debug(f"{self.id} {direction} ml risk score: {score:.1%}")
+            else:
+                short_data = data[self.short_risk_info['features']]
+                short_data = self.short_risk_scaler.transform(short_data)
+                short_data = pd.DataFrame(short_data, columns=self.short_risk_info['features'])
+                score = float(self.short_risk_model.predict_proba(short_data)[-1, 1])
+                # logger.debug(f"{self.id} {direction} ml risk score: {score:.1%}")
+        except ValueError as e:
+            # logger.exception('NaN in prediction set')
+            print(f"\nNan in {signal['pair']} risk model data\n")
+            logger.error(e)
+            logger.debug('signal:')
+            logger.debug(pformat(signal))
+            logger.debug('features:')
+            logger.debug(pformat(features))
+            logger.debug('data:')
+            print(data.tail())
+            return 0
 
         return min(1.0, max(0.001, score))
 
@@ -1504,28 +1526,27 @@ class Agent:
         perf_stats_w = self.perf_stats_lw if direction == 'long' else self.perf_stats_sw
         perf_stats_uw = self.perf_stats_luw if direction == 'long' else self.perf_stats_suw
 
-        features = {'ignore': [0]} | perf_stats_w | perf_stats_uw
+        features = {'ignore': [0]} | perf_stats_w | perf_stats_uw  # the ignore is just to give it a second dimension
         data = pd.DataFrame().from_dict(data=features, orient='columns')
 
         try:
             if direction == 'long':
-                # long_data = data[:, self.long_perf_features_idx]
                 long_data = data[self.long_perf_info['features']]
                 long_data = self.long_perf_scaler.transform(long_data)
                 long_data = pd.DataFrame(data=long_data, columns=self.long_perf_info['features'])
                 score = float(self.long_perf_model.predict_proba(long_data)[-1, 1])
-                # logger.debug(f"{self.id} {direction} ml perf score: {score:.1%}")
+                logger.debug(f"{self.id} {direction} ml perf score pre-clipping: {score:.1%}")
+                logger.debug(f"based on: {self.long_perf_info['features']}\n")
             else:
-                # short_data = data[:, self.short_perf_features_idx]
                 short_data = data[self.short_perf_info['features']]
                 short_data = self.short_perf_scaler.transform(short_data)
                 short_data = pd.DataFrame(data=short_data, columns=self.short_perf_info['features'])
                 score = float(self.short_perf_model.predict_proba(short_data)[-1, 1])
-                # logger.debug(f"{self.id} {direction} ml perf score: {score:.1%}")
+                logger.debug(f"{self.id} {direction} ml perf score pre-clipping: {score:.1%}")
+                logger.debug(f"based on: {self.short_perf_info['features']}\n")
         except ValueError:
             logger.exception(f"{self.id} ")
 
-        logger.debug(f"{self.id} {direction} ml perf score before clipping: {score}")
         return min(1.0, max(0.001, score))
 
     def perf_manual_prediction(self, direction):
@@ -2922,26 +2943,86 @@ class Agent:
 
         return stop_price
 
-    def get_size(self, session, signal) -> tuple[float, float]:
-        """calculates the desired position size in base or quote denominations
-        using the total account balance, current fixed-risk setting, and the calculated scores"""
+
+    def get_fr_size(self, session, signal) -> tuple[float, float]:
+        """calculates the desired position size in base or quote denominations using the total
+        account balance, current fixed-risk setting, and the distance to invalidation of the trade"""
 
         jn = Timer('get_size')
         jn.start()
 
         balance = session.spot_bal if self.mode == 'spot' else session.margin_bal
-
         price = session.pairs_data[signal['pair']]['price']
+        distance = signal['inval_dist']
 
-        signal_score = max(1, signal['score'])
-        perf_score = max(1, signal['perf_score'])
+        perf_score = min(1, signal['perf_score'])
 
-        usdt_size = balance * session.max_allocation * signal_score * perf_score
-
+        usdt_size = (balance * session.frac_risk_limit * perf_score) / distance
         base_size = float(usdt_size / price)
 
         jn.stop()
         return base_size, usdt_size
+
+    def get_scored_size(self, session, signal) -> tuple[float, float]:
+        """calculates the desired position size in base or quote denominations
+        using the total account balance, current fixed-risk setting, and the calculated scores"""
+
+        jn = Timer('get_scored_size')
+        jn.start()
+
+        balance = session.spot_bal if self.mode == 'spot' else session.margin_bal
+        price = session.pairs_data[signal['pair']]['price']
+
+        signal_score = min(1, signal['score'])
+        perf_score = min(1, signal['perf_score'])
+
+        usdt_size = balance * session.max_allocation * signal_score * perf_score
+        base_size = float(usdt_size / price)
+
+        jn.stop()
+        return base_size, usdt_size
+
+
+    def get_kelly_size(self, session, signal) -> tuple[float, float]:
+        """calculates the optimum position size based on the kelly criterion. can only be used on signals that have rr"""
+
+        jn = Timer('get_kelly_size')
+        jn.start()
+
+        balance = session.spot_bal if self.mode == 'spot' else session.margin_bal
+        price = session.pairs_data[signal['pair']]['price']
+        rr = signal['rr']
+
+        signal_score = min(1, signal['score'])
+        perf_score = min(1, signal['perf_score'])
+
+        main_scalar = balance * session.max_allocation
+        usdt_size = main_scalar * ((rr * signal_score * perf_score) - (1 - signal_score)) / rr
+        usdt_size = max(0.0, usdt_size)
+        base_size = float(usdt_size / price)
+
+        jn.stop()
+        return base_size, usdt_size
+
+    # def get_thorp_size(self, session, signal) -> tuple[float, float]:
+    #     """calculates the optimum position size based on the thorp variant of the kelly criterion, for use on signals
+    #     that don't have rr"""
+    #
+    #     jn = Timer('get_thorp_size')
+    #     jn.start()
+    #
+    #     balance = session.spot_bal if self.mode == 'spot' else session.margin_bal
+    #     price = session.pairs_data[signal['pair']]['price']
+    #
+    #     signal_score = min(1, signal['score'])
+    #     perf_score = min(1, signal['perf_score'])
+    #
+    #     main_scalar = balance * session.max_allocation
+    #     usdt_size = main_scalar * ((strat_mean_return * signal_score * perf_score) - risk_free_rate) / strat_variance
+    #     base_size = float(usdt_size / price)
+    #
+    #     jn.stop()
+    #     return base_size, usdt_size
 
     def aged_condition(self, signal_age, series_1, series_2):
         """returns True if series_1 has been above series_2 for {signal_age} consecutive periods"""
@@ -3339,21 +3420,22 @@ class TrailFractals(Agent):
 class ChannelRun(Agent):
     """Machine learning strategy that uses OCO orders to manage trades"""
 
-    def __init__(self, session, tf: str, offset: int, lookback: int, goal, pair_selection: str, num_pairs: int) -> None:
+    def __init__(self, session, tf: str, offset: int, lookback: int, entry: str, goal: str, pair_selection: str, num_pairs: int) -> None:
         t = Timer('Channel Run init')
         t.start()
         self.mode = 'margin'
         self.tf = tf
         self.offset = offset
         self.lookback = lookback
+        self.entry = entry
         self.goal = goal
         self.trail_stop = False
         self.oco = True
         self.close_on_signal = False
         self.pair_selection = pair_selection
         self.training_pairs_n = num_pairs
-        self.name = f'channel_run_{self.lookback}_{self.goal}'
-        self.id = f"channel_run_{self.tf}_{self.offset}_{self.lookback}_{self.goal}_{self.pair_selection}_{self.training_pairs_n}"
+        self.name = f'channel_run_{self.lookback}_{self.entry}_{self.goal}'
+        self.id = f"channel_run_{self.tf}_{self.offset}_{self.lookback}_{self.entry}_{self.goal}_{self.pair_selection}_{self.training_pairs_n}"
         self.ohlc_length = 4035
         Agent.__init__(self, session)
         session.pairs_set.update(self.pairs)
@@ -3386,8 +3468,13 @@ class ChannelRun(Agent):
         channel_position = (price - chan_low) / (chan_high - chan_low)
         signal_dict['channel_position'] = channel_position
 
-        entry_l = channel_position < 0.1
-        entry_s = channel_position > 0.9
+        if self.entry == 'edge':
+            entry_l = channel_position < 0.1
+            entry_s = channel_position > 0.9
+        elif self.entry == 'mid':
+            uptrend = df.close.ewm(int(self.lookback/2)).mean().iloc[-1] > df.close.ewm(self.lookback).mean().iloc[-1]
+            entry_l = (0.4 < channel_position < 0.6) and uptrend
+            entry_s = (0.4 < channel_position < 0.6) and not uptrend
 
         atr_lb = 10
         df = ind.atr(df, atr_lb)
@@ -3453,6 +3540,8 @@ class ChannelRun(Agent):
         created_dt = datetime.fromtimestamp(model_created).astimezone(timezone.utc)
         model_age = datetime.now(timezone.utc) - created_dt
 
+        signal_dict['long_features'] = self.long_info['features']
+        signal_dict['short_features'] = self.short_info['features']
         signal_dict['inval'] = stp
         signal_dict['inval_ratio'] = stp / price
         signal_dict['inval_dist'] = abs(stp - price) / price
