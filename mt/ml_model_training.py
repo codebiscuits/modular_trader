@@ -33,11 +33,12 @@ warnings.filterwarnings('ignore')
 warnings.simplefilter(action='ignore', category=FutureWarning)
 logger = create_logger('model_training')
 use_local_data = True  # if false, uses trade records from the pi
+uid = int(datetime.now().timestamp())
 
 fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
 
 
-def backtest_oco(df_0, side, lookback, goal, trim_ohlc=1600):
+def backtest_oco(df_0, side, lookback, entry_trig, goal, trim_ohlc=1600):
     """i can either target the opposite side of the channel or the mid-point, or both"""
 
     df_0 = df_0.reset_index(drop=True)
@@ -56,15 +57,22 @@ def backtest_oco(df_0, side, lookback, goal, trim_ohlc=1600):
         df = df_0[row:row + trim_ohlc].copy().reset_index(drop=True)
         entry = df.close.iloc[0]
         atr = df[f"atr-{atr_lb}"].iloc[0]
+        hh_0 = df[f"hh_{lookback}"].iloc[0]
+        mid_0 = df[f"channel_mid_{lookback}"].iloc[0]
+        ll_0 = df[f"ll_{lookback}"].iloc[0]
 
         if side == 'long':
             highest = df.high.max()
             lowest = df.low.min()
             if goal == 'mid':
-                target = df[f"channel_mid_{lookback}"].iloc[0]
+                target = mid_0
             else:
-                target = df[f"hh_{lookback}"].iloc[0]
-            stop = df[f"ll_{lookback}"].iloc[0] - atr
+                target = hh_0
+            if entry_trig == 'edge':
+                stop = ll_0 - atr
+            else:
+                stop = (ll_0 + mid_0) / 2
+
             rr = abs((target / entry) - 1) / abs((stop / entry) - 1)
             target_hit_idx = df.high.clip(upper=target).idxmax()
             stop_hit_idx = df.low.clip(lower=stop).idxmin()
@@ -84,10 +92,13 @@ def backtest_oco(df_0, side, lookback, goal, trim_ohlc=1600):
             highest = df.high.max()
             lowest = df.low.min()
             if goal == 'mid':
-                target = df[f"channel_mid_{lookback}"].iloc[0]
+                target = mid_0
             else:
-                target = df[f"ll_{lookback}"].iloc[0]
-            stop = df[f"hh_{lookback}"].iloc[0] + atr
+                target = ll_0
+            if entry_trig == 'edge':
+                stop = hh_0 + atr
+            else:
+                stop = (hh_0 + mid_0) / 2
             rr = abs((target / entry) - 1) / abs((stop / entry) - 1)
             target_hit_idx = df.low.clip(lower=target).idxmin()  # returns index of earliest instance of lowest value
             stop_hit_idx = df.high.clip(upper=stop).idxmax()  # returns index of earliest instance of highest value
@@ -150,8 +161,8 @@ def channel_run_entries(df, lookback, entry):
         df['entry_l'] = df.channel_position < 0.1
         df['entry_s'] = df.channel_position > 0.9
     elif entry == 'mid':
-        df['entry_l'] = (0.4 < df.channel_position < 0.6) and df.uptrend
-        df['entry_s'] = (0.4 < df.channel_position < 0.6) and not df.uptrend
+        df['entry_l'] = (df.channel_position > 0.4) & (df.channel_position < 0.6) & df.uptrend
+        df['entry_s'] = (df.channel_position > 0.4) & (df.channel_position < 0.6) & ~df.uptrend
 
     df = df.drop('uptrend', axis=1)
 
@@ -211,7 +222,7 @@ def generate_channel_run_dataset(pairs: list, side: str, timeframe: str, strat_p
         df = mlf.get_data(pair, timeframe).tail(data_len + 200).reset_index(drop=True)
         df = mlf.add_features(df, timeframe).tail(data_len).reset_index(drop=True)
         df = channel_run_entries(df, lookback, entry)
-        res, exit_idxs, count = backtest_oco(df, side, lookback, goal)
+        res, exit_idxs, count = backtest_oco(df, side, lookback, entry, goal)
         all_res.extend(res)
         all_exit_idx.extend(exit_idxs)
 
@@ -409,7 +420,7 @@ def validate_findings(X_train, X_val, y_train, y_val, sfs_selector, final_featur
 
 
 def final_rf_train_and_save(mode, strat_name, X_final, y_final, final_features, best_params,
-                            pairs, num_pairs, selection_method, strat_params, data_len):
+                            pairs, num_pairs, selection_method, strat_params, data_len, model_id):
     print(f"final model train and save began: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
 
     X_final = X_final[final_features]
@@ -446,7 +457,8 @@ def final_rf_train_and_save(mode, strat_name, X_final, y_final, final_features, 
         pairs,
         final_model,
         final_scaler,
-        len(X_final)
+        len(X_final),
+        model_id
     )
 
 
@@ -577,13 +589,13 @@ def create_perf_dataset(strat_name: str, side: str, timeframe: str, strat_params
     return df
 
 
-def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tuple,
+def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tuple, uid: int,
                   num_pairs: int, selection_method: str, history: int, num_trials: int):
     loop_start = time.perf_counter()
     print(f"\n*1* {datetime.now().strftime('%H:%M:%S')} Running {strat_name} primary model, {side}, {timeframe}, "
           f"{', '.join([str(p) for p in strat_params])}, {num_pairs}, {selection_method} primary")
 
-    data_len = 2500
+    data_len = {'channel_run': 2500, 'trail_fractals': 1000}[strat_name]
 
     # generate dataset
     pairs = mlf.get_margin_pairs(selection_method, num_pairs, history)
@@ -595,18 +607,43 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
     # split features from labels
     X, y, _ = mlf.features_labels_split(res_df)
 
+    # check for infinite values and drop rows if needed
+    xinf = X.index[np.isinf(X).any(axis=1)]
+    if len(xinf):
+        X = X.drop(xinf).reset_index(drop=True)
+        y = y.drop(xinf).reset_index(drop=True)
+
+    yinf = y.index[np.isinf(y)]
+    if len(yinf):
+        X = X.drop(yinf).reset_index(drop=True)
+        y = y.drop(yinf).reset_index(drop=True)
+
+    # # split train and test sets in time order to preserve the accuracy constraint of market evolution
+    # split_idx = int(len(X) * 0.7)
+    # X_train = X.iloc[:split_idx, :]
+    # X_test = X.iloc[split_idx:, :]
+    # y_train = y.iloc[:split_idx]
+    # y_test = y.iloc[split_idx:]
+
     # balance classes
     if (len(y.unique()) < 2) or (y.value_counts().iloc[0] < 20) or (y.value_counts().iloc[1] < 20):
         logger.debug('stopped - not enough samples in both classes for cross-validation etc')
         return  # need enough samples in each class for cross-validation etc
     # us = RandomUnderSampler(random_state=0)
     us = ClusterCentroids(random_state=0)
-    X, y = us.fit_resample(X, y)
+    try:
+        X, y = us.fit_resample(X, y)
+    except ValueError as e:
+        print(e)
+        print()
 
     logger.debug(f"Length of dataset: {len(y)}")
 
     # split data for fitting and calibration
     X_train, X_test, X_val, y_train, y_test, y_val = ttv_split(X, y)
+
+    # # randomly split test and validation sets
+    # X_test, X_val, y_test, y_val = train_test_split(X_test, y_test, train_size=0.5, random_state=11, stratify=y_test)
 
     if (y_test.value_counts().iloc[0] < 6) or (y_test.value_counts().iloc[1] < 6):
         logger.debug('stopped - not enough samples in both classes for cross-validation etc')
@@ -638,13 +675,14 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
 
     # train final model
     final_rf_train_and_save('tech', strat_name, X, y, final_features, best_params,
-                            pairs, num_pairs, selection_method, strat_params, data_len)
+                            pairs, num_pairs, selection_method, strat_params, data_len, uid)
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
     print(f"{strat_name} Technical test time taken: {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
 
     return dict(
+        model_id=uid,
         strat_name=strat_name,
         side=side,
         timeframe=timeframe,
@@ -663,7 +701,7 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
 
 
 def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat_params: tuple,
-                    num_pairs: int, selection_method: str, thresh: float, num_trials: int):
+                    uid: int, num_pairs: int, selection_method: str, thresh: float, num_trials: int):
     """this function can be used to train the risk model or the performance model, selected by the mode parameter"""
 
     loop_start = time.perf_counter()
@@ -747,13 +785,14 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
 
     # train final model
     final_rf_train_and_save(mode, strat_name, X, y, final_features, best_params,
-                            [], num_pairs, selection_method, strat_params, 'na')
+                            [], num_pairs, selection_method, strat_params, 'na', uid)
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
     print(f"{strat_name} {mode} test time taken: {int(loop_elapsed // 60)}m {loop_elapsed % 60:.1f}s")
 
     return dict(
+        model_id=uid,
         strat_name=strat_name,
         side=side,
         timeframe=timeframe,
@@ -790,62 +829,60 @@ if __name__ == '__main__':
     all_stats = []
 
     for side, timeframe in product(sides, timeframes):
-        print(f"\n\n*******\nTesting {side} {timeframe}\n*******\n")
+        print(f"\n\n{'** ** ** **':^120}\n{f'Testing {side} {timeframe}':^120}\n{'** ** ** **':^120}\n")
 
         n = {'15m': 1500, '30m': 1000, '1h': 750, '4h': 500, '12h': 400, '1d': 365}  # how many tf periods to end up with
         mult = {'15m': 3, '30m': 6, '1h': 12, '4h': 48, '12h': 144, '1d': 288}  # how many 5m periods to get data_len
         history = n[timeframe]# * mult[timeframe]
 
         if timeframe in ['15m', '30m', '1h', '4h']:
-            # all_stats.append(train_primary('channel_run', side, timeframe, (50, 'edge', 'edge'), 50, '1w_volumes', history, num_trials))
-            # all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (50, 'edge', 'edge'), 50, '1w_volumes', 0.4, num_trials))
-            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (50, 'edge', 'edge'), 50, '1w_volumes', 0.4, num_trials))
+            all_stats.append(train_primary('channel_run', side, timeframe, (100, 'mid', 'edge'), uid, 50, 'volume_1d', history, num_trials))
+            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (100, 'mid', 'edge'), uid, 50, 'volume_1d', 0.4, num_trials))
+            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (100, 'mid', 'edge'), uid, 50, 'volume_1d', 0.4, num_trials))
 
-            all_stats.append(train_primary('channel_run', side, timeframe, (50, 'mid', 'edge'), 50, '1w_volumes', history, num_trials))
-            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (50, 'mid', 'edge'), 50, '1w_volumes', 0.4, num_trials))
-            all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (50, 'mid', 'edge'), 50, '1w_volumes', 0.4, num_trials))
+            all_stats.append(train_primary('channel_run', side, timeframe, (100, 'edge', 'mid'), uid, 50, 'volume_1d', history, num_trials))
+            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (100, 'edge', 'mid'), uid, 50, 'volume_1d', 0.4, num_trials))
+            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (100, 'edge', 'mid'), uid, 50, 'volume_1d', 0.4, num_trials))
 
-            # all_stats.append(train_primary('channel_run', side, timeframe, (50, 'edge', 'mid'), 50, '1w_volumes', history, num_trials))
-            # all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (50, 'edge', 'mid'), 50, '1w_volumes', 0.4, num_trials))
-            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (50, 'edge', 'mid'), 50, '1w_volumes', 0.4, num_trials))
-            #
-            # all_stats.append(train_primary('channel_run', side, timeframe, (100, 'edge', 'edge'), 50, '1w_volumes', history, num_trials))
-            # all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (100, 'edge', 'edge'), 50, '1w_volumes', 0.4, num_trials))
-            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (100, 'edge', 'edge'), 50, '1w_volumes', 0.4, num_trials))
+            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 50, 'volume_1d', history, num_trials))
+            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 50, 'volume_1d', 0.4, num_trials))
+            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 50, 'volume_1d', 0.4, num_trials))
 
-            all_stats.append(train_primary('channel_run', side, timeframe, (100, 'mid', 'edge'), 50, '1w_volumes', history, num_trials))
-            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (100, 'mid', 'edge'), 50, '1w_volumes', 0.4, num_trials))
-            all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (100, 'mid', 'edge'), 50, '1w_volumes', 0.4, num_trials))
+            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 50, 'volume_1d', history, num_trials))
+            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 50, 'volume_1d', 0.4, num_trials))
+            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 50, 'volume_1d', 0.4, num_trials))
 
-            # all_stats.append(train_primary('channel_run', side, timeframe, (100, 'edge', 'mid'), 50, '1w_volumes', history, num_trials))
-            # all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (100, 'edge', 'mid'), 50, '1w_volumes', 0.4, num_trials))
-            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (100, 'edge', 'mid'), 50, '1w_volumes', 0.4, num_trials))
-            #
-            # all_stats.append(train_primary('channel_run', side, timeframe, (200, 'edge', 'edge'), 50, '1w_volumes', history, num_trials))
-            # all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'edge', 'edge'), 50, '1w_volumes', 0.4, num_trials))
-            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (200, 'edge', 'edge'), 50, '1w_volumes', 0.4, num_trials))
+            all_stats.append(train_primary('channel_run', side, timeframe, (100, 'mid', 'edge'), uid, 50, 'log_volume_x_spread', history, num_trials))
+            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (100, 'mid', 'edge'), uid, 50, 'log_volume_x_spread', 0.4, num_trials))
+            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (100, 'mid', 'edge'), uid, 50, 'log_volume_x_spread', 0.4, num_trials))
 
-            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'mid', 'edge'), 50, '1w_volumes', history, num_trials))
-            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'mid', 'edge'), 50, '1w_volumes', 0.4, num_trials))
-            all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (200, 'mid', 'edge'), 50, '1w_volumes', 0.4, num_trials))
+            all_stats.append(train_primary('channel_run', side, timeframe, (100, 'edge', 'mid'), uid, 50, 'log_volume_x_spread', history, num_trials))
+            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (100, 'edge', 'mid'), uid, 50, 'log_volume_x_spread', 0.4, num_trials))
+            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (100, 'edge', 'mid'), uid, 50, 'log_volume_x_spread', 0.4, num_trials))
 
-            # all_stats.append(train_primary('channel_run', side, timeframe, (200, 'edge', 'mid'), 50, '1w_volumes', history, num_trials))
-            # all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'edge', 'mid'), 50, '1w_volumes', 0.4, num_trials))
-            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (200, 'edge', 'mid'), 50, '1w_volumes', 0.4, num_trials))
+            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 50, 'log_volume_x_spread', history, num_trials))
+            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 50, 'log_volume_x_spread', 0.4, num_trials))
+            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 50, 'log_volume_x_spread', 0.4, num_trials))
 
-        # if timeframe in ['1h', '4h', '12h', '1d']:
-        #     all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', history, num_trials))
-        #     all_stats.append(train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials))
-        #     all_stats.append(train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1d_volumes', 0.4, num_trials))
-        #
-        #     all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', history, num_trials))
-        #     all_stats.append(train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials))
-        #     all_stats.append(train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), 30, '1w_volumes', 0.4, num_trials))
+            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 50, 'log_volume_x_spread', history, num_trials))
+            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 50, 'log_volume_x_spread', 0.4, num_trials))
+            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 50, 'log_volume_x_spread', 0.4, num_trials))
+
+        if timeframe in ['1h', '4h', '12h', '1d']:
+            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), uid, 50, 'volume_1d', history, num_trials))
+            all_stats.append(train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), uid, 50, 'volume_1d', 0.4, num_trials))
+            # all_stats.append(train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), uid, 30, 'volume_1d', 0.4, num_trials))
+
+            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), uid, 50, 'log_volume_x_spread', history, num_trials))
+            all_stats.append(train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), uid, 50, 'log_volume_x_spread', 0.4, num_trials))
+            # all_stats.append(train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), uid, 30, 'log_volume_x_spread', 0.4, num_trials))
 
     all_stats = [record for record in all_stats if record is not None]
     stats_df = pd.DataFrame().from_records(all_stats)
     now_date = datetime.now(tz=timezone.utc).strftime('%d-%m-%y')
     stats_df.to_parquet(f'/home/ross/coding/modular_trader/machine_learning/training_stats_{now_date}.parquet')
+
+    print(f"\n{'* '*20:^120}\n\n{f'DONT FORGET TO CHANGE THE AGENT PARAMS IN SETUP SCANNER':^120}\n\n{'* '*20:^120}\n")
 
     all_end = time.perf_counter()
     all_elapsed = all_end - all_start

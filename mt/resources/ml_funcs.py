@@ -47,7 +47,7 @@ def init_client(max_retries: int = 360, delay: int = 5):
     raise Exception(f"Max retries exceeded. Request still failed after {max_retries} attempts.")
 
 
-def save_models(mode, strategy, param_str, sel_method, num_pairs, side, tf, data_len, selected, pairs, model, scaler, validity):
+def save_models(mode, strategy, param_str, sel_method, num_pairs, side, tf, data_len, selected, pairs, model, scaler, validity, uid):
     locations = ['/',
                  '/pi_1/',
                  '/pi_2/']
@@ -58,7 +58,7 @@ def save_models(mode, strategy, param_str, sel_method, num_pairs, side, tf, data
         model_info = f"{side}_{tf}_info_{mode}.json"
         scaler_file = f"{side}_{tf}_scaler_{mode}.sav"
 
-        info_dict = {'data_length': data_len, 'features': selected, 'pair_selection': sel_method,
+        info_dict = {'data_length': data_len, 'features': selected, 'pair_selection': sel_method, 'model_id': uid,
                      'pairs': pairs, 'created': int(datetime.now(timezone.utc).timestamp()), 'validity': validity}
 
         # save to file
@@ -73,11 +73,39 @@ def save_models(mode, strategy, param_str, sel_method, num_pairs, side, tf, data
         joblib.dump(scaler, scaler_path)
 
 
-def rank_pairs(selection):
+def rank_pairs_old(selection):
     with open(f'/home/ross/coding/modular_trader/market_data/recent_{selection}.json', 'r') as file:
-        vols = json.load(file)
+        ranks = json.load(file)
 
-    return sorted(vols, key=lambda x: vols[x], reverse=True)
+    return sorted(ranks, key=lambda x: ranks[x], reverse=True)
+
+
+def rank_pairs(selection):
+    # load market_info
+    df = pd.read_parquet('/home/ross/coding/modular_trader/market_data/market_info.parquet')
+
+    # load spreads'
+    with open('/home/ross/coding/modular_trader/market_data/spreads.json', 'r') as file:
+        spreads = json.load(file)
+    spreads_df = pd.DataFrame().from_dict(data=spreads, orient='index')
+    spreads_df['new_index'] = pd.to_datetime(spreads_df.index, format='mixed')
+    spreads_df = spreads_df.set_index('new_index', drop=True)
+    spreads_series = spreads_df.tail(200).mean()
+    df['spreads'] = spreads_series
+
+    # filter dataframe
+    df = df.loc[df.spreads < 0.004]
+    df = df.loc[df.volatility_1w > 0.0003]
+    df = df.loc[df.length > 10_000]
+
+    # create new features
+    df['log_volume_1d'] = np.log(df.volume_1d)
+    df['scaled_spread'] = (df.spreads - df.spreads.min()) / (df.spreads.max() - df.spreads.min())
+    df['scaled_log_volume'] = (df.log_volume_1d - df.log_volume_1d.min()) / (
+                df.log_volume_1d.max() - df.log_volume_1d.min())
+    df['log_volume_x_spread'] = df.scaled_log_volume * df.scaled_spread
+
+    return list(df.sort_values(selection, ascending=False).index)
 
 
 def get_data(pair, timeframe, vwma_periods=24):
@@ -128,7 +156,7 @@ def get_margin_pairs(method, num_pairs, data_len):
     exc_info = client.get_exchange_info()
     symbol_margin = {i['symbol']: i['isMarginTradingAllowed'] for i in exc_info['symbols'] if
                      i['quoteAsset'] == 'USDT'}
-    pairs = [p for p in pairs if symbol_margin[p]
+    pairs = [p for p in pairs if symbol_margin.get(p)
              and (market_info.at[p, 'length'] > data_len)
              and (market_info.at[p, 'volatility_1w'] > 0.0003)
              ]
