@@ -149,6 +149,9 @@ def signal_noise_ratio(df: pd.DataFrame, periods: int) -> pd.DataFrame:
 
 
 def stochastic(data: pd.Series, lookback: int) -> pd.Series:
+    """calculates the position of a series proportional to its own highest and lowest values over a specified lookback
+    window"""
+
     hh = data.rolling(lookback).max()
     ll = data.rolling(lookback).min()
 

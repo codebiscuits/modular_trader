@@ -14,9 +14,11 @@ Process for adding new features:
 2 - insert all variations of the feature into the add_feature function below, with the following format: 
     'column name created by the feature': {'call': name of feature function, 'params': (df, param_1, param_2, etc)},
     if there are no parameters other than the dataframe, just put (df, ) as the params value. This is how the modular 
-    trading system accesses each individual feature it needs.
+    trading system accesses each individual feature it needs. NB if a function creates more than one new column, give 
+    each one it's own entry here, because each one will need to be individually accessible by the agents.
 3 - add the same variations of the call to the 'add_features' function in ml_funcs so that all the training and analysis
-    scripts have access to the feature when developing and training models
+    scripts have access to the feature when developing and training models. Functions that produce multiple feature 
+    columns do not need a separate call for each column at this stage, just make sure every column gets produced.
 4 - consider whether it leaves a column in the dataframe that would need to be removed inside features_labels_split
 """
 
@@ -185,6 +187,14 @@ def add_feature(df, name, timeframe):
         'skew_50': {'call': skew, 'params': (df, 50)},
         'skew_100': {'call': skew, 'params': (df, 100)},
         'skew_200': {'call': skew, 'params': (df, 200)},
+        'smoothed_stoch_20': {'call': smoothed_stoch, 'params': (df, 20, False)},
+        'smoothed_stoch_50': {'call': smoothed_stoch, 'params': (df, 50, False)},
+        'smoothed_stoch_100': {'call': smoothed_stoch, 'params': (df, 100, False)},
+        'smoothed_stoch_200': {'call': smoothed_stoch, 'params': (df, 200, False)},
+        'smoothed_stoch_20_roc': {'call': smoothed_stoch, 'params': (df, 20, True)},
+        'smoothed_stoch_50_roc': {'call': smoothed_stoch, 'params': (df, 50, True)},
+        'smoothed_stoch_100_roc': {'call': smoothed_stoch, 'params': (df, 100, True)},
+        'smoothed_stoch_200_roc': {'call': smoothed_stoch, 'params': (df, 200, True)},
         'stoch_base_vol_25': {'call': stoch_base_vol, 'params': (df, 25)},
         'stoch_base_vol_50': {'call': stoch_base_vol, 'params': (df, 50)},
         'stoch_base_vol_100': {'call': stoch_base_vol, 'params': (df, 100)},
@@ -242,10 +252,25 @@ def add_feature(df, name, timeframe):
     return df
 
 
-def channel_position(df, lookback):
+def smoothed_stoch(df: pd.DataFrame, lookback: int, roc: bool=False) -> pd.DataFrame:
+    """calculates the stochastic oscillator for a specified lookback window, then smooths it using an ema of the same
+    length. the result shows how strong the trend has been and can be a good indicator of potential exhaustion, since an
+    extended value of the smoothed line shows that the trend has been strong for a long time. the roc flag selects
+    whether to also output a column showing the current rate-of-change of the smoothed stochastic oscillator"""
+
+    stoch = ind.stochastic(df.close, lookback)
+    df[f"smoothed_stoch_{lookback}"] = stoch.ewm(lookback).mean()
+
+    if roc:
+        df[f"sm_stoch_{lookback}_roc"] = df[f"smoothed_stoch_{lookback}"].pct_change()
+
+    return df
+
+
+def channel_position(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
     ll = df.low.rolling(lookback).min()
     hh = df.high.rolling(lookback).max()
-    df['channel_position'] = (df.close - ll) / (hh - ll)
+
     df[f'channel_position_{lookback}'] = (df.close - ll) / (hh - ll)
 
     return df

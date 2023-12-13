@@ -158,11 +158,11 @@ def channel_run_entries(df, lookback, entry):
     df[f'channel_position_{lookback}'] = (df.close - df[f"ll_{lookback}"]) / (df[f"hh_{lookback}"] - df[f"ll_{lookback}"])
 
     if entry == 'edge':
-        df['entry_l'] = df.channel_position < 0.1
-        df['entry_s'] = df.channel_position > 0.9
+        df['entry_l'] = df[f'channel_position_{lookback}'] < 0.1
+        df['entry_s'] = df[f'channel_position_{lookback}'] > 0.9
     elif entry == 'mid':
-        df['entry_l'] = (df.channel_position > 0.4) & (df.channel_position < 0.6) & df.uptrend
-        df['entry_s'] = (df.channel_position > 0.4) & (df.channel_position < 0.6) & ~df.uptrend
+        df['entry_l'] = (df[f'channel_position_{lookback}'] > 0.4) & (df[f'channel_position_{lookback}'] < 0.6) & df.uptrend
+        df['entry_s'] = (df[f'channel_position_{lookback}'] > 0.4) & (df[f'channel_position_{lookback}'] < 0.6) & ~df.uptrend
 
     df = df.drop('uptrend', axis=1)
 
