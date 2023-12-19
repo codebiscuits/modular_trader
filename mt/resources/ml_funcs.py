@@ -47,13 +47,13 @@ def init_client(max_retries: int = 360, delay: int = 5):
     raise Exception(f"Max retries exceeded. Request still failed after {max_retries} attempts.")
 
 
-def save_models(mode, strategy, param_str, sel_method, num_pairs, side, tf, data_len, selected, pairs, model, scaler, validity, uid):
+def save_models(mode, strategy, param_str, sel_method, side, tf, data_len, selected, pairs, model, scaler, validity, uid):
     locations = ['/',
                  '/pi_1/',
                  '/pi_2/']
     for location in locations:
         folder = Path(f"/home/ross/coding{location}modular_trader/machine_learning/"
-                      f"models/{strategy}_{param_str}/{sel_method}_{num_pairs}")
+                      f"models/{strategy}_{param_str}/{sel_method}")
         model_file = f"{side}_{tf}_model_{mode}.sav"
         model_info = f"{side}_{tf}_info_{mode}.json"
         scaler_file = f"{side}_{tf}_scaler_{mode}.sav"

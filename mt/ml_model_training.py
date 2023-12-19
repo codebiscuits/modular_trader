@@ -420,7 +420,7 @@ def validate_findings(X_train, X_val, y_train, y_val, sfs_selector, final_featur
 
 
 def final_rf_train_and_save(mode, strat_name, X_final, y_final, final_features, best_params,
-                            pairs, num_pairs, selection_method, strat_params, data_len, model_id):
+                            pairs, selection_method, strat_params, data_len, model_id):
     print(f"final model train and save began: {datetime.now().strftime('%Y/%m/%d %H:%M')}")
 
     X_final = X_final[final_features]
@@ -449,7 +449,6 @@ def final_rf_train_and_save(mode, strat_name, X_final, y_final, final_features, 
         strat_name,
         "_".join([str(sp) for sp in strat_params]),
         selection_method,
-        num_pairs,
         side,
         timeframe,
         data_len,
@@ -675,7 +674,7 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
 
     # train final model
     final_rf_train_and_save('tech', strat_name, X, y, final_features, best_params,
-                            pairs, num_pairs, selection_method, strat_params, data_len, uid)
+                            pairs, selection_method, strat_params, data_len, uid)
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
@@ -785,7 +784,7 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
 
     # train final model
     final_rf_train_and_save(mode, strat_name, X, y, final_features, best_params,
-                            [], num_pairs, selection_method, strat_params, 'na', uid)
+                            [], selection_method, strat_params, 'na', uid)
 
     loop_end = time.perf_counter()
     loop_elapsed = loop_end - loop_start
@@ -835,47 +834,15 @@ if __name__ == '__main__':
         mult = {'15m': 3, '30m': 6, '1h': 12, '4h': 48, '12h': 144, '1d': 288}  # how many 5m periods to get data_len
         history = n[timeframe]# * mult[timeframe]
 
-        if timeframe in ['15m', '30m', '1h', '4h']:
-            all_stats.append(train_primary('channel_run', side, timeframe, (100, 'mid', 'edge'), uid, 50, 'volume_1d', history, num_trials))
-            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (100, 'mid', 'edge'), uid, 50, 'volume_1d', 0.4, num_trials))
-            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (100, 'mid', 'edge'), uid, 50, 'volume_1d', 0.4, num_trials))
+        if timeframe in ['15m', '30m']:
+            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 100, 'volume_1d', history, num_trials))
+            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 100, 'volume_1d', 0.4, num_trials))
+            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 100, 'volume_1d', 0.4, num_trials))
 
-            all_stats.append(train_primary('channel_run', side, timeframe, (100, 'edge', 'mid'), uid, 50, 'volume_1d', history, num_trials))
-            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (100, 'edge', 'mid'), uid, 50, 'volume_1d', 0.4, num_trials))
-            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (100, 'edge', 'mid'), uid, 50, 'volume_1d', 0.4, num_trials))
-
-            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 50, 'volume_1d', history, num_trials))
-            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 50, 'volume_1d', 0.4, num_trials))
-            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 50, 'volume_1d', 0.4, num_trials))
-
-            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 50, 'volume_1d', history, num_trials))
-            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 50, 'volume_1d', 0.4, num_trials))
-            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 50, 'volume_1d', 0.4, num_trials))
-
-            all_stats.append(train_primary('channel_run', side, timeframe, (100, 'mid', 'edge'), uid, 50, 'log_volume_x_spread', history, num_trials))
-            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (100, 'mid', 'edge'), uid, 50, 'log_volume_x_spread', 0.4, num_trials))
-            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (100, 'mid', 'edge'), uid, 50, 'log_volume_x_spread', 0.4, num_trials))
-
-            all_stats.append(train_primary('channel_run', side, timeframe, (100, 'edge', 'mid'), uid, 50, 'log_volume_x_spread', history, num_trials))
-            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (100, 'edge', 'mid'), uid, 50, 'log_volume_x_spread', 0.4, num_trials))
-            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (100, 'edge', 'mid'), uid, 50, 'log_volume_x_spread', 0.4, num_trials))
-
-            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 50, 'log_volume_x_spread', history, num_trials))
-            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 50, 'log_volume_x_spread', 0.4, num_trials))
-            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 50, 'log_volume_x_spread', 0.4, num_trials))
-
-            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 50, 'log_volume_x_spread', history, num_trials))
-            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 50, 'log_volume_x_spread', 0.4, num_trials))
-            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 50, 'log_volume_x_spread', 0.4, num_trials))
-
-        if timeframe in ['1h', '4h', '12h', '1d']:
-            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), uid, 50, 'volume_1d', history, num_trials))
-            all_stats.append(train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), uid, 50, 'volume_1d', 0.4, num_trials))
-            # all_stats.append(train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), uid, 30, 'volume_1d', 0.4, num_trials))
-
-            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), uid, 50, 'log_volume_x_spread', history, num_trials))
-            all_stats.append(train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), uid, 50, 'log_volume_x_spread', 0.4, num_trials))
-            # all_stats.append(train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), uid, 30, 'log_volume_x_spread', 0.4, num_trials))
+        if timeframe in ['4h', '12h', '1d']:
+            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), uid, 100, 'volume_1d', history, num_trials))
+            all_stats.append(train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), uid, 100, 'volume_1d', 0.4, num_trials))
+            # all_stats.append(train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), uid, 100, 'volume_1d', 0.4, num_trials))
 
     all_stats = [record for record in all_stats if record is not None]
     stats_df = pd.DataFrame().from_records(all_stats)
