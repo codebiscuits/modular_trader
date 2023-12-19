@@ -191,10 +191,10 @@ def add_feature(df, name, timeframe):
         'smoothed_stoch_50': {'call': smoothed_stoch, 'params': (df, 50, False)},
         'smoothed_stoch_100': {'call': smoothed_stoch, 'params': (df, 100, False)},
         'smoothed_stoch_200': {'call': smoothed_stoch, 'params': (df, 200, False)},
-        'smoothed_stoch_20_roc': {'call': smoothed_stoch, 'params': (df, 20, True)},
-        'smoothed_stoch_50_roc': {'call': smoothed_stoch, 'params': (df, 50, True)},
-        'smoothed_stoch_100_roc': {'call': smoothed_stoch, 'params': (df, 100, True)},
-        'smoothed_stoch_200_roc': {'call': smoothed_stoch, 'params': (df, 200, True)},
+        'sm_stoch_20_roc': {'call': smoothed_stoch, 'params': (df, 20, True)},
+        'sm_stoch_50_roc': {'call': smoothed_stoch, 'params': (df, 50, True)},
+        'sm_stoch_100_roc': {'call': smoothed_stoch, 'params': (df, 100, True)},
+        'sm_stoch_200_roc': {'call': smoothed_stoch, 'params': (df, 200, True)},
         'stoch_base_vol_25': {'call': stoch_base_vol, 'params': (df, 25)},
         'stoch_base_vol_50': {'call': stoch_base_vol, 'params': (df, 50)},
         'stoch_base_vol_100': {'call': stoch_base_vol, 'params': (df, 100)},
@@ -240,11 +240,11 @@ def add_feature(df, name, timeframe):
     try:
         feature = feature_lookup[name]
     except KeyError as e:
-        if name == 'rr':
-            feature = None
-        else:
+        if name != 'rr':
+            logger.debug(name + ' not found in feature lookup')
             logger.exception(e)
             logger.error(timeframe)
+        feature = None
 
     if feature:
         df = feature['call'](*feature['params'])

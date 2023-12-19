@@ -18,6 +18,7 @@ from pyarrow import ArrowInvalid
 import joblib
 from xgboost import XGBClassifier
 import plotly.graph_objects as go
+from sklearn.linear_model import LinearRegression
 
 ctx = getcontext()
 ctx.prec = 12
@@ -44,7 +45,7 @@ class Agent:
         t = Timer('agent init')
         t.start()
         self.live = session.live
-        self.fr_max = session.max_allocation
+        self.fr_max = session.frac_risk_limit * {'15m': 1, '30m': 2, '1h': 4, '4h': 10, '12h': 20, '1d': 30}[self.tf]
         self.realised_pnls = dict(
             real_spot=0,
             real_long=0,
@@ -195,11 +196,7 @@ class Agent:
         w = Timer(f'read_open_trade_records-{state}')
         w.start()
 
-        if session.live:
-            records_r = session.records_r
-        else:
-            records_r = session.records_r[self.pi_path]
-        ot_path_1 = Path(f"{records_r}/{self.id}/{state}_trades.json")
+        ot_path_1 = Path(f"{session.records_r}/{self.id}/{state}_trades.json")
         ot_path_2 = Path(f"{session.records_w}/{self.id}/{state}_trades.json")
 
         if session.use_local_records and ot_path_2.exists():
@@ -227,11 +224,7 @@ class Agent:
         e = Timer('read_closed_trade_records')
         e.start()
 
-        if session.live:
-            records_r = session.records_r
-        else:
-            records_r = session.records_r[self.pi_path]
-        ct_path_1 = Path(f"{records_r}/{self.id}/closed_trades.json")
+        ct_path_1 = Path(f"{session.records_r}/{self.id}/closed_trades.json")
         ct_path_2 = Path(f"{session.records_w}/{self.id}/closed_trades.json")
 
         if session.use_local_records and ct_path_2.exists():
@@ -329,16 +322,59 @@ class Agent:
 
         for pair, pos in self.open_trades.items():
             position = pos['position']
+            pos_hard_stop = position.get('hard_stop')
+            trade_hard_stop = pos['trade'][-1]['hard_stop']
+            hard_stop = pos_hard_stop if pos_hard_stop else trade_hard_stop
             if position['direction'] in ['long', 'spot']:
-                valid = float(position['hard_stop']) < session.pairs_data[pair]['price']
+                valid = float(hard_stop) < session.pairs_data[pair]['price']
             else:
-                valid = float(position['hard_stop']) > session.pairs_data[pair]['price']
+                valid = float(hard_stop) > session.pairs_data[pair]['price']
 
             if not valid:
                 logger.warning(
                     f"{self.id} {pair} {position['direction']} position somehow passed its stop-loss without "
                     f"closing")
                 # TODO close position and record as stopped
+
+    def stale_trades_iteration(self, session, asset, pos, state):
+        limits = {'15m': 240, '30m': 240, '1h': 240, '4h': 240, '12h': 240, '1d': 240}
+
+        old = pos['duration (h)'] > limits[self.tf]
+        boring = pos['pnl_R'] < 1
+        if old and boring:
+            # logger.debug(pformat(pos))
+            return (
+                {
+                    'agent': self.id,
+                    'action': 'close',
+                    'pair': asset + session.quote_asset,
+                    'direction': pos['direction'],
+                    'state': state,
+                    'mode': self.mode,
+                    'reason': 'stale',
+                }
+            )
+
+    def check_stale_trades(self, session) -> list:
+        """checks for any trades which have been open for a long time and not really moved, and creates a close signal
+        for any that meet those conditions"""
+
+        stale_trades = []
+        for asset, pos in self.real_pos.items():
+            if asset == 'USDT':
+                continue
+            stale_trade = self.stale_trades_iteration(session, asset, pos, 'real')
+            if stale_trade:
+                stale_trades.append(stale_trade)
+
+        for asset, pos in self.sim_pos.items():
+            if asset == 'USDT':
+                continue
+            stale_trade = self.stale_trades_iteration(session, asset, pos, 'sim')
+            if stale_trade:
+                stale_trades.append(stale_trade)
+
+        return stale_trades
 
     # record stopped trades ------------------------------------------------
 
@@ -635,6 +671,7 @@ class Agent:
                 f"{target_dict['liability']} +++")
 
         return target_dict
+
     @uf.retry_on_busy()
     def record_closed_oco_trades(self, session, timeframes) -> None:
         m = Timer('record_closed_oco_trades')
@@ -716,6 +753,7 @@ class Agent:
                 # logger.info(f"RCOT {self.id} {pair} stop hit")
                 stop_size = self.repay_stop(session, pair, stop_order)
                 stop_dict = self.create_stop_dict(session, pair, stop_order, stop_size)
+                logger.debug(f"rcot - closed_time = {stop_dict['timestamp']}")
                 self.save_records(session, pair, stop_dict, stop_order)
 
                 self.counts_dict[f'real_stop_{direction}'] += 1
@@ -786,7 +824,8 @@ class Agent:
                 session.store_ohlc(df, pair, timeframes)
 
         # cut off all data before what i'm interested in
-        stop_dt = datetime.fromtimestamp((stop_time / 1000) - 300).astimezone(timezone.utc)  # -300s for previous 5min
+        stop_time = uf.scale_number(stop_time, 10)
+        stop_dt = datetime.fromtimestamp(stop_time - 300).astimezone(timezone.utc)  # -300s for previous 5min
         df = df.loc[df.timestamp >= stop_dt].reset_index(drop=True)
 
         rsst_gd.stop()
@@ -951,6 +990,8 @@ class Agent:
 
         if isinstance(exit_row, pd.Timestamp):
             closed_time = int(exit_row.timestamp())
+            # if closed_time < 1_000_000_000_000:
+            #     closed_time *= 1000
 
         k16.stop()
 
@@ -1035,6 +1076,7 @@ class Agent:
                 self.plot_oco_trade(df, pair, state, rr, exe_price, target, stop,
                                     target_hit, stop_hit, closed_time)
             if target_hit or stop_hit:
+                # logger.debug(f"rcost {closed_time = }")
                 action = 'close' if target_hit else 'stop'
                 price = target if target_hit else stop
                 trade_dict = self.create_oco_trade_dict(pair, direction, price, base_size, action, closed_time, 'sim')
@@ -1176,9 +1218,9 @@ class Agent:
 
             # identify wanted positions by checking sim reasons (subbed with empty list for real positions)
             if 'low_score' not in pos['signal'].get('sim_reasons', []):
-                if not session.open_risk_records.get(f"{self.tf}_{self.name}"):
-                    session.open_risk_records[f"{self.tf}_{self.name}"] = []
-                session.open_risk_records[f"{self.tf}_{self.name}"].append(open_risk['r'])
+                if not session.open_risk_records.get(f"{self.id}"):
+                    session.open_risk_records[f"{self.id}"] = []
+                session.open_risk_records[f"{self.id}"].append(open_risk['r'])
 
             if 0 <= open_risk['r'] < self.indiv_r_limit:
                 continue
@@ -1186,6 +1228,10 @@ class Agent:
             # TODO i could check for failed stops here too by simply looking for positions with negative open risk.
             #  in these cases, perhaps i could create a signal with 'stop' as the action, then arrange for those signals
             #  to be sent to the close_position omf
+
+            pos_hard_stop = pos['position'].get('hard_stop')
+            trade_hard_stop = pos['trade'][-1]['hard_stop']
+            hard_stop = pos_hard_stop if pos_hard_stop else trade_hard_stop
 
             signal = {
                 'agent': self.id,
@@ -1196,7 +1242,7 @@ class Agent:
                 'action': 'tp',
                 'direction': direction,
                 'state': state,
-                'inval': float(pos['position']['hard_stop'])
+                'inval': float(hard_stop)
             }
 
             if current_value < session.min_size:
@@ -1220,91 +1266,28 @@ class Agent:
         reduce = max(ideal, fr_inc)
         return max((fr_prev - reduce), 0)
 
-    def get_pnls(self, direction: str, wanted: bool) -> dict:
-        """ retrieves the pnls of all closed (real and wanted sim) trades for the agent, then collates the pnls into a
-        dataframe, and calculates several moving averages on them. it then returns a dictionary of the latest row of
-        those moving averages"""
-
-        all_rpnls = []
-        for a, b in self.closed_trades.items():
-            trade_wanted = (b['trade'][0]['state'] == 'real') or (b['trade'][0]['wanted'])
-            right_direction = b['trade'][0]['direction'] == direction
-            if (trade_wanted == wanted) and right_direction:
-                rpnl = 0
-                for t in b['trade']:
-                    if t.get('rpnl'):
-                        rpnl += float(t['rpnl'])
-                all_rpnls.append((int(a), rpnl))
-        for a, b in self.closed_sim_trades.items():
-            trade_wanted = b['trade'][0]['wanted']
-            right_direction = b['trade'][0]['direction'] == direction
-            if (trade_wanted == wanted) and right_direction:
-                rpnl = 0
-                for t in b['trade']:
-                    if t.get('rpnl'):
-                        rpnl += float(t['rpnl'])
-                all_rpnls.append((int(a), rpnl))
-        rpnl_df = pd.DataFrame(all_rpnls, columns=['timestamp', 'rpnl'])
-
-        if len(rpnl_df) < 4:
-            return {'ema_4': 0, 'ema_8': 0, 'ema_16': 0, 'ema_32': 0, 'ema_64': 0, 'ema_128': 0,
-                    'ema_4_roc': 0, 'ema_8_roc': 0, 'ema_16_roc': 0, 'ema_32_roc': 0, 'ema_64_roc': 0, 'ema_128_roc': 0,
-                    'sum_4': 0, 'sum_8': 0, 'sum_16': 0, 'sum_32': 0, 'sum_64': 0, 'sum_128': 0}
-
-        rpnl_df = rpnl_df.sort_values('timestamp').reset_index(drop=True)
-        rpnl_df['ema_4'] = rpnl_df.rpnl.ewm(4).mean()
-        rpnl_df['ema_8'] = rpnl_df.rpnl.ewm(8).mean()
-        rpnl_df['ema_16'] = rpnl_df.rpnl.ewm(16).mean()
-        rpnl_df['ema_32'] = rpnl_df.rpnl.ewm(32).mean()
-        rpnl_df['ema_64'] = rpnl_df.rpnl.ewm(64).mean()
-        rpnl_df['ema_128'] = rpnl_df.rpnl.ewm(128).mean()
-        rpnl_df['ema_4_roc'] = rpnl_df.ema_4.ffill().pct_change()
-        rpnl_df['ema_8_roc'] = rpnl_df.ema_8.ffill().pct_change()
-        rpnl_df['ema_16_roc'] = rpnl_df.ema_16.ffill().pct_change()
-        rpnl_df['ema_32_roc'] = rpnl_df.ema_32.ffill().pct_change()
-        rpnl_df['ema_64_roc'] = rpnl_df.ema_64.ffill().pct_change()
-        rpnl_df['ema_128_roc'] = rpnl_df.ema_128.ffill().pct_change()
-        rpnl_df['sum_4'] = rpnl_df.rpnl.rolling(4).sum()
-        rpnl_df['sum_8'] = rpnl_df.rpnl.rolling(8).sum()
-        rpnl_df['sum_16'] = rpnl_df.rpnl.rolling(16).sum()
-        rpnl_df['sum_32'] = rpnl_df.rpnl.rolling(32).sum()
-        rpnl_df['sum_64'] = rpnl_df.rpnl.rolling(64).sum()
-        rpnl_df['sum_128'] = rpnl_df.rpnl.rolling(128).sum()
-        # TODO rolling sharpe, sortino and sqn. where a moving avg is needed, use emas so theres always a value
-
-        return rpnl_df.to_dict(orient='records')[-1]
-
-    def calc_rpnls(self):
-        self.pnls = dict(
-            spot_wanted=self.get_pnls('spot', True),
-            long_wanted=self.get_pnls('long', True),
-            short_wanted=self.get_pnls('short', True),
-            spot_unwanted=self.get_pnls('spot', False),
-            long_unwanted=self.get_pnls('long', False),
-            short_unwanted=self.get_pnls('short', False),
-        )
-
     def perf_stats(self, direction):
         d = 'uw_' if 'unwanted' in direction else ''
         perf_stats = {}
-        perf_stats[f'{d}perf_ema_4'] = self.pnls[direction]['ema_4']
-        perf_stats[f'{d}perf_ema_8'] = self.pnls[direction]['ema_8']
-        perf_stats[f'{d}perf_ema_16'] = self.pnls[direction]['ema_16']
-        perf_stats[f'{d}perf_ema_32'] = self.pnls[direction]['ema_32']
-        perf_stats[f'{d}perf_ema_64'] = self.pnls[direction]['ema_64']
-        perf_stats[f'{d}perf_ema_128'] = self.pnls[direction]['ema_128']
-        perf_stats[f'{d}perf_ema4_roc'] = self.pnls[direction]['ema_4_roc']
-        perf_stats[f'{d}perf_ema8_roc'] = self.pnls[direction]['ema_8_roc']
-        perf_stats[f'{d}perf_ema16_roc'] = self.pnls[direction]['ema_16_roc']
-        perf_stats[f'{d}perf_ema32_roc'] = self.pnls[direction]['ema_32_roc']
-        perf_stats[f'{d}perf_ema64_roc'] = self.pnls[direction]['ema_64_roc']
-        perf_stats[f'{d}perf_ema128_roc'] = self.pnls[direction]['ema_128_roc']
-        perf_stats[f'{d}perf_sum_4'] = self.pnls[direction]['sum_4']
-        perf_stats[f'{d}perf_sum_8'] = self.pnls[direction]['sum_8']
-        perf_stats[f'{d}perf_sum_16'] = self.pnls[direction]['sum_16']
-        perf_stats[f'{d}perf_sum_32'] = self.pnls[direction]['sum_32']
-        perf_stats[f'{d}perf_sum_64'] = self.pnls[direction]['sum_64']
-        perf_stats[f'{d}perf_sum_128'] = self.pnls[direction]['sum_128']
+        perf_stats['lr_ratio'] = self.pnls[direction].get('lr_ratio', 0)
+        # perf_stats[f'{d}perf_ema_4'] = self.pnls[direction]['ema_4']
+        # perf_stats[f'{d}perf_ema_8'] = self.pnls[direction]['ema_8']
+        # perf_stats[f'{d}perf_ema_16'] = self.pnls[direction]['ema_16']
+        # perf_stats[f'{d}perf_ema_32'] = self.pnls[direction]['ema_32']
+        # perf_stats[f'{d}perf_ema_64'] = self.pnls[direction]['ema_64']
+        # perf_stats[f'{d}perf_ema_128'] = self.pnls[direction]['ema_128']
+        # perf_stats[f'{d}perf_ema4_roc'] = self.pnls[direction]['ema_4_roc']
+        # perf_stats[f'{d}perf_ema8_roc'] = self.pnls[direction]['ema_8_roc']
+        # perf_stats[f'{d}perf_ema16_roc'] = self.pnls[direction]['ema_16_roc']
+        # perf_stats[f'{d}perf_ema32_roc'] = self.pnls[direction]['ema_32_roc']
+        # perf_stats[f'{d}perf_ema64_roc'] = self.pnls[direction]['ema_64_roc']
+        # perf_stats[f'{d}perf_ema128_roc'] = self.pnls[direction]['ema_128_roc']
+        # perf_stats[f'{d}perf_sum_4'] = self.pnls[direction]['sum_4']
+        # perf_stats[f'{d}perf_sum_8'] = self.pnls[direction]['sum_8']
+        # perf_stats[f'{d}perf_sum_16'] = self.pnls[direction]['sum_16']
+        # perf_stats[f'{d}perf_sum_32'] = self.pnls[direction]['sum_32']
+        # perf_stats[f'{d}perf_sum_64'] = self.pnls[direction]['sum_64']
+        # perf_stats[f'{d}perf_sum_128'] = self.pnls[direction]['sum_128']
 
         return perf_stats
 
@@ -1450,9 +1433,9 @@ class Agent:
                     'conf_s': signal['confidence_s'],
                     'inval_ratio': signal['inval_ratio'],
                     'inval_dist': signal['inval_dist'],
-                    'mkt_rank_1d': signal.get('market_rank_1d', 0.5),
-                    'mkt_rank_1w': signal.get('market_rank_1w', 0.5),
-                    'mkt_rank_1m': signal.get('market_rank_1m', 0.5),
+                    'mkt_rank_1d': 0.5 if signal['market_rank_1d'] == np.nan else signal['market_rank_1d'],
+                    'mkt_rank_1w': 0.5 if signal['market_rank_1w'] == np.nan else signal['market_rank_1w'],
+                    'mkt_rank_1m': 0.5 if signal['market_rank_1m'] == np.nan else signal['market_rank_1m'],
                     'rr': signal.get('rr')
                     }
 
@@ -1514,60 +1497,184 @@ class Agent:
 
         return score
 
-    def perf_model_prediction(self, direction):
+    # def perf_model_prediction(self, direction):
+    #
+    #     if direction == 'long' and self.perf_score_validity_l == 0:
+    #         # logger.debug(f"{self.id} perf prediction {direction} short circuit, score 0")
+    #         return 0
+    #     elif direction == 'short' and self.perf_score_validity_s == 0:
+    #         # logger.debug(f"{self.id} perf prediction {direction} short circuit, score 0")
+    #         return 0
+    #
+    #     perf_stats_w = self.perf_stats_lw if direction == 'long' else self.perf_stats_sw
+    #     perf_stats_uw = self.perf_stats_luw if direction == 'long' else self.perf_stats_suw
+    #
+    #     features = {'ignore': [0]} | perf_stats_w | perf_stats_uw  # the ignore is just to give it a second dimension
+    #     data = pd.DataFrame().from_dict(data=features, orient='columns')
+    #
+    #     try:
+    #         if direction == 'long':
+    #             long_data = data[self.long_perf_info['features']]
+    #             long_data = self.long_perf_scaler.transform(long_data)
+    #             long_data = pd.DataFrame(data=long_data, columns=self.long_perf_info['features'])
+    #             score = float(self.long_perf_model.predict_proba(long_data)[-1, 1])
+    #             logger.debug(f"{self.id} {direction} ml perf score pre-clipping: {score:.1%}")
+    #             logger.debug(f"based on: {self.long_perf_info['features']}\n")
+    #         else:
+    #             short_data = data[self.short_perf_info['features']]
+    #             short_data = self.short_perf_scaler.transform(short_data)
+    #             short_data = pd.DataFrame(data=short_data, columns=self.short_perf_info['features'])
+    #             score = float(self.short_perf_model.predict_proba(short_data)[-1, 1])
+    #             logger.debug(f"{self.id} {direction} ml perf score pre-clipping: {score:.1%}")
+    #             logger.debug(f"based on: {self.short_perf_info['features']}\n")
+    #     except ValueError:
+    #         logger.exception(f"{self.id} ")
+    #
+    #     return min(1.0, max(0.001, score))
+    #
+    # def perf_manual_prediction(self, direction):
+    #     perf_ema4 = self.pnls[direction]['ema_4']
+    #     perf_ema8 = self.pnls[direction]['ema_8']
+    #     perf_ema16 = self.pnls[direction]['ema_16']
+    #     perf_ema32 = self.pnls[direction]['ema_32']
+    #     perf_ema64 = self.pnls[direction]['ema_64']
+    #     perf_ema128 = self.pnls[direction]['ema_128']
+    #
+    #     perf_score = 0
+    #     if self.tf in {'15m', '30m'}:
+    #         perf_score = ((perf_ema128 > 0.5) + (perf_ema64 > 0.5) + (perf_ema32 > 0.5)) / 3
+    #     elif self.tf in {'1h', '4h'}:
+    #         perf_score = ((perf_ema32 > 0.5) + (perf_ema16 > 0.5) + (perf_ema8 > 0.5)) / 3
+    #     elif self.tf in {'12h', '1d'}:
+    #         perf_score = ((perf_ema16 > 0.5) + (perf_ema8 > 0.5) + (perf_ema4 > 0.5)) / 3
+    #
+    #     logger.debug(f"{self.id} perdict_perf_manual {direction} score: {perf_score:.1%}")
+    #
+    #     return perf_score
 
-        if direction == 'long' and self.perf_score_validity_l == 0:
-            # logger.debug(f"{self.id} perf prediction {direction} short circuit, score 0")
+    # performance scores -------------------------------------------------------
+
+    # performance metrics ------------------------------------------------------
+
+    def calc_rpnls(self):
+        self.pnls = dict(
+            spot_wanted=self.get_pnls('spot', True),
+            long_wanted=self.get_pnls('long', True),
+            short_wanted=self.get_pnls('short', True),
+            spot_unwanted=self.get_pnls('spot', False),
+            long_unwanted=self.get_pnls('long', False),
+            short_unwanted=self.get_pnls('short', False),
+        )
+
+    def get_pnls(self, direction: str, wanted: bool) -> dict:
+        """ retrieves the pnls of all closed (real and wanted sim) trades for the agent, then collates the pnls into a
+        dataframe, and calculates several moving averages on them. it then returns a dictionary of the latest row of
+        those moving averages"""
+
+        all_rpnls = []
+        for a, b in self.closed_trades.items():
+            if b['trade'][0]['direction'] == direction:
+                rpnl = sum([float(t.get('rpnl', 0.0)) for t in b['trade']])
+                all_rpnls.append((int(a), rpnl))
+        for a, b in self.closed_sim_trades.items():
+            trade_wanted = b['trade'][0]['wanted'] == wanted
+            right_direction = b['trade'][0]['direction'] == direction
+            if trade_wanted and right_direction:
+                rpnl = sum([float(t.get('rpnl', 0.0)) for t in b['trade']])
+                all_rpnls.append((int(a), rpnl))
+
+        rpnl_df = pd.DataFrame(all_rpnls, columns=['timestamp', 'rpnl'])
+
+        if len(rpnl_df) < 7:
+            return {'lr_ratio': 0}
+
+        rpnl_df = rpnl_df.sort_values('timestamp').reset_index(drop=True)
+
+        rpnl_df['lr_ratio'] = self.lr_ratio(rpnl_df.rpnl, 7)
+
+        # TODO put any other performance metrics here so they are recorded together in the signals
+
+        return rpnl_df.to_dict(orient='records')[-1]
+
+    def lr_ratio(self, s: pd.Series, lookback: int) -> pd.Series:
+        """linear regression ratio is the slope of the regression divided by the r2 score. it is applied on a rolling
+        window so as to be an evolving score representing the trend strength of the input series. i designed it as a
+        performance metric for agents"""
+
+        cum_rpnl = s.expanding().sum()
+        scores = [0] * lookback
+        for i in s.index[lookback:]:
+            X = np.arange(lookback).reshape(-1, 1)
+            y = cum_rpnl[i - lookback: i]
+            y_scale = len(y)
+            y_span = max(y) - min(y)
+            y = y_scale * (y - min(y)) / y_span
+
+            lr = LinearRegression().fit(X, y)
+            slope = min(max(lr.coef_[0], 0), 1)
+            r2 = min(max(lr.score(X, y), 0), 1)
+
+            scores.append(slope * r2)
+
+        if len(scores) == len(cum_rpnl):
+            lr_scores = pd.Series(scores).clip(lower=0, upper=1)
+        else:
+            lr_scores = pd.Series([0] * len(cum_rpnl))
+
+        return lr_scores
+
+    def ross_ratio(self, s: pd.Series, weight: float, n: int) -> pd.Series:
+        """
+        similar to sortino but rather than excluding upward variance altogether, upward variance is downweighted by a specified factor.
+        the problem with the sortino ratio is that it requires a decent number of periods with negative returns before a score can be calculated
+
+        calculation:
+        first the mean is calculated on all non-zero values of the series
+        then the positive values are all scaled down by the weighting factor
+        then the standard deviation is calculated on the modified series
+        lastly the ratio of mean / std is returned
+        """
+
+        denom = min(n, len(s))
+        ann = 365 / denom
+        s = s.loc[s.abs().gt(0)]
+        s_mean = s.rolling(n).mean()
+        s = s.where(s < 0, s * weight)
+        s_std = s.rolling(n).std()
+
+        return (s_mean * ann / (s_std * np.sqrt(ann)))
+
+    def ross_ratio_score(self, direction: str, weight: float, n: int, granularity: int) -> pd.Series:
+        """returns """
+
+        if len(self.perf_log) == 0:
             return 0
-        elif direction == 'short' and self.perf_score_validity_s == 0:
-            # logger.debug(f"{self.id} perf prediction {direction} short circuit, score 0")
+
+        perf_stats = [{'time': d['timestamp'],
+                       'wanted': d[f'wanted_rpnl_{direction}']
+                       } for d in self.perf_log]
+        perf_df = pd.DataFrame(perf_stats)
+
+        # organise dataframe
+        perf_df['time'] = pd.to_datetime(perf_df.time, format='%d/%m/%y %H:%M')
+        perf_df = perf_df.set_index('time', drop=True)
+        df = perf_df.sort_index()
+        df = df.fillna(0)
+
+        rc_ratio = self.ross_ratio(df.wanted, weight, n)
+
+        rc_scores: pd.Series = (
+                                   rc_ratio.pct_change()  # transform absolute values into relative values (relative to previous)
+                                   .loc[rc_ratio.abs().gt(
+                                       0)]  # remove any periods where there was no change from previous
+                                   .gt(0)  # transform positive values into 1 and negative values into 0
+                                   .rolling(
+                                       granularity).sum()) / granularity  # proportion of the last x periods that were up
+
+        if rc_scores.empty:
             return 0
-
-        perf_stats_w = self.perf_stats_lw if direction == 'long' else self.perf_stats_sw
-        perf_stats_uw = self.perf_stats_luw if direction == 'long' else self.perf_stats_suw
-
-        features = {'ignore': [0]} | perf_stats_w | perf_stats_uw  # the ignore is just to give it a second dimension
-        data = pd.DataFrame().from_dict(data=features, orient='columns')
-
-        try:
-            if direction == 'long':
-                long_data = data[self.long_perf_info['features']]
-                long_data = self.long_perf_scaler.transform(long_data)
-                long_data = pd.DataFrame(data=long_data, columns=self.long_perf_info['features'])
-                score = float(self.long_perf_model.predict_proba(long_data)[-1, 1])
-                logger.debug(f"{self.id} {direction} ml perf score pre-clipping: {score:.1%}")
-                logger.debug(f"based on: {self.long_perf_info['features']}\n")
-            else:
-                short_data = data[self.short_perf_info['features']]
-                short_data = self.short_perf_scaler.transform(short_data)
-                short_data = pd.DataFrame(data=short_data, columns=self.short_perf_info['features'])
-                score = float(self.short_perf_model.predict_proba(short_data)[-1, 1])
-                logger.debug(f"{self.id} {direction} ml perf score pre-clipping: {score:.1%}")
-                logger.debug(f"based on: {self.short_perf_info['features']}\n")
-        except ValueError:
-            logger.exception(f"{self.id} ")
-
-        return min(1.0, max(0.001, score))
-
-    def perf_manual_prediction(self, direction):
-        perf_ema4 = self.pnls[direction]['ema_4']
-        perf_ema8 = self.pnls[direction]['ema_8']
-        perf_ema16 = self.pnls[direction]['ema_16']
-        perf_ema32 = self.pnls[direction]['ema_32']
-        perf_ema64 = self.pnls[direction]['ema_64']
-        perf_ema128 = self.pnls[direction]['ema_128']
-
-        perf_score = 0
-        if self.tf in {'15m', '30m'}:
-            perf_score = ((perf_ema128 > 0.5) + (perf_ema64 > 0.5) + (perf_ema32 > 0.5)) / 3
-        elif self.tf in {'1h', '4h'}:
-            perf_score = ((perf_ema32 > 0.5) + (perf_ema16 > 0.5) + (perf_ema8 > 0.5)) / 3
-        elif self.tf in {'12h', '1d'}:
-            perf_score = ((perf_ema16 > 0.5) + (perf_ema8 > 0.5) + (perf_ema4 > 0.5)) / 3
-
-        logger.debug(f"{self.id} perdict_perf_manual {direction} score: {perf_score:.1%}")
-
-        return perf_score
+        else:
+            return rc_scores[-1]
 
     # signal scores -------------------------------------------------------------
 
@@ -1605,9 +1712,9 @@ class Agent:
         current_base_size = v['position']['base_size']
         entry_price = float(v['position']['entry_price'])
 
-        open_time = int(v['position']['open_time'])
-        now = datetime.now(timezone.utc)
-        duration = round((now.timestamp() * 1000 - open_time) / 3600, 1)
+        open_time = uf.scale_number(int(v['position']['open_time']), 10)
+        now = datetime.now(timezone.utc).timestamp()
+        duration = round((now - open_time) / 3600, 1)
 
         direction = v['position']['direction']
 
@@ -2052,8 +2159,6 @@ class Agent:
         else:
             stop_order = funcs.set_stop_M(session, pair, stop_size, be.SIDE_BUY, stp)
 
-        # TODO if stop order ids start going missing, it might be because i commented this line (16/11/2023)
-        # open_order['stop_id'] = stop_order.get('orderId')
         self.open_trades[pair]['position']['hard_stop'] = str(stp)
         self.open_trades[pair]['position']['init_hard_stop'] = str(stp)
         self.open_trades[pair]['position']['stop_id'] = stop_order.get('orderId')
@@ -2640,8 +2745,8 @@ class Agent:
             'timestamp': int(now.timestamp() * 1000),
             'utc_datetime': now.strftime(timestring),
             'state': 'sim',
-            'fee': '0',
-            'fee_currency': 'BNB',
+            'fee': usdt_size * 0.00075,
+            'fee_currency': 'USDT',
             'wanted': wanted}
 
         pos_record = {
@@ -2702,8 +2807,8 @@ class Agent:
                     'utc_datetime': now.strftime(timestring),
                     'action': 'tp',
                     'direction': direction,
-                    'fee': '0',
-                    'fee_currency': 'BNB',
+                    'fee': float(usdt_size) * 0.00075,
+                    'fee_currency': 'USDT',
                     'state': 'sim'}
         self.sim_trades[pair]['trade'].append(tp_order)
 
@@ -2782,8 +2887,8 @@ class Agent:
                        'utc_datetime': now.strftime(timestring),
                        'action': 'close',
                        'direction': direction,
-                       'fee': '0',
-                       'fee_currency': 'BNB',
+                       'fee': sim_bal * price * 0.00075,
+                       'fee_currency': 'USDT',
                        'state': 'sim'}
 
         if self.oco:
@@ -2809,7 +2914,7 @@ class Agent:
         df = self.get_data(session, pair, session.timeframes, trade_start)
 
         # cut off all data after what i'm interested in
-        end_dt = datetime.fromtimestamp((trade_end / 1000) + 300).astimezone(timezone.utc)  # +300s for subsequent 5min
+        end_dt = datetime.fromtimestamp((uf.scale_number(trade_end, 10)) + 300).astimezone(timezone.utc)  # +300s for subsequent 5min
         df = df.loc[df.timestamp <= end_dt].reset_index(drop=True)
 
         fig = go.Figure(data=go.Ohlc(x=df['timestamp'],
@@ -2943,7 +3048,6 @@ class Agent:
 
         return stop_price
 
-
     def get_fr_size(self, session, signal) -> tuple[float, float]:
         """calculates the desired position size in base or quote denominations using the total
         account balance, current fixed-risk setting, and the distance to invalidation of the trade"""
@@ -2957,7 +3061,7 @@ class Agent:
 
         perf_score = min(1, signal['perf_score'])
 
-        usdt_size = (balance * session.frac_risk_limit * perf_score) / distance
+        usdt_size = (balance * self.fr_max * perf_score) / distance
         base_size = float(usdt_size / price)
 
         jn.stop()
@@ -2981,7 +3085,6 @@ class Agent:
 
         jn.stop()
         return base_size, usdt_size
-
 
     def get_kelly_size(self, session, signal) -> tuple[float, float]:
         """calculates the optimum position size based on the kelly criterion. can only be used on signals that have rr"""
@@ -3234,7 +3337,8 @@ class Agent:
         action = ph.get('action')
 
         if ph['completed'] is None:
-            if price > ph['stop_price']:
+            if ((direction == 'long' and price > ph['stop_price']) or
+                    (direction == 'short' and price < ph['stop_price'])):
                 self.move_api_stop(session, pair, direction, ph['stop_price'], pos_record, stage=1)
             elif price > self.open_trades[pair]['position']['hard_stop']:
                 self.close_real_full_M(session, pair, direction, action)
@@ -3242,8 +3346,10 @@ class Agent:
                 del self.open_trades[pair]['placeholder']
 
         elif ph['completed'] == 'clear_stop':
-            if price > ph['stop_price']:
-                self.move_api_stop(session, pair, direction, ph['stop_price'], pos_record, stage=2)
+            old_stop = float(self.open_trades[pair]['trade'][-1]['hard_stop'])
+            if ((direction == 'long' and price > old_stop) or
+                    (direction == 'short' and price < old_stop)):
+                self.move_api_stop(session, pair, direction, old_stop, pos_record, stage=2)
             else:
                 self.close_real_full_M(session, pair, direction, action)
 
@@ -3334,43 +3440,35 @@ class TrailFractals(Agent):
 
         # Long model
         df['r_pct'] = df.long_r_pct
-        long_features = df[self.long_info['features']]
-        # long_features, _, cols = mlf.transform_columns(long_features, long_features)
-        # long_features = pd.DataFrame(long_features, columns=cols)
-        long_features_scaled = self.long_scaler.transform(long_features)
-        # long_features = long_features[-1, :]
 
-        long_X = pd.DataFrame(long_features_scaled, columns=self.long_info['features']).iloc[-2:, :]
-        # long_X = np.array(pd.Series(long_X.iloc[-1])).reshape(1, -1)
+        # long model
+        long_features = df[self.long_info['features']]
         try:
+            long_features_scaled = self.long_scaler.transform(long_features)
+            long_X = pd.DataFrame(long_features_scaled, columns=self.long_info['features']).iloc[-2:, :]
             long_confidence = self.long_model.predict_proba(long_X, )[-1, 1]
         except ValueError as e:
             # logger.exception('NaN in prediction set')
             print(f'\n{pair}\n')
             logger.error(e)
             print(long_features.tail())
-            print(long_features_scaled[-3:, :])
             long_confidence = 0
 
         # Short model
         df = df.drop('long_r_pct', axis=1)
         df['r_pct'] = df.short_r_pct
-        short_features = df[self.short_info['features']]
-        # short_features, _, cols = mlf.transform_columns(short_features, short_features)
-        # short_features = pd.DataFrame(short_features, columns=cols)
-        short_features_scaled = self.short_scaler.transform(short_features)
-        # short_features = short_features[-1, :]
 
-        short_X = pd.DataFrame(short_features_scaled, columns=self.short_info['features']).iloc[-2:, :]
-        # short_X = np.array(pd.Series(short_X.iloc[-1])).reshape(1, -1)
+        # short model
+        short_features = df[self.short_info['features']]
         try:
+            short_features_scaled = self.short_scaler.transform(short_features)
+            short_X = pd.DataFrame(short_features_scaled, columns=self.short_info['features']).iloc[-2:, :]
             short_confidence = self.short_model.predict_proba(short_X)[-1, 1]
         except ValueError as e:
             # logger.exception('NaN in prediction set')
             print(f'\n{pair}\n')
             logger.error(e)
             print(short_features.tail())
-            print(short_features_scaled[-3:, :])
             short_confidence = 0
 
         if price > df.frac_low.iloc[-1]:
@@ -3404,13 +3502,17 @@ class TrailFractals(Agent):
         signal_dict['conf_rf_usdt_s'] = short_confidence
         signal_dict['confidence_l'] = long_confidence
         signal_dict['confidence_s'] = short_confidence
-        signal_dict['market_rank_1d'] = session.pairs_data[pair]['market_rank_1d']
-        signal_dict['market_rank_1w'] = session.pairs_data[pair]['market_rank_1w']
-        signal_dict['market_rank_1m'] = session.pairs_data[pair]['market_rank_1m']
         signal_dict['width'] = self.width
         signal_dict['spacing'] = self.spacing
         signal_dict['training_pair_selection'] = self.pair_selection
         signal_dict['training_pairs_n'] = len(self.pairs)
+
+        mkt_rank_1d = (session.pairs_data[pair]['market_rank_1d'])
+        mkt_rank_1w = (session.pairs_data[pair]['market_rank_1w'])
+        mkt_rank_1m = (session.pairs_data[pair]['market_rank_1m'])
+        signal_dict['market_rank_1d'] = 0.5 if np.isnan(mkt_rank_1d) else mkt_rank_1d
+        signal_dict['market_rank_1w'] = 0.5 if np.isnan(mkt_rank_1w) else mkt_rank_1w
+        signal_dict['market_rank_1m'] = 0.5 if np.isnan(mkt_rank_1m) else mkt_rank_1m
 
         sig.stop()
 
@@ -3420,7 +3522,8 @@ class TrailFractals(Agent):
 class ChannelRun(Agent):
     """Machine learning strategy that uses OCO orders to manage trades"""
 
-    def __init__(self, session, tf: str, offset: int, lookback: int, entry: str, goal: str, pair_selection: str, num_pairs: int) -> None:
+    def __init__(self, session, tf: str, offset: int, lookback: int, entry: str, goal: str, pair_selection: str,
+                 num_pairs: int) -> None:
         t = Timer('Channel Run init')
         t.start()
         self.mode = 'margin'
@@ -3472,22 +3575,23 @@ class ChannelRun(Agent):
             entry_l = channel_position < 0.1
             entry_s = channel_position > 0.9
         elif self.entry == 'mid':
-            uptrend = df.close.ewm(int(self.lookback/2)).mean().iloc[-1] > df.close.ewm(self.lookback).mean().iloc[-1]
+            uptrend = df.close.ewm(int(self.lookback / 2)).mean().iloc[-1] > df.close.ewm(self.lookback).mean().iloc[-1]
             entry_l = (0.4 < channel_position < 0.6) and uptrend
             entry_s = (0.4 < channel_position < 0.6) and not uptrend
 
         atr_lb = 10
         df = ind.atr(df, atr_lb)
         atr = df[f"atr-{atr_lb}"].iloc[-1]
+        atr2 = atr * 2  # i want to space the invalidation out a bit more to protect myself from stop-runs
 
         if entry_l:
-            target = chan_high if self.goal == 'edge' else chan_mid
-            inval = chan_low - atr
+            target = (chan_high - atr) if self.goal == 'edge' else chan_mid
+            inval = (chan_low - atr2) if self.entry == 'edge' else ((chan_low + chan_mid) / 2)
             signal_dict['bias'] = 'bullish'
             model_created = self.long_info.get('created')
         elif entry_s:
-            target = chan_low if self.goal == 'edge' else chan_mid
-            inval = chan_high + atr
+            target = (chan_low + atr) if self.goal == 'edge' else chan_mid
+            inval = (chan_high + atr2) if self.entry == 'edge' else ((chan_high + chan_mid) / 2)
             signal_dict['bias'] = 'bearish'
             model_created = self.short_info.get('created')
         else:
@@ -3507,9 +3611,9 @@ class ChannelRun(Agent):
 
         # Long model
         long_features = df[self.long_info['features']]
-        long_features_scaled = self.long_scaler.transform(long_features)
-        long_X = pd.DataFrame(long_features_scaled, columns=self.long_info['features'])
         try:
+            long_features_scaled = self.long_scaler.transform(long_features)
+            long_X = pd.DataFrame(long_features_scaled, columns=self.long_info['features'])
             long_confidence = self.long_model.predict_proba(long_X.iloc[-3:, :])[-1, 1]
         except ValueError as e:
             # logger.exception('NaN in prediction set')
@@ -3517,15 +3621,13 @@ class ChannelRun(Agent):
             logger.error(e)
             print('long_features dataframe:')
             print(long_features.tail())
-            print('long_features_scaled array:')
-            print(long_features_scaled[-3:, :])
             long_confidence = 0
 
         # Short model
         short_features = df[self.short_info['features']]
-        short_features_scaled = self.short_scaler.transform(short_features)
-        short_X = pd.DataFrame(short_features_scaled, columns=self.short_info['features'])
         try:
+            short_features_scaled = self.short_scaler.transform(short_features)
+            short_X = pd.DataFrame(short_features_scaled, columns=self.short_info['features'])
             short_confidence = self.short_model.predict_proba(short_X.iloc[-3:, :])[-1, 1]
         except ValueError as e:
             # logger.exception('NaN in prediction set')
@@ -3533,13 +3635,21 @@ class ChannelRun(Agent):
             logger.error(e)
             print('short_features dataframe:')
             print(short_features.tail())
-            print('short_features_scaled array:')
-            print(short_features_scaled[-3:, :])
             short_confidence = 0
 
         created_dt = datetime.fromtimestamp(model_created).astimezone(timezone.utc)
         model_age = datetime.now(timezone.utc) - created_dt
 
+        mkt_rank_1d = (session.pairs_data[pair]['market_rank_1d'])
+        mkt_rank_1w = (session.pairs_data[pair]['market_rank_1w'])
+        mkt_rank_1m = (session.pairs_data[pair]['market_rank_1m'])
+
+        signal_dict['chan_high'] = chan_high
+        signal_dict['chan_low'] = chan_low
+        signal_dict['chan_mid'] = chan_mid
+        signal_dict['market_rank_1d'] = 0.5 if np.isnan(mkt_rank_1d) else mkt_rank_1d
+        signal_dict['market_rank_1w'] = 0.5 if np.isnan(mkt_rank_1w) else mkt_rank_1w
+        signal_dict['market_rank_1m'] = 0.5 if np.isnan(mkt_rank_1m) else mkt_rank_1m
         signal_dict['long_features'] = self.long_info['features']
         signal_dict['short_features'] = self.short_info['features']
         signal_dict['inval'] = stp
@@ -3552,12 +3662,8 @@ class ChannelRun(Agent):
         signal_dict['model_age'] = model_age.total_seconds()
         signal_dict['conf_rf_usdt_l'] = long_confidence
         signal_dict['conf_rf_usdt_s'] = short_confidence
-        signal_dict['confidence_l'] = long_confidence  # if theres more than one ml model, this is where i combine them
-        signal_dict[
-            'confidence_s'] = short_confidence  # so that i can have a universal 'confidence' for the secondary manual
-        signal_dict['market_rank_1d'] = session.pairs_data[pair]['market_rank_1d']
-        signal_dict['market_rank_1w'] = session.pairs_data[pair]['market_rank_1w']
-        signal_dict['market_rank_1m'] = session.pairs_data[pair]['market_rank_1m']
+        signal_dict['confidence_l'] = long_confidence  # if there's more than one ml model, this is where i combine them
+        signal_dict['confidence_s'] = short_confidence  # so i can have a universal 'confidence' for the risk model
         signal_dict['lookback'] = self.lookback
         signal_dict['training_pair_selection'] = self.pair_selection
         signal_dict['training_pairs_n'] = len(self.pairs)

@@ -19,34 +19,27 @@ script_start = time.perf_counter()
 
 logger = create_logger('setup_scanner')
 
+# TIMESTAMPS USED BY BINANCE ARE 13 DIGITS (MS)
+# TIMESTAMPS USED BY THE DATETIME MODULE ARE 10 DIGITS (S)
+# PANDAS CAN CONVERT EITHER FORMAT USING THE UNIT ARG
+
 ########################################################################################################################
 now_start = datetime.now(tz=timezone.utc).strftime("%d/%m/%y %H:%M")
 logger.debug(f'-+-+-+-+-+-+-+-+ {now_start} Running Setup Scanner +-+-+-+-+-+-+-+-\n')
-logger.info(f'-+-+-+-+-+-+-+-+ {now_start} Running Setup Scanner +-+-+-+-+-+-+-+-\n')
+logger.info(f'\n-+-+-+-+-+-+-+-+ {now_start} Running Setup Scanner +-+-+-+-+-+-+-+-\n')
 
-session = sessions.TradingSession(0.03, 0.003, 3, True)
+session = sessions.TradingSession(0.04, 0.004, 4, True)
 
 # initialise agents
 agents = []
 for timeframe, offset, active_agents in session.timeframes:
     if 'TrailFractals' in active_agents:
         agents.extend([
-                TrailFractals(session, timeframe, offset, 5, 2, '1d_volumes', 30),
-                TrailFractals(session, timeframe, offset, 5, 2, '1w_volumes', 30),
+                TrailFractals(session, timeframe, offset, 5, 2, 'volume_1d', 50),
             ])
     if 'ChannelRun' in active_agents:
         agents.extend([
-                ChannelRun(session, timeframe, offset, 50, 'edge', 'edge', '1w_volumes', 50),
-                # ChannelRun(session, timeframe, offset, 50, 'mid', 'edge', '1w_volumes', 50),
-                ChannelRun(session, timeframe, offset, 50, 'edge', 'mid', '1w_volumes', 50),
-
-                ChannelRun(session, timeframe, offset, 100, 'edge', 'edge', '1w_volumes', 50),
-                # ChannelRun(session, timeframe, offset, 100, 'mid', 'edge', '1w_volumes', 50),
-                ChannelRun(session, timeframe, offset, 100, 'edge', 'mid', '1w_volumes', 50),
-
-                ChannelRun(session, timeframe, offset, 200, 'edge', 'edge', '1w_volumes', 50),
-                # ChannelRun(session, timeframe, offset, 200, 'mid', 'edge', '1w_volumes', 50),
-                ChannelRun(session, timeframe, offset, 200, 'edge', 'mid', '1w_volumes', 50),
+                ChannelRun(session, timeframe, offset, 200, 'edge', 'mid', 'volume_1d', 50),
             ])
 
 agents = {a.id: a for a in agents}
@@ -69,6 +62,7 @@ for agent in agents.values():
         agent.record_stopped_trades(session, session.timeframes)
         agent.record_stopped_sim_trades(session, session.timeframes)
         real_sim_tps_closes.extend(agent.check_open_risk(session))
+    real_sim_tps_closes.extend(agent.check_stale_trades(session))
     agent.max_positions = agent.set_max_pos()
     agent.total_r_limit = agent.max_positions * 1.7  # TODO need to update reduce_risk and run it before/after set_fixed_ris
 session.save_open_risk_stats()
@@ -344,8 +338,9 @@ logger.debug(f"{len(checked_signals) = }")
 
 for signal in checked_signals:
     # logger.debug('')
-    if agents[signal['agent']].oco:
-        # logger.debug(f"Ignoring {signal['action']} signal for {agents[signal['agent']].id}")
+    if (signal['mode'] == 'oco') and (signal['reason'] != 'stale'):
+        logger.debug("Ignoring oco tp/close signal:")
+        logger.debug(pformat(signal))
         continue
 
     # if signal['state'] == 'real':
@@ -370,11 +365,11 @@ tp_close_took = tp_close_end - tp_close_start
 
 logger.debug(f"-+-+-+-+-+-+-+-+-+-+-+-+-+-+- Calculating Signal Scores -+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n")
 
-risk_validity, perf_validity = 30, 30
 # calculate agent perf scores
+risk_validity, perf_validity = 30, 30
 for agent in agents.values():
-    agent.use_ml_perf_l = agent.perf_score_validity_l >= perf_validity
-    agent.use_ml_perf_s = agent.perf_score_validity_s >= perf_validity
+    # agent.use_ml_perf_l = agent.perf_score_validity_l >= perf_validity
+    # agent.use_ml_perf_s = agent.perf_score_validity_s >= perf_validity
 
     agent.calc_rpnls()
 
@@ -385,15 +380,15 @@ for agent in agents.values():
     agent.perf_stats_suw = agent.perf_stats('short_unwanted')
 
     # make predictions
-    agent.perf_score_ml_l = agent.perf_model_prediction('long')
-    agent.perf_score_ml_s = agent.perf_model_prediction('short')
-    agent.perf_score_old_l = 0  # agent.perf_manual_prediction('long_wanted')
-    agent.perf_score_old_s = 0  # agent.perf_manual_prediction('short_wanted')
-    agent.perf_score_l = agent.perf_score_ml_l if agent.use_ml_perf_l else agent.perf_score_old_l
-    agent.perf_score_s = agent.perf_score_ml_s if agent.use_ml_perf_s else agent.perf_score_old_s
+    agent.perf_score_lr_l = agent.perf_stats_lw['lr_ratio']
+    agent.perf_score_lr_s = agent.perf_stats_sw['lr_ratio']
+    agent.perf_score_rc_l = agent.ross_ratio_score('long', 0.01, n, 10)
+    agent.perf_score_rc_s = agent.ross_ratio_score('short', 0.01, n, 10)
+    agent.perf_score_l = (agent.perf_score_rc_l + agent.perf_score_lr_l) / 2
+    agent.perf_score_s = (agent.perf_score_rc_s + agent.perf_score_lr_s) / 2
 
-for agent in agents.values():
-    logger.debug(f"{agent.id} ml perf scores: Long: {agent.perf_score_ml_l:.1%}, Short: {agent.perf_score_ml_s:.1%}")
+# for agent in agents.values():
+#     logger.debug(f"{agent.id} ml perf scores: Long: {agent.perf_score_ml_l:.1%}, Short: {agent.perf_score_ml_s:.1%}")
 
 logger.debug('creating signal scores:')
 while processed_signals['unassigned']:
@@ -409,12 +404,10 @@ while processed_signals['unassigned']:
 
     signal['perf_score'] = (agents[signal['agent']].perf_score_l if signal['direction'] == 'long'
                             else agents[signal['agent']].perf_score_s)
-    signal['perf_score_ml'] = (agents[signal['agent']].perf_score_ml_l if signal['direction'] == 'long'
-                               else agents[signal['agent']].perf_score_ml_s)
-    signal['perf_validity'] = (agents[signal['agent']].perf_score_validity_l if signal['direction'] == 'long'
-                               else agents[signal['agent']].perf_score_validity_s)
-    signal['perf_score_old'] = (agents[signal['agent']].perf_score_old_l if signal['direction'] == 'long'
-                                else agents[signal['agent']].perf_score_old_s)
+    signal['perf_score_lr'] = (agents[signal['agent']].perf_score_lr_l if signal['direction'] == 'long'
+                               else agents[signal['agent']].perf_score_lr_s)
+    signal['perf_score_rc'] = (agents[signal['agent']].perf_score_rc_l if signal['direction'] == 'long'
+                                else agents[signal['agent']].perf_score_rc_s)
 
     # record risk model score
     signal['score_ml'] = agents[signal['agent']].risk_model_prediction(signal)
@@ -427,8 +420,7 @@ while processed_signals['unassigned']:
     signal['base_size'], signal['quote_size'] = agents[signal['agent']].get_fr_size(session, signal)
 
     logger.info(f"{signal['agent']}, {signal['pair']}, {signal['tf']}, {signal['direction']}, secondary validity: "
-                f"{signal['validity']}, score: {signal['score']:.1%}, perf score ml: {signal['perf_score_ml']:.1%}, "
-                f"perf_score_old: {signal['perf_score_old']:.1%}")
+                f"{signal['validity']}, score: {signal['score']:.1%}, perf_score_rc: {signal['perf_score_rc']:.1%}")
 
     score_threshold = 0.6
     sim_position = agents[signal['agent']].sim_pos.get(signal['asset'], {'direction': 'flat'})['direction']
@@ -498,9 +490,9 @@ while unassigned:
         sim_reasons.append('not_a_margin_pair')
 
     if s['direction'] in {'spot', 'long'}:
-        usdt_depth, _ = funcs.get_depth(session, s['pair'])
+        usdt_depth, _ = funcs.get_depth(session, s)
     else:
-        _, usdt_depth = funcs.get_depth(session, s['pair'])
+        _, usdt_depth = funcs.get_depth(session, s)
 
     if usdt_depth == 0:
         sim_reasons.append('too_much_spread')
@@ -544,11 +536,11 @@ while unassigned:
         processed_signals['sim_open'].append(s)
     else:
         pfrd = quote_size * abs(1 - s['inval_ratio'])
-        fractional_risk = balance * session.frac_risk_limit
+        fractional_risk = balance * agents[s['agent']].fr_max
         if pfrd > fractional_risk:
             r = fractional_risk / pfrd
             quote_size = quote_size * r
-            logger.debug(f"Reducing size because PFRD was greater than {session.frac_risk_limit:.1%} of account, new "
+            logger.info(f"Reducing size because PFRD was greater than {agents[s['agent']].fr_max:.1%} of account, new "
                         f"quote size: {quote_size}, inval ratio: {s['inval_ratio']}, pfrd: {pfrd:.2f}.")
         or_limits[agent.id] += r
         pos_limits[agent.id] += 1
