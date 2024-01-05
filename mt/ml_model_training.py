@@ -130,10 +130,10 @@ def backtest_oco(df_0, side, lookback, entry_trig, goal, trim_ohlc=1600):
 
         results.append(row_data | row_res)
 
-        msg = (f"trade lifespans getting close to trimmed ohlc length ({trim_ohlc = }), {exit_row = }, {len(df) = } "
-               f"({exit_row / len(df):.1%})")
+        # msg = (f"trade lifespans getting close to trimmed ohlc length ({trim_ohlc = }), {exit_row = }, {len(df) = } "
+        #        f"({exit_row / len(df):.1%})")
         if exit_row / len(df) > 0.9:
-            print(msg)
+            # print(msg)
             count += 1
 
         exit_idxs.append(exit_row)  # this is to look at the distributions of how much trimmed ohlc data is being used
@@ -158,8 +158,8 @@ def channel_run_entries(df, lookback, entry):
     df[f'channel_position_{lookback}'] = (df.close - df[f"ll_{lookback}"]) / (df[f"hh_{lookback}"] - df[f"ll_{lookback}"])
 
     if entry == 'edge':
-        df['entry_l'] = df[f'channel_position_{lookback}'] < 0.1
-        df['entry_s'] = df[f'channel_position_{lookback}'] > 0.9
+        df['entry_l'] = (df[f'channel_position_{lookback}'] < 0.1) & df.uptrend
+        df['entry_s'] = (df[f'channel_position_{lookback}'] > 0.9) & ~df.uptrend
     elif entry == 'mid':
         df['entry_l'] = (df[f'channel_position_{lookback}'] > 0.4) & (df[f'channel_position_{lookback}'] < 0.6) & df.uptrend
         df['entry_s'] = (df[f'channel_position_{lookback}'] > 0.4) & (df[f'channel_position_{lookback}'] < 0.6) & ~df.uptrend
@@ -465,7 +465,7 @@ def load_secondary_data(strat_name, timeframe, strat_params, selection_method, n
     root_dir = '/home/ross/coding' if use_local_data else '/home/ross/coding/pi_1'
 
     records_path = Path(f"{root_dir}/modular_trader/records/{strat_name}_{timeframe}_None_"
-                        f"{'_'.join([str(sp) for sp in strat_params])}_{selection_method}_{num_pairs}")
+                        f"{'_'.join([str(sp) for sp in strat_params])}_{selection_method}")
     logger.debug(records_path)
 
     try:
@@ -488,16 +488,14 @@ def create_risk_dataset(strat_name: str, side: str, timeframe: str, strat_params
     final pnl of the trade was above zero, and win is True if the final pnl of the trade was above the threshold"""
 
     all_records = load_secondary_data(strat_name, timeframe, strat_params, selection_method, num_pairs)
-    logger.debug(f"risk data length: {len(all_records)}")
+    logger.debug(f"risk data length in: {len(all_records)}")
 
     observations = []
     for position in all_records.values():
         signal = position['signal']
 
         # remove irrelevant/unusable signals
-        if ((signal['direction'] != side) or
-                (signal.get('confidence_l') in [None, 0]) or
-                (signal.get('market_rank_1d') in [None, 0])):
+        if (signal['direction'] != side) or (signal.get('confidence_l') in [None, 0]):
             continue
 
         # sum up trade rpnl
@@ -513,9 +511,9 @@ def create_risk_dataset(strat_name: str, side: str, timeframe: str, strat_params
                 conf_l=signal['conf_rf_usdt_l'],
                 conf_s=signal['conf_rf_usdt_s'],
                 inval_dist=signal['inval_dist'],
-                mkt_rank_1d=signal['market_rank_1d'],
-                mkt_rank_1w=signal['market_rank_1w'],
-                mkt_rank_1m=signal['market_rank_1m'],
+                mkt_rank_1d=signal.get('market_rank_1d', 0.5),
+                mkt_rank_1w=signal.get('market_rank_1w', 0.5),
+                mkt_rank_1m=signal.get('market_rank_1m', 0.5),
                 pnl=pnl > 0,
                 win=pnl > thresh
             )
@@ -528,6 +526,7 @@ def create_risk_dataset(strat_name: str, side: str, timeframe: str, strat_params
             # logger.debug(pformat(position))
             continue
 
+    logger.debug(f"risk data length out: {len(observations)}")
     return pd.DataFrame(observations)
 
 
@@ -590,6 +589,9 @@ def create_perf_dataset(strat_name: str, side: str, timeframe: str, strat_params
 
 def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tuple, uid: int,
                   num_pairs: int, selection_method: str, history: int, num_trials: int):
+    """history refers to the minimum length of ohlc data available for a pair to be selected to be included in a
+    backtest, data_len refers to the length of ohlc data i actually load in for each pair during backtesting"""
+
     loop_start = time.perf_counter()
     print(f"\n*1* {datetime.now().strftime('%H:%M:%S')} Running {strat_name} primary model, {side}, {timeframe}, "
           f"{', '.join([str(p) for p in strat_params])}, {num_pairs}, {selection_method} primary")
@@ -626,7 +628,10 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
 
     # balance classes
     if (len(y.unique()) < 2) or (y.value_counts().iloc[0] < 20) or (y.value_counts().iloc[1] < 20):
-        logger.debug('stopped - not enough samples in both classes for cross-validation etc')
+        logger.debug(f'stopped - not enough samples in both classes for cross-validation etc, distribution of wins and '
+                     f'losses: {y.value_counts().iloc[0]} vs {y.value_counts().iloc[1]}')
+        if (y.value_counts().iloc[0] + y.value_counts().iloc[1]) != len(y):
+            logger.debug('WARNING: value counts of zeros and ones does not match total observations.')
         return  # need enough samples in each class for cross-validation etc
     # us = RandomUnderSampler(random_state=0)
     us = ClusterCentroids(random_state=0)
@@ -645,7 +650,8 @@ def train_primary(strat_name: str, side: str, timeframe: str, strat_params: tupl
     # X_test, X_val, y_test, y_val = train_test_split(X_test, y_test, train_size=0.5, random_state=11, stratify=y_test)
 
     if (y_test.value_counts().iloc[0] < 6) or (y_test.value_counts().iloc[1] < 6):
-        logger.debug('stopped - not enough samples in both classes for cross-validation etc')
+        logger.debug('stopped - not enough samples in both classes for cross-validation etc, distribution of wins and '
+                     f'losses: {y.value_counts().iloc[0]} vs {y.value_counts().iloc[1]}')
         return
 
     # feature scaling
@@ -727,7 +733,8 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
 
     # balance classes
     if (len(y.unique()) < 2) or (y.value_counts().iloc[0] < 20) or (y.value_counts().iloc[1] < 20):
-        logger.debug('stopped - not enough samples in both classes for cross-validation etc')
+        logger.debug('stopped - not enough samples in both classes for cross-validation etc, distribution of wins and '
+                     f'losses: {y.value_counts().iloc[0]} vs {y.value_counts().iloc[1]}')
         return  # need enough samples in each class for cross-validation etc
     # us = RandomUnderSampler(random_state=0)
     us = ClusterCentroids(random_state=0)
@@ -743,7 +750,8 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
     # split off validation set
     X_train, X_test, X_val, y_train, y_test, y_val = ttv_split(X, y)
     if (y_test.value_counts().iloc[0] < 6) or (y_test.value_counts().iloc[1] < 6):
-        logger.debug('stopped - not enough samples in both classes for cross-validation etc')
+        logger.debug('stopped - not enough samples in both classes for cross-validation etc, distribution of wins and '
+                     f'losses: {y_test.value_counts().iloc[0]} vs {y_test.value_counts().iloc[1]}')
         return
 
     # split off validation labels
@@ -816,7 +824,8 @@ if __name__ == '__main__':
         'long',
         'short'
     ]
-    timeframes = ['15m', '30m', '1h', '4h', '12h', '1d']
+    timeframes = ['15m', '30m', '1h', '4h', '12h',
+                  '1d']
     num_trials = 500
 
     # TODO i need to write a 'retrain_primary' function that just fits a model with preselected features and params to the
@@ -830,19 +839,21 @@ if __name__ == '__main__':
     for side, timeframe in product(sides, timeframes):
         print(f"\n\n{'** ** ** **':^120}\n{f'Testing {side} {timeframe}':^120}\n{'** ** ** **':^120}\n")
 
-        n = {'15m': 1500, '30m': 1000, '1h': 750, '4h': 500, '12h': 400, '1d': 365}  # how many tf periods to end up with
+        # this is to set a minimum length of ohlc data that each pair will be required to have
+        n = {'15m': 3000, '30m': 1500, '1h': 750, '4h': 400, '12h': 300, '1d': 201}  # how many tf periods to end up with
         mult = {'15m': 3, '30m': 6, '1h': 12, '4h': 48, '12h': 144, '1d': 288}  # how many 5m periods to get data_len
-        history = n[timeframe]# * mult[timeframe]
+        history = n[timeframe] * mult[timeframe]
 
         if timeframe in ['15m', '30m']:
+            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 100, 'volume_1d', history, num_trials))
+            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 100, 'volume_1d', 0.4, num_trials))
+
             all_stats.append(train_primary('channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 100, 'volume_1d', history, num_trials))
             all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 100, 'volume_1d', 0.4, num_trials))
-            # all_stats.append(train_secondary('perf', 'channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 100, 'volume_1d', 0.4, num_trials))
 
         if timeframe in ['4h', '12h', '1d']:
             all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), uid, 100, 'volume_1d', history, num_trials))
             all_stats.append(train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), uid, 100, 'volume_1d', 0.4, num_trials))
-            # all_stats.append(train_secondary('perf', 'trail_fractals', side, timeframe, (5, 2), uid, 100, 'volume_1d', 0.4, num_trials))
 
     all_stats = [record for record in all_stats if record is not None]
     stats_df = pd.DataFrame().from_records(all_stats)

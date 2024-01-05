@@ -145,7 +145,7 @@ def get_data(pair, timeframe, vwma_periods=24):
     return df
 
 
-def get_margin_pairs(method, num_pairs, data_len):
+def get_margin_pairs(method, num_pairs, history):
 
     start_pair = 0
     pairs = rank_pairs(method)
@@ -157,7 +157,7 @@ def get_margin_pairs(method, num_pairs, data_len):
     symbol_margin = {i['symbol']: i['isMarginTradingAllowed'] for i in exc_info['symbols'] if
                      i['quoteAsset'] == 'USDT'}
     pairs = [p for p in pairs if symbol_margin.get(p)
-             and (market_info.at[p, 'length'] > data_len)
+             and (market_info.at[p, 'length'] > history)
              and (market_info.at[p, 'volatility_1w'] > 0.0003)
              ]
 
