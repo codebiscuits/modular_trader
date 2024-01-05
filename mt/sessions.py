@@ -20,25 +20,31 @@ import json
 logger = create_logger('  sessions   ')
 
 
-def get_timeframes() -> list[tuple]:
+def get_timeframes(force_all) -> list[tuple]:
     """hour of day is multiplied by 4 so that the hourly timeframes can be compared with the quarter-hourly
     timeframes"""
 
-    qh = datetime.now(timezone.utc).minute // 15  # this represents which quarter-hour is current
-    hour = datetime.now(timezone.utc).hour
-    # qh, hour = 0, 0 # for testing all timeframes
+    if force_all:
+        qh, hour = 0, 0  # for testing all timeframes
+    else:
+        qh = datetime.now(timezone.utc).minute // 15  # this represents which quarter-hour is current
+        hour = datetime.now(timezone.utc).hour
 
-    mi = {1: ('15m', None, ('ChannelRun', )),
-         2: ('30m', None, ('ChannelRun', ))}
+    mi = {
+        1: ('15m', None, ('ChannelRun',)),
+        2: ('30m', None, ('ChannelRun',))
+    }
 
-    ho = {4: ('1h', None, ('TrailFractals', 'ChannelRun')),
-         16: ('4h', None, ('TrailFractals', 'ChannelRun')),
-         48: ('12h', None, ('TrailFractals', )),
-         96: ('1d', None, ('TrailFractals', ))}
+    ho = {
+        # 4: ('1h', None, ('TrailFractals',)),
+        16: ('4h', None, ('TrailFractals',)),
+        48: ('12h', None, ('TrailFractals',)),
+        96: ('1d', None, ('TrailFractals',))
+    }
 
     timeframes = (
             [mi[tf] for tf in mi if qh % tf == 0] +
-            [ho[tf] for tf in ho if ((hour*4) % tf == 0) and (qh % tf == 0)]
+            [ho[tf] for tf in ho if ((hour * 4) % tf == 0) and (qh % tf == 0)]
     )
 
     return timeframes
@@ -61,7 +67,7 @@ class TradingSession:
     min_length = 10000
     max_length = 0  # this gets updated by each agent init so it ends up enough for all of them
     quote_asset = 'USDT'
-    max_spread = 0.5
+    max_spread = {'15m': 0.02, '30m': 0.04, '1h': 0.08, '4h': 0.32, '12h': 0.1, '1d': 0.2}
     ohlc_tf = '5m'
     above_200_ema = set()
     below_200_ema = set()
@@ -85,7 +91,7 @@ class TradingSession:
     open_risk_records = {}
 
     @uf.retry_on_busy()
-    def __init__(self, max_allo, max_fr, max_lev, use_local_records):
+    def __init__(self, max_allo, max_fr, max_lev, use_local_records, force_all_tf=False):
         t = Timer('session init')
         t.start()
 
@@ -102,7 +108,7 @@ class TradingSession:
         self.running_on = identify_machine()
         self.live = True  # self.set_live()
         self.min_size = 20
-        self.timeframes = get_timeframes()
+        self.timeframes = get_timeframes(force_all_tf)
 
         # get data from exchange
         # self.get_cg_symbols()
@@ -135,10 +141,14 @@ class TradingSession:
             self.top_up_bnb_s(15)
         if self.margin_bal > 30:
             self.top_up_bnb_m(15)
-        logger.debug(f"Max size for new positions this session: {self.max_allocation * self.margin_bal * self.leverage:.2f} USDT\n")
-        logger.info(f"Max size for new positions this session: {self.max_allocation * self.margin_bal * self.leverage:.2f} USDT\n")
-        logger.debug(f"Max fixed-risk for new positions this session: {self.frac_risk_limit * self.margin_bal:.2f} USDT\n")
-        logger.info(f"Max fixed-risk for new positions this session: {self.frac_risk_limit * self.margin_bal:.2f} USDT\n")
+        logger.debug(
+            f"Max size for new positions this session: {self.max_allocation * self.margin_bal * self.leverage:.2f} USDT\n")
+        logger.info(
+            f"Max size for new positions this session: {self.max_allocation * self.margin_bal * self.leverage:.2f} USDT\n")
+        logger.debug(
+            f"Max fixed-risk for new positions this session: {self.frac_risk_limit * self.margin_bal:.2f} USDT\n")
+        logger.info(
+            f"Max fixed-risk for new positions this session: {self.frac_risk_limit * self.margin_bal:.2f} USDT\n")
 
         # load local data and configure settings
         self.mkt_data_r, self.mkt_data_w, self.records_r, self.records_w, self.ohlc_r, self.ohlc_w = self.data_paths()
@@ -435,7 +445,6 @@ class TradingSession:
 
         return mkt_data_r, mkt_data_w, records_r, records_w, ohlc_r, ohlc_w
 
-
     def set_ohlc_tf(self, tf):
         self.ohlc_tf = tf
 
@@ -539,7 +548,7 @@ class TradingSession:
             except json.JSONDecodeError:
                 or_stats_data = {}
 
-        or_stats_data[datetime.now().timestamp()] = self.open_risk_records
+        or_stats_data[int(datetime.now().timestamp())] = self.open_risk_records
 
         with open(or_stats_path, 'w') as file:
             json.dump(or_stats_data, file)
@@ -709,7 +718,7 @@ class TradingSession:
         # top up if needed
         if bnb_value < 10:
             if free_usdt > usdt_size:
-                # pb.push_note(now, 'Topping up margin BNB')
+                logger.info('Topping up margin BNB')
                 # uid weight of 6
                 order = self.client.create_margin_order(
                     symbol='BNBUSDT',
@@ -895,4 +904,3 @@ class TradingSession:
         self.check_open_spot_orders()
         self.check_open_margin_orders()
         self.count_algo_orders()  # kind of redundant since the above two methods create lists which could be counted
-

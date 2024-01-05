@@ -9,7 +9,7 @@ from mt.sessions import TradingSession
 from pathlib import Path
 
 sync_client = Client()
-session = TradingSession(0.01, 0.003, 1, True)
+session = TradingSession(0.1, 0.003, True, True)
 logger = create_logger('async_update_ohlc', 'async_update_ohlc')
 
 

@@ -26,6 +26,16 @@ ctx.prec = 12
 logger = create_logger('utility_funcs')
 
 
+def scale_number(n: [float | int], desired: int):
+    """takes a number n and counts the number of digits to the left of the decimal point, then scales it up or down as
+    needed to match the desired number of digits"""
+
+    n_digits = len(str(int(n)))
+    diff = desired - n_digits
+
+    return n * (10 ** diff)
+
+
 def open_risk_calc(session, record: dict, metric: str) -> dict | float:
     """calculates what would be lost from the current value if the position ended up getting stopped out, denominated
     in percent, USDT and R where percent is the percentage of the position's current value that would be lost and R is
@@ -41,8 +51,12 @@ def open_risk_calc(session, record: dict, metric: str) -> dict | float:
     init_stop = float(record['trade'][0]['hard_stop'])
     init_risk_pct = (init_price - init_stop) / init_price
 
+    pos_hard_stop = record['position'].get('hard_stop')
+    trade_hard_stop = record['trade'][-1].get('hard_stop')
+    hard_stop = pos_hard_stop if pos_hard_stop else trade_hard_stop
+
     current_price = session.pairs_data[pair]['price']
-    current_stop = float(record['position']['hard_stop'])
+    current_stop = float(hard_stop)
     current_risk_pct = (current_price - current_stop) / current_price
 
     base_size = float(record['position']['base_size'])
@@ -283,13 +297,14 @@ def log(session, agent) -> None:
                   'positions': agent.real_pos, 'trade_counts': agent.counts_dict,
                   'median_spread': stats.median(session.spreads.values()),
                   'quote_asset': session.quote_asset, 'max_allocation': session.max_allocation,
-                  'max_spread': session.max_spread, 'indiv_r_limit': agent.indiv_r_limit,
+                  'max_spread': session.max_spread[agent.tf], 'indiv_r_limit': agent.indiv_r_limit,
                   'total_r_limit': agent.total_r_limit, 'target_risk': agent.target_risk,
                   'max_pos': agent.max_positions, 'market_bias': session.market_bias,
                   'real_open_risk': agent.total_open_risk, 'wanted_open_risk': agent.wanted_open_risk,
                   'num_wanted_pos': num_wanted_pos, 'avg_open_size': stats.mean(session.trade_sizes),
-                  'max_open_size': max(session.trade_sizes), 'used_ml_perf_l': agent.use_ml_perf_l,
-                  'used_ml_perf_s': agent.use_ml_perf_s
+                  'max_open_size': max(session.trade_sizes),
+                  'perf_score_rc_l': agent.perf_score_rc_l, 'perf_score_rc_s': agent.perf_score_rc_s,
+                  'perf_score_lr_l': agent.perf_score_lr_l, 'perf_score_lr_s': agent.perf_score_lr_s,
                   }
 
     if agent.mode == 'spot':

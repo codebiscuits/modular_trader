@@ -54,11 +54,13 @@ def get_max_borrow(session, asset: str) -> float:
     return borrow
 
 
-def get_depth(session, pair: str) -> Tuple[float, float]:
+def get_depth(session, signal: dict) -> Tuple[float, float]:
     """returns the quantity (in the quote currency) that could be bought/sold
     within the % range of price set by the max_slip param"""
 
-    max_slip = session.max_spread
+    pair = signal['pair']
+    tf = signal['tf']
+    max_slip = session.max_spread[tf]
 
     price = session.pairs_data[pair]['price']
     book = session.get_book_data(pair)
@@ -699,7 +701,7 @@ def set_stop_M(session, pair: str, size: float, side: str, trigger: float) -> di
         except bx.BinanceAPIException as e:
             if e.code == -2010:
                 logger.exception(e)
-                now = datetime.now(timezone=timezone.utc).strftime('%d/%m/%y %H:%M')
+                now = datetime.now(tz=timezone.utc).strftime('%d/%m/%y %H:%M')
                 logger.error(f"current time: {now}, failed to set stop: {trigger} on {pair}")
                 if side == be.SIDE_SELL:
                     real_curr_price = float(session.client.get_orderbook_ticker(symbol=pair)['bidPrice'])
