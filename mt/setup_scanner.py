@@ -28,18 +28,19 @@ now_start = datetime.now(tz=timezone.utc).strftime("%d/%m/%y %H:%M")
 logger.debug(f'-+-+-+-+-+-+-+-+ {now_start} Running Setup Scanner +-+-+-+-+-+-+-+-\n')
 logger.info(f'\n-+-+-+-+-+-+-+-+ {now_start} Running Setup Scanner +-+-+-+-+-+-+-+-\n')
 
-session = sessions.TradingSession(0.04, 0.004, 4, True)
+session = sessions.TradingSession(0.05, 0.002, 1.9, True, False)
 
 # initialise agents
 agents = []
 for timeframe, offset, active_agents in session.timeframes:
     if 'TrailFractals' in active_agents:
         agents.extend([
-                TrailFractals(session, timeframe, offset, 5, 2, 'volume_1d', 50),
+                TrailFractals(session, timeframe, offset, 5, 2, 'volume_1d'),
             ])
     if 'ChannelRun' in active_agents:
         agents.extend([
-                ChannelRun(session, timeframe, offset, 200, 'edge', 'mid', 'volume_1d', 50),
+                ChannelRun(session, timeframe, offset, 200, 'mid', 'edge', 'volume_1d'),
+                ChannelRun(session, timeframe, offset, 200, 'edge', 'mid', 'volume_1d'),
             ])
 
 agents = {a.id: a for a in agents}
@@ -384,8 +385,12 @@ for agent in agents.values():
     agent.perf_score_lr_s = agent.perf_stats_sw['lr_ratio']
     agent.perf_score_rc_l = agent.ross_ratio_score('long', 0.01, n, 10)
     agent.perf_score_rc_s = agent.ross_ratio_score('short', 0.01, n, 10)
-    agent.perf_score_l = (agent.perf_score_rc_l + agent.perf_score_lr_l) / 2
-    agent.perf_score_s = (agent.perf_score_rc_s + agent.perf_score_lr_s) / 2
+    agent.green_mean_l = agent.perf_stats_lw['green_mean']
+    agent.green_mean_s = agent.perf_stats_sw['green_mean']
+    # agent.perf_score_l = (agent.perf_score_rc_l + agent.perf_score_lr_l) / 2
+    # agent.perf_score_s = (agent.perf_score_rc_s + agent.perf_score_lr_s) / 2
+    agent.perf_score_l = (agent.perf_score_rc_l + agent.perf_score_lr_l + agent.green_mean_l) / 3
+    agent.perf_score_s = (agent.perf_score_rc_s + agent.perf_score_lr_s + agent.green_mean_s) / 3
 
 # for agent in agents.values():
 #     logger.debug(f"{agent.id} ml perf scores: Long: {agent.perf_score_ml_l:.1%}, Short: {agent.perf_score_ml_s:.1%}")
@@ -397,10 +402,10 @@ while processed_signals['unassigned']:
     # record perf stats and perf score in signal dictionaries
     if signal['direction'] in ['long', 'spot']:
         signal.update(agents[signal['agent']].perf_stats_lw)
-        signal.update(agents[signal['agent']].perf_stats_luw)
+        signal['perf_stats_luw'] = agents[signal['agent']].perf_stats_luw
     else:
         signal.update(agents[signal['agent']].perf_stats_sw)
-        signal.update(agents[signal['agent']].perf_stats_suw)
+        signal['perf_stats_suw'] = agents[signal['agent']].perf_stats_suw
 
     signal['perf_score'] = (agents[signal['agent']].perf_score_l if signal['direction'] == 'long'
                             else agents[signal['agent']].perf_score_s)
@@ -552,6 +557,7 @@ while unassigned:
         s['quote_size'] = quote_size
         s['base_size'] = s['base_size'] * r  # the value of r is equivalent to the change in size, if any.
         s['pct_of_full_pos'] *= r
+        s['init_or'] = r
 
         processed_signals['real_open'].append(s)
         logger.debug(f"{s['pair']} {s['tf']} real open signal, {s['quote_size']:.2f}USDT")
@@ -572,22 +578,49 @@ real_opened = 0
 for signal in processed_signals['real_open']:
     session.trade_sizes.append(signal['quote_size'])
 
+    a = agents[signal['agent']]
+    pair = signal['pair']
+    algo_orders = session.pairs_data[pair]['algo_orders']
+    algo_limit = 4 if a.oco else 5
+
     if signal['mode'] == 'spot':
-        agents[signal['agent']].open_real_s(session, signal, 0)
+        a.open_real_s(session, signal, 0)
         real_opened += 1
 
-    elif signal['quote_size'] > (remaining_borrow - 100):
+    elif signal['quote_size'] > (remaining_borrow - 100):  # if it gets this far, mode == margin is implied
         signal['state'] = 'sim'
         signal['sim_reasons'] = ['too_much_leverage']
         processed_signals['sim_open'].append(signal)
         # logger.debug("changed real open signal to sim, borrow limit reached")
 
+    elif a.num_open_positions >= a.max_positions:
+        signal['state'] = 'sim'
+        signal['sim_reasons'] = ['too_many_pos']
+        processed_signals['sim_open'].append(signal)
+        logger.debug("sent real open signal to sim, open pos limit reached")
+
+    elif a.total_open_risk >= a.total_r_limit:
+        signal['state'] = 'sim'
+        signal['sim_reasons'] = ['too_much_or']
+        processed_signals['sim_open'].append(signal)
+        logger.debug("sent real open signal to sim, open risk limit reached")
+
+    elif algo_orders >= algo_limit:
+        signal['state'] = 'sim'
+        signal['sim_reasons'] = ['algo_order_limit']
+        processed_signals['sim_open'].append(signal)
+        logger.debug("sent real open signal to sim, open risk limit reached")
+
     else:
         logger.debug(f"Processing {signal['agent']} {signal['pair']} {signal['action']} {signal['state']} "
                     f"{signal['direction']}")
-        successful = agents[signal['agent']].open_real_M(session, signal, 0)
+        successful = a.open_real_M(session, signal, 0)
         if successful:
             real_opened += 1
+            a.num_open_positions += 1
+            algo_increment = 2 if a.oco else 1
+            session.pairs_data[pair]['algo_orders'] += algo_increment
+            a.total_open_risk += signal['init_or']
             remaining_borrow -= signal['quote_size']
             logger.debug(f"remaining_borrow: {remaining_borrow:.2f}")
 
@@ -680,8 +713,9 @@ for tf in session.timeframes:
     logger.info(f"\n{tf[0]} market bias: {session.market_bias[tf[0]]:.2f} range from 1 (bullish) to -1 (bearish)")
 
 uf.market_benchmark(session)
+session.log()
 for agent in agents.values():
-    uf.log(session, agent)
+    agent.log(session)
     agent.benchmark = uf.strat_benchmark(session, agent)
 uf.scanner_summary(session, list(agents.values()))
 

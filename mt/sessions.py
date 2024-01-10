@@ -15,6 +15,7 @@ from decimal import Decimal
 import statistics as stats
 import pandas as pd
 import json
+from pprint import pformat
 
 # pb = uf.init_pb()
 logger = create_logger('  sessions   ')
@@ -107,7 +108,7 @@ class TradingSession:
         self.last_price_update = 0
         self.running_on = identify_machine()
         self.live = True  # self.set_live()
-        self.min_size = 20
+        self.min_size = 15
         self.timeframes = get_timeframes(force_all_tf)
 
         # get data from exchange
@@ -138,9 +139,9 @@ class TradingSession:
         self.check_fees()
         # self.check_margin_lvl()
         if self.spot_bal > 30:
-            self.top_up_bnb_s(15)
+            self.top_up_bnb_s(6)
         if self.margin_bal > 30:
-            self.top_up_bnb_m(15)
+            self.top_up_bnb_m(6)
         logger.debug(
             f"Max size for new positions this session: {self.max_allocation * self.margin_bal * self.leverage:.2f} USDT\n")
         logger.info(
@@ -904,3 +905,35 @@ class TradingSession:
         self.check_open_spot_orders()
         self.check_open_margin_orders()
         self.count_algo_orders()  # kind of redundant since the above two methods create lists which could be counted
+
+    def log(self):
+        if not self.trade_sizes:  # just in case it's still an empty list
+            self.trade_sizes = [0, 0, 0]
+
+        new_record = {'timestamp': self.now_start,
+                      'median_spread': stats.median(self.spreads.values()),
+                      'quote_asset': self.quote_asset, 'max_allocation': self.max_allocation,
+                      'market_bias': self.market_bias, 'avg_open_size': stats.mean(self.trade_sizes),
+                      'max_open_size': max(self.trade_sizes), 'spot_balance': round(self.spot_bal, 2),
+                      'margin_balance': round(self.margin_bal, 2)
+                      }
+
+        log_path = self.records_w / "session_log.json"
+        log_path.touch(exist_ok=True)
+
+        try:
+            with open(log_path, 'r') as file:
+                old_records = json.load(file)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.exception(e)
+            old_records = []
+
+        old_records.append(new_record)
+        all_records = old_records
+
+        try:
+            with open(log_path, 'w') as rec_file:
+                json.dump(all_records, rec_file)
+        except TypeError as e:
+            logger.exception(e)
+            logger.error(pformat(new_record))

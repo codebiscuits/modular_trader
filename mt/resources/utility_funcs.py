@@ -286,68 +286,7 @@ def strat_benchmark(session, agent) -> dict:
     return benchmark
 
 
-def log(session, agent) -> None:
-    """records all data from the session as a line in the perf_log.json file"""
 
-    num_wanted_pos = len(agent.real_pos.keys()) + len([k for k, v in agent.sim_pos.items() if v.get('wanted')])
-    if not session.trade_sizes: # just in case it's still an empty list
-        session.trade_sizes = [0, 0, 0]
-
-    new_record = {'timestamp': session.now_start,
-                  'positions': agent.real_pos, 'trade_counts': agent.counts_dict,
-                  'median_spread': stats.median(session.spreads.values()),
-                  'quote_asset': session.quote_asset, 'max_allocation': session.max_allocation,
-                  'max_spread': session.max_spread[agent.tf], 'indiv_r_limit': agent.indiv_r_limit,
-                  'total_r_limit': agent.total_r_limit, 'target_risk': agent.target_risk,
-                  'max_pos': agent.max_positions, 'market_bias': session.market_bias,
-                  'real_open_risk': agent.total_open_risk, 'wanted_open_risk': agent.wanted_open_risk,
-                  'num_wanted_pos': num_wanted_pos, 'avg_open_size': stats.mean(session.trade_sizes),
-                  'max_open_size': max(session.trade_sizes),
-                  'perf_score_rc_l': agent.perf_score_rc_l, 'perf_score_rc_s': agent.perf_score_rc_s,
-                  'perf_score_lr_l': agent.perf_score_lr_l, 'perf_score_lr_s': agent.perf_score_lr_s,
-                  }
-
-    if agent.mode == 'spot':
-        new_record['balance'] = round(session.spot_bal, 2)
-        new_record['model_info'] = agent.long_info
-
-        new_record['real_rpnl_spot'] = agent.realised_pnls['real_spot']
-        new_record['sim_rpnl_spot'] = agent.realised_pnls['sim_spot']
-        new_record['wanted_rpnl_spot'] = agent.realised_pnls['wanted_spot']
-        new_record['unwanted_rpnl_spot'] = agent.realised_pnls['unwanted_spot']
-
-    elif agent.mode == 'margin':
-        new_record['balance'] = round(session.margin_bal, 2)
-        new_record['long_model_info'] = agent.long_info
-        new_record['short_model_info'] = agent.short_info
-
-        new_record['real_rpnl_long'] = agent.realised_pnls['real_long']
-        new_record['sim_rpnl_long'] = agent.realised_pnls['sim_long']
-        new_record['wanted_rpnl_long'] = agent.realised_pnls['wanted_long']
-        new_record['unwanted_rpnl_long'] = agent.realised_pnls['unwanted_long']
-
-        new_record['real_rpnl_short'] = agent.realised_pnls['real_short']
-        new_record['sim_rpnl_short'] = agent.realised_pnls['sim_short']
-        new_record['wanted_rpnl_short'] = agent.realised_pnls['wanted_short']
-        new_record['unwanted_rpnl_short'] = agent.realised_pnls['unwanted_short']
-    else:
-        logger.warning(f'*** warning log function not working for {agent.id} ***')
-
-    old_records = agent.perf_log
-    old_records.append(new_record)
-    all_records = old_records
-
-    write_folder = Path(f"{session.records_w}/{agent.id}")
-    write_folder.mkdir(parents=True, exist_ok=True)
-    write_path = write_folder / "perf_log.json"
-    write_path.touch(exist_ok=True)
-
-    try:
-        with open(write_path, 'w') as rec_file:
-            json.dump(all_records, rec_file)
-    except TypeError as e:
-        logger.exception(e)
-        logger.error(pformat(new_record))
 
 
 def interpret_benchmark(session, agents: list) -> None:
