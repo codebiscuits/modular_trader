@@ -3,6 +3,7 @@ import pandas as pd
 from pathlib import Path
 import mt.resources.ml_funcs as mlf
 import mt.resources.indicators as ind
+import mt.resources.utility_funcs as uf
 import numpy as np
 from datetime import datetime, timezone
 import statistics as stats
@@ -22,12 +23,13 @@ from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 from imblearn.under_sampling import RandomUnderSampler, ClusterCentroids
 from xgboost import XGBClassifier, DMatrix
 import optuna
+from pprint import pprint
 
 optuna.logging.set_verbosity(optuna.logging.ERROR)
 
-if not Path('pi_2.txt').exists():
+# if not Path('pi_2.txt').exists():
     # import mt.update_ohlc
-    import mt.async_update_ohlc
+    # import mt.async_update_ohlc
 
 warnings.filterwarnings('ignore')
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -36,6 +38,48 @@ use_local_data = True  # if false, uses trade records from the pi
 uid = int(datetime.now().timestamp())
 
 fb_scorer = make_scorer(fbeta_score, beta=0.333, zero_division=0)
+
+
+def load_spreads():
+    spreads_path = Path('/home/ross/coding/modular_trader/market_data/spreads.json')
+
+    with open(spreads_path, 'r') as f:
+        data = json.load(f)
+
+    spreads_df = pd.DataFrame().from_dict(data, orient='index')
+    spreads_df['timestamp'] = pd.to_datetime(spreads_df.index, format='%d/%m/%y %H:%M')
+    spreads_df = spreads_df.set_index('timestamp', drop=True)
+    spreads_df = spreads_df.sort_index()
+    spreads_df = spreads_df.resample('H').agg('mean')
+
+    return spreads_df
+
+
+def spread_stats(spreads_df, pair, dt):
+    """spreads df is hourly data"""
+
+    spread = spreads_df.loc[dt, pair]
+    current_med_spread = spreads_df.loc[dt, :].median()
+
+    spread_12 = spreads_df.loc[spreads_df.index < dt].tail(12).mean(axis=0)
+    min_spread_12 = spread_12.min()
+    med_spread_12 = spread_12.median()
+    max_spread_12 = spread_12.max()
+
+    spread_24 = spreads_df.loc[spreads_df.index < dt].tail(24).mean(axis=0)
+    min_spread_24 = spread_24.min()
+    med_spread_24 = spread_24.median()
+    max_spread_24 = spread_24.max()
+
+    return dict(
+        spread=spread,
+        spread_rank=spreads_df.rank(axis=1, pct=True).loc[dt, pair],
+        spread_vs_med=spread / current_med_spread,
+        spread_vs_med_12=spread / med_spread_12,
+        spread_vs_med_24=spread / med_spread_24,
+        spread_channel_pos_12=(spread - min_spread_12) / (max_spread_12 - min_spread_12),
+        spread_channel_pos_24=(spread - min_spread_24) / (max_spread_24 - min_spread_24),
+    )
 
 
 def backtest_oco(df_0, side, lookback, entry_trig, goal, trim_ohlc=1600):
@@ -479,7 +523,12 @@ def load_secondary_data(strat_name, timeframe, strat_params, selection_method, n
     except FileNotFoundError:
         sim_records_1 = {}
 
-    return real_records_1 | sim_records_1
+    d = real_records_1 | sim_records_1
+    d = {int(k): v for k, v in d.items()}
+    s = sorted(d.keys())
+    sd = {x: d[x] for x in s}
+
+    return sd
 
 
 def create_risk_dataset(strat_name: str, side: str, timeframe: str, strat_params: tuple,
@@ -498,6 +547,29 @@ def create_risk_dataset(strat_name: str, side: str, timeframe: str, strat_params
         if (signal['direction'] != side) or (signal.get('confidence_l') in [None, 0]):
             continue
 
+        stamp = uf.scale_number(position['trade'][0]['timestamp'], 10)
+        ts = datetime.fromtimestamp(stamp, tz=timezone.utc)
+        dt = pd.Timestamp(year=ts.year, month=ts.month, day=ts.day, hour=ts.hour)
+        print(dt)
+
+        if dt < spread_start:
+            print(f"Skipping {dt} because it is less than {spread_start}")
+            continue
+
+        if signal.get('spread') is None: # get spread stats from historical records and merge them with signal dict
+            signal = signal | spread_stats(spreads_df, signal['pair'], dt)
+
+        # pprint(signal)
+
+        spread = signal['spread']
+        spread_rank = signal['spread_rank']
+        spread_vs_med = signal['spread_vs_med']
+        spread_vs_med_12 = signal['spread_vs_med_12']
+        spread_vs_med_24 = signal['spread_vs_med_24']
+        spread_channel_pos_12 = signal['spread_channel_pos_12']
+        spread_channel_pos_24 = signal['spread_channel_pos_24']
+
+
         # sum up trade rpnl
         trade = position['trade']
         pnl = 0.0
@@ -508,6 +580,14 @@ def create_risk_dataset(strat_name: str, side: str, timeframe: str, strat_params
         try:
             observation = dict(
                 # asset=signal['asset'],
+                hour=ts.hour,
+                spread=spread,
+                spread_rank=spread_rank,
+                spread_vs_med=spread_vs_med,
+                spread_vs_med_12=spread_vs_med_12,
+                spread_vs_med_24=spread_vs_med_24,
+                spread_channel_pos_12=spread_channel_pos_12,
+                spread_channel_pos_24=spread_channel_pos_24,
                 conf_l=signal['conf_rf_usdt_l'],
                 conf_s=signal['conf_rf_usdt_s'],
                 inval_dist=signal['inval_dist'],
@@ -820,6 +900,9 @@ def train_secondary(mode: str, strat_name: str, side: str, timeframe: str, strat
 if __name__ == '__main__':
     all_start = time.perf_counter()
 
+    spreads_df = load_spreads()
+    spread_start = spreads_df.index[0]
+
     sides = [
         'long',
         'short'
@@ -844,15 +927,16 @@ if __name__ == '__main__':
         mult = {'15m': 3, '30m': 6, '1h': 12, '4h': 48, '12h': 144, '1d': 288}  # how many 5m periods to get data_len
         history = n[timeframe] * mult[timeframe]
 
-        if timeframe in ['15m', '30m']:
-            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 100, 'volume_1d', history, num_trials))
-            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 100, 'volume_1d', 0.4, num_trials))
+        # if timeframe in ['15m', '30m']:
+            # all_stats.append(train_primary('channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 100, 'volume_1d', history, num_trials))
+            # all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 100, 'volume_1d', 0.4, num_trials))
 
-            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 100, 'volume_1d', history, num_trials))
-            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 100, 'volume_1d', 0.4, num_trials))
+            # all_stats.append(train_primary('channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 100, 'volume_1d', history, num_trials))
+            # all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 100, 'volume_1d', 0.4, num_trials))
 
-        if timeframe in ['4h', '12h', '1d']:
-            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), uid, 100, 'volume_1d', history, num_trials))
+        if timeframe in [#'4h',
+                         '12h', '1d']:
+            # all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), uid, 100, 'volume_1d', history, num_trials))
             all_stats.append(train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), uid, 100, 'volume_1d', 0.4, num_trials))
 
     all_stats = [record for record in all_stats if record is not None]
