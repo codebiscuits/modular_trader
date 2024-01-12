@@ -790,7 +790,7 @@ def set_oco_m(session, pair: str, size: float, side: str, target: float, stop: f
                 stopLimitTimeInForce=be.TIME_IN_FORCE_GTC
             )
             session.pairs_data[pair]['algo_orders'] += 2
-            logger.error(f"New {pair} {side} oco successfuly set at {target}, {stop_trigger}")
+            logger.info(f"New {pair} {side} oco successfuly set at {target}, {stop_trigger}")
 
         except bx.BinanceAPIException as e:
             if e.code == -2010:

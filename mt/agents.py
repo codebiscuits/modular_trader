@@ -93,7 +93,7 @@ class Agent:
         session.min_length = min(session.min_length, self.ohlc_length)
         session.max_length = max(session.min_length, self.ohlc_length)
         self.model_folder = Path(f"/home/ross/coding/modular_trader/machine_learning/models/{self.name}")
-        self.variation_folder = self.model_folder / f"{self.pair_selection}_{self.training_pairs_n}"
+        self.variation_folder = self.model_folder / f"{self.pair_selection}"
         if not self.variation_folder.exists():
             logger.debug(f"{self.id} can't find ml models in {self.variation_folder}")
         self.load_technical_model_data(session)
@@ -1269,6 +1269,7 @@ class Agent:
     def perf_stats(self, direction):
         d = 'uw_' if 'unwanted' in direction else ''
         perf_stats = {}
+
         perf_stats['lr_ratio'] = self.pnls[direction].get('lr_ratio', 0)
         # perf_stats[f'{d}perf_ema_4'] = self.pnls[direction]['ema_4']
         # perf_stats[f'{d}perf_ema_8'] = self.pnls[direction]['ema_8']
@@ -1285,9 +1286,11 @@ class Agent:
         # perf_stats[f'{d}perf_sum_4'] = self.pnls[direction]['sum_4']
         # perf_stats[f'{d}perf_sum_8'] = self.pnls[direction]['sum_8']
         # perf_stats[f'{d}perf_sum_16'] = self.pnls[direction]['sum_16']
-        # perf_stats[f'{d}perf_sum_32'] = self.pnls[direction]['sum_32']
-        # perf_stats[f'{d}perf_sum_64'] = self.pnls[direction]['sum_64']
-        # perf_stats[f'{d}perf_sum_128'] = self.pnls[direction]['sum_128']
+        perf_stats[f'{d}perf_sum_32'] = self.pnls[direction]['sum_32']
+        perf_stats[f'{d}perf_sum_64'] = self.pnls[direction]['sum_64']
+        perf_stats[f'{d}perf_sum_128'] = self.pnls[direction]['sum_128']
+
+        perf_stats['green_mean'] = self.pnls[direction]['green_mean']
 
         return perf_stats
 
@@ -1566,6 +1569,8 @@ class Agent:
             short_unwanted=self.get_pnls('short', False),
         )
 
+        # logger.debug(pformat(self.pnls))
+
     def get_pnls(self, direction: str, wanted: bool) -> dict:
         """ retrieves the pnls of all closed (real and wanted sim) trades for the agent, then collates the pnls into a
         dataframe, and calculates several moving averages on them. it then returns a dictionary of the latest row of
@@ -1586,9 +1591,26 @@ class Agent:
         rpnl_df = pd.DataFrame(all_rpnls, columns=['timestamp', 'rpnl'])
 
         if len(rpnl_df) < 7:
-            return {'lr_ratio': 0}
+            return {'lr_ratio': 0,
+                    'sum_32': 0,
+                    'sum_64': 0,
+                    'sum_128': 0,
+                    'green_mean': 0}
 
         rpnl_df = rpnl_df.sort_values('timestamp').reset_index(drop=True)
+
+        rpnl_df['sum_32'] = rpnl_df.rpnl.rolling(32).sum().fillna(0)
+        rpnl_df['sum_64'] = rpnl_df.rpnl.rolling(64).sum().fillna(0)
+        rpnl_df['sum_128'] = rpnl_df.rpnl.rolling(128).sum().fillna(0)
+
+        rpnl_df['sum_32_pos'] = rpnl_df.sum_32 > 0
+        rpnl_df['sum_64_pos'] = rpnl_df.sum_64 > 0
+        rpnl_df['sum_128_pos'] = rpnl_df.sum_128 > 0
+
+        rpnl_df['green_mean'] = rpnl_df[['sum_32_pos', 'sum_64_pos', 'sum_128_pos']].mean(axis=1)
+        rpnl_df = rpnl_df.drop(['sum_32_pos', 'sum_64_pos', 'sum_128_pos'], axis=1)
+
+        # logger.debug(rpnl_df.tail())
 
         rpnl_df['lr_ratio'] = self.lr_ratio(rpnl_df.rpnl, 7)
 
@@ -2230,10 +2252,12 @@ class Agent:
                 api_order = self.increase_position(session, pair, size, direction)
             except bx.BinanceAPIException as e:
                 if e.code in [-2010, -3027]:
-                    logger.info(f"Error {e.code} while calling increase_position for {self.id} {pair} {direction}")
+                    logger.exception(f"Error {e.code} while calling increase_position for {self.id} {pair} {direction}")
+                    logger.exception(e)
                     del self.open_trades[pair]
                     return False
                 else:
+                    logger.exception(f"Error {e.code} while calling increase_position for {self.id} {pair} {direction}")
                     logger.exception(e)
                     del self.open_trades[pair]
                     return False
@@ -3381,12 +3405,65 @@ class Agent:
                 logger.error(e.message)
         k1.stop()
 
+    def log(self, session):
+        """records all data from the session as a line in the perf_log.json file"""
+
+        num_wanted_pos = len(self.real_pos.keys()) + len([k for k, v in self.sim_pos.items() if v.get('wanted')])
+
+        new_record = {'timestamp': session.now_start, 'positions': self.real_pos, 'trade_counts': self.counts_dict,
+                      'indiv_r_limit': self.indiv_r_limit, 'total_r_limit': self.total_r_limit,
+                      'target_risk': self.target_risk, 'max_pos': self.max_positions,
+                      'real_open_risk': self.total_open_risk, 'wanted_open_risk': self.wanted_open_risk,
+                      'num_wanted_pos': num_wanted_pos,
+                      'perf_score_rc_l': self.perf_score_rc_l, 'perf_score_rc_s': self.perf_score_rc_s,
+                      'perf_score_lr_l': self.perf_score_lr_l, 'perf_score_lr_s': self.perf_score_lr_s,
+                      }
+
+        if self.mode == 'spot':
+            new_record['model_info'] = self.long_info
+
+            new_record['real_rpnl_spot'] = self.realised_pnls['real_spot']
+            new_record['sim_rpnl_spot'] = self.realised_pnls['sim_spot']
+            new_record['wanted_rpnl_spot'] = self.realised_pnls['wanted_spot']
+            new_record['unwanted_rpnl_spot'] = self.realised_pnls['unwanted_spot']
+
+        elif self.mode == 'margin':
+            new_record['long_model_info'] = self.long_info
+            new_record['short_model_info'] = self.short_info
+
+            new_record['real_rpnl_long'] = self.realised_pnls['real_long']
+            new_record['sim_rpnl_long'] = self.realised_pnls['sim_long']
+            new_record['wanted_rpnl_long'] = self.realised_pnls['wanted_long']
+            new_record['unwanted_rpnl_long'] = self.realised_pnls['unwanted_long']
+
+            new_record['real_rpnl_short'] = self.realised_pnls['real_short']
+            new_record['sim_rpnl_short'] = self.realised_pnls['sim_short']
+            new_record['wanted_rpnl_short'] = self.realised_pnls['wanted_short']
+            new_record['unwanted_rpnl_short'] = self.realised_pnls['unwanted_short']
+        else:
+            logger.warning(f'*** warning log function not working for {self.id} ***')
+
+        old_records = self.perf_log
+        old_records.append(new_record)
+        all_records = old_records
+
+        write_folder = Path(f"{session.records_w}/{self.id}")
+        write_folder.mkdir(parents=True, exist_ok=True)
+        write_path = write_folder / "perf_log.json"
+        write_path.touch(exist_ok=True)
+
+        try:
+            with open(write_path, 'w') as rec_file:
+                json.dump(all_records, rec_file)
+        except TypeError as e:
+            logger.exception(e)
+            logger.error(pformat(new_record))
+
 
 class TrailFractals(Agent):
     """Machine learning strategy that manages trades with williams fractals trailing stops"""
 
-    def __init__(self, session, tf: str, offset: int, width: int, spacing: int, pair_selection: str,
-                 num_pairs: int) -> None:
+    def __init__(self, session, tf: str, offset: int, width: int, spacing: int, pair_selection: str) -> None:
         t = Timer('TrailFractals init')
         t.start()
         self.mode = 'margin'
@@ -3398,11 +3475,10 @@ class TrailFractals(Agent):
         self.oco = False
         self.close_on_signal = False
         self.pair_selection = pair_selection
-        self.training_pairs_n = num_pairs
         self.ohlc_length = 4035
         self.name = f'trail_fractals_{self.width}_{self.spacing}'
         self.id = (f"trail_fractals_{self.tf}_{self.offset}_{self.width}_"
-                   f"{self.spacing}_{self.pair_selection}_{self.training_pairs_n}")
+                   f"{self.spacing}_{self.pair_selection}")
         self.pi_path = 1
         Agent.__init__(self, session)
         session.pairs_set.update(self.pairs)
@@ -3438,10 +3514,8 @@ class TrailFractals(Agent):
                     'short_ratio': short_stop / price,
                     'tf': self.tf}
 
-        # Long model
-        df['r_pct'] = df.long_r_pct
-
         # long model
+        df['r_pct'] = df.long_r_pct
         long_features = df[self.long_info['features']]
         try:
             long_features_scaled = self.long_scaler.transform(long_features)
@@ -3454,11 +3528,9 @@ class TrailFractals(Agent):
             print(long_features.tail())
             long_confidence = 0
 
-        # Short model
+        # short model
         df = df.drop('long_r_pct', axis=1)
         df['r_pct'] = df.short_r_pct
-
-        # short model
         short_features = df[self.short_info['features']]
         try:
             short_features_scaled = self.short_scaler.transform(short_features)
@@ -3507,9 +3579,9 @@ class TrailFractals(Agent):
         signal_dict['training_pair_selection'] = self.pair_selection
         signal_dict['training_pairs_n'] = len(self.pairs)
 
-        mkt_rank_1d = (session.pairs_data[pair]['market_rank_1d'])
-        mkt_rank_1w = (session.pairs_data[pair]['market_rank_1w'])
-        mkt_rank_1m = (session.pairs_data[pair]['market_rank_1m'])
+        mkt_rank_1d = (session.pairs_data[pair].get('market_rank_1d', 0.5))
+        mkt_rank_1w = (session.pairs_data[pair].get('market_rank_1w', 0.5))
+        mkt_rank_1m = (session.pairs_data[pair].get('market_rank_1m', 0.5))
         signal_dict['market_rank_1d'] = 0.5 if np.isnan(mkt_rank_1d) else mkt_rank_1d
         signal_dict['market_rank_1w'] = 0.5 if np.isnan(mkt_rank_1w) else mkt_rank_1w
         signal_dict['market_rank_1m'] = 0.5 if np.isnan(mkt_rank_1m) else mkt_rank_1m
@@ -3522,8 +3594,7 @@ class TrailFractals(Agent):
 class ChannelRun(Agent):
     """Machine learning strategy that uses OCO orders to manage trades"""
 
-    def __init__(self, session, tf: str, offset: int, lookback: int, entry: str, goal: str, pair_selection: str,
-                 num_pairs: int) -> None:
+    def __init__(self, session, tf: str, offset: int, lookback: int, entry: str, goal: str, pair_selection: str) -> None:
         t = Timer('Channel Run init')
         t.start()
         self.mode = 'margin'
@@ -3536,9 +3607,8 @@ class ChannelRun(Agent):
         self.oco = True
         self.close_on_signal = False
         self.pair_selection = pair_selection
-        self.training_pairs_n = num_pairs
         self.name = f'channel_run_{self.lookback}_{self.entry}_{self.goal}'
-        self.id = f"channel_run_{self.tf}_{self.offset}_{self.lookback}_{self.entry}_{self.goal}_{self.pair_selection}_{self.training_pairs_n}"
+        self.id = f"channel_run_{self.tf}_{self.offset}_{self.lookback}_{self.entry}_{self.goal}_{self.pair_selection}"
         self.ohlc_length = 4035
         Agent.__init__(self, session)
         session.pairs_set.update(self.pairs)
@@ -3571,13 +3641,15 @@ class ChannelRun(Agent):
         channel_position = (price - chan_low) / (chan_high - chan_low)
         signal_dict['channel_position'] = channel_position
 
+        # TODO i need to modify the strategy conditions in ml model training so edge_mid has the ema cross as well
+        # TODO i also need to consider whether the technical model is really necessary
+        uptrend = df.close.ewm(int(self.lookback / 2)).mean().iloc[-1] > df.close.ewm(self.lookback).mean().iloc[-1]
         if self.entry == 'edge':
-            entry_l = channel_position < 0.1
-            entry_s = channel_position > 0.9
+            entry_l = channel_position < 0.1 and uptrend
+            entry_s = channel_position > 0.9 and not uptrend
         elif self.entry == 'mid':
-            uptrend = df.close.ewm(int(self.lookback / 2)).mean().iloc[-1] > df.close.ewm(self.lookback).mean().iloc[-1]
-            entry_l = (0.4 < channel_position < 0.6) and uptrend
-            entry_s = (0.4 < channel_position < 0.6) and not uptrend
+            entry_l = (0.4 < channel_position < 0.6) and not uptrend # swapped the direction of the trend confirmation 04/01/24
+            entry_s = (0.4 < channel_position < 0.6) and uptrend # because it seems this variation works best against the trend
 
         atr_lb = 10
         df = ind.atr(df, atr_lb)
@@ -3640,9 +3712,9 @@ class ChannelRun(Agent):
         created_dt = datetime.fromtimestamp(model_created).astimezone(timezone.utc)
         model_age = datetime.now(timezone.utc) - created_dt
 
-        mkt_rank_1d = (session.pairs_data[pair]['market_rank_1d'])
-        mkt_rank_1w = (session.pairs_data[pair]['market_rank_1w'])
-        mkt_rank_1m = (session.pairs_data[pair]['market_rank_1m'])
+        mkt_rank_1d = (session.pairs_data[pair].get('market_rank_1d', 0.5))
+        mkt_rank_1w = (session.pairs_data[pair].get('market_rank_1w', 0.5))
+        mkt_rank_1m = (session.pairs_data[pair].get('market_rank_1m', 0.5))
 
         signal_dict['chan_high'] = chan_high
         signal_dict['chan_low'] = chan_low
