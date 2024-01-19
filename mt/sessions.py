@@ -112,7 +112,6 @@ class TradingSession:
         self.timeframes = get_timeframes(force_all_tf)
 
         # get data from exchange
-        # self.get_cg_symbols()
         abc = Timer('all binance calls')
         abc.start()
         self.info = self.client.get_exchange_info()
@@ -124,6 +123,20 @@ class TradingSession:
         self.m_acct = self.client.get_margin_account()
         self.spreads = self.binance_spreads()
         abc.stop()
+
+        # load local data and configure settings
+        self.mkt_data_r, self.mkt_data_w, self.records_r, self.records_w, self.ohlc_r, self.ohlc_w = self.data_paths()
+        self.spreads_df = self.save_spreads()
+        self.spread_stats()
+        self.load_mkt_ranks()
+        self.max_loan_amounts = {}
+        self.pairs_set = set()
+        self.book_data = {}
+        # self.indicators = {'ema-200', 'ema-100', 'ema-50', 'ema-25', 'vol_delta',
+        #                    'vol_delta_div', 'roc_1d', 'roc_1w', 'roc_1m', 'vwma-24'}
+        self.features = {tf[0]: set() for tf in self.timeframes}
+        self.wrpnl_totals = {'spot': 0, 'long': 0, 'short': 0, 'count': 0}
+        self.urpnl_totals = {'spot': 0, 'long': 0, 'short': 0, 'count': 0}
 
         # filter and organise data
         self.get_pairs_info()
@@ -151,18 +164,6 @@ class TradingSession:
         logger.info(
             f"Max fixed-risk for new positions this session: {self.frac_risk_limit * self.margin_bal:.2f} USDT\n")
 
-        # load local data and configure settings
-        self.mkt_data_r, self.mkt_data_w, self.records_r, self.records_w, self.ohlc_r, self.ohlc_w = self.data_paths()
-        self.save_spreads()
-        self.load_mkt_ranks()
-        self.max_loan_amounts = {}
-        self.pairs_set = set()
-        self.book_data = {}
-        # self.indicators = {'ema-200', 'ema-100', 'ema-50', 'ema-25', 'vol_delta',
-        #                    'vol_delta_div', 'roc_1d', 'roc_1w', 'roc_1m', 'vwma-24'}
-        self.features = {tf[0]: set() for tf in self.timeframes}
-        self.wrpnl_totals = {'spot': 0, 'long': 0, 'short': 0, 'count': 0}
-        self.urpnl_totals = {'spot': 0, 'long': 0, 'short': 0, 'count': 0}
         t.stop()
 
     def set_live(self) -> bool:
@@ -333,6 +334,51 @@ class TradingSession:
 
         return avg_spreads
 
+
+    def save_spreads(self):
+        spreads_path = self.mkt_data_w / 'spreads.json'
+        spreads_path.touch(exist_ok=True)
+
+        with open(spreads_path, 'r') as file:
+            try:
+                spreads_data = json.load(file)
+            except json.JSONDecodeError:
+                spreads_data = {}
+
+        spreads_data[self.now_start] = self.spreads
+
+        with open(spreads_path, 'w') as file:
+            json.dump(spreads_data, file)
+
+        logger.info(f'\nsaved spreads to {spreads_path}\n')
+
+        return pd.DataFrame().from_dict(spreads_data, orient='index')
+
+    def spread_stats(self):
+
+        # stats on today's spread data
+        self.current_spreads = pd.DataFrame(self.spreads, index=['spread']).transpose()
+        self.current_spreads['rank'] = self.current_spreads['spread'].rank(pct=True)
+        self.current_min_spread = self.current_spreads.spread.min()
+        self.current_med_spread = self.current_spreads.spread.median()
+        self.current_max_spread = self.current_spreads.spread.max()
+
+        # stats on historic spread data
+        self.spreads_df['timestamp'] = pd.to_datetime(self.spreads_df.index, format="%d/%m/%y %H:%M")
+        self.spreads_df = self.spreads_df.set_index('timestamp', drop=True)
+        self.spreads_df = self.spreads_df.sort_index()
+        self.spreads_df = self.spreads_df.resample('H').agg('mean')
+
+        self.min_spread_12 = self.spreads_df.iloc[-12:, :].mean().min()
+        self.med_spread_12 = self.spreads_df.iloc[-12:, :].mean().median()
+        self.max_spread_12 = self.spreads_df.iloc[-12:, :].mean().max()
+        self.spread_roc_12 = self.spreads_df.rolling(3).mean().median(axis=1).pct_change(12).iloc[-1]
+
+        self.min_spread_24 = self.spreads_df.iloc[-24:, :].mean().min()
+        self.med_spread_24 = self.spreads_df.iloc[-24:, :].mean().median()
+        self.max_spread_24 = self.spreads_df.iloc[-24:, :].mean().max()
+        self.spread_roc_24 = self.spreads_df.rolling(3).mean().median(axis=1).pct_change(24).iloc[-1]
+
     @uf.retry_on_busy()
     def update_prices(self) -> None:
         """fetches current prices for all pairs on binance. much faster than get_price"""
@@ -385,12 +431,11 @@ class TradingSession:
                     elif f['filterType'] == 'MAX_NUM_ALGO_ORDERS':
                         max_algo = f['maxNumAlgoOrders']
 
-                spread = self.spreads.get(pair)
-
                 self.pairs_data[pair] = dict(
                     base_asset=base_asset,
                     # cg_symbol=cg_symbol,
-                    spread=spread,
+                    spread=self.spreads.get(pair),
+                    spread_rank=self.current_spreads.loc[pair, 'rank'],
                     margin_allowed=margin,
                     price_tick_size=tick_size,
                     lot_step_size=step_size,
@@ -521,23 +566,6 @@ class TradingSession:
         df = df.tail(enough).reset_index(drop=True)
         self.pairs_data[pair]['ohlc_5m'] = df
         # logger.debug(f"{pair} ohlc stored in session")
-
-    def save_spreads(self):
-        spreads_path = self.mkt_data_w / 'spreads.json'
-        spreads_path.touch(exist_ok=True)
-
-        with open(spreads_path, 'r') as file:
-            try:
-                spreads_data = json.load(file)
-            except json.JSONDecodeError:
-                spreads_data = {}
-
-        spreads_data[self.now_start] = self.spreads
-
-        with open(spreads_path, 'w') as file:
-            json.dump(spreads_data, file)
-
-        logger.info(f'\nsaved spreads to {spreads_path}\n')
 
     def save_open_risk_stats(self):
         or_stats_path = self.records_w / 'or_stats.json'

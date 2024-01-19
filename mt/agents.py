@@ -932,7 +932,8 @@ class Agent:
             df = self.get_data(session, pair, timeframes, stop_time)
             if df.empty:
                 logger.warning(f"RSST couldn't find a valid stop time for {pair} {direction}")
-                logger.warning(f"Stop time on record: {stop_time}")
+                stop_dt_str = datetime.fromtimestamp(stop_time / 1000).strftime(format='%d/%m/%y %H:%M')
+                logger.warning(f"Stop time on record: {stop_dt_str}")
                 continue
 
             stopped, overshoot_pct, stop_hit_time = self.check_stop_hit(pair, df, direction, stop)
@@ -1130,42 +1131,35 @@ class Agent:
         b.start()
         session.counts.append(f'record_trades {state}')
 
+        folder = Path(f"{session.records_w}/{self.id}")
+        folder.mkdir(parents=True, exist_ok=True)
+
         if state in {'open', 'all'}:
-            filepath = Path(f"{session.records_w}/{self.id}")
-            filepath.mkdir(parents=True, exist_ok=True)
-            filepath = filepath / "open_trades.json"
+            filepath = folder / "open_trades.json"
             if not filepath.exists():
                 filepath.touch()
             with open(filepath, "w") as file:
                 json.dump(self.open_trades, file)
         if state in {'sim', 'all'}:
-            filepath = Path(f"{session.records_w}/{self.id}")
-            filepath.mkdir(parents=True, exist_ok=True)
-            filepath = filepath / "sim_trades.json"
+            filepath = folder / "sim_trades.json"
             if not filepath.exists():
                 filepath.touch()
             with open(filepath, "w") as file:
                 json.dump(self.sim_trades, file)
         if state in {'tracked', 'all'}:
-            filepath = Path(f"{session.records_w}/{self.id}")
-            filepath.mkdir(parents=True, exist_ok=True)
-            filepath = filepath / "tracked_trades.json"
+            filepath = folder / "tracked_trades.json"
             if not filepath.exists():
                 filepath.touch()
             with open(filepath, "w") as file:
                 json.dump(self.tracked_trades, file)
         if state in {'closed', 'all'}:
-            filepath = Path(f"{session.records_w}/{self.id}")
-            filepath.mkdir(parents=True, exist_ok=True)
-            filepath = filepath / "closed_trades.json"
+            filepath = folder / "closed_trades.json"
             if not filepath.exists():
                 filepath.touch()
             with open(filepath, "w") as file:
                 json.dump(self.closed_trades, file)
         if state in {'closed_sim', 'all'}:
-            filepath = Path(f"{session.records_w}/{self.id}")
-            filepath.mkdir(parents=True, exist_ok=True)
-            filepath = filepath / "closed_sim_trades.json"
+            filepath = folder / "closed_sim_trades.json"
             if not filepath.exists():
                 filepath.touch()
             with open(filepath, "w") as file:
@@ -3497,7 +3491,7 @@ class TrailFractals(Agent):
             logger.info(f"{pair} not a margin pair, but was trying to get margin signals")
             return dict()
 
-        signal_dict = {'agent': self.id, 'mode': self.mode, 'pair': pair}
+        signal_dict = {'agent': self.id, 'mode': self.mode, 'pair': pair, 'timestamp': datetime.now().timestamp()}
 
         df = ind.williams_fractals(df, self.width, self.spacing)
 
@@ -3558,6 +3552,15 @@ class TrailFractals(Agent):
 
         created_dt = datetime.fromtimestamp(model_created).astimezone(timezone.utc)
         model_age = datetime.now(timezone.utc) - created_dt
+
+        spread = session.pairs_data[pair]['spread']
+        signal_dict['spread'] = spread
+        signal_dict['spread_rank'] = session.pairs_data[pair]['spread_rank']
+        signal_dict['spread_vs_med'] = spread / session.current_med_spread
+        signal_dict['spread_vs_med_12'] = spread / session.med_spread_12
+        signal_dict['spread_vs_med_24'] = spread / session.med_spread_24
+        signal_dict['spread_channel_pos_12'] = (spread - session.min_spread_12) / (session.max_spread_12 - session.min_spread_12)
+        signal_dict['spread_channel_pos_24'] = (spread - session.min_spread_24) / (session.max_spread_24 - session.min_spread_24)
 
         stp = self.calc_stop(inval, session.pairs_data[pair]['spread'], price)
         signal_dict['inval'] = stp
@@ -3630,7 +3633,7 @@ class ChannelRun(Agent):
         if pair not in self.pairs:
             return dict()
 
-        signal_dict = {'agent': self.id, 'mode': self.mode, 'pair': pair}
+        signal_dict = {'agent': self.id, 'mode': self.mode, 'pair': pair, 'timestamp': datetime.now().timestamp()}
         price = session.pairs_data[pair]['price']
 
         df[f"ll_{self.lookback}"] = df.low.rolling(self.lookback).min()
@@ -3711,17 +3714,27 @@ class ChannelRun(Agent):
 
         created_dt = datetime.fromtimestamp(model_created).astimezone(timezone.utc)
         model_age = datetime.now(timezone.utc) - created_dt
+        signal_dict['model_age'] = model_age.total_seconds()
 
         mkt_rank_1d = (session.pairs_data[pair].get('market_rank_1d', 0.5))
         mkt_rank_1w = (session.pairs_data[pair].get('market_rank_1w', 0.5))
         mkt_rank_1m = (session.pairs_data[pair].get('market_rank_1m', 0.5))
+        signal_dict['market_rank_1d'] = 0.5 if np.isnan(mkt_rank_1d) else mkt_rank_1d
+        signal_dict['market_rank_1w'] = 0.5 if np.isnan(mkt_rank_1w) else mkt_rank_1w
+        signal_dict['market_rank_1m'] = 0.5 if np.isnan(mkt_rank_1m) else mkt_rank_1m
+
+        spread = session.pairs_data[pair]['spread']
+        signal_dict['spread'] = spread
+        signal_dict['spread_vs_med'] = spread / session.current_med_spread
+        signal_dict['spread_rank'] = session.pairs_data[pair]['spread_rank']
+        signal_dict['spread_vs_med_12'] = spread / session.med_spread_12
+        signal_dict['spread_vs_med_24'] = spread / session.med_spread_24
+        signal_dict['spread_channel_pos_12'] = (spread - session.min_spread_12) / (session.max_spread_12 - session.min_spread_12)
+        signal_dict['spread_channel_pos_24'] = (spread - session.min_spread_24) / (session.max_spread_24 - session.min_spread_24)
 
         signal_dict['chan_high'] = chan_high
         signal_dict['chan_low'] = chan_low
         signal_dict['chan_mid'] = chan_mid
-        signal_dict['market_rank_1d'] = 0.5 if np.isnan(mkt_rank_1d) else mkt_rank_1d
-        signal_dict['market_rank_1w'] = 0.5 if np.isnan(mkt_rank_1w) else mkt_rank_1w
-        signal_dict['market_rank_1m'] = 0.5 if np.isnan(mkt_rank_1m) else mkt_rank_1m
         signal_dict['long_features'] = self.long_info['features']
         signal_dict['short_features'] = self.short_info['features']
         signal_dict['inval'] = stp
@@ -3731,7 +3744,6 @@ class ChannelRun(Agent):
         signal_dict['pct_of_full_pos'] = 1
         signal_dict['tf'] = self.tf
         signal_dict['asset'] = pair[:-len(session.quote_asset)]
-        signal_dict['model_age'] = model_age.total_seconds()
         signal_dict['conf_rf_usdt_l'] = long_confidence
         signal_dict['conf_rf_usdt_s'] = short_confidence
         signal_dict['confidence_l'] = long_confidence  # if there's more than one ml model, this is where i combine them

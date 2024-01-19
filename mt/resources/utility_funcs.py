@@ -286,9 +286,6 @@ def strat_benchmark(session, agent) -> dict:
     return benchmark
 
 
-
-
-
 def interpret_benchmark(session, agents: list) -> None:
     """takes the benchmark results, ranks them by performance, and prints them
     in a table"""
