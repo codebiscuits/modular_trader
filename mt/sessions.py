@@ -367,17 +367,17 @@ class TradingSession:
         self.spreads_df['timestamp'] = pd.to_datetime(self.spreads_df.index, format="%d/%m/%y %H:%M")
         self.spreads_df = self.spreads_df.set_index('timestamp', drop=True)
         self.spreads_df = self.spreads_df.sort_index()
-        self.spreads_df = self.spreads_df.resample('H').agg('mean')
+        self.spreads_df = self.spreads_df.resample('h').agg('mean')
 
         self.min_spread_12 = self.spreads_df.iloc[-12:, :].mean().min()
         self.med_spread_12 = self.spreads_df.iloc[-12:, :].mean().median()
         self.max_spread_12 = self.spreads_df.iloc[-12:, :].mean().max()
-        self.med_spread_roc_12 = self.spreads_df.rolling(3).mean().median(axis=1).pct_change(12).iloc[-1]
+        self.med_spread_roc_12 = self.spreads_df.rolling(3).mean().median(axis=1).pct_change(12, fill_method=None).iloc[-1]
 
         self.min_spread_24 = self.spreads_df.iloc[-24:, :].mean().min()
         self.med_spread_24 = self.spreads_df.iloc[-24:, :].mean().median()
         self.max_spread_24 = self.spreads_df.iloc[-24:, :].mean().max()
-        self.med_spread_roc_24 = self.spreads_df.rolling(3).mean().median(axis=1).pct_change(24).iloc[-1]
+        self.med_spread_roc_24 = self.spreads_df.rolling(3).mean().median(axis=1).pct_change(24, fill_method=None).iloc[-1]
 
     @uf.retry_on_busy()
     def update_prices(self) -> None:
