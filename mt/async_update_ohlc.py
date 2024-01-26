@@ -44,13 +44,13 @@ async def stitch(pair, klines, all_data, tf):
         df = df.tail(max_len).reset_index(drop=True)
 
     extra_data = {'pair': pair,
-                  'roc_1d': df.close.rolling(12).mean().ffill().pct_change(288).iloc[-1],
-                  'roc_1w': df.close.rolling(84).mean().ffill().pct_change(2016).iloc[-1],
-                  'roc_1m': df.close.rolling(360).mean().ffill().pct_change(8640).iloc[-1],
+                  'roc_1d': df.close.rolling(12).mean().ffill().pct_change(288, fill_method=None).iloc[-1],
+                  'roc_1w': df.close.rolling(84).mean().ffill().pct_change(2016, fill_method=None).iloc[-1],
+                  'roc_1m': df.close.rolling(360).mean().ffill().pct_change(8640, fill_method=None).iloc[-1],
                   'volume_1d': df.tail(288).quote_vol.sum(),
                   'volume_1w': df.tail(2016).quote_vol.sum(),
-                  'volatility_1d': df.tail(288).close.ffill().pct_change().std(),
-                  'volatility_1w': df.tail(2016).close.ffill().pct_change().std(),
+                  'volatility_1d': df.tail(288).close.ffill().pct_change(fill_method=None).std(),
+                  'volatility_1w': df.tail(2016).close.ffill().pct_change(fill_method=None).std(),
                   'length': len(df)}
 
     ohlc_w = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{tf}/{pair}.parquet')
@@ -132,7 +132,7 @@ for sym in session.info['symbols']:
             fp.unlink()
 all_pairs = list(session.pairs_data.keys())
 
-divs = 3
+divs = 2 # with 4gb of ram this value should be 6, with 8gb use a value of
 extra_dfs = []
 for div in range(divs):
     logger.info(f"division {div + 1} of {divs}")
