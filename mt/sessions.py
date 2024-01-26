@@ -372,12 +372,12 @@ class TradingSession:
         self.min_spread_12 = self.spreads_df.iloc[-12:, :].mean().min()
         self.med_spread_12 = self.spreads_df.iloc[-12:, :].mean().median()
         self.max_spread_12 = self.spreads_df.iloc[-12:, :].mean().max()
-        self.spread_roc_12 = self.spreads_df.rolling(3).mean().median(axis=1).pct_change(12).iloc[-1]
+        self.med_spread_roc_12 = self.spreads_df.rolling(3).mean().median(axis=1).pct_change(12).iloc[-1]
 
         self.min_spread_24 = self.spreads_df.iloc[-24:, :].mean().min()
         self.med_spread_24 = self.spreads_df.iloc[-24:, :].mean().median()
         self.max_spread_24 = self.spreads_df.iloc[-24:, :].mean().max()
-        self.spread_roc_24 = self.spreads_df.rolling(3).mean().median(axis=1).pct_change(24).iloc[-1]
+        self.med_spread_roc_24 = self.spreads_df.rolling(3).mean().median(axis=1).pct_change(24).iloc[-1]
 
     @uf.retry_on_busy()
     def update_prices(self) -> None:

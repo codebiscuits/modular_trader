@@ -132,7 +132,7 @@ for sym in session.info['symbols']:
             fp.unlink()
 all_pairs = list(session.pairs_data.keys())
 
-divs = 6
+divs = 3
 extra_dfs = []
 for div in range(divs):
     logger.info(f"division {div + 1} of {divs}")

@@ -1433,7 +1433,16 @@ class Agent:
                     'mkt_rank_1d': 0.5 if signal['market_rank_1d'] == np.nan else signal['market_rank_1d'],
                     'mkt_rank_1w': 0.5 if signal['market_rank_1w'] == np.nan else signal['market_rank_1w'],
                     'mkt_rank_1m': 0.5 if signal['market_rank_1m'] == np.nan else signal['market_rank_1m'],
-                    'rr': signal.get('rr')
+                    'rr': signal.get('rr'),
+                    'spread': signal['spread'],
+                    'spread_rank': signal['spread_rank'],
+                    'spread_vs_med': signal['spread_vs_med'],
+                    'spread_vs_med_12': signal['spread_vs_med_12'],
+                    'spread_vs_med_24': signal['spread_vs_med_24'],
+                    'spread_channel_pos_12': signal['spread_channel_pos_12'],
+                    'spread_channel_pos_24': signal['spread_channel_pos_24'],
+                    'spread_roc_12': signal['spread_roc_12'],
+                    'spread_roc_24': signal['spread_roc_24'],
                     }
 
         data = pd.DataFrame().from_dict(data=features, orient='columns')
@@ -3561,6 +3570,8 @@ class TrailFractals(Agent):
         signal_dict['spread_vs_med_24'] = spread / session.med_spread_24
         signal_dict['spread_channel_pos_12'] = (spread - session.min_spread_12) / (session.max_spread_12 - session.min_spread_12)
         signal_dict['spread_channel_pos_24'] = (spread - session.min_spread_24) / (session.max_spread_24 - session.min_spread_24)
+        signal_dict['spread_roc_12'] = session.med_spread_roc_12
+        signal_dict['spread_roc_24'] = session.med_spread_roc_24
 
         stp = self.calc_stop(inval, session.pairs_data[pair]['spread'], price)
         signal_dict['inval'] = stp
@@ -3731,6 +3742,8 @@ class ChannelRun(Agent):
         signal_dict['spread_vs_med_24'] = spread / session.med_spread_24
         signal_dict['spread_channel_pos_12'] = (spread - session.min_spread_12) / (session.max_spread_12 - session.min_spread_12)
         signal_dict['spread_channel_pos_24'] = (spread - session.min_spread_24) / (session.max_spread_24 - session.min_spread_24)
+        signal_dict['spread_roc_12'] = session.med_spread_roc_12
+        signal_dict['spread_roc_24'] = session.med_spread_roc_24
 
         signal_dict['chan_high'] = chan_high
         signal_dict['chan_low'] = chan_low
