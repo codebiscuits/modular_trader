@@ -133,6 +133,7 @@ for sym in session.info['symbols']:
 all_pairs = list(session.pairs_data.keys())
 
 divs = 2 # with 4gb of ram this value should be 6, with 8gb use a value of
+logger.debug(f"async divs: {divs}")
 extra_dfs = []
 for div in range(divs):
     logger.info(f"division {div + 1} of {divs}")
