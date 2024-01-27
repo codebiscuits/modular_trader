@@ -56,6 +56,8 @@ def identify_machine() -> str:
         return 'pi_1'
     elif Path('/pi_2.txt').exists():
         return 'pi_2'
+    elif Path('/pi_3.txt').exists():
+        return 'pi_3'
     elif Path('/laptop.txt').exists():
         return 'laptop'
     elif Path('/main_pc.txt').exists():
@@ -172,12 +174,13 @@ class TradingSession:
 
         y = Timer('set_live')
         y.start()
-        live = self.running_on in ['pi_1', 'pi_2']
+        live = self.running_on == 'laptop'
 
         if live:
-            logger.debug('*** Warning: Live ***')
+            logger.debug(f'*** Warning: Live - Running on {self.running_on} ***')
         else:
-            logger.info('*** Warning: Not Live ***')
+            logger.debug(f'*** Warning: Not Live - Running on {self.running_on} ***')
+            logger.info(f'*** Warning: Not Live - Running on {self.running_on} ***')
         y.stop()
         return live
 
