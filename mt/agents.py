@@ -108,7 +108,7 @@ class Agent:
         if session.live:
             records_r = session.records_r
         else:
-            records_r = session.records_r[self.pi_path]
+            records_r = session.records_r
 
         bal_path_1 = Path(f"{records_r}/{self.id}/perf_log.json")
         bal_path_2 = Path(f"{session.records_w}/{self.id}/perf_log.json")
