@@ -109,7 +109,7 @@ class TradingSession:
         self.name = 'agent names here'
         self.last_price_update = 0
         self.running_on = identify_machine()
-        self.live = True  # self.set_live()
+        self.live = self.set_live()
         self.min_size = 15
         self.timeframes = get_timeframes(force_all_tf)
 
