@@ -139,7 +139,7 @@ class Agent:
         if session.live:
             records_r = session.records_r
         else:
-            records_r = session.records_r[self.pi_path]
+            records_r = session.records_r
         real_folder = Path(f"{records_r}/{self.id}")
         test_folder = Path(f'{session.records_w}/{self.id}')
         if not test_folder.exists():
@@ -165,7 +165,7 @@ class Agent:
             if session.live:
                 records_r = session.records_r
             else:
-                records_r = session.records_r[self.pi_path]
+                records_r = session.records_r
             trades_path = Path(f'{records_r}/{self.id}/{switch}_trades.json')
             test_trades = Path(f'{session.records_w}/{self.id}/{switch}_trades.json')
             test_trades.touch(exist_ok=True)
@@ -255,7 +255,7 @@ class Agent:
         if session.live:
             records_r = session.records_r
         else:
-            records_r = session.records_r[self.pi_path]
+            records_r = session.records_r
         cs_path_1 = Path(f"{records_r}/{self.id}/closed_sim_trades.json")
         cs_path_2 = Path(f"{session.records_w}/{self.id}/closed_sim_trades.json")
 
@@ -3482,7 +3482,6 @@ class TrailFractals(Agent):
         self.name = f'trail_fractals_{self.width}_{self.spacing}'
         self.id = (f"trail_fractals_{self.tf}_{self.offset}_{self.width}_"
                    f"{self.spacing}_{self.pair_selection}")
-        self.pi_path = 1
         Agent.__init__(self, session)
         session.pairs_set.update(self.pairs)
         self.notes = ''
