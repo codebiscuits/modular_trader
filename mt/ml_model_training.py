@@ -58,6 +58,8 @@ def load_spreads():
 def spread_stats(spreads_df, pair, dt):
     """spreads df is hourly data"""
 
+    spreads_df = spreads_df.interpolate() # i would prefer to interpolate more inteligently than this
+
     spread = spreads_df.loc[dt, pair]
     current_med_spread = spreads_df.loc[dt, :].median()
 
@@ -65,11 +67,15 @@ def spread_stats(spreads_df, pair, dt):
     min_spread_12 = spread_12.min()
     med_spread_12 = spread_12.median()
     max_spread_12 = spread_12.max()
+    roc_12 = spreads_df.median(axis=1).rolling(12).mean().interpolate().ffill().pct_change(3) > 0
+    spread_roc_12 = roc_12[dt]
 
     spread_24 = spreads_df.loc[spreads_df.index < dt].tail(24).mean(axis=0)
     min_spread_24 = spread_24.min()
     med_spread_24 = spread_24.median()
     max_spread_24 = spread_24.max()
+    roc_24 = spreads_df.median(axis=1).rolling(24).mean().interpolate().ffill().pct_change(3) > 0
+    spread_roc_24 = roc_24[dt]
 
     return dict(
         spread=spread,
@@ -79,6 +85,8 @@ def spread_stats(spreads_df, pair, dt):
         spread_vs_med_24=spread / med_spread_24,
         spread_channel_pos_12=(spread - min_spread_12) / (max_spread_12 - min_spread_12),
         spread_channel_pos_24=(spread - min_spread_24) / (max_spread_24 - min_spread_24),
+        spread_roc_12=spread_roc_12,
+        spread_roc_24=spread_roc_24
     )
 
 
@@ -550,13 +558,12 @@ def create_risk_dataset(strat_name: str, side: str, timeframe: str, strat_params
         stamp = uf.scale_number(position['trade'][0]['timestamp'], 10)
         ts = datetime.fromtimestamp(stamp, tz=timezone.utc)
         dt = pd.Timestamp(year=ts.year, month=ts.month, day=ts.day, hour=ts.hour)
-        print(dt)
 
         if dt < spread_start:
-            print(f"Skipping {dt} because it is less than {spread_start}")
+            # print(f"Skipping {dt} because it is less than {spread_start}")
             continue
 
-        if signal.get('spread') is None: # get spread stats from historical records and merge them with signal dict
+        if signal.get('spread_roc_12') is None: # get spread stats from historical records and merge them with signal dict
             signal = signal | spread_stats(spreads_df, signal['pair'], dt)
 
         # pprint(signal)
@@ -568,6 +575,8 @@ def create_risk_dataset(strat_name: str, side: str, timeframe: str, strat_params
         spread_vs_med_24 = signal['spread_vs_med_24']
         spread_channel_pos_12 = signal['spread_channel_pos_12']
         spread_channel_pos_24 = signal['spread_channel_pos_24']
+        spread_roc_12 = signal['spread_roc_12']
+        spread_roc_24 = signal['spread_roc_24']
 
 
         # sum up trade rpnl
@@ -588,6 +597,8 @@ def create_risk_dataset(strat_name: str, side: str, timeframe: str, strat_params
                 spread_vs_med_24=spread_vs_med_24,
                 spread_channel_pos_12=spread_channel_pos_12,
                 spread_channel_pos_24=spread_channel_pos_24,
+                spread_roc_12=spread_roc_12,
+                spread_roc_24=spread_roc_24,
                 conf_l=signal['conf_rf_usdt_l'],
                 conf_s=signal['conf_rf_usdt_s'],
                 inval_dist=signal['inval_dist'],
@@ -927,16 +938,16 @@ if __name__ == '__main__':
         mult = {'15m': 3, '30m': 6, '1h': 12, '4h': 48, '12h': 144, '1d': 288}  # how many 5m periods to get data_len
         history = n[timeframe] * mult[timeframe]
 
-        # if timeframe in ['15m', '30m']:
-            # all_stats.append(train_primary('channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 100, 'volume_1d', history, num_trials))
-            # all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 100, 'volume_1d', 0.4, num_trials))
+        if timeframe in ['15m', '30m']:
+            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 100, 'volume_1d', history, num_trials))
+            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'mid', 'edge'), uid, 100, 'volume_1d', 0.4, num_trials))
 
-            # all_stats.append(train_primary('channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 100, 'volume_1d', history, num_trials))
-            # all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 100, 'volume_1d', 0.4, num_trials))
+            all_stats.append(train_primary('channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 100, 'volume_1d', history, num_trials))
+            all_stats.append(train_secondary('risk', 'channel_run', side, timeframe, (200, 'edge', 'mid'), uid, 100, 'volume_1d', 0.4, num_trials))
 
         if timeframe in [#'4h',
                          '12h', '1d']:
-            # all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), uid, 100, 'volume_1d', history, num_trials))
+            all_stats.append(train_primary('trail_fractals', side, timeframe, (5, 2), uid, 100, 'volume_1d', history, num_trials))
             all_stats.append(train_secondary('risk', 'trail_fractals', side, timeframe, (5, 2), uid, 100, 'volume_1d', 0.4, num_trials))
 
     all_stats = [record for record in all_stats if record is not None]
