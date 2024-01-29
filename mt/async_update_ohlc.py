@@ -5,11 +5,12 @@ from time import perf_counter as perf
 from mt.resources.loggers import create_logger
 from pyarrow import ArrowInvalid
 from datetime import datetime, timezone
-from mt.sessions import TradingSession
+from mt.sessions import TradingSession, LightSession
 from pathlib import Path
 
 sync_client = Client()
-session = TradingSession(0.1, 0.003, True, True)
+# session = TradingSession(0.1, 0.003, True, True)
+session = LightSession()
 logger = create_logger('async_update_ohlc', 'async_update_ohlc')
 
 
@@ -132,15 +133,17 @@ for sym in session.info['symbols']:
             fp.unlink()
 all_pairs = list(session.pairs_data.keys())
 
-divs = 2 # with 4gb of ram this value should be 6, with 8gb use a value of
+divs = 2 # with 4gb of ram this value should be 6, with 8gb use a value of 2
 logger.debug(f"async divs: {divs}")
 extra_dfs = []
 for div in range(divs):
     logger.info(f"division {div + 1} of {divs}")
     pairs = all_pairs[div::divs]
     extra_dfs.append(asyncio.run(main(pairs, '5m')))
-
 extra_df = pd.concat(extra_dfs, ignore_index=True)
+
+# extra_df = (asyncio.run(main(all_pairs, '5m'))) #  0 divs, only use with > 10gb ram
+
 extra_df['rank_1d'] = extra_df['roc_1d'].rank(pct=True)
 extra_df['rank_1w'] = extra_df['roc_1w'].rank(pct=True)
 extra_df['rank_1m'] = extra_df['roc_1m'].rank(pct=True)

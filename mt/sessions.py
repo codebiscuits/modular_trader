@@ -66,6 +66,160 @@ def identify_machine() -> str:
         return 'other'
 
 
+
+def data_paths(tf) -> tuple[Path, Path, Path, Path, Path, Path]:
+    """automatically sets the absolute paths for the market_data, records and ohlc folders"""
+
+    u = Timer('mkt_data_path in session')
+    u.start()
+
+    ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{tf}')
+    mkt_data_r = Path('/home/ross/coding/modular_trader/market_data')
+    records_r = Path(f'/home/ross/coding/modular_trader/records')
+
+    # if self.running_on == 'pi_1':
+    #     ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
+    #     mkt_data_r = Path('/home/ross/coding/modular_trader/market_data')
+    #     records_r = Path(f'/home/ross/coding/modular_trader/records')
+    # elif self.running_on == 'pi_2':
+    #     ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
+    #     mkt_data_r = Path('/home/ross/coding/modular_trader/market_data')
+    #     records_r = Path(f'/home/ross/coding/modular_trader/records')
+    # else:
+    #     ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
+    #     mkt_data_r = Path('/home/ross/coding/pi_2/modular_trader/market_data')
+    #     records_r = (Path(f'/home/ross/coding/pi_1/modular_trader/records'),
+    #                  Path(f'/home/ross/coding/pi_2/modular_trader/records'))
+
+    mkt_data_w = Path('/home/ross/coding/modular_trader/market_data')
+    mkt_data_w.mkdir(parents=True, exist_ok=True)
+    records_w = Path(f'/home/ross/coding/modular_trader/records')
+    records_w.mkdir(exist_ok=True)
+    ohlc_w = Path(f"/home/ross/coding/modular_trader/bin_ohlc_{tf}")
+    ohlc_w.mkdir(exist_ok=True)
+
+    return mkt_data_r, mkt_data_w, records_r, records_w, ohlc_r, ohlc_w
+
+
+
+class LightSession:
+
+    pairs_data = {}
+    def __init__(self):
+        self.ohlc_tf = '5m'
+        self.quote_asset = 'USDT'
+        self.now_start = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
+        self.client = Client(keys.bPkey, keys.bSkey, testnet=False)
+        self.info = self.client.get_exchange_info()
+        self.spreads = self.binance_spreads()
+        self.mkt_data_r, self.mkt_data_w, self.records_r, self.records_w, self.ohlc_r, self.ohlc_w = data_paths(self.ohlc_tf)
+        self.spreads_df = self.save_spreads()
+        self.current_spreads = pd.DataFrame(self.spreads, index=['spread']).transpose()
+        self.current_spreads['rank'] = self.current_spreads['spread'].rank(pct=True)
+        self.get_pairs_info()
+
+    def binance_spreads(self, quote: str = 'USDT') -> dict[str: float]:
+        """returns a dictionary with pairs as keys and current average spread as values"""
+
+        def parse_ob_tickers(tickers):
+            s = {}
+            for t in tickers:
+                if t.get('symbol')[-1 * length:] == quote:
+                    pair = t.get('symbol')
+                    bid = float(t.get('bidPrice'))
+                    ask = float(t.get('askPrice'))
+                    if bid and ask:
+                        spread = ask - bid
+                        mid = (ask + bid) / 2
+                        s[pair] = spread / mid
+
+            return s
+
+        length = len(quote)
+        avg_spreads = {}
+
+        s_1 = parse_ob_tickers(self.client.get_orderbook_tickers())
+        time.sleep(1)
+
+        s_2 = parse_ob_tickers(self.client.get_orderbook_tickers())
+        time.sleep(1)
+
+        s_3 = parse_ob_tickers(self.client.get_orderbook_tickers())
+
+        for k in s_1:
+            avg_spreads[k] = stats.median([s_1.get(k), s_2.get(k), s_3.get(k)])
+
+        return avg_spreads
+
+    def save_spreads(self):
+        spreads_path = self.mkt_data_w / 'spreads.json'
+        spreads_path.touch(exist_ok=True)
+
+        with open(spreads_path, 'r') as file:
+            try:
+                spreads_data = json.load(file)
+            except json.JSONDecodeError:
+                spreads_data = {}
+
+        spreads_data[self.now_start] = self.spreads
+
+        with open(spreads_path, 'w') as file:
+            json.dump(spreads_data, file)
+
+        logger.info(f'\nsaved spreads to {spreads_path}\n')
+
+        return pd.DataFrame().from_dict(spreads_data, orient='index')
+
+    def get_pairs_info(self):
+
+        not_pairs = ['GBPUSDT', 'AUDUSDT', 'BUSDUSDT', 'EURUSDT', 'TUSDUSDT',
+                     'USDCUSDT', 'PAXUSDT', 'COCOSUSDT', 'SUSDUSDT', 'USDPUSDT',
+                     'USTUSDT']
+
+        symbols = self.info['symbols']
+        for sym in symbols:
+            pair = sym.get('symbol')
+            right_quote = sym.get('quoteAsset') == self.quote_asset
+            right_market = 'SPOT' in sym.get('permissions')
+            allowed = pair not in not_pairs
+
+            if right_quote and right_market and allowed:
+                base_asset = sym.get('baseAsset')
+
+                margin = 'MARGIN' in sym.get('permissions')
+                oco_allowed = sym['ocoAllowed']
+                quote_order_qty_allowed = sym['quoteOrderQtyMarketAllowed']
+
+                if sym.get('status') != 'TRADING':
+                    continue
+
+                for f in sym['filters']:
+                    if f['filterType'] == 'PRICE_FILTER':
+                        tick_size = Decimal(f['tickSize'])
+                    elif f['filterType'] == 'LOT_SIZE':
+                        step_size = Decimal(f['stepSize'])
+                    elif f['filterType'] == 'NOTIONAL':
+                        min_size = f['minNotional']
+                    elif f['filterType'] == 'MAX_NUM_ALGO_ORDERS':
+                        max_algo = f['maxNumAlgoOrders']
+
+                self.pairs_data[pair] = dict(
+                    base_asset=base_asset,
+                    # cg_symbol=cg_symbol,
+                    spread=self.spreads.get(pair),
+                    spread_rank=self.current_spreads.loc[pair, 'rank'],
+                    margin_allowed=margin,
+                    price_tick_size=tick_size,
+                    lot_step_size=step_size,
+                    min_notional=min_size,
+                    max_algo_orders=max_algo,
+                    oco_allowed=oco_allowed,
+                    qoq_allowed=quote_order_qty_allowed,
+                    spot_orders=[],
+                    margin_orders=[],
+                )
+
+
 class TradingSession:
     min_length = 10000
     max_length = 0  # this gets updated by each agent init so it ends up enough for all of them
@@ -99,6 +253,7 @@ class TradingSession:
         t.start()
 
         # configure settings and constants
+        self.ohlc_tf = '5m'
         self.now_start = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
         self.client = Client(keys.bPkey, keys.bSkey, testnet=False)
         self.use_local_records = use_local_records
@@ -127,7 +282,7 @@ class TradingSession:
         abc.stop()
 
         # load local data and configure settings
-        self.mkt_data_r, self.mkt_data_w, self.records_r, self.records_w, self.ohlc_r, self.ohlc_w = self.data_paths()
+        self.mkt_data_r, self.mkt_data_w, self.records_r, self.records_w, self.ohlc_r, self.ohlc_w = data_paths(self.ohlc_tf)
         self.spreads_df = self.save_spreads()
         self.spread_stats()
         self.load_mkt_ranks()
@@ -337,8 +492,8 @@ class TradingSession:
 
         return avg_spreads
 
-
     def save_spreads(self):
+
         spreads_path = self.mkt_data_w / 'spreads.json'
         spreads_path.touch(exist_ok=True)
 
@@ -460,39 +615,6 @@ class TradingSession:
         self.fees['spot_taker'] = taker * Decimal(0.75) if spot_bnb else taker
         self.fees['margin_maker'] = maker * Decimal(0.75) if margin_bnb else maker
         self.fees['margin_taker'] = taker * Decimal(0.75) if margin_bnb else taker
-
-    def data_paths(self) -> tuple[Path, Path, Path, Path, Path]:
-        """automatically sets the absolute paths for the market_data, records and ohlc folders"""
-
-        u = Timer('mkt_data_path in session')
-        u.start()
-
-        ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
-        mkt_data_r = Path('/home/ross/coding/modular_trader/market_data')
-        records_r = Path(f'/home/ross/coding/modular_trader/records')
-
-        # if self.running_on == 'pi_1':
-        #     ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
-        #     mkt_data_r = Path('/home/ross/coding/modular_trader/market_data')
-        #     records_r = Path(f'/home/ross/coding/modular_trader/records')
-        # elif self.running_on == 'pi_2':
-        #     ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
-        #     mkt_data_r = Path('/home/ross/coding/modular_trader/market_data')
-        #     records_r = Path(f'/home/ross/coding/modular_trader/records')
-        # else:
-        #     ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}')
-        #     mkt_data_r = Path('/home/ross/coding/pi_2/modular_trader/market_data')
-        #     records_r = (Path(f'/home/ross/coding/pi_1/modular_trader/records'),
-        #                  Path(f'/home/ross/coding/pi_2/modular_trader/records'))
-
-        mkt_data_w = Path('/home/ross/coding/modular_trader/market_data')
-        mkt_data_w.mkdir(parents=True, exist_ok=True)
-        records_w = Path(f'/home/ross/coding/modular_trader/records')
-        records_w.mkdir(exist_ok=True)
-        ohlc_w = Path(f"/home/ross/coding/modular_trader/bin_ohlc_{self.ohlc_tf}")
-        ohlc_w.mkdir(exist_ok=True)
-
-        return mkt_data_r, mkt_data_w, records_r, records_w, ohlc_r, ohlc_w
 
     def set_ohlc_tf(self, tf):
         self.ohlc_tf = tf

@@ -1443,6 +1443,7 @@ class Agent:
                     'spread_channel_pos_24': signal['spread_channel_pos_24'],
                     'spread_roc_12': signal['spread_roc_12'],
                     'spread_roc_24': signal['spread_roc_24'],
+                    'hour': signal['hour']
                     }
 
         data = pd.DataFrame().from_dict(data=features, orient='columns')
@@ -3499,7 +3500,8 @@ class TrailFractals(Agent):
             logger.info(f"{pair} not a margin pair, but was trying to get margin signals")
             return dict()
 
-        signal_dict = {'agent': self.id, 'mode': self.mode, 'pair': pair, 'timestamp': datetime.now().timestamp()}
+        signal_dict = {'agent': self.id, 'mode': self.mode, 'pair': pair,
+                       'timestamp': datetime.now().timestamp(), 'hour': datetime.now(tz=timezone.utc).hour}
 
         df = ind.williams_fractals(df, self.width, self.spacing)
 
@@ -3643,7 +3645,8 @@ class ChannelRun(Agent):
         if pair not in self.pairs:
             return dict()
 
-        signal_dict = {'agent': self.id, 'mode': self.mode, 'pair': pair, 'timestamp': datetime.now().timestamp()}
+        signal_dict = {'agent': self.id, 'mode': self.mode, 'pair': pair,
+                       'timestamp': datetime.now().timestamp(), 'hour': datetime.now(tz=timezone.utc).hour}
         price = session.pairs_data[pair]['price']
 
         df[f"ll_{self.lookback}"] = df.low.rolling(self.lookback).min()
