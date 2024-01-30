@@ -134,7 +134,7 @@ for sym in session.info['symbols']:
 all_pairs = list(session.pairs_data.keys())
 
 hour = datetime.now().hour
-divs = hour % 5 + 2 # with 4gb of ram this value should be 6, with 8gb use a value of 2
+divs = hour % 7 + 2 # with 4gb of ram this value should be 6, with 8gb use a value of 2
 logger.debug(f"async divs: {divs}")
 extra_dfs = []
 for div in range(divs):
