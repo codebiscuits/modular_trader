@@ -133,7 +133,8 @@ for sym in session.info['symbols']:
             fp.unlink()
 all_pairs = list(session.pairs_data.keys())
 
-divs = 2 # with 4gb of ram this value should be 6, with 8gb use a value of 2
+hour = datetime.now().hour
+divs = hour % 5 + 2 # with 4gb of ram this value should be 6, with 8gb use a value of 2
 logger.debug(f"async divs: {divs}")
 extra_dfs = []
 for div in range(divs):
@@ -153,5 +154,5 @@ mkt_info_path = Path("/home/ross/coding/modular_trader/market_data/market_info.p
 extra_df.to_parquet(mkt_info_path)
 
 elapsed = perf() - start
-logger.debug(f"Time taken: {int(elapsed // 60)}m {elapsed % 60:.2f}s")
-logger.info(f"Time taken: {int(elapsed // 60)}m {elapsed % 60:.2f}s\n\n")
+logger.debug(f"Pairs updated: {len(all_pairs)}, Time taken: {int(elapsed // 60)}m {elapsed % 60:.2f}s")
+logger.info(f"Pairs updated: {len(all_pairs)}, Time taken: {int(elapsed // 60)}m {elapsed % 60:.2f}s\n\n")
