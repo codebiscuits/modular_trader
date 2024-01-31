@@ -133,8 +133,8 @@ for sym in session.info['symbols']:
             fp.unlink()
 all_pairs = list(session.pairs_data.keys())
 
-hour = datetime.now().hour
-divs = hour % 7 + 2 # with 4gb of ram this value should be 6, with 8gb use a value of 2
+# test_divs = datetime.now().hour % 7 + 2 #  this cycles through divs values for testing which is best on a machine
+divs = 4 # with 4gb of ram this value should be 6, with 8gb use a value of 4, with 16gb it doesn't seem to matter
 logger.debug(f"async divs: {divs}")
 extra_dfs = []
 for div in range(divs):
