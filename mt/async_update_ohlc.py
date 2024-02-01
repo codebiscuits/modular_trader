@@ -4,10 +4,11 @@ from binance import Client, AsyncClient
 from time import perf_counter as perf
 from mt.resources.loggers import create_logger
 from pyarrow import ArrowInvalid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta, date
 from mt.sessions import TradingSession, LightSession
 from pathlib import Path
-
+import pickle
+#
 sync_client = Client()
 # session = TradingSession(0.1, 0.003, True, True)
 session = LightSession()
@@ -156,3 +157,38 @@ extra_df.to_parquet(mkt_info_path)
 elapsed = perf() - start
 logger.debug(f"Pairs updated: {len(all_pairs)}, Time taken: {int(elapsed // 60)}m {elapsed % 60:.2f}s")
 logger.info(f"Pairs updated: {len(all_pairs)}, Time taken: {int(elapsed // 60)}m {elapsed % 60:.2f}s\n\n")
+
+
+
+###########  archive yesterday's spreads data  ###########
+
+import json
+
+filepath = Path("/home/ross/coding/modular_trader/market_data/spreads.json")
+with open(filepath, 'r') as f:
+    data = json.load(f)
+
+df = pd.DataFrame().from_dict(data, orient='index')
+df = df.reset_index()
+df['time'] = pd.to_datetime(df['index'], format='%d/%m/%y %H:%M')
+df['timestamp'] = ((df.time - pd.Timestamp("1970-01-01")) // pd.Timedelta("1s")).astype('int32')
+df = df.set_index('time', drop=True).drop('index', axis=1).sort_index()
+df = df.resample('h').agg('median')
+
+today = datetime.combine(date.today(), datetime.min.time())
+yesterday = today - timedelta(days=1)
+
+df_filtered = df.loc[df.index >= yesterday]
+df_filtered = df_filtered.loc[df_filtered.index < today]
+
+df_filtered = df_filtered.set_index('timestamp', drop=True)
+
+archive_path = Path("/home/ross/coding/modular_trader/market_data/spreads_archive")
+archive_path.mkdir(parents=True, exist_ok=True)
+archive_filepath = archive_path / f"{yesterday.strftime('%d-%m-%Y')}.json"
+
+if not archive_filepath.exists():
+    with open(archive_filepath, 'w') as f:
+        json.dump(df_filtered.to_dict(), f)
+        logger.info(f"Saved spreads data to {archive_filepath}")
+        logger.debug(f"Saved spreads data to {archive_filepath}")
