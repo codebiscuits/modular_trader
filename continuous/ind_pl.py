@@ -1,0 +1,36 @@
+import polars as pl
+import math
+
+
+def hma(data, length):
+    half_len = length / 2
+    root_len = round(math.sqrt(length))
+    data = data.with_columns(
+        ((pl.col('close').ewm_mean(span=half_len) * 2) - pl.col('close').ewm_mean(span=length))
+        .ewm_mean(span=root_len)
+        .alias(f'hma_{length}')
+    )
+    return data
+
+
+def ema(data, length):
+    data = data.with_columns(pl.col('close').ewm_mean(span=length).alias(f'ema_{length}'))
+
+    return data
+
+
+def ichimoku(data, f=9, s=26):
+    """fast and slow periods make up all the different components of the ichimoku system"""
+
+    # indicators
+    data = data.with_columns(
+        ((pl.col('high').rolling_max(f) + pl.col('low').rolling_min(f)) / 2).shift(1).alias('tenkan'),
+        ((pl.col('high').rolling_max(s) + pl.col('low').rolling_min(s)) / 2).shift(1).alias('kijun'),
+        ((pl.col('high').rolling_max(s) + pl.col('low').rolling_min(s * 2)) / 2).shift(1 + s).alias('senkou_b'),
+        pl.col('close').shift(1 - s).alias('chikou')
+    )
+    data = data.with_columns(
+        ((pl.col('tenkan') + pl.col('kijun')) / 2).shift(1 + s).alias('senkou_a')
+    )
+
+    return data
