@@ -1,7 +1,7 @@
 """this is the continuous trader equivalent of setup_scanner, the central script that puts everything together and runs
 it all"""
 
-from wootrade import Client as Client_w
+# from wootrade import Client as Client_w
 from binance.client import Client as Client_b
 import binance.enums as be
 import mt.resources.keys as keys
@@ -15,37 +15,119 @@ import matplotlib.pyplot as plt
 import math
 import statistics as stats
 from pathlib import Path
-import components
+from continuous import components
 from time import perf_counter
+from pprint import pprint
+from itertools import permutations
 
 all_start = perf_counter()
+
+# tos = datetime.now().hour
 
 pl.Config(tbl_cols=20, tbl_rows=50, tbl_width_chars=180)
 # client = Client_w(keys.woo_key, keys.woo_secret, keys.woo_app_id, testnet=True)
 # client = Client_b(keys.bPkey, keys.bSkey)
 
+# TODO make a dashboard
+# TODO correlation analysis to find pairs that don't move with the rest of the market
+# TODO make it possible to plot the individual coins' backtests
+# TODO make it possible to plot the individual forecasts' backtests
+# TODO add drawdown to the pnl plots
+# TODO work out how to apply the buffer concept to the backtests in the same way it applies to live trading, then remove
+#  forecast quantisation and check how that changes things
+
+# TODO import a list of all binance pairs i have data for, then test the pairs with the shortest history just to see if
+#  it works. If so, start testing lots of different portfolios with flat portfolio weighting to see if i can do better
+#  than i currently am with a manually selected portfolio
+
+# TODO i want a chart that shows one coin's price data with a single sub-strat's forecast overlaid, so i can see how
+#  well each forecast matches the price action. it would be great if i could make it so all the forecasts are there but
+#  they can be toggled on or off individually so i can just look at one or a few or all of them
+
+# TODO i need to work performance weightings into the portfolio backtests. i already have it working on the sub-strats,
+#  so it should be fairly easy to get it working on the coins too. then i can really decide which model to run.
+
+# TODO i need some more strategies to diversify what i currently have
+
+# note: i think the forward feature selection is probably curve fitting, so i won't use it until i can forward test it
+def sqntl_fwd(markets, n, weighting: str='weighted_lin'):
+    """pick the best portfolio of n trading pairs from the list by adding one pair at a time and backtesting the
+    combined sharpe ratio of each iteration"""
+
+    best = markets[:1]
+    remaining = markets[1:]
+    high_score = 0
+
+    while len(best) < n:
+        results = []
+        for r in remaining:
+            interim = best.copy()
+            interim.append(r)
+            trader_2y = components.Trader(interim, 17520, 1)
+            all_pnls = trader_2y.compare_backtests()
+            stats = components.calc_perf(all_pnls[weighting])
+            results.append({'trial': r, 'sharpe': stats['sharpe']})
+
+        res_df = pl.DataFrame(results).sort('sharpe', descending=True)
+        best_trial = res_df.item(0, 'trial')
+        best_sharpe = res_df.item(0, 'sharpe')
+        if best_sharpe > high_score:
+            best.append(best_trial)
+            remaining.remove(best_trial)
+            high_score = best_sharpe
+        else:
+            break
+
+    print(f"\nOptimum Portfolio: {best}")
+    trader_2y = components.Trader(best, 17520, 1)
+    all_pnls = trader_2y.compare_backtests()
+    stats = components.calc_perf(all_pnls['weighted_lin'])
+    components.print_stats('weighted_lin', stats)
+
+    return best
+
+def choose_by_length(minimum: int|str, maximum:int|str=420000):
+    """checks the length of ohlc history of each trading pair, then makes a list of all pairs whos history length falls
+    within the stated range"""
+
+    lengths = {'1 month': 8750, '2 months': 17500, '3 months': 26250, '6 months': 52500,
+               '1 year': 105000, '2 years': 210000, '3 years': 315000, '4 years': 420000}
+
+    if isinstance(minimum, str):
+        minimum = lengths[minimum]
+    if isinstance(maximum, str):
+        maximum = lengths[maximum]
+
+    info = {}
+    data_path = Path("/home/ross/coding/modular_trader/bin_ohlc_5m")
+    for pair_path in list(data_path.glob('*')):
+        df = pl.read_parquet(pair_path)
+        info[pair_path.stem] = len(df)
+
+    return [p for p, v in info.items() if minimum < v <= maximum]
+
+
 markets = [
     'BTCUSDT',
-    # 'ETHUSDT',
-#     'SOLUSDT',
-#     'FXSUSDT',
-#     'ROSEUSDT',
+    'SOLUSDT',
+    'NEARUSDT',
+    'ROSEUSDT',
+    'OCEANUSDT',
+    'ETHUSDT',
+    'MATICUSDT',
+    'AVAXUSDT',
 ]
 
-session = components.Session()
-traders = {m: components.Trader(m) for m in markets}
+# markets = choose_by_length(400000, 420000)
+print(f"Testing {len(markets)} pairs")
+if len(markets) <= 10:
+    print(markets)
 
-for m in markets:
-    print(m)
-
-    traders[m].add_substrat(components.IchiTrend, {'market': m, 'timeframe': '8h', 'a': 10, 'b': 30})
-    # traders[m].add_substrat(components.IchiTrend, {'market': m, 'timeframe': '8h', 'a': 20, 'b': 60})
-    # traders[m].add_substrat(components.IchiTrend, {'market': m, 'timeframe': '1d', 'a': 10, 'b': 30})
-    # traders[m].add_substrat(components.IchiTrend, {'market': m, 'timeframe': '1d', 'a': 20, 'b': 60})
-
-    for ss in traders[m].strats:
-        print(ss)
-        print(ss.data.fetch())
+# lookback window options: '4 years', '3 years', '2 years', '1 year', '6 months', '3 months', '1 month', '1 week'
+trader = components.Trader(markets, '3 years', 'perf', True, 3, live=True)
+trader.run_backtests(plot_pnls=False, window='2 years')
+trader.run_trading()
 
 all_end = perf_counter()
 print(f"elapsed time: {all_end - all_start:.1f}s")
+print("\n****************************************************************************")

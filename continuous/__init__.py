@@ -1,4 +1,4 @@
-# this is a new system inspired by the 'advanced futures trading strategies' book, uusing a continuous trading paradigm
+# this is a new system inspired by the 'advanced futures trading strategies' book, using a continuous trading paradigm
 # instead of discrete setups and positions.
 
 # i want to run the system on woo, so i will develop functions for execution and monitoring of the woo exchange, and i
