@@ -140,7 +140,7 @@ if len(markets) <= 10:
     print(markets)
 
 # lookback window options: '4 years', '3 years', '2 years', '1 year', '6 months', '3 months', '1 month', '1 week'
-trader = components.Trader(markets, '3 years', 'perf', True, 3, live=True)
+trader = components.Trader(markets, '3 years', 'perf', True, 5, live=True)
 trader.run_backtests(plot_pnls=False, window='2 years')
 trader.run_trading()
 
