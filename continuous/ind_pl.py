@@ -34,3 +34,10 @@ def ichimoku(data, f=9, s=26):
     )
 
     return data
+
+def rsi(series: pl.Series, lookback: int=14) -> pl.Series:
+    """transforms input series into rsi of that series"""
+
+    pass
+
+

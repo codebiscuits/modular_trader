@@ -405,8 +405,6 @@ class Trader:
     def execute_trades(self, diff):
 
         # TODO execute all the borrows first, using the values in the diff
-        # TODO make sure to update asset_bals
-        # TODO
 
         print("\ndiff:")
         pprint(diff)
@@ -424,28 +422,26 @@ class Trader:
         # borrow USDT as needed
         if total_long_diff > 0:
             total_long_diff *= 1.1
-            print(f"\n\nBorrow {total_long_diff:.2f} USDT")
+            # print(f"\n\nBorrow {total_long_diff:.2f} USDT")
             loan = self.borrow('USDT', total_long_diff)
 
         # reduce existing positions as needed
         for asset, change in diff.items():
             if change['long_diff'] < 0:
-                print(f"\n\nSell {abs(change['long_diff']):.2f} USDT of {asset}")
+                # print(f"\n\nSell {abs(change['long_diff']):.2f} USDT of {asset}")
                 self.sell(asset, abs(change['long_diff']))
             elif change['short_diff'] > 0:
-                print(f"\n\nBuy {change['short_diff']:.2f} {asset}")
+                # print(f"\n\nBuy {change['short_diff']:.2f} USDT of {asset}")
                 self.buy(asset, change['short_diff'])
 
         # increase existing positions as needed
         for asset, change in diff.items():
             if change['long_diff'] > 0:
-                print(f"\n\nBuy {change['long_diff']:.2f} {asset}")
+                # print(f"\n\nBuy {change['long_diff']:.2f} USDT of {asset}")
                 self.buy(asset, change['long_diff'])
             elif change['short_diff'] < 0:
-                print(f"\n\nSell {abs(change['short_diff']):.2f} {asset}")
+                # print(f"\n\nSell {abs(change['short_diff']):.2f} USDT of {asset}")
                 borrowed = self.borrow(asset[:-4], abs(change['short_diff']))
-                print(f"amount borrowed: {borrowed}")
-                self.asset_bals[asset[:-4]]['free'] += borrowed
                 self.sell(asset, abs(change['short_diff']))
 
         # calculate how much USDT to keep in case shorts need to be covered and there's no available borrow
@@ -459,9 +455,7 @@ class Trader:
             if values['free'] and (values['borrowed'] or values['interest']):
                 owed = values['borrowed'] + values['interest']
                 repay_amount = round(min(values['free'], owed), 5)
-                if self.ignore_repay(asset, repay_amount):
-                    continue
-                print(f"\n\nRepay {repay_amount} {asset}")
+                # print(f"\n\nRepay {repay_amount} {asset}")
                 self.repay(asset, repay_amount)
 
     def ignore_repay(self, asset, repay_amount):
@@ -475,7 +469,8 @@ class Trader:
             repay_threshold = 10
             repay_value = repay_amount * asset_price
 
-        print(f"ignore {repay_amount} {asset} repay")
+        # if repay_value < repay_threshold:
+        #     print(f"ignore {repay_amount} {asset} repay, only worth {repay_value:.2f} USDT")
 
         return repay_value < repay_threshold
 
@@ -849,7 +844,7 @@ class Trader:
         print(f"{response['symbol']} {response['side']} logged")
 
     def buy(self, pair, quote_size):
-        print(f"Buy {quote_size:.2f} USDT of {pair}")
+        # print(f"Buy {quote_size:.2f} USDT of {pair}")
 
         # calculate base size
         price = self.pairs_data[pair]['price']
@@ -859,8 +854,8 @@ class Trader:
         if self.live:
             # check usdt balance before buying
             free_bal = self.asset_bals['USDT']['free']
-            if free_bal < quote_size:
-                print(f"Reducing {pair} buy size from {quote_size:.2f} USDT to {free_bal:.2f} USDT.")
+            # if free_bal < quote_size:
+            #     print(f"Reducing {pair} buy size from {quote_size:.2f} USDT to {free_bal:.2f} USDT.")
             buy_size = min(free_bal, quote_size)
 
             # send order to exchange
@@ -909,7 +904,7 @@ class Trader:
                 self.log_trade(price, quote_size, buy_order)
 
     def sell(self, pair, quote_size):
-        print(f"Sell {quote_size:.5f} USDT of {pair}")
+        # print(f"Sell {quote_size:.5f} USDT of {pair}")
 
         price = self.pairs_data[pair]['price']
         base_size = quote_size / price
@@ -917,8 +912,8 @@ class Trader:
         if self.live:
             # check free balance of asset before selling
             free_bal = self.asset_bals[pair[:-4]]['free']
-            if free_bal < float(base_size):
-                print(f"Reducing {pair} sell size from {base_size} to {free_bal}.")
+            # if free_bal < float(base_size):
+            #     print(f"Reducing {pair} sell size from {base_size} to {free_bal}.")
             sell_size = min(free_bal, float(base_size))
             if sell_size * price > self.min_transaction:
                 sell_size = step_round(sell_size, self.pairs_data[pair]['lot_step_size'])
@@ -975,27 +970,27 @@ class Trader:
 
         if self.live:
             max_loan = self.asset_bals[asset]['max_loan']
-            print(f"max {asset} loan: {max_loan}")
-            if max_loan < base_size:
-                print(f"Reducing {asset} borrow amount from {base_size} to {max_loan}")
+            # print(f"max {asset} loan: {max_loan}")
+            # if max_loan < base_size:
+            #     print(f"Reducing {asset} borrow amount from {base_size} to {max_loan}")
             base_size = f"{min([base_size, max_loan]):.5f}"
 
             if float(base_size):
-                print(f"Borrow {base_size} {asset}")
+                # print(f"Borrow {base_size} {asset}")
                 try:
                     tries = 0
                     loan = self.client.create_margin_loan(asset=asset, amount=base_size)
                     time.sleep(1)
                     details = self.client.get_margin_loan_details(asset=asset, txId=loan['tranId'])
                     status = details['rows'][0]['status']
-                    print(f"attempting to borrow {base_size} {asset}, status: {status}")
+                    # print(f"attempting to borrow {base_size} {asset}, status: {status}")
                     if status != 'CONFIRMED':
                         while status != 'CONFIRMED' and tries < 10:
                             time.sleep(5)
                             details = self.client.get_margin_loan_details(asset=asset, txId=loan['tranId'])
                             status = details['rows'][0]['status']
                             tries += 1
-                            print(f"{asset} loan status: {status} after {tries} tries.")
+                            # print(f"{asset} loan status: {status} after {tries} tries.")
                     if details['rows'][0]['status'] == 'CONFIRMED':
                         print(f"log {asset} borrow")
                         # pprint(details)
@@ -1015,7 +1010,6 @@ class Trader:
             return 0.0
 
     def repay(self, asset, amount):
-        print(f"running repay on {asset}")
         # calculate base size
         if asset == 'USDT':
             base_size = amount
@@ -1030,25 +1024,27 @@ class Trader:
             # print(f"Reducing {asset} repay from {amount} to {min(free_bal, owed)}")
             base_size = f"{min([free_bal, base_size, owed]) * 0.995:.5f}"
 
+            if self.ignore_repay(asset, float(base_size)):
+                return 0.0
+
             if float(base_size):
-                print(f"Repay {base_size} {asset}")
                 try:
                     tries = 0
                     repay = self.client.repay_margin_loan(asset=asset, amount=base_size)
                     time.sleep(1)
                     details = self.client.get_margin_repay_details(asset=asset, txId=repay['tranId'])
                     status = details['rows'][0]['status']
-                    print(f"attempting to repay {base_size} {asset}, status: {status}")
+                    # print(f"attempting to repay {base_size} {asset}, status: {status}")
                     if status != 'CONFIRMED':
                         while status != 'CONFIRMED' and tries < 10:
                             time.sleep(5)
-                            details = self.client.get_margin_loan_details(asset=asset, txId=repay['tranId'])
+                            details = self.client.get_margin_repay_details(asset=asset, txId=repay['tranId'])
                             status = details['rows'][0]['status']
                             tries += 1
-                            print(f"{asset} repay status: {status} after {tries} tries.")
+                            # print(f"{asset} repay status: {status} after {tries} tries.")
                     if details['rows'][0]['status'] == 'CONFIRMED':
                         print(f"log {asset} repay")
-                        pprint(details)
+                        # pprint(details)
                         self.asset_bals[asset]['free'] -= float(base_size)
                         self.asset_bals[asset]['borrowed'] -= float(base_size)
                         return float(details['rows'][0]['principal'])

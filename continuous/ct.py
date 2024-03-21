@@ -49,6 +49,15 @@ pl.Config(tbl_cols=20, tbl_rows=50, tbl_width_chars=180)
 
 # TODO i need some more strategies to diversify what i currently have
 
+# TODO backtesting idea: to test which filters to use in portfolio construction, i could backtest jumbo portfolios with
+#  different filters to see if there is a useful differentiation. eg if i want to test weekly rsi, i could make the
+#  following jumbo portfolios and compare their backtests:
+#  all pairs above 50 weekly rsi,
+#  all pairs below 50 weekly rsi,
+#  all pairs above 75 weekly rsi,
+#  all pairs below 25 weekly rsi,
+#  all pairs between 25 and 75 weekly rsi
+
 # note: i think the forward feature selection is probably curve fitting, so i won't use it until i can forward test it
 def sqntl_fwd(markets, n, weighting: str='weighted_lin'):
     """pick the best portfolio of n trading pairs from the list by adding one pair at a time and backtesting the
@@ -106,6 +115,12 @@ def choose_by_length(minimum: int|str, maximum:int|str=420000):
 
     return [p for p, v in info.items() if minimum < v <= maximum]
 
+def backtest_all():
+    # load each pair's ohlc one by one and compile a dict of statistics about them (backtested sharpe,ohlc length,
+    # current daily/weekly volume, htf overbought/oversold etc) then put all those stats into a dataframe and filter out
+    # the worst examples for each factor, then sort the rest by sharpe and pick the best 10/15/20. run this once a week
+    # or so.
+    pass
 
 markets = [
     'BTCUSDT',
@@ -118,7 +133,8 @@ markets = [
     'AVAXUSDT',
 ]
 
-# markets = choose_by_length(400000, 420000)
+# markets = choose_by_length(0, 10000)
+
 print(f"Testing {len(markets)} pairs")
 if len(markets) <= 10:
     print(markets)
