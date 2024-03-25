@@ -316,15 +316,7 @@ class Trader:
 
         return port_pnl
 
-    def get_pos_sizes(self, sub_weighting: bool = True):
-
-        if sub_weighting:
-            sizes = self.weighted_data.select(cs.contains('size')).to_dicts()[-1]
-            sharpes = self.weighted_data.select(cs.contains('sharpe')).to_dicts()[-1]
-        else:
-            sizes = self.flat_data.select(cs.contains('size')).to_dicts()[-1]
-            sharpes = self.flat_data.select(cs.contains('sharpe')).to_dicts()[-1]
-
+    def get_pos_sizes(self):
         # calculate flat weights
         flat_weight = 1 / len(self.markets)
 
@@ -333,13 +325,15 @@ class Trader:
         lin_weights = sorted([x / sum(n) for x in n], reverse=True)
 
         # calculate performance-based weights
+        sharpes = self.backtest_data.select(cs.contains('dyn_sharpe')).to_dicts()[-1]
         total_perf_weight = sum([max(s, 0) for s in sharpes.values()]) + 1
         perf_weights = {k: v / total_perf_weight for k, v in sharpes.items()}
 
         final_sizes = {}
+        sizes = self.backtest_data.select(cs.contains('raw_forecast')).to_dicts()[-1]
         for n, m in enumerate(self.markets):
             final_sizes[m] = {
-                'size': sizes[f"{m}_size"],
+                'size': sizes[f"{m}_raw_forecast"],
                 'flat_weight': flat_weight,
                 'lin_weight': lin_weights[n],
                 'perf_weight': perf_weights[f"{m}_dyn_sharpe"]
@@ -479,8 +473,7 @@ class Trader:
         print(f"Portfolio: {self.markets}")
 
         print('Current Backtest Results:')
-        print_stats('weighted_flat', self.flat_stats)
-        print_stats('weighted_lin', self.lin_stats)
+        print_stats('Performance Stats:', self.stats)
         # print_stats('weighted_perf', self.perf_stats)
 
         sorted_target_pos = dict(sorted(self.targets.items()))
@@ -497,6 +490,7 @@ class Trader:
     def log_info(self):
         new_data = dict(
             timestamp=self.now_start,
+            fc_weighting=self.fc_weighting,
             port_weights=self.port_weights,
             usdt_net=self.capital['usdt_net'],
             btc_net=self.capital['btc_net'],
@@ -505,9 +499,7 @@ class Trader:
             flat_allocations=self.flat_allocations,
             lin_allocations=self.lin_allocations,
             perf_allocations=self.perf_allocations,
-            flat_bt_sharpe=self.flat_stats['sharpe'],
-            lin_bt_sharpe=self.lin_stats['sharpe'],
-            # perf_bt_sharpe=self.perf_stats['sharpe'],
+            bt_sharpe=self.stats['sharpe'],
             trades=self.num_trades
         )
 
