@@ -8,6 +8,8 @@ import polars as pl
 import polars.selectors as cs
 import plotly.graph_objects as go
 import plotly.express as px
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
 import seaborn as sns
 import matplotlib.pyplot as plt
 import math
@@ -23,33 +25,22 @@ from decimal import Decimal
 # client = Client_w(keys.woo_key, keys.woo_secret, keys.woo_app_id, testnet=True)
 client = Client_b(keys.bPkey, keys.bSkey)
 
-
-def standard_forecast(forecast: pl.Series, dyn_std: pl.Series, flip: bool = False) -> pl.Series:
-    """scales a forecast by dynamic standard deviation"""
-
-    flipper = -1 if flip else 1
-
-    # standardise and flip
-    forecast = ((forecast / dyn_std) * flipper)
-
-    # normalise
-    forecast = forecast / forecast.abs().mean()
-
-    forecast = forecast.clip(lower_bound=-1, upper_bound=1)
-
-    return forecast
-
-
 def calc_perf(s: pl.Series, window: int = 8760) -> dict:
-    """calculates 1 year rolling performance statistics"""
+    """calculates 1 year rolling performance statistics on any cummulative pnl series"""
 
     ann_mean = s.pct_change().mean() * 8760
     ann_std = s.pct_change().std() * 92
-    ann_sharpe = ann_mean / ann_std
+    if ann_std:
+        ann_sharpe = ann_mean / ann_std
+    else:
+        ann_sharpe = 0
 
-    dyn_mean = s.pct_change().rolling_mean(window, min_periods=3)[-1] * 8760
-    dyn_std = s.pct_change().rolling_std(window, min_periods=3)[-1] * 92
-    dyn_sharpe = dyn_mean / dyn_std
+    dyn_mean = s.pct_change().ewm_mean(span=window, min_periods=100)[-1] * 8760
+    dyn_std = s.pct_change().ewm_std(span=window, min_periods=100)[-1] * 92
+    if dyn_std:
+        dyn_sharpe = dyn_mean / dyn_std
+    else:
+        dyn_sharpe = 0
 
     dd = (s.cum_max() - s) / s.cum_max()
     max_dd = dd.rolling_max(window, min_periods=1)[-1]
@@ -70,7 +61,7 @@ def calc_perf(s: pl.Series, window: int = 8760) -> dict:
 
 
 def print_stats(name: str, d: dict) -> None:
-    print(f"{name} Total Rtn: {d['total_rtn']:.0f}, "
+    print(f"{name} Total Rtn: {d['total_rtn']:.0f}x, "
           f"Sharpe: {d['sharpe']:.2f}, "
           f"Mean Rtn: {d['mean_rtn']:.1%}, "
           f"Stdev: {d['std_rtn']:.2f}, "
@@ -94,8 +85,8 @@ def match_lengths(data_in: dict) -> pl.DataFrame:
 def calc_dyn_weight(s: pl.Series, lookback=8760) -> pl.Series:
     """calculates rolling sharpe ratio, annualised for hourly data"""
 
-    ann_mean = s.pct_change().rolling_mean(lookback, min_periods=168) * 8760
-    ann_std = (s.pct_change().rolling_std(lookback, min_periods=168) * 92).clip(lower_bound=0.1)
+    ann_mean = s.pct_change().ewm_mean(span=lookback, min_periods=168) * 8760
+    ann_std = (s.pct_change().ewm_std(span=lookback, min_periods=168) * 92).clip(lower_bound=0.1)
 
     # px.histogram(y=ann_std).show()
 
@@ -120,44 +111,49 @@ class Trader:
     lookbacks = {'4 years': 35040, '3 years': 26280, '2 years': 17520, '1 year': 8760,
                  '6 months': 4380, '3 months': 2180, '1 month': 720, '1 week': 168}
 
-    def __init__(self, markets: list[str], dyn_weight_lb: str, port_weights: str,
-                 keep_records: bool = True, leverage: float|str = 1.0, live = False):
+    def __init__(self, markets: list[str], dyn_weight_lb: str, fc_weighting: bool, port_weights: str,
+                 strat_list: list, keep_records: bool = True, leverage: float|str = 1.0, live = False):
         self.now_start = datetime.now().timestamp()
         print(f"\nTrader initialised at {datetime.fromtimestamp(self.now_start).strftime('%d/%m/%Y %H:%M:%S')}")
         self.markets = markets
         self.dyn_weight_lb = self.lookbacks[dyn_weight_lb]
+        self.fc_weighting = fc_weighting
         self.port_weights = port_weights
         self.keep_records = keep_records
         self.target_lev = leverage
         self.live = live
         self.buffer = 0.02  # this is the minimum position change for a trade to be triggered
         self.min_transaction = 10.0  # this is the minimum change in USDT for a trade to be triggered
-        self.coins = {m: Coin(m, self.dyn_weight_lb) for m in self.markets}
+        self.coins = {m: Coin(m, self.dyn_weight_lb, strat_list) for m in self.markets}
+        self.create_strats()
         self.mkt_data_path = Path('/home/ross/coding/modular_trader/market_data')
         self.mkt_data_path.mkdir(parents=True, exist_ok=True)
         self.records_path = Path('/home/ross/coding/modular_trader/continuous/records')
         self.records_path.mkdir(parents=True, exist_ok=True)
 
-    def run_backtests(self, plot_pnls: bool, window):
+    def run_backtests(self, window, show_stats: bool=False, plot_rtns: bool=False, plot_forecast: bool=False,
+                      plot_sharpe: bool=False, plot_pnls: bool=False, inspect_substrats: bool=False):
         for coin in self.coins.values():
-            coin.get_forecasts()
-            coin.combine_forecasts()
+            coin.get_raw_forecasts()
+            coin.combine_forecasts(self.fc_weighting, inspect=inspect_substrats)
         self.stats = {}
-        self.flat_data = self.get_coin_data('flat')
-        self.weighted_data = self.get_coin_data('weighted')
-        # px.line(self.weighted_data.select(cs.contains('size')).tail(5000)).show()
-        # px.line(self.weighted_data.select(cs.contains('dyn_sharpe')).tail(5000)).show()
-        self.all_pnls: pl.DataFrame = self.backtest_and_compare(self.lookbacks[window])
-        self.flat_stats = calc_perf(self.all_pnls['weighted_flat'], self.dyn_weight_lb)
-        self.lin_stats = calc_perf(self.all_pnls['weighted_lin'], self.dyn_weight_lb)
-        # self.perf_stats = calc_perf(self.all_pnls['weighted_perf'], self.dyn_weight_lb)
+        self.backtest_data = self.get_coin_data()
+        self.pnl: pl.DataFrame = self.backtest_portfolio(self.lookbacks[window])
+
+        self.stats = calc_perf(self.pnl['combined_cum_pnl'], self.dyn_weight_lb)
+        if show_stats:
+            print_stats(self.port_weights, self.stats)
+        if plot_rtns:
+            px.line(self.backtest_data.select(cs.contains('price')).tail(self.lookbacks[window])).show()
+        if plot_forecast:
+            fc_col = 'dyn_forecast' if self.port_weights == 'perf' else 'raw_forecast'
+            px.line(self.backtest_data.select(cs.contains(fc_col)).tail(self.lookbacks[window])).show()
+        if plot_sharpe:
+            px.line(self.backtest_data.select(cs.contains('dyn_sharpe')).tail(self.lookbacks[window]), title='dynamic sharpe').show()
         if plot_pnls:
-            title = f"dwlb: {self.dyn_weight_lb}, weighting: {self.port_weights}, leverage: {self.target_lev}"
-            px.line(
-                data_frame=self.all_pnls,
-                title=title,
-                log_y=True
-            ).show()
+            symbols = self.coins.keys() if len(self.coins) < 10 else len(self.coins)
+            title = f"Pairs: {symbols}, dwlb: {self.dyn_weight_lb}, weighting: {self.port_weights}, leverage: {self.target_lev}"
+            px.line(y=self.pnl['combined_cum_pnl'], title=title, log_y=True).show()
 
     def run_trading(self):
         # fetch exchange data
@@ -178,7 +174,7 @@ class Trader:
 
         # calculate positions
         self.num_trades = 0
-        self.final_sizes = self.get_sizes()
+        self.final_sizes = self.get_pos_sizes()
         self.flat_allocations, self.flat_target_pos = self.get_positions('flat', self.keep_records)
         self.lin_allocations, self.lin_target_pos = self.get_positions('lin', self.keep_records)
         self.perf_allocations, self.perf_target_pos = self.get_positions('perf', self.keep_records)
@@ -239,8 +235,9 @@ class Trader:
     #     if max_transfer < target_withdraw:
     #         # think of a way to programmatically reduce target_lev that can persist from one session to the next
 
-
-
+    def create_strats(self):
+        for coin in self.coins.values():
+            coin.add_strats()
 
     def save_record(self, data, name):
         now = int(datetime.now().timestamp())
@@ -258,31 +255,34 @@ class Trader:
         with open(self.records_path / name, 'w') as file:
             json.dump(old_data, file)
 
-    def get_coin_data(self, weighting: str = 'flat'):
+    def get_coin_data(self):
         backtests = {}
 
         for coin in self.coins.values():
-            backtests[f"{coin.market}_size"] = coin.pnls[f'{weighting}_size']
-            backtests[f"{coin.market}_raw_pnl"] = coin.pnls[f'{weighting}_raw_pnl']
-            backtests[f"{coin.market}_cum_pnl"] = coin.pnls[f'{weighting}_cum_pnl']
-            backtests[f"{coin.market}_dyn_sharpe"] = coin.pnls[f'{weighting}_dyn_sharpe']
+            backtests[f"{coin.market}_price"] = coin.pnls['close']
+            backtests[f"{coin.market}_returns"] = coin.pnls['returns']
+            backtests[f"{coin.market}_raw_forecast"] = coin.pnls['raw_forecast']
+            backtests[f"{coin.market}_raw_pnl"] = coin.pnls['raw_pnl']
+            backtests[f"{coin.market}_raw_cum_pnl"] = coin.pnls['raw_cum_pnl']
+            backtests[f"{coin.market}_dyn_forecast"] = coin.pnls['dyn_forecast']
+            backtests[f"{coin.market}_dyn_pnl"] = coin.pnls['dyn_pnl']
+            backtests[f"{coin.market}_dyn_cum_pnl"] = coin.pnls['dyn_cum_pnl']
+            backtests[f"{coin.market}_dyn_sharpe"] = coin.pnls['dyn_sharpe']
 
-            self.stats[f"{coin.market}_{weighting}"] = coin.stats[weighting]
+            self.stats[coin.market] = coin.stats
 
         return match_lengths(backtests)
 
-    def backtest_portfolio(self, weighted_in: bool, weighted_out: str | list[float], window):
+    def backtest_portfolio(self, window):
 
-        backtests = self.weighted_data if weighted_in else self.flat_data
+        if self.port_weights == 'flat':
+            port_pnl: pl.DataFrame = self.backtest_data.select(cs.contains('raw_pnl'))
+            port_pnl = ((port_pnl - 1) * self.target_lev) + 1
+            port_pnl = port_pnl.with_columns(port_pnl.mean_horizontal().alias('combined_pnl'))
 
-        port_pnl: pl.DataFrame = backtests.select(cs.contains('raw_pnl'))
-        port_pnl = ((port_pnl - 1) * self.target_lev) + 1
-
-        if weighted_out == 'flat':
-            port_pnl = port_pnl.with_columns(port_pnl.mean_horizontal().alias('raw_pnl'))
-
-        elif weighted_out == 'linear':
-
+        elif self.port_weights == 'linear':
+            port_pnl: pl.DataFrame = self.backtest_data.select(cs.contains('raw_pnl'))
+            port_pnl = ((port_pnl - 1) * self.target_lev) + 1
             n = range(1, port_pnl.shape[1] + 1)  # number of coins
             weights = sorted([x / sum(n) for x in n], reverse=True)
 
@@ -291,41 +291,32 @@ class Trader:
                     pl.col(f"{coin}_raw_pnl").mul(weight).alias(f"{coin}_raw_pnl")
                 )
 
-            port_pnl = port_pnl.with_columns(port_pnl.sum_horizontal().alias('raw_pnl'))
+            port_pnl = port_pnl.with_columns(port_pnl.sum_horizontal().alias('combined_pnl'))
 
-        elif type(weighted_out) == list:
+        elif self.port_weights == 'perf':
+            port_pnl: pl.DataFrame = self.backtest_data.select(cs.contains('dyn_pnl'))
+            port_pnl = ((port_pnl - 1) * self.target_lev) + 1
+            port_pnl = port_pnl.with_columns(port_pnl.mean_horizontal().alias('combined_pnl'))
 
-            for coin, weight in zip(self.coins, weighted_out):
+        elif type(self.port_weights) == list:
+            port_pnl: pl.DataFrame = self.backtest_data.select(cs.contains('raw_pnl'))
+            port_pnl = ((port_pnl - 1) * self.target_lev) + 1
+            for coin, weight in zip(self.coins, self.port_weights):
                 port_pnl = port_pnl.with_columns(
                     pl.col(f"{coin}_raw_pnl").mul(weight).alias(f"{coin}_raw_pnl")
                 )
 
-            port_pnl = port_pnl.with_columns(port_pnl.sum_horizontal().alias('raw_pnl'))
+            port_pnl = port_pnl.with_columns(port_pnl.sum_horizontal().alias('combined_pnl'))
 
         else:
             port_pnl = None
 
         port_pnl = port_pnl.tail(window)
-        port_pnl = port_pnl.with_columns(pl.col('raw_pnl').cum_prod().alias('cum_pnl'))
+        port_pnl = port_pnl.with_columns(pl.col('combined_pnl').cum_prod().alias('combined_cum_pnl'))
 
         return port_pnl
 
-    def backtest_and_compare(self, window: int = 8760):
-        flat_flat = self.backtest_portfolio(False, 'flat', window)
-        flat_lin = self.backtest_portfolio(False, 'linear', window)
-        weighted_flat = self.backtest_portfolio(True, 'flat', window)
-        weighted_lin = self.backtest_portfolio(True, 'linear', window)
-
-        return pl.DataFrame(
-            {
-                'flat_flat': flat_flat['cum_pnl'],
-                'flat_lin': flat_lin['cum_pnl'],
-                'weighted_flat': weighted_flat['cum_pnl'],
-                'weighted_lin': weighted_lin['cum_pnl'],
-            }
-        )
-
-    def get_sizes(self, sub_weighting: bool = True):
+    def get_pos_sizes(self, sub_weighting: bool = True):
 
         if sub_weighting:
             sizes = self.weighted_data.select(cs.contains('size')).to_dicts()[-1]
@@ -1065,26 +1056,52 @@ class Coin:
     # TODO i need to test the correlations between forecasts of all these different settings. chances are some of these
     #  won't be necessary, like the doubled settings on the 4h and the standard settings on the 8h are probably highly
     #  correlated
+    price_input = 'close'
     ichitrends = [
-        # {'tf': '1h', 'f': 10, 's': 30},
-        {'tf': '1h', 'f': 20, 's': 60},
-        {'tf': '4h', 'f': 10, 's': 30}, {'tf': '4h', 'f': 20, 's': 60},
-        {'tf': '8h', 'f': 10, 's': 30}, {'tf': '8h', 'f': 20, 's': 60},
-        {'tf': '1d', 'f': 10, 's': 30}, {'tf': '1d', 'f': 20, 's': 60},
-        {'tf': '1w', 'f': 10, 's': 30},
-        # {'tf': '1w', 'f': 20, 's': 60},
+        {'tf': '4h', 'f': 10, 's': 30, 'input': price_input},
+        {'tf': '4h', 'f': 20, 's': 60, 'input': price_input},
+        {'tf': '8h', 'f': 10, 's': 30, 'input': price_input},
+        {'tf': '8h', 'f': 20, 's': 60, 'input': price_input},
+        {'tf': '1d', 'f': 10, 's': 30, 'input': price_input},
+        {'tf': '1d', 'f': 20, 's': 60, 'input': price_input},
+        # {'tf': '1w', 'f': 10, 's': 30, 'input': price_input},
+        # {'tf': '1w', 'f': 20, 's': 60, 'input': price_input},
     ]
 
-    def __init__(self, market, dyn_weight_lb: int):
+    emarocs = [
+        '4h', '8h',
+        '1d',
+        # '1w'
+    ]
+
+    hmarocs = [
+        '4h', '8h',
+        '1d',
+        # '1w'
+    ]
+
+    def __init__(self, market, dyn_weight_lb: int, strat_list: list):
         self.market = market
         self.dyn_weight_lb = dyn_weight_lb
+        self.strat_list = strat_list
         self.data = self.load_data()
-        self.strats = {
-            f"ichitrend_{it['tf']}_{it['f']}_{it['s']}": IchiTrend(self.data, it['tf'], it['f'], it['s'])
-            for it in self.ichitrends
-        }
         self.pnls = pl.DataFrame()
         self.stats = {}
+        self.strats = {}
+
+    def add_strats(self):
+        if 'ichitrend' in self.strat_list:
+            self.strats.update({
+                f"ichitrend_{it['tf']}_{it['f']}_{it['s']}_{it['input']}":
+                    IchiTrend(self.data, it['tf'], it['f'], it['s'], it['input'])
+                for it in self.ichitrends
+            })
+
+        if 'emaroc' in self.strat_list:
+            self.strats.update({f"emaroc_{tf}": EmaRoc(self.data, tf) for tf in self.emarocs})
+
+        if 'hmaroc' in self.strat_list:
+            self.strats.update({f"hmaroc_{tf}": HmaRoc(self.data, tf) for tf in self.hmarocs})
 
     def __str__(self):
         return f"{self.market} Coin object: {len(self.strats)}"
@@ -1203,151 +1220,320 @@ class Coin:
                            'dyn_std', 'vwma_1h', 'vwma_25h', 'vwma_50h', 'vwma_100h', 'vwma_200h'])
                 .set_sorted('timestamp'))
 
-    def get_forecasts(self):
-        """get forecasts from each child, put them in a new pl.DataFrame,
+    def get_raw_forecasts(self):
+        """get raw forecasts from each child, put them in a new pl.DataFrame,
         and match the length with the original hourly data"""
 
         # collect forecasts from sub-strats
         fc_dict = {k: v.forecast for k, v in self.strats.items()}
         max_len = max([len(f) for f in fc_dict.values()])
 
-        self.forecasts = pl.DataFrame()
+        self.raw_forecasts = pl.DataFrame()
         for k, v in fc_dict.items():
-            self.forecasts = self.forecasts.with_columns(
+            self.raw_forecasts = self.raw_forecasts.with_columns(
                 pl.Series([0.0] * (max_len - len(v)), dtype=pl.Float64).extend(v).alias(k))
+        # px.line(self.forecasts.tail(35000), title='individual un-weighted forecast').show()
 
         # match length of forecasts to hourly ohlc data
-        if len(self.forecasts) > len(self.data):
-            self.forecasts = self.forecasts.tail(len(self.data))
-        elif len(self.forecasts) < len(self.data):
-            self.data = self.data.tail(len(self.forecasts))
+        if len(self.raw_forecasts) > len(self.data):
+            self.raw_forecasts = self.raw_forecasts.tail(len(self.data))
+        elif len(self.raw_forecasts) < len(self.data):
+            self.data = self.data.tail(len(self.raw_forecasts))
 
-    def get_weights(self) -> pl.DataFrame:
-        scores = {}
-
-        for fc in self.strats:
-            scores[fc] = self.backtest_forecast(fc)[2]
-
-        dynamic_weights = pl.DataFrame(scores)
-        # px.line(dynamic_weights.tail(5000)).show()
-
-        thresh = len(dynamic_weights.columns)
-        # if there are backtests with good sharpe ratios, this will divide everything by the total, so they keep their
-        # relative weighting but end up combining to 1. however, if the backtests are all crap and average to less than
-        # 1, dividing by the total would actually increase allocation to all of them. lower_bound=thresh ensures that i
-        # leave them with small weightings in these cases. This way, when times are bad I'm not fully exposed.
-        dynamic_weights = dynamic_weights.with_columns(
-            dynamic_weights.sum_horizontal()
-            .clip(lower_bound=1)
-            .alias('total_weight')
-        )
-        # print(f"dynamic weights:\n{dynamic_weights.describe()}")
-
-        final_weights = pl.DataFrame(
-            [(col / dynamic_weights.get_column('total_weight')).fill_null(0).clip(lower_bound=0)
-             for col in dynamic_weights.iter_columns()]
-        )
-        # print(f"final weights:\n{final_weights.describe()}")
-
-        return final_weights
-
-    def combine_forecasts(self):
-
-        weights = self.get_weights()
-        # px.line(data_frame=weights.drop('total_weight').tail(1000), title=f"{self.market}").show()
-        # print(weights.describe())
-
-        weighted_forecasts = {}
-        for fc in self.strats:
-            weighted_forecasts[fc] = (
-                    self.forecasts.get_column(fc) * weights.get_column(fc).shift(n=1, fill_value=0)
-            )
-        self.weighted_forecasts = pl.DataFrame(weighted_forecasts)
-
-        self.forecasts = self.forecasts.with_columns(
-            self.forecasts.mean_horizontal().alias('flat_size'),
-            self.weighted_forecasts.sum_horizontal().alias('weighted_size')
-        )
-        # print(f"sizes before scaling:\n{self.forecasts.select(['flat_size', 'final_size']).describe()}")
-
-        # scale forecasts
-        self.forecasts = self.forecasts.with_columns(
-            (
-                pl.col('flat_size')
-                .truediv(pl.col('flat_size').abs().mean())
-                .truediv(2)
-                .clip(lower_bound=-1, upper_bound=1)
-                .alias('flat_size')
-            ),
-            (
-                pl.col('weighted_size')
-                .truediv(pl.col('weighted_size').abs().mean())
-                .truediv(2)
-                .clip(lower_bound=-1, upper_bound=1)
-                .alias('weighted_size')
-            ),
-        )
-        # print(f"sizes after scaling:\n{self.forecasts.select(['flat_size', 'final_size']).describe()}")
-
-        flat_scores = self.backtest_forecast('flat_size')
-        # print_stats('flat_size', flat_scores[3])
-        weighted_scores = self.backtest_forecast('weighted_size')
-        # print_stats('weighted_size', weighted_scores[3])
-
-        self.pnls = self.pnls.with_columns(
-            self.forecasts['flat_size'].alias('flat_size'),
-            flat_scores[0].alias('flat_raw_pnl'),
-            flat_scores[1].alias('flat_cum_pnl'),
-            flat_scores[2].alias('flat_dyn_sharpe'),
-            self.forecasts['weighted_size'].alias('weighted_size'),
-            weighted_scores[0].alias('weighted_raw_pnl'),
-            weighted_scores[1].alias('weighted_cum_pnl'),
-            weighted_scores[2].alias('weighted_dyn_sharpe'),
-        )
-
-        self.stats['flat'] = flat_scores[3]
-        self.stats['weighted'] = weighted_scores[3]
-
-        # px.line(data_frame=self.weighted_forecasts, title="weighted_forecasts").show()
-        # px.line(data_frame=self.forecasts.select(['flat_size', 'final_size']), title="final forecasts").show()
-        # px.line(data_frame=self.pnls, title="pnls and sharpes").show()
-
-    def backtest_forecast(self, name: str) -> tuple[pl.Series, pl.Series, pl.Series, dict]:
-        """backtest the named forecast"""
-
-        q = 0.2
+    def forecast_to_returns(self, df, stage):
+        """quantises the forecast, calculates proportional turnover and trading costs from trading the quantised
+        forecast, then uses that data to calculate a returns series and a cummulative returns series"""
+        q = 0.01
         costs = 0.005
 
-        fc = self.forecasts.get_column(name)
-        returns = self.data.get_column('pct_change_1h')
-
-        temp = pl.DataFrame({'forecast': fc, 'returns': returns})
-
-        temp = temp.with_columns(pl.col('forecast')
+        # quantise the forecast
+        df = df.with_columns(pl.col(f"{stage}_forecast")
                                  .truediv(q).round().mul(q)
                                  .shift(n=1, fill_value=0)
-                                 .alias('forecast'))
+                                 .alias(f"{stage}_forecast"))
 
-        temp = temp.with_columns(pl.col('forecast').diff().fill_null(0).alias('trade_size'))
-        temp = temp.with_columns(pl.col('trade_size').mul(costs).alias('trade_costs'))
+        # calculate turnover and trading costs
+        df = df.with_columns(pl.col(f"{stage}_forecast").diff().fill_null(0).alias(f'{stage}_trade_size'))
+        df = df.with_columns(pl.col(f'{stage}_trade_size').mul(costs).alias(f'{stage}_trade_costs'))
 
-        temp = temp.with_columns(
-            pl.col('forecast')
+        # calculate raw pnl from the forecast, the pair's returns and the trading costs
+        df = df.with_columns(
+            pl.col(f"{stage}_forecast")
             .mul(pl.col('returns'))
             .add(1)
-            .mul(pl.lit(1) - pl.col('trade_costs'))
-            .alias('raw_pnl')
+            .mul(pl.lit(1) - pl.col(f'{stage}_trade_costs'))
+            .alias(f'{stage}_pnl')
         )
 
-        temp = temp.with_columns(pl.col('raw_pnl').cum_prod().fill_null(1.0).alias(f'{name}_cum_pnl'))
-        cum_pnl = temp['raw_pnl'].cum_prod().fill_null(1.0)
-        dyn_sharpe = calc_dyn_weight(temp.get_column(f'{name}_cum_pnl'), self.dyn_weight_lb)
+        # cummulate raw pnl series for backtesting
+        df = df.with_columns(pl.col(f'{stage}_pnl').cum_prod().fill_null(1.0).alias(f'{stage}_cum_pnl'))
 
-        perf_metrics = calc_perf(temp.get_column(f'{name}_cum_pnl'), self.dyn_weight_lb)
-        perf_metrics['turnover'] = temp['trade_size'].sum()
-        perf_metrics['total_costs'] = temp['trade_costs'].sum()
+        return df
 
-        return temp['raw_pnl'], cum_pnl, dyn_sharpe, perf_metrics
+    def perf_weight_forecast(self, fc: pl.Series):
+        """transforms a raw forecast into a performance-weighted dynamic forecast"""
+
+        # put the forecast and the pair's returns series together in a dataframe
+        returns = self.data.get_column('pct_change_1h')
+        close = self.data.get_column('close')
+
+        temp = match_lengths({'raw_forecast': fc, 'returns': returns, 'close': close})
+
+        temp = self.forecast_to_returns(temp, 'raw')
+
+        # backtest raw pnl series to calculate dynamic sharpe
+        temp = temp.with_columns(
+            calc_dyn_weight(temp.get_column('raw_cum_pnl'), self.dyn_weight_lb)
+            .ewm_mean(span=1000)
+            .alias('dyn_sharpe'),
+            (calc_dyn_weight(temp.get_column('raw_cum_pnl'), self.dyn_weight_lb) / 2)
+            .ewm_mean(span=1000)
+            .clip(lower_bound=0, upper_bound=2)
+            .alias('dyn_sharpe_lim'),
+        )
+
+        # create dynamic forecast from raw forecast and dynamic sharpe
+        temp = temp.with_columns(
+            pl.col('raw_forecast')
+            .mul(
+                pl.col('dyn_sharpe_lim')
+                .shift(n=1, fill_value=0)
+                # .sub(0.5)
+            )
+            .alias('dyn_forecast')
+        )
+
+        return temp
+
+    def inspect_perf_weighting(self, df, name):
+        """takes the dataframe from perf_weight_forecast and plots the various series so i can see how that forecast is
+        performing dynamically"""
+
+        df = self.forecast_to_returns(df, 'dyn')
+
+        fig = make_subplots(rows=6, cols=1, shared_xaxes=True, vertical_spacing=0.02)
+
+        fig.add_trace(go.Scatter(y=df['close'], name='price'), row=1, col=1)
+        fig.add_trace(go.Scatter(y=df['raw_forecast'], name='raw_forecast'), row=2, col=1)
+        fig.add_trace(go.Scatter(y=df['raw_cum_pnl'], name='raw_cum_pnl'), row=3, col=1)
+        fig.add_trace(go.Scatter(y=df['dyn_sharpe_lim'], name='dyn_sharpe_lim'), row=4, col=1)
+        fig.add_trace(go.Scatter(y=df['dyn_sharpe'], name='dyn_sharpe'), row=4, col=1)
+        fig.add_trace(go.Scatter(y=df['dyn_forecast'], name='dyn_forecast'), row=5, col=1)
+        fig.add_trace(go.Scatter(y=df['dyn_cum_pnl'], name='dyn_cum_pnl'), row=6, col=1)
+
+        raw_sharpe = calc_perf(df['raw_cum_pnl'])['sharpe']
+        dyn_sharpe = calc_perf(df['dyn_cum_pnl'])['sharpe']
+
+        title = f"{name} raw sharpe: {raw_sharpe:.2f}, dynamic sharpe: {dyn_sharpe:.2f}\n"
+
+        fig.update_layout(height=600, width=1200, title_text=title)
+        fig.show()
+
+    def get_weighted_forecasts(self, inspect: bool = False):
+        """gets the individual raw forecasts from each active sub-strat and turns them into individual dynamic
+        forecasts, then puts them all together in a dataframe and returns the dataframe"""
+
+        weighted_forecasts_dict = {}
+        for strat_name, strat in self.strats.items():
+            fc_df = self.perf_weight_forecast(strat.forecast)
+            weighted_forecasts_dict[strat_name] = fc_df["dyn_forecast"]
+            if inspect:
+                self.inspect_perf_weighting(fc_df, strat_name)
+
+        return match_lengths(weighted_forecasts_dict)
+
+    def combine_forecasts(self, weighting: bool, inspect: bool = False):
+
+        if weighting:
+            self.weighted_forecasts = self.get_weighted_forecasts(inspect)
+            forecasts = self.weighted_forecasts
+        else:
+            forecasts = self.raw_forecasts
+
+        combined_forecast = forecasts.mean_horizontal()
+
+        # i might want to process the combined forecast here
+
+        # then i want to backtest the combined forecast
+
+        # then, if i'm perf-weighting the portfolio, i would apply perf-weighting to the combined forecast here
+        combined =  self.perf_weight_forecast(combined_forecast)
+        self.pnls = self.forecast_to_returns(combined, 'dyn')
+        # print(f"{self.market} pnls df: {self.pnls.columns}")
+        dyn_combined_forecast = self.pnls['dyn_forecast']
+
+        # then i can backtest the perf-weighted portfolio of forecasts in the trader maybe
+
+    # def get_weights(self) -> pl.DataFrame:
+    #
+    #     # this block backtests each individual sub-forecast so they can be dynamically weighted in the main forecast
+    #     scores = {}
+    #     for fc in self.strats:
+    #         scores[fc] = self.backtest_forecast(fc)[2]
+    #
+    #     dynamic_weights = pl.DataFrame(scores)
+    #     # px.line(dynamic_weights.tail(35000), title='individual forecast weight').show()
+    #
+    #     # if there are backtests with good sharpe ratios, this will divide everything by the total, so they keep their
+    #     # relative weighting but end up combining to 1. however, if the backtests are all crap and average to less than
+    #     # 1, dividing by the total would actually increase allocation to all of them. lower_bound=thresh ensures that i
+    #     # leave them with small weightings in these cases. This way, when times are bad I'm not fully exposed.
+    #     thresh = len(dynamic_weights.columns)
+    #     dynamic_weights = dynamic_weights.with_columns(
+    #         dynamic_weights.sum_horizontal()
+    #         .clip(lower_bound=1)
+    #         .alias('total_weight')
+    #     )
+    #     # divide each dynamic weight series by total dynamic weight series and clip
+    #     final_weights = pl.DataFrame(
+    #         [(col / dynamic_weights.get_column('total_weight')).fill_null(0).clip(lower_bound=0)
+    #          for col in dynamic_weights.iter_columns()]
+    #     )
+    #     # final_weights = dynamic_weights
+    #
+    #     return final_weights
+    #
+    # def old_combine_forecasts(self):
+    #
+    #     weights = self.get_weights()
+    #
+    #     weighted_forecasts = {}
+    #     for fc in self.strats:
+    #         weighted_forecasts[fc] = (
+    #                 self.forecasts.get_column(fc) * weights.get_column(fc).shift(n=1, fill_value=0)
+    #         )
+    #     self.weighted_forecasts = pl.DataFrame(weighted_forecasts)
+    #
+    #     # combine individual sub-strat forecasts into weighted and unweighted coin forecasts
+    #     self.forecasts = self.forecasts.with_columns(
+    #         self.forecasts.mean_horizontal().alias('flat_size'),
+    #         self.weighted_forecasts.sum_horizontal().alias('weighted_size')
+    #     )
+    #
+    #     # # scale forecasts
+    #     # self.forecasts = self.forecasts.with_columns(
+    #     #     (
+    #     #         pl.col('flat_size')
+    #     #         .truediv(pl.col('flat_size').abs().mean())
+    #     #         .truediv(2)
+    #     #         .clip(lower_bound=-1, upper_bound=1)
+    #     #         .alias('flat_size')
+    #     #     ),
+    #     #     (
+    #     #         pl.col('weighted_size')
+    #     #         .truediv(pl.col('weighted_size').abs().mean())
+    #     #         .truediv(2)
+    #     #         .clip(lower_bound=-1, upper_bound=1)
+    #     #         .alias('weighted_size')
+    #     #     ),
+    #     # )
+    #
+    #     # backtest weighted and unweighted combined forecasts
+    #     flat_scores = self.backtest_forecast('flat_size')
+    #     weighted_scores = self.backtest_forecast('weighted_size')
+    #
+    #     # store forecast, returns, cum returns and dynamic sharpe for weighted and unweighted forecasts
+    #     self.pnls = self.pnls.with_columns(
+    #         self.forecasts['flat_size'].alias('flat_size'),
+    #         flat_scores[0].alias('flat_raw_pnl'),
+    #         flat_scores[1].alias('flat_cum_pnl'),
+    #         flat_scores[2].alias('flat_dyn_sharpe'),
+    #         self.forecasts['weighted_size'].alias('weighted_size'),
+    #         weighted_scores[0].alias('weighted_raw_pnl'),
+    #         weighted_scores[1].alias('weighted_cum_pnl'),
+    #         weighted_scores[2].alias('weighted_dyn_sharpe'),
+    #         weighted_scores[3].alias('pair_rtns'),
+    #     )
+    #
+    #     self.stats['flat'] = flat_scores[4]
+    #     self.stats['weighted'] = weighted_scores[4]
+    #
+    #     # px.line(data_frame=self.weighted_forecasts, title="weighted_forecasts").show()
+    #     # px.line(data_frame=self.forecasts.select(['flat_size', 'final_size']), title="final forecasts").show()
+    #     # px.line(data_frame=self.pnls, title="pnls and sharpes").show()
+    #
+    # def old_backtest_forecast(self, name: str) -> tuple[pl.DataFrame, dict]:
+    #     """backtest the named forecast"""
+    #
+    #     # put the forecast and the pair's returns series together in a dataframe
+    #     fc = self.raw_forecasts.get_column(name)
+    #     returns = self.data.get_column('pct_change_1h')
+    #     close = self.data.get_column('close')
+    #     temp = pl.DataFrame({'forecast': fc, 'returns': returns, 'close': close})
+    #
+    #     ###########################
+    #
+    #     q = 0.2
+    #     costs = 0.005
+    #
+    #     # quantise the forecast
+    #     temp = temp.with_columns(pl.col('forecast')
+    #                              .truediv(q).round().mul(q)
+    #                              .shift(n=1, fill_value=0)
+    #                              .alias('forecast'))
+    #
+    #     # calculate turnover and trading costs
+    #     temp = temp.with_columns(pl.col('forecast').diff().fill_null(0).alias('trade_size'))
+    #     temp = temp.with_columns(pl.col('trade_size').mul(costs).alias('trade_costs'))
+    #
+    #     # calculate raw pnl from the forecast, the pair's returns and the trading costs
+    #     temp = temp.with_columns(
+    #         pl.col('forecast')
+    #         .mul(pl.col('returns'))
+    #         .add(1)
+    #         .mul(pl.lit(1) - pl.col('trade_costs'))
+    #         .alias(f'{name}_raw_pnl')
+    #     )
+    #
+    #     # cummulate raw pnl series for backtesting
+    #     temp = temp.with_columns(pl.col(f'{name}_raw_pnl').cum_prod().fill_null(1.0).alias(f'{name}_cum_pnl'))
+    #
+    #     ################################
+    #
+    #     # backtest raw pnl series to calculate dynamic sharpe
+    #     temp = temp.with_columns(
+    #         calc_dyn_weight(temp.get_column(f'{name}_cum_pnl'), self.dyn_weight_lb)
+    #         .alias(f'{name}_dyn_sharpe')
+    #     )
+    #
+    #     # create dynamic forecast from raw forecast and dynamic sharpe
+    #     temp = temp.with_columns(
+    #         pl.col('forecast')
+    #         .mul(pl.col(f'{name}_dyn_sharpe').sub(0.5).clip(lower_bound=0, upper_bound=1))
+    #         .alias('dyn_forecast')
+    #     )
+    #
+    #     ################################
+    #
+    #     # quantise the dynamic forecast
+    #     temp = temp.with_columns(pl.col('dyn_forecast')
+    #                              .truediv(q).round().mul(q)
+    #                              .shift(n=1, fill_value=0)
+    #                              .alias('dyn_forecast'))
+    #
+    #     # re-calculate turnover and trading costs
+    #     temp = temp.with_columns(pl.col('dyn_forecast').diff().fill_null(0).alias('trade_size'))
+    #     temp = temp.with_columns(pl.col('trade_size').mul(costs).alias('trade_costs'))
+    #
+    #     # calculate dynamic pnl from the dynamic forecast, the pair's returns, and updated trading costs
+    #     temp = temp.with_columns(
+    #         pl.col('dyn_forecast')
+    #         .mul(pl.col('returns'))
+    #         .add(1)
+    #         .mul(pl.lit(1) - pl.col('trade_costs'))
+    #         .alias(f'{name}_dyn_pnl')
+    #     )
+    #
+    #     # cummulate dynamic pnl series for backtesting
+    #     temp = temp.with_columns(pl.col(f'{name}_dyn_pnl').cum_prod().alias(f'{name}_dyn_cum_pnl'))
+    #
+    #     ###############################
+    #
+    #     perf_metrics = calc_perf(temp.get_column(f'{name}_dyn_cum_pnl'), self.dyn_weight_lb)
+    #     perf_metrics['turnover'] = temp['trade_size'].sum()
+    #     perf_metrics['total_costs'] = temp['trade_costs'].sum()
+    #
+    #     return temp, perf_metrics
 
 
 class SubStrat:
@@ -1360,6 +1546,7 @@ class SubStrat:
             self.data = self.resample_data(data)
         else:
             self.data = data
+        self.forecast_col = str()
 
     def resample_data(self, data):
         self.data = (data.group_by_dynamic(pl.col('timestamp'), every=self.timeframe).agg(
@@ -1394,66 +1581,79 @@ class SubStrat:
             .set_sorted('timestamp')
         )
 
-
-class IchiTrend(SubStrat):
-
-    def __init__(self, data, timeframe, f, s):
-        super().__init__(data, timeframe)
-        self.f = f
-        self.s = s
-        self.forecast = self.calc_forecast(True, True)
-
-    def __str__(self):
-        return f"IchiTrend ({self.f}, {self.s}), {self.timeframe}"
-
-    def calc_forecast(self, standardise: bool = True, shift: bool = True) -> pl.Series:
-        self.data = ind.ichimoku(self.data, self.f, self.s)
-
-        # trend following strategy
-        self.data = self.data.with_columns(
-            pl.col(f'tenkan_{self.f}').gt(pl.col(f'kijun_{self.s}')).alias(f'tk_up_{self.f}_{self.s}'),
-            pl.col(f'senkou_a_{self.f}_{self.s}').gt(pl.col(f'senkou_b_{self.s * 2}')).alias(
-                f'cloud_up_{self.f}_{self.s}'),
-            (pl.col('close').gt(pl.col(f'senkou_a_{self.f}_{self.s}')) & pl.col('close').gt(
-                pl.col(f'tenkan_{self.f}'))).alias(f'price_above_tenkan_{self.f}_{self.s}'),
-            (pl.col('close').gt(pl.col(f'senkou_a_{self.f}_{self.s}')) & pl.col('close').gt(
-                pl.col(f'kijun_{self.s}'))).alias(f'price_above_kijun_{self.f}_{self.s}'),
-            (pl.col('close').gt(pl.col(f'senkou_a_{self.f}_{self.s}')) & pl.col('close').gt(
-                pl.col(f'senkou_b_{self.s * 2}'))).alias(f'price_above_cloud_{self.f}_{self.s}'),
-            pl.col('close').gt(pl.col('close').shift(self.s)).alias(f'chikou_above_price_{self.f}_{self.s}')
-        )
-
-        forecast_col = f'ichi_trend_{self.timeframe}_{self.f}_{self.s}'
-
-        self.data = (
-            self.data.with_columns(
-                self.data.select(
-                    [f'tk_up_{self.f}_{self.s}',
-                     f'cloud_up_{self.f}_{self.s}',
-                     f'price_above_tenkan_{self.f}_{self.s}',
-                     f'price_above_kijun_{self.f}_{self.s}',
-                     f'price_above_cloud_{self.f}_{self.s}',
-                     f'chikou_above_price_{self.f}_{self.s}']
-                ).mean_horizontal().alias(forecast_col)
-            )
-            .select(['timestamp', 'dyn_std', forecast_col])
-        )
+    def process_forecast(self,
+                         long_only: bool = False,
+                         standardise: bool = False,
+                         normalise: bool = False,
+                         flip: bool = False,
+                         smooth: bool = False,
+                         quantise: float = 0.5,
+                         shift: bool = True) -> pl.Series:
 
         # fit range to long and short
-        self.data = self.data.with_columns(pl.col(forecast_col).mul(2).sub(1).alias(forecast_col))
+        if not long_only:
+            self.data = self.data.with_columns(pl.col(self.forecast_col).mul(2).sub(1).alias(self.forecast_col))
 
         # standardise forecast at local timescale
         if standardise:
             self.data = (
                 self.data.with_columns(
-                    standard_forecast(self.data[forecast_col], self.data['dyn_std'], False)
-                    .alias(forecast_col)
+                    pl.col(self.forecast_col)
+                    .truediv(pl.col('dyn_std'))
+                    .alias(self.forecast_col)
                 )
             )
 
+        if normalise:
+            self.data = (
+                self.data.with_columns(
+                    pl.col(self.forecast_col)
+                    .truediv(pl.col(self.forecast_col).abs().mean())
+                    .alias(self.forecast_col)
+                )
+            )
+
+        if flip:
+            self.data = (
+                self.data.with_columns(
+                    pl.col(self.forecast_col)
+                    .mul(-1)
+                    .alias(self.forecast_col)
+                )
+            )
+
+        if smooth:
+            self.data = (
+                self.data.with_columns(
+                    pl.col(self.forecast_col)
+                    .ewm_mean(span=3)
+                    .alias(self.forecast_col)
+                )
+            )
+
+        if quantise:
+            self.data = (
+                self.data.with_columns(
+                    pl.col(self.forecast_col)
+                    .truediv(quantise)
+                    .round()
+                    .mul(quantise)
+                    .alias(self.forecast_col)
+                )
+            )
+
+        # clip
+        self.data = (
+            self.data.with_columns(
+                pl.col(self.forecast_col)
+                .clip(lower_bound=-1, upper_bound=1)
+                .alias(self.forecast_col)
+            )
+        )
+
         # shift forecast one period at local timescale. this prevents look-ahead bias because i'm using closing prices
         if shift:
-            self.data = self.data.with_columns(pl.col(forecast_col).shift(n=1, fill_value=0).alias(forecast_col))
+            self.data = self.data.with_columns(pl.col(self.forecast_col).shift(n=1, fill_value=0).alias(self.forecast_col))
 
         # resample to 1h
         if self.timeframe != '1h':
@@ -1462,8 +1662,127 @@ class IchiTrend(SubStrat):
                 .interpolate().fill_null(strategy='forward')
             )
 
-        return self.data.get_column(forecast_col).fill_null(0).ewm_mean(6)
+        return self.data.get_column(self.forecast_col).fill_null(0).ewm_mean(6)
 
+
+class IchiTrend(SubStrat):
+
+    def __init__(self, data, timeframe, f, s, input):
+        super().__init__(data, timeframe)
+        self.f = f
+        self.s = s
+        self.input = input
+        self.data = self.calc_forecast()
+        self.forecast = self.process_forecast()
+
+    def __str__(self):
+        return f"IchiTrend ({self.f}, {self.s}), {self.input}, {self.timeframe}"
+
+    def calc_forecast(self, standardise: bool = True, shift: bool = True) -> pl.Series:
+        self.data = ind.ichimoku(self.data, self.f, self.s)
+
+        # trend following strategy
+        self.data = self.data.with_columns(
+            pl.col(f'tenkan_{self.f}').gt(pl.col(f'kijun_{self.s}')).alias(f'tk_up_{self.f}_{self.s}'),
+
+            pl.col(f'senkou_a_{self.f}_{self.s}').gt(pl.col(f'senkou_b_{self.s * 2}')).alias(
+                f'cloud_up_{self.f}_{self.s}'),
+
+            (pl.col(self.input).gt(pl.col(f'senkou_a_{self.f}_{self.s}')) & pl.col(self.input).gt(
+                pl.col(f'tenkan_{self.f}'))).alias(f'price_above_tenkan_{self.f}_{self.s}'),
+
+            (pl.col(self.input).gt(pl.col(f'senkou_a_{self.f}_{self.s}')) & pl.col(self.input).gt(
+                pl.col(f'kijun_{self.s}'))).alias(f'price_above_kijun_{self.f}_{self.s}'),
+
+            (pl.col(self.input).gt(pl.col(f'senkou_a_{self.f}_{self.s}')) & pl.col(self.input).gt(
+                pl.col(f'senkou_b_{self.s * 2}'))).alias(f'price_above_cloud_{self.f}_{self.s}'),
+
+            pl.col(self.input).gt(pl.col(self.input).shift(self.s)).alias(f'chikou_above_price_{self.f}_{self.s}')
+        )
+
+        self.forecast_col = f'ichi_trend_{self.timeframe}_{self.f}_{self.s}'
+
+        return (
+            self.data.with_columns(
+                self.data.select(
+                    [f'tk_up_{self.f}_{self.s}',
+                     f'cloud_up_{self.f}_{self.s}',
+                     f'price_above_tenkan_{self.f}_{self.s}',
+                     f'price_above_kijun_{self.f}_{self.s}',
+                     f'price_above_cloud_{self.f}_{self.s}',
+                     f'chikou_above_price_{self.f}_{self.s}']
+                ).mean_horizontal().alias(self.forecast_col)
+            )
+            .select(['timestamp', 'dyn_std', self.forecast_col])
+        )
+
+class EmaRoc(SubStrat):
+    def __init__(self, data, timeframe):
+        super().__init__(data, timeframe)
+        self.data = self.calc_forecast()
+        self.forecast = self.process_forecast()
+
+    def __str__(self):
+        return f"EmaRoc {self.timeframe}"
+
+    def calc_forecast(self) -> pl.DataFrame:
+        self.data = ind.ema(self.data, 25)
+        self.data = ind.ema(self.data, 50)
+        self.data = ind.ema(self.data, 100)
+        self.data = ind.ema(self.data, 200)
+
+        # trend following strategy
+        self.data = self.data.with_columns(
+            pl.col(f'ema_25').pct_change().gt(0).alias(f'ema_roc_25'),
+            pl.col(f'ema_50').pct_change().gt(0).alias(f'ema_roc_50'),
+            pl.col(f'ema_100').pct_change().gt(0).alias(f'ema_roc_100'),
+            pl.col(f'ema_200').pct_change().gt(0).alias(f'ema_roc_200'),
+        )
+
+        self.forecast_col = f'EmaRoc_{self.timeframe}'
+
+        return (
+            self.data.with_columns(
+                self.data.select(cs.contains('ema_roc'))
+                .mean_horizontal()
+                .alias(self.forecast_col)
+            )
+            .select(['timestamp', 'dyn_std', self.forecast_col])
+        )
+
+class HmaRoc(SubStrat):
+    def __init__(self, data, timeframe):
+        super().__init__(data, timeframe)
+        self.data = self.calc_forecast()
+        self.forecast = self.process_forecast()
+
+    def __str__(self):
+        return f"HmaRoc {self.timeframe}"
+
+    def calc_forecast(self) -> pl.DataFrame:
+        self.data = ind.hma(self.data, 25)
+        self.data = ind.hma(self.data, 50)
+        self.data = ind.hma(self.data, 100)
+        self.data = ind.hma(self.data, 200)
+
+        # trend following strategy
+        self.data = self.data.with_columns(
+            pl.col(f'hma_25').pct_change().gt(0).alias(f'hma_roc_25'),
+            pl.col(f'hma_50').pct_change().gt(0).alias(f'hma_roc_50'),
+            pl.col(f'hma_100').pct_change().gt(0).alias(f'hma_roc_100'),
+            pl.col(f'hma_200').pct_change().gt(0).alias(f'hma_roc_200'),
+        )
+
+        self.forecast_col = f'HmaRoc_{self.timeframe}'
+
+        return (
+            self.data.with_columns(
+                self.data.select(cs.contains('hma_roc'))
+                .mean_horizontal()
+                .alias(self.forecast_col)
+            )
+            .select(['timestamp', 'dyn_std', self.forecast_col])
+        )
 
 class EmaTrend(SubStrat):
 

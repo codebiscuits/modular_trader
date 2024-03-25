@@ -35,6 +35,9 @@ pl.Config(tbl_cols=20, tbl_rows=50, tbl_width_chars=180)
 # TODO add drawdown to the pnl plots
 # TODO work out how to apply the buffer concept to the backtests in the same way it applies to live trading, then remove
 #  forecast quantisation and check how that changes things
+# TODO in calc_dyn_weight i am using ewm_mean and ewm_std in the dynamic sharpe calculation. once i have everything
+#  working, i could try swapping this for a simple moving average (rolling_mean and rolling_std) to see if it performs
+#  any differently
 
 # TODO import a list of all binance pairs i have data for, then test the pairs with the shortest history just to see if
 #  it works. If so, start testing lots of different portfolios with flat portfolio weighting to see if i can do better
@@ -125,13 +128,19 @@ def backtest_all():
 markets = [
     'BTCUSDT',
     'SOLUSDT',
-    'NEARUSDT',
-    'ROSEUSDT',
-    'OCEANUSDT',
+    'DUSKUSDT',
     'ETHUSDT',
-    'MATICUSDT',
+    'OMUSDT',
     'AVAXUSDT',
+    'YGGUSDT',
 ]
+
+strategies = [
+    'ichitrend',
+    'emaroc',
+    'hmaroc'
+    ]
+# lookback window options: '4 years', '3 years', '2 years', '1 year', '6 months', '3 months', '1 month', '1 week'
 
 # markets = choose_by_length(0, 10000)
 
@@ -140,8 +149,8 @@ if len(markets) <= 10:
     print(markets)
 
 # lookback window options: '4 years', '3 years', '2 years', '1 year', '6 months', '3 months', '1 month', '1 week'
-trader = components.Trader(markets, '3 years', 'perf', True, 5, live=True)
-trader.run_backtests(plot_pnls=False, window='2 years')
+trader = components.Trader(markets, dyn_weight_lb='1 week', fc_weighting=True, port_weights='flat', strat_list=strategies, keep_records=True, leverage=3, live=True)
+trader.run_backtests(window='1 year',show_stats=True, plot_rtns=False, plot_forecast=False, plot_sharpe=False, plot_pnls=True, inspect_substrats=False)
 trader.run_trading()
 
 all_end = perf_counter()

@@ -24,9 +24,9 @@ def ichimoku(data, f=9, s=26):
 
     # indicators
     data = data.with_columns(
-        ((pl.col('high').rolling_max(f) + pl.col('low').rolling_min(f)) / 2).shift(1).alias(f'tenkan_{f}'),
-        ((pl.col('high').rolling_max(s) + pl.col('low').rolling_min(s)) / 2).shift(1).alias(f'kijun_{s}'),
-        ((pl.col('high').rolling_max(s) + pl.col('low').rolling_min(s * 2)) / 2).shift(1 + s).alias(f'senkou_b_{s*2}'),
+        ((pl.col('high').rolling_max(f, min_periods=2) + pl.col('low').rolling_min(f, min_periods=2)) / 2).shift(1).alias(f'tenkan_{f}'),
+        ((pl.col('high').rolling_max(s, min_periods=2) + pl.col('low').rolling_min(s, min_periods=2)) / 2).shift(1).alias(f'kijun_{s}'),
+        ((pl.col('high').rolling_max(s, min_periods=2) + pl.col('low').rolling_min(s * 2, min_periods=2)) / 2).shift(1 + s).alias(f'senkou_b_{s*2}'),
         pl.col('close').shift(1 - s).alias(f'chikou_{1-s}')
     )
     data = data.with_columns(
