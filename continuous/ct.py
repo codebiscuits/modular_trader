@@ -136,6 +136,7 @@ markets = [
 ]
 
 strategies = [
+    'chanbreak'
     'ichitrend',
     'emaroc',
     'hmaroc'

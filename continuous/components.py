@@ -21,14 +21,16 @@ import json
 from json import JSONDecodeError
 import time
 from decimal import Decimal
+from itertools import product
 
 # client = Client_w(keys.woo_key, keys.woo_secret, keys.woo_app_id, testnet=True)
 client = Client_b(keys.bPkey, keys.bSkey)
 
+
 def calc_perf(s: pl.Series, window: int = 8760) -> dict:
     """calculates 1 year rolling performance statistics on any cummulative pnl series"""
 
-    ann_mean = s.pct_change().mean() * 8760
+    ann_mean = s.pct_change().median() * 8760
     ann_std = s.pct_change().std() * 92
     if ann_std:
         ann_sharpe = ann_mean / ann_std
@@ -112,7 +114,7 @@ class Trader:
                  '6 months': 4380, '3 months': 2180, '1 month': 720, '1 week': 168}
 
     def __init__(self, markets: list[str], dyn_weight_lb: str, fc_weighting: bool, port_weights: str,
-                 strat_list: list, keep_records: bool = True, leverage: float|str = 1.0, live = False):
+                 strat_list: list, keep_records: bool = True, leverage: float | str = 1.0, live=False):
         self.now_start = datetime.now().timestamp()
         print(f"\nTrader initialised at {datetime.fromtimestamp(self.now_start).strftime('%d/%m/%Y %H:%M:%S')}")
         self.markets = markets
@@ -131,8 +133,8 @@ class Trader:
         self.records_path = Path('/home/ross/coding/modular_trader/continuous/records')
         self.records_path.mkdir(parents=True, exist_ok=True)
 
-    def run_backtests(self, window, show_stats: bool=False, plot_rtns: bool=False, plot_forecast: bool=False,
-                      plot_sharpe: bool=False, plot_pnls: bool=False, inspect_substrats: bool=False):
+    def run_backtests(self, window, show_stats: bool = False, plot_rtns: bool = False, plot_forecast: bool = False,
+                      plot_sharpe: bool = False, plot_pnls: bool = False, inspect_substrats: bool = False):
         for coin in self.coins.values():
             coin.get_raw_forecasts()
             coin.combine_forecasts(self.fc_weighting, inspect=inspect_substrats)
@@ -149,7 +151,8 @@ class Trader:
             fc_col = 'dyn_forecast' if self.port_weights == 'perf' else 'raw_forecast'
             px.line(self.backtest_data.select(cs.contains(fc_col)).tail(self.lookbacks[window])).show()
         if plot_sharpe:
-            px.line(self.backtest_data.select(cs.contains('dyn_sharpe')).tail(self.lookbacks[window]), title='dynamic sharpe').show()
+            px.line(self.backtest_data.select(cs.contains('dyn_sharpe')).tail(self.lookbacks[window]),
+                    title='dynamic sharpe').show()
         if plot_pnls:
             symbols = self.coins.keys() if len(self.coins) < 10 else len(self.coins)
             title = f"Pairs: {symbols}, dwlb: {self.dyn_weight_lb}, weighting: {self.port_weights}, leverage: {self.target_lev}"
@@ -434,7 +437,6 @@ class Trader:
             [bal['usdt_value'] for asset, bal in self.asset_bals.items()
              if (asset not in ['BNB', 'USDT']) and (bal['usdt_value'] < 0)]
         ))
-
 
         # repay any unnecessary debts
         for asset, values in self.asset_bals.items():
@@ -1052,28 +1054,46 @@ class Coin:
     # TODO i need to test the correlations between forecasts of all these different settings. chances are some of these
     #  won't be necessary, like the doubled settings on the 4h and the standard settings on the 8h are probably highly
     #  correlated
-    price_input = 'close'
+
+    timeframes = ['1h', '4h', '8h', '1d', '1w']
+    lookbacks = [2, 4, 8, 16, 32, 64, 128, 256]
+
+
+    chanbreaks = [
+        {'tf': '1h', 'lb': 2}, {'tf': '1h', 'lb': 4}, {'tf': '1h', 'lb': 8}, {'tf': '1h', 'lb': 16},
+        {'tf': '1h', 'lb': 32}, {'tf': '1h', 'lb': 64}, {'tf': '1h', 'lb': 128}, {'tf': '1h', 'lb': 256},
+        {'tf': '4h', 'lb': 2}, {'tf': '4h', 'lb': 4}, {'tf': '4h', 'lb': 8}, {'tf': '4h', 'lb': 16},
+        {'tf': '4h', 'lb': 32}, {'tf': '4h', 'lb': 64}, {'tf': '4h', 'lb': 128}, {'tf': '4h', 'lb': 256},
+        {'tf': '8h', 'lb': 2}, {'tf': '8h', 'lb': 4}, {'tf': '8h', 'lb': 8}, {'tf': '8h', 'lb': 16},
+        {'tf': '8h', 'lb': 32}, {'tf': '8h', 'lb': 64}, {'tf': '8h', 'lb': 128}, {'tf': '8h', 'lb': 256},
+        {'tf': '1d', 'lb': 2}, {'tf': '1d', 'lb': 4}, {'tf': '1d', 'lb': 8}, {'tf': '1d', 'lb': 16},
+        {'tf': '1d', 'lb': 32}, {'tf': '1d', 'lb': 64}, {'tf': '1d', 'lb': 128}, {'tf': '1d', 'lb': 256},
+        {'tf': '1w', 'lb': 2}, {'tf': '1w', 'lb': 4}, {'tf': '1w', 'lb': 8}, {'tf': '1w', 'lb': 16},
+        {'tf': '1w', 'lb': 32}, {'tf': '1w', 'lb': 64}, {'tf': '1w', 'lb': 128}, # {'tf': '1w', 'lb': 256},
+    ]
+
     ichitrends = [
-        {'tf': '4h', 'f': 10, 's': 30, 'input': price_input},
-        {'tf': '4h', 'f': 20, 's': 60, 'input': price_input},
-        {'tf': '8h', 'f': 10, 's': 30, 'input': price_input},
-        {'tf': '8h', 'f': 20, 's': 60, 'input': price_input},
-        {'tf': '1d', 'f': 10, 's': 30, 'input': price_input},
-        {'tf': '1d', 'f': 20, 's': 60, 'input': price_input},
-        # {'tf': '1w', 'f': 10, 's': 30, 'input': price_input},
-        # {'tf': '1w', 'f': 20, 's': 60, 'input': price_input},
+        {'tf': '4h', 'f': 10, 's': 30},
+        {'tf': '4h', 'f': 20, 's': 60},
+        {'tf': '8h', 'f': 10, 's': 30},
+        {'tf': '8h', 'f': 20, 's': 60},
+        {'tf': '1d', 'f': 10, 's': 30},
+        {'tf': '1d', 'f': 20, 's': 60},
+        {'tf': '1w', 'f': 10, 's': 30},
+        {'tf': '1w', 'f': 20, 's': 60},
     ]
 
-    emarocs = [
-        '4h', '8h',
-        '1d',
-        # '1w'
-    ]
-
-    hmarocs = [
-        '4h', '8h',
-        '1d',
-        # '1w'
+    moving_avg_rocs = [
+        {'tf': '1h', 'lb': 4}, {'tf': '1h', 'lb': 8}, {'tf': '1h', 'lb': 16}, {'tf': '1h', 'lb': 32},
+        {'tf': '1h', 'lb': 64}, {'tf': '1h', 'lb': 128}, {'tf': '1h', 'lb': 256},
+        {'tf': '4h', 'lb': 4}, {'tf': '4h', 'lb': 8}, {'tf': '4h', 'lb': 16}, {'tf': '4h', 'lb': 32},
+        {'tf': '4h', 'lb': 64}, {'tf': '4h', 'lb': 128}, {'tf': '4h', 'lb': 256},
+        {'tf': '8h', 'lb': 4}, {'tf': '8h', 'lb': 8}, {'tf': '8h', 'lb': 16}, {'tf': '8h', 'lb': 32},
+        {'tf': '8h', 'lb': 64}, {'tf': '8h', 'lb': 128}, {'tf': '8h', 'lb': 256},
+        {'tf': '1d', 'lb': 4}, {'tf': '1d', 'lb': 8}, {'tf': '1d', 'lb': 16}, {'tf': '1d', 'lb': 32},
+        {'tf': '1d', 'lb': 64}, {'tf': '1d', 'lb': 128}, {'tf': '1d', 'lb': 256},
+        {'tf': '1w', 'lb': 4}, {'tf': '1w', 'lb': 8}, {'tf': '1w', 'lb': 16}, {'tf': '1w', 'lb': 32},
+        {'tf': '1w', 'lb': 64}, {'tf': '1w', 'lb': 128}, {'tf': '1w', 'lb': 256},
     ]
 
     def __init__(self, market, dyn_weight_lb: int, strat_list: list):
@@ -1086,18 +1106,31 @@ class Coin:
         self.strats = {}
 
     def add_strats(self):
+        chanbreak_input_series = 'vwma_1h'
+        if 'chanbreak' in self.strat_list:
+            self.strats.update({
+                f"chanbreak_{cb['tf']}_{cb['lb']}_{chanbreak_input_series}":
+                    ChanBreak(self.data, cb['tf'], cb['lb'], chanbreak_input_series)
+                for cb in self.chanbreaks
+            })
+
+        ichitrend_input_series = 'vwma_1h'
         if 'ichitrend' in self.strat_list:
             self.strats.update({
-                f"ichitrend_{it['tf']}_{it['f']}_{it['s']}_{it['input']}":
-                    IchiTrend(self.data, it['tf'], it['f'], it['s'], it['input'])
+                f"ichitrend_{it['tf']}_{it['f']}_{it['s']}_{ichitrend_input_series}":
+                    IchiTrend(self.data, it['tf'], it['f'], it['s'], ichitrend_input_series)
                 for it in self.ichitrends
             })
 
         if 'emaroc' in self.strat_list:
-            self.strats.update({f"emaroc_{tf}": EmaRoc(self.data, tf) for tf in self.emarocs})
+            self.strats.update({
+                f"emaroc_{x['tf']}_{x['lb']}": EmaRoc(self.data, x['tf'], x['lb']) for x in self.moving_avg_rocs
+            })
 
         if 'hmaroc' in self.strat_list:
-            self.strats.update({f"hmaroc_{tf}": HmaRoc(self.data, tf) for tf in self.hmarocs})
+            self.strats.update({
+                f"hmaroc_{x['tf']}_{x['lb']}": HmaRoc(self.data, x['tf'], x['lb']) for x in self.moving_avg_rocs
+            })
 
     def __str__(self):
         return f"{self.market} Coin object: {len(self.strats)}"
@@ -1244,9 +1277,9 @@ class Coin:
 
         # quantise the forecast
         df = df.with_columns(pl.col(f"{stage}_forecast")
-                                 .truediv(q).round().mul(q)
-                                 .shift(n=1, fill_value=0)
-                                 .alias(f"{stage}_forecast"))
+                             .truediv(q).round().mul(q)
+                             .shift(n=1, fill_value=0)
+                             .alias(f"{stage}_forecast"))
 
         # calculate turnover and trading costs
         df = df.with_columns(pl.col(f"{stage}_forecast").diff().fill_null(0).alias(f'{stage}_trade_size'))
@@ -1353,7 +1386,7 @@ class Coin:
         # then i want to backtest the combined forecast
 
         # then, if i'm perf-weighting the portfolio, i would apply perf-weighting to the combined forecast here
-        combined =  self.perf_weight_forecast(combined_forecast)
+        combined = self.perf_weight_forecast(combined_forecast)
         self.pnls = self.forecast_to_returns(combined, 'dyn')
         # print(f"{self.market} pnls df: {self.pnls.columns}")
         dyn_combined_forecast = self.pnls['dyn_forecast']
@@ -1649,7 +1682,8 @@ class SubStrat:
 
         # shift forecast one period at local timescale. this prevents look-ahead bias because i'm using closing prices
         if shift:
-            self.data = self.data.with_columns(pl.col(self.forecast_col).shift(n=1, fill_value=0).alias(self.forecast_col))
+            self.data = self.data.with_columns(
+                pl.col(self.forecast_col).shift(n=1, fill_value=0).alias(self.forecast_col))
 
         # resample to 1h
         if self.timeframe != '1h':
@@ -1659,6 +1693,39 @@ class SubStrat:
             )
 
         return self.data.get_column(self.forecast_col).fill_null(0).ewm_mean(6)
+
+
+class ChanBreak(SubStrat):
+    def __init__(self, data, timeframe: str, lb: int, col: str = 'close'):
+        super().__init__(data, timeframe)
+        self.lb = lb
+        self.col = col
+        self.data = self.calc_forecast()
+        self.forecast = self.process_forecast()
+
+    def calc_forecast(self):
+        self.forecast_col = f'chan_break_{self.timeframe}_{self.lb}_{self.col}'
+
+        # is the current price above last period's channel high or below last periods channel low?
+        # if so, was this not the case one period before that?
+
+        self.data = self.data.with_columns(
+            # these two are just for plotting, they aren't necessary for the forecast
+            # pl.col(self.col).rolling_max(self.lb).shift(1).alias('chan_hi'),
+            # pl.col(self.col).rolling_min(self.lb).shift(1).alias('chan_lo'),
+
+            pl.col(self.col).rolling_max(self.lb).shift(1).lt(pl.col(self.col)).cast(pl.Int64).diff().alias('above'),
+            pl.col(self.col).rolling_min(self.lb).shift(1).gt(pl.col(self.col)).cast(pl.Int64).diff().alias('below'),
+        )
+        self.data = self.data.with_columns(
+            pl.when(pl.col('above') == 1).then(pl.lit(1))
+            .when(pl.col('below') == 1).then(pl.lit(-1))
+            .fill_null(strategy='forward')
+            .fill_null(0)
+            .alias(self.forecast_col)
+        )
+
+        return self.data.select(['timestamp', 'dyn_std', self.forecast_col])
 
 
 class IchiTrend(SubStrat):
@@ -1712,73 +1779,52 @@ class IchiTrend(SubStrat):
             .select(['timestamp', 'dyn_std', self.forecast_col])
         )
 
+
 class EmaRoc(SubStrat):
-    def __init__(self, data, timeframe):
+    def __init__(self, data, timeframe, lb):
         super().__init__(data, timeframe)
+        self.lb = lb
         self.data = self.calc_forecast()
         self.forecast = self.process_forecast()
 
     def __str__(self):
-        return f"EmaRoc {self.timeframe}"
+        return f"EmaRoc {self.timeframe} {self.lb}"
 
     def calc_forecast(self) -> pl.DataFrame:
-        self.data = ind.ema(self.data, 25)
-        self.data = ind.ema(self.data, 50)
-        self.data = ind.ema(self.data, 100)
-        self.data = ind.ema(self.data, 200)
+        self.forecast_col = f'EmaRoc_{self.timeframe}_{self.lb}'
+
+        self.data = ind.ema(self.data, self.lb)
 
         # trend following strategy
         self.data = self.data.with_columns(
-            pl.col(f'ema_25').pct_change().gt(0).alias(f'ema_roc_25'),
-            pl.col(f'ema_50').pct_change().gt(0).alias(f'ema_roc_50'),
-            pl.col(f'ema_100').pct_change().gt(0).alias(f'ema_roc_100'),
-            pl.col(f'ema_200').pct_change().gt(0).alias(f'ema_roc_200'),
+            pl.col(f'ema_{self.lb}').pct_change().gt(0).alias(self.forecast_col),
         )
 
-        self.forecast_col = f'EmaRoc_{self.timeframe}'
+        return self.data.select(['timestamp', 'dyn_std', self.forecast_col])
 
-        return (
-            self.data.with_columns(
-                self.data.select(cs.contains('ema_roc'))
-                .mean_horizontal()
-                .alias(self.forecast_col)
-            )
-            .select(['timestamp', 'dyn_std', self.forecast_col])
-        )
 
 class HmaRoc(SubStrat):
-    def __init__(self, data, timeframe):
+    def __init__(self, data, timeframe, lb):
         super().__init__(data, timeframe)
+        self.lb = lb
         self.data = self.calc_forecast()
         self.forecast = self.process_forecast()
 
     def __str__(self):
-        return f"HmaRoc {self.timeframe}"
+        return f"HmaRoc {self.timeframe} {self.lb}"
 
     def calc_forecast(self) -> pl.DataFrame:
-        self.data = ind.hma(self.data, 25)
-        self.data = ind.hma(self.data, 50)
-        self.data = ind.hma(self.data, 100)
-        self.data = ind.hma(self.data, 200)
+        self.forecast_col = f'HmaRoc_{self.timeframe}'
+
+        self.data = ind.hma(self.data, self.lb)
 
         # trend following strategy
         self.data = self.data.with_columns(
-            pl.col(f'hma_25').pct_change().gt(0).alias(f'hma_roc_25'),
-            pl.col(f'hma_50').pct_change().gt(0).alias(f'hma_roc_50'),
-            pl.col(f'hma_100').pct_change().gt(0).alias(f'hma_roc_100'),
-            pl.col(f'hma_200').pct_change().gt(0).alias(f'hma_roc_200'),
+            pl.col(f'hma_{self.lb}').pct_change().gt(0).alias(self.forecast_col)
         )
 
-        self.forecast_col = f'HmaRoc_{self.timeframe}'
+        return self.data.select(['timestamp', 'dyn_std', self.forecast_col])
 
-        return (
-            self.data.with_columns(
-                self.data.select(cs.contains('hma_roc'))
-                .mean_horizontal()
-                .alias(self.forecast_col)
-            )
-            .select(['timestamp', 'dyn_std', self.forecast_col])
-        )
 
 class EmaTrend(SubStrat):
 
