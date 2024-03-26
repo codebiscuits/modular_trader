@@ -435,6 +435,7 @@ class Trader:
              if (asset not in ['BNB', 'USDT']) and (bal['usdt_value'] < 0)]
         ))
 
+
         # repay any unnecessary debts
         for asset, values in self.asset_bals.items():
             if values['free'] and (values['borrowed'] or values['interest']):
@@ -453,9 +454,10 @@ class Trader:
             asset_price = self.pairs_data[f'{asset}USDT']['price']
             repay_threshold = 10
             repay_value = repay_amount * asset_price
+            # print(f"{repay_amount} {asset} at price: {asset_price:.2f} USDT = {repay_value:.2f} USDT value")
 
-        # if repay_value < repay_threshold:
-        #     print(f"ignore {repay_amount} {asset} repay, only worth {repay_value:.2f} USDT")
+        if repay_value < repay_threshold:
+            print(f"ignore {repay_amount} {asset} repay, only worth {repay_value:.2f} USDT")
 
         return repay_value < repay_threshold
 
@@ -851,6 +853,8 @@ class Trader:
                     bought = float(buy_order['executedQty'])
                     self.asset_bals['USDT']['free'] -= spent
                     self.asset_bals['USDT']['net_asset'] -= spent
+                    if pair[:-4] not in self.asset_bals:
+                        self.asset_bals[pair[:-4]] = {}
                     self.asset_bals[pair[:-4]]['free'] += bought
                     self.asset_bals[pair[:-4]]['net_asset'] += bought
 
@@ -909,6 +913,8 @@ class Trader:
                     sold = float(sell_order['executedQty'])
                     self.asset_bals['USDT']['free'] += take
                     self.asset_bals['USDT']['net_asset'] += take
+                    if pair[:-4] not in self.asset_bals:
+                        self.asset_bals[pair[:-4]] = {}
                     self.asset_bals[pair[:-4]]['free'] -= sold
                     self.asset_bals[pair[:-4]]['net_asset'] -= sold
 
@@ -977,6 +983,8 @@ class Trader:
                     if details['rows'][0]['status'] == 'CONFIRMED':
                         print(f"log {asset} borrow")
                         # pprint(details)
+                        if asset not in self.asset_bals:
+                            self.asset_bals[asset] = {}
                         self.asset_bals[asset]['free'] += float(details['rows'][0]['principal'])
                         self.asset_bals[asset]['borrowed'] += float(details['rows'][0]['principal'])
                         return float(details['rows'][0]['principal'])
@@ -992,19 +1000,13 @@ class Trader:
         else:  # if not live
             return 0.0
 
-    def repay(self, asset, amount):
-        # calculate base size
-        if asset == 'USDT':
-            base_size = amount
-        else:
-            price = self.pairs_data[f"{asset}USDT"]['price']
-            base_size = amount / price
+    def repay(self, asset, base_size):
 
         if self.live:
             free_bal = self.asset_bals[asset]['free']
             owed = self.asset_bals[asset]['borrowed'] + self.asset_bals[asset]['interest']
-            # if (free_bal < amount) or (owed < amount):
-            # print(f"Reducing {asset} repay from {amount} to {min(free_bal, owed)}")
+            # if (free_bal < base_size) or (owed < base_size):
+            #     print(f"Reducing {asset} repay from {base_size} to {min(free_bal, owed)}")
             base_size = f"{min([free_bal, base_size, owed]) * 0.995:.5f}"
 
             if self.ignore_repay(asset, float(base_size)):
@@ -1028,6 +1030,8 @@ class Trader:
                     if details['rows'][0]['status'] == 'CONFIRMED':
                         print(f"log {asset} repay")
                         # pprint(details)
+                        if asset not in self.asset_bals:
+                            self.asset_bals[asset] = {}
                         self.asset_bals[asset]['free'] -= float(base_size)
                         self.asset_bals[asset]['borrowed'] -= float(base_size)
                         return float(details['rows'][0]['principal'])
