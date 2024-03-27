@@ -30,22 +30,13 @@ pl.Config(tbl_cols=20, tbl_rows=50, tbl_width_chars=180)
 
 # TODO make a dashboard
 # TODO correlation analysis to find pairs that don't move with the rest of the market
-# TODO make it possible to plot the individual coins' backtests
-# TODO make it possible to plot the individual forecasts' backtests
 # TODO add drawdown to the pnl plots
 # TODO work out how to apply the buffer concept to the backtests in the same way it applies to live trading, then remove
 #  forecast quantisation and check how that changes things
-# TODO in calc_dyn_weight i am using ewm_mean and ewm_std in the dynamic sharpe calculation. once i have everything
-#  working, i could try swapping this for a simple moving average (rolling_mean and rolling_std) to see if it performs
-#  any differently
 
 # TODO import a list of all binance pairs i have data for, then test the pairs with the shortest history just to see if
 #  it works. If so, start testing lots of different portfolios with flat portfolio weighting to see if i can do better
 #  than i currently am with a manually selected portfolio
-
-# TODO i want a chart that shows one coin's price data with a single sub-strat's forecast overlaid, so i can see how
-#  well each forecast matches the price action. it would be great if i could make it so all the forecasts are there but
-#  they can be toggled on or off individually so i can just look at one or a few or all of them
 
 # TODO i need to work performance weightings into the portfolio backtests. i already have it working on the sub-strats,
 #  so it should be fairly easy to get it working on the coins too. then i can really decide which model to run.
@@ -60,6 +51,15 @@ pl.Config(tbl_cols=20, tbl_rows=50, tbl_width_chars=180)
 #  all pairs above 75 weekly rsi,
 #  all pairs below 25 weekly rsi,
 #  all pairs between 25 and 75 weekly rsi
+#  this would need to be done with walk-forward testing, where i use one window to choose the coins, then test their
+#  performance on the next window, then choose new coins and test them on the following window etc
+
+# TODO i could make an oscillator-based strategy using the same technique i used with chanbreak, where i set up a
+#  condition that looks at whether the oscilator is over or under a certain level eg 80% and 20%, and takes the diff of
+#  those conditions, then uses pl.when to separate out just the moments when the oscillator crossed back inside those
+#  extreme levels, indicating possible mean reversion. i could even get it to stay flat when the oscillator is at the
+#  extremes to  really differentiate it from the trend-following strats, depending on whether that actually improves
+#  things or not. i could test it with rsi, awesome osc, fisher transform etc
 
 # note: i think the forward feature selection is probably curve fitting, so i won't use it until i can forward test it
 def sqntl_fwd(markets, n, weighting: str='weighted_lin'):
@@ -150,7 +150,7 @@ if len(markets) <= 10:
     print(markets)
 
 # lookback window options: '4 years', '3 years', '2 years', '1 year', '6 months', '3 months', '1 month', '1 week'
-trader = components.Trader(markets, dyn_weight_lb='1 week', fc_weighting=True, port_weights='flat', strat_list=strategies, keep_records=True, leverage=3, live=True)
+trader = components.Trader(markets, dyn_weight_lb='1 week', fc_weighting=True, port_weights='flat', strat_list=strategies, keep_records=True, leverage=2, live=True)
 trader.run_backtests(window='1 year', show_stats=True, plot_rtns=False, plot_forecast=False, plot_sharpe=False, plot_pnls=False, inspect_substrats=False)
 trader.run_trading()
 

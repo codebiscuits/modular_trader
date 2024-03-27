@@ -171,7 +171,7 @@ class Trader:
         self.asset_bals = self.get_asset_bals()
         self.max_loan()
         self.fees = self.check_fees()
-        self.top_up_bnb(6)
+        self.top_up_bnb(20)
         self.spreads_df = self.save_spreads()
         self.get_pairs_info()
 
@@ -348,8 +348,10 @@ class Trader:
 
     def get_positions(self, weighting: str, log: bool):
 
+        # percentage of total capital to allocate to each asset
         allocations = {k: v['size'] * v[f'{weighting}_weight'] for k, v in self.final_sizes.items() if k != 'timestamp'}
 
+        # usdt value to allocate to each asset
         positions = {
             k: v['size'] * v[f'{weighting}_weight'] * self.capital['usdt_net'] * self.target_lev
             for k, v in self.final_sizes.items()
@@ -449,9 +451,13 @@ class Trader:
     def ignore_repay(self, asset, repay_amount):
         """returns True if the repay amount is too small to be worth a transaction."""
 
+        trading = f"{asset}USDT" in self.markets
+
         if asset == 'USDT':
             repay_threshold = max(25.0, self.total_short_exposure * 0.25)
             repay_value = repay_amount
+        elif (asset != 'BNBUSDT') and not trading:
+            return False  # if its what remains of an asset i used to trade, just get rid of it
         else:
             asset_price = self.pairs_data[f'{asset}USDT']['price']
             repay_threshold = 10
@@ -642,20 +648,31 @@ class Trader:
         bnb_price = float(self.client.get_avg_price(symbol='BNBUSDT')['price'])
         bnb_value = net_bnb * bnb_price
 
+        def execute_top_up(usdt_size):
+            print('Topping up margin BNB')
+
+            order = self.client.create_margin_order(
+                symbol='BNBUSDT',
+                side=be.SIDE_BUY,
+                type=be.ORDER_TYPE_MARKET,
+                quoteOrderQty=usdt_size)
+
+            return order
+
         # top up if needed
-        if bnb_value < 10:
+        if bnb_value < usdt_size:
             if free_usdt > usdt_size:
-                print('Topping up margin BNB')
-                # uid weight of 6
-                order = self.client.create_margin_order(
-                    symbol='BNBUSDT',
-                    side=be.SIDE_BUY,
-                    type=be.ORDER_TYPE_MARKET,
-                    quoteOrderQty=usdt_size)
-                # logger.debug(pformat(order))
+                order = execute_top_up(usdt_size)
             else:
-                print('Warning - Margin BNB balance low and not enough USDT to top up')
-                order = None
+                try:
+                    borrowed = self.borrow('USDT', usdt_size)  # only works if live is True
+                    if borrowed:
+                        order = execute_top_up(min(borrowed, usdt_size))
+                except bx.BinanceAPIException as e:
+                    print(e.code)
+                    print(e.message)
+                    print('\nWarning - Margin BNB balance low and not enough USDT to top up\n')
+                    order = None
         else:
             order = None
 
@@ -950,14 +967,14 @@ class Trader:
             if self.keep_records:
                 self.log_trade(price, price * base_size, sell_order)
 
-    def borrow(self, asset, amount):
+    def borrow(self, asset, quote_size):
 
         # calculate base size
         if asset == 'USDT':
-            base_size = amount
+            base_size = quote_size
         else:
             price = self.pairs_data[f"{asset}USDT"]['price']
-            base_size = amount / price
+            base_size = quote_size / price
 
         if self.live:
             max_loan = self.asset_bals[asset]['max_loan']
@@ -1371,6 +1388,87 @@ class Coin:
 
         return match_lengths(weighted_forecasts_dict)
 
+    def process_forecast(self,
+                         forecast: pl.Series,
+                         long_only: bool = False,
+                         standardise: bool = False,
+                         normalise: bool = True,
+                         flip: bool = False,
+                         smooth: bool = False,
+                         quantise: float = 0.5,) -> pl.Series:
+
+        # fit range to long and short
+        if not long_only:
+            forecast = (forecast * 2) - 1
+            # self.data = self.data.with_columns(pl.col(self.forecast_col).mul(2).sub(1).alias(self.forecast_col))
+
+        # standardise forecast at local timescale
+        if standardise:
+            forecast /= self.data['dyn_std']
+            # self.data = (
+            #     self.data.with_columns(
+            #         pl.col(self.forecast_col)
+            #         .truediv(pl.col('dyn_std'))
+            #         .alias(self.forecast_col)
+            #     )
+            # )
+
+        if normalise:
+            forecast = forecast / forecast.abs().mean()
+            # self.data = (
+            #     self.data.with_columns(
+            #         pl.col(self.forecast_col)
+            #         .truediv(pl.col(self.forecast_col).abs().mean())
+            #         .alias(self.forecast_col)
+            #     )
+            # )
+
+        if flip:
+            forecast *= -1
+            # self.data = (
+            #     self.data.with_columns(
+            #         pl.col(self.forecast_col)
+            #         .mul(-1)
+            #         .alias(self.forecast_col)
+            #     )
+            # )
+
+        if smooth:
+            forecast = forecast.ewm_mean(span=3)
+            # self.data = (
+            #     self.data.with_columns(
+            #         pl.col(self.forecast_col)
+            #         .ewm_mean(span=3)
+            #         .alias(self.forecast_col)
+            #     )
+            # )
+
+        if quantise:
+            q = 0.2
+            forecast = ((forecast / q).round()) * q
+            # self.data = (
+            #     self.data.with_columns(
+            #         pl.col(self.forecast_col)
+            #         .truediv(quantise)
+            #         .round()
+            #         .mul(quantise)
+            #         .alias(self.forecast_col)
+            #     )
+            # )
+
+        # clip
+        forecast = forecast.clip(lower_bound=-1, upper_bound=1)
+        # self.data = (
+        #     self.data.with_columns(
+        #         pl.col(self.forecast_col)
+        #         .clip(lower_bound=-1, upper_bound=1)
+        #         .alias(self.forecast_col)
+        #     )
+        # )
+
+        # return self.data.get_column(self.forecast_col).fill_null(0).ewm_mean(6)
+        return forecast
+
     def combine_forecasts(self, weighting: bool, inspect: bool = False):
 
         if weighting:
@@ -1382,6 +1480,7 @@ class Coin:
         combined_forecast = forecasts.mean_horizontal()
 
         # i might want to process the combined forecast here
+        # combined_forecast = self.process_forecast(combined_forecast)
 
         # then i want to backtest the combined forecast
 
@@ -1610,80 +1709,84 @@ class SubStrat:
             .set_sorted('timestamp')
         )
 
-    def process_forecast(self,
-                         long_only: bool = False,
-                         standardise: bool = False,
-                         normalise: bool = False,
-                         flip: bool = False,
-                         smooth: bool = False,
-                         quantise: float = 0.5,
-                         shift: bool = True) -> pl.Series:
+    # def process_forecast(self,
+    #                      long_only: bool = False,
+    #                      standardise: bool = False,
+    #                      normalise: bool = False,
+    #                      flip: bool = False,
+    #                      smooth: bool = False,
+    #                      quantise: float = 0.5,
+    #                      shift: bool = True) -> pl.Series:
+    #
+    #     # fit range to long and short
+    #     if not long_only:
+    #         self.data = self.data.with_columns(pl.col(self.forecast_col).mul(2).sub(1).alias(self.forecast_col))
+    #
+    #     # standardise forecast at local timescale
+    #     if standardise:
+    #         self.data = (
+    #             self.data.with_columns(
+    #                 pl.col(self.forecast_col)
+    #                 .truediv(pl.col('dyn_std'))
+    #                 .alias(self.forecast_col)
+    #             )
+    #         )
+    #
+    #     if normalise:
+    #         self.data = (
+    #             self.data.with_columns(
+    #                 pl.col(self.forecast_col)
+    #                 .truediv(pl.col(self.forecast_col).abs().mean())
+    #                 .alias(self.forecast_col)
+    #             )
+    #         )
+    #
+    #     if flip:
+    #         self.data = (
+    #             self.data.with_columns(
+    #                 pl.col(self.forecast_col)
+    #                 .mul(-1)
+    #                 .alias(self.forecast_col)
+    #             )
+    #         )
+    #
+    #     if smooth:
+    #         self.data = (
+    #             self.data.with_columns(
+    #                 pl.col(self.forecast_col)
+    #                 .ewm_mean(span=3)
+    #                 .alias(self.forecast_col)
+    #             )
+    #         )
+    #
+    #     if quantise:
+    #         self.data = (
+    #             self.data.with_columns(
+    #                 pl.col(self.forecast_col)
+    #                 .truediv(quantise)
+    #                 .round()
+    #                 .mul(quantise)
+    #                 .alias(self.forecast_col)
+    #             )
+    #         )
+    #
+    #     # clip
+    #     self.data = (
+    #         self.data.with_columns(
+    #             pl.col(self.forecast_col)
+    #             .clip(lower_bound=-1, upper_bound=1)
+    #             .alias(self.forecast_col)
+    #         )
+    #     )
 
-        # fit range to long and short
-        if not long_only:
-            self.data = self.data.with_columns(pl.col(self.forecast_col).mul(2).sub(1).alias(self.forecast_col))
-
-        # standardise forecast at local timescale
-        if standardise:
-            self.data = (
-                self.data.with_columns(
-                    pl.col(self.forecast_col)
-                    .truediv(pl.col('dyn_std'))
-                    .alias(self.forecast_col)
-                )
-            )
-
-        if normalise:
-            self.data = (
-                self.data.with_columns(
-                    pl.col(self.forecast_col)
-                    .truediv(pl.col(self.forecast_col).abs().mean())
-                    .alias(self.forecast_col)
-                )
-            )
-
-        if flip:
-            self.data = (
-                self.data.with_columns(
-                    pl.col(self.forecast_col)
-                    .mul(-1)
-                    .alias(self.forecast_col)
-                )
-            )
-
-        if smooth:
-            self.data = (
-                self.data.with_columns(
-                    pl.col(self.forecast_col)
-                    .ewm_mean(span=3)
-                    .alias(self.forecast_col)
-                )
-            )
-
-        if quantise:
-            self.data = (
-                self.data.with_columns(
-                    pl.col(self.forecast_col)
-                    .truediv(quantise)
-                    .round()
-                    .mul(quantise)
-                    .alias(self.forecast_col)
-                )
-            )
-
-        # clip
-        self.data = (
-            self.data.with_columns(
-                pl.col(self.forecast_col)
-                .clip(lower_bound=-1, upper_bound=1)
-                .alias(self.forecast_col)
-            )
-        )
+    def shift_and_resample(self):
+        # clip values
+        self.data = self.data.with_columns(
+            pl.col(self.forecast_col).cast(pl.Float64).clip(lower_bound=-1, upper_bound=1).alias(self.forecast_col))
 
         # shift forecast one period at local timescale. this prevents look-ahead bias because i'm using closing prices
-        if shift:
-            self.data = self.data.with_columns(
-                pl.col(self.forecast_col).shift(n=1, fill_value=0).alias(self.forecast_col))
+        self.data = self.data.with_columns(
+            pl.col(self.forecast_col).shift(n=1, fill_value=0).alias(self.forecast_col))
 
         # resample to 1h
         if self.timeframe != '1h':
@@ -1701,7 +1804,7 @@ class ChanBreak(SubStrat):
         self.lb = lb
         self.col = col
         self.data = self.calc_forecast()
-        self.forecast = self.process_forecast()
+        self.forecast = self.shift_and_resample()
 
     def calc_forecast(self):
         self.forecast_col = f'chan_break_{self.timeframe}_{self.lb}_{self.col}'
@@ -1736,7 +1839,7 @@ class IchiTrend(SubStrat):
         self.s = s
         self.input = input
         self.data = self.calc_forecast()
-        self.forecast = self.process_forecast()
+        self.forecast = self.shift_and_resample()
 
     def __str__(self):
         return f"IchiTrend ({self.f}, {self.s}), {self.input}, {self.timeframe}"
@@ -1785,7 +1888,7 @@ class EmaRoc(SubStrat):
         super().__init__(data, timeframe)
         self.lb = lb
         self.data = self.calc_forecast()
-        self.forecast = self.process_forecast()
+        self.forecast = self.shift_and_resample()
 
     def __str__(self):
         return f"EmaRoc {self.timeframe} {self.lb}"
@@ -1808,7 +1911,7 @@ class HmaRoc(SubStrat):
         super().__init__(data, timeframe)
         self.lb = lb
         self.data = self.calc_forecast()
-        self.forecast = self.process_forecast()
+        self.forecast = self.shift_and_resample()
 
     def __str__(self):
         return f"HmaRoc {self.timeframe} {self.lb}"
