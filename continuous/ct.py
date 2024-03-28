@@ -61,6 +61,13 @@ pl.Config(tbl_cols=20, tbl_rows=50, tbl_width_chars=180)
 #  extremes to  really differentiate it from the trend-following strats, depending on whether that actually improves
 #  things or not. i could test it with rsi, awesome osc, fisher transform etc
 
+# TODO maybe i could engineer reversal indicators as temporary signals to reduce size. i don't know if this is a good
+#  idea or not but instead of thinking of reversal/mean reversion signals in the same way as trend-following signals (ie
+#  directional forecasts), i could instead think of them as a scalar from 1 down to 0 that shuts of all the directional
+#  forecasts at any point where its likely they will be wrong (changes in trend) and then gradually eases of as the
+#  trend-following forecasts gradually adjust to the new direction. I could also have something like adx or long-term
+#  rsi doing a similar job to minimise attempted trend-following behaviour during chop.
+
 # note: i think the forward feature selection is probably curve fitting, so i won't use it until i can forward test it
 def sqntl_fwd(markets, n, weighting: str='weighted_lin'):
     """pick the best portfolio of n trading pairs from the list by adding one pair at a time and backtesting the
@@ -130,9 +137,12 @@ markets = [
     'SOLUSDT',
     'DUSKUSDT',
     'ETHUSDT',
+    'ROSEUSDT',
     'OMUSDT',
     'AVAXUSDT',
     'YGGUSDT',
+    'DOGEUSDT',
+    'SHIBUSDT',
 ]
 
 strategies = [
