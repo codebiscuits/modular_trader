@@ -195,6 +195,8 @@ class Trader:
         # update info and print summary
         self.m_acct = self.client.get_margin_account()
         self.asset_bals = self.get_asset_bals()
+        self.capital: dict = self.account_bal()
+        self.actual_lev = (self.capital['usdt_debt'] / self.capital['usdt_net']) + 1
         if self.keep_records:
             self.log_info()
         self.print_info()
@@ -475,7 +477,7 @@ class Trader:
         pwm = {'flat': 'flat', 'lin': 'linear', 'perf': 'performance-based'}
         print(f"Portfolio weighting method: {pwm[self.port_weights]}")
         print(f"\n{self.target_lev = }")
-        print(f"Actual Leverage: {(self.capital['usdt_debt'] / self.capital['usdt_net']) + 1:.2f}")
+        print(f"Actual Leverage: {self.actual_lev:.2f}")
         print(f"Current Buffer: {self.buffer:.0%}")
         print(f"Maker Fee: {self.fees['maker'] * 10000:.1f}bps, Taker Fee: {self.fees['taker'] * 10000:.1f}bps")
         print("Capital stats:")
@@ -505,12 +507,13 @@ class Trader:
             usdt_net=self.capital['usdt_net'],
             btc_net=self.capital['btc_net'],
             max_leverage=self.target_lev,
+            real_leverage=self.actual_lev,
             buffer=self.buffer,
             flat_allocations=self.flat_allocations,
             lin_allocations=self.lin_allocations,
             perf_allocations=self.perf_allocations,
             bt_sharpe=self.stats['sharpe'],
-            trades=self.num_trades
+            trades=self.num_trades,
         )
 
         try:

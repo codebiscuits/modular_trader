@@ -35,9 +35,10 @@ def ichimoku(data, f=9, s=26):
 
     return data
 
-def rsi(series: pl.Series, lookback: int=14) -> pl.Series:
+def rsi_clip(series: pl.Series, lookback: int=14) -> pl.Series:
     """transforms input series into rsi of that series"""
 
-    pass
+    ups = series.clip(lower_bound=0).ewm_mean(lookback)
+    downs = series.clip(upper_bound=0).abs().ewm_mean(lookback)
 
-
+    return pl.Series(pl.when(downs > 0.0).then((ups - downs) / downs).otherwise(1.0))
