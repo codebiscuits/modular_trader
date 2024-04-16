@@ -147,7 +147,8 @@ markets = [
 ]
 
 strategies = [
-    'chanbreak'
+    # 'rsirev',
+    'chanbreak',
     'ichitrend',
     'emaroc',
     'hmaroc'
@@ -161,7 +162,7 @@ if len(markets) <= 10:
     print(markets)
 
 # lookback window options: '4 years', '3 years', '2 years', '1 year', '6 months', '3 months', '1 month', '1 week'
-trader = components.Trader(markets, dyn_weight_lb='1 week', fc_weighting=True, port_weights='flat', strat_list=strategies, keep_records=True, leverage=4, live=True)
+trader = components.Trader(markets, dyn_weight_lb='1 week', fc_weighting=True, port_weights='flat', strat_list=strategies, keep_records=True, leverage=1, live=True)
 trader.run_backtests(window='1 year', show_stats=True, plot_rtns=False, plot_forecast=False, plot_sharpe=False, plot_pnls=False, inspect_substrats=False)
 trader.run_trading()
 
