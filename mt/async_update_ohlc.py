@@ -178,8 +178,14 @@ if not archive_filepath.exists():
 
     df = pd.DataFrame().from_dict(data, orient='index')
     df = df.reset_index()
-    df['time'] = pd.to_datetime(df['index'], format='%d/%m/%y %H:%M')
-    df['timestamp'] = ((df.time - pd.Timestamp("1970-01-01")) // pd.Timedelta("1s")).astype('int32')
+    print(df.head())
+    print(df.shape)
+    df['time'] = pd.to_datetime(df['index'], unit='s')
+    df['time'] = df['index']
+    df['time_origin'] = pd.Timestamp("1970-01-01")
+    print(df.info())
+    print(df.head())
+    df['timestamp'] = ((df.time - df.time_origin) // pd.Timedelta("1s")).astype('int32')
     df = df.set_index('time', drop=True).drop('index', axis=1).sort_index()
     df = df.resample('h').agg('median')
 

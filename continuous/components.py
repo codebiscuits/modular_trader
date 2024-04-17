@@ -628,7 +628,7 @@ class Trader:
             except json.JSONDecodeError:
                 spreads_data = {}
 
-        timestamp = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
+        timestamp = int(datetime.now(timezone.utc).timestamp())
         spreads_data[timestamp] = self.spreads
 
         with open(spreads_path, 'w') as file:

@@ -161,7 +161,8 @@ class LightSession:
             except json.JSONDecodeError:
                 spreads_data = {}
 
-        spreads_data[self.now_start] = self.spreads
+        timestamp = int(datetime.now(timezone.utc).timestamp())
+        spreads_data[timestamp] = self.spreads
 
         with open(spreads_path, 'w') as file:
             json.dump(spreads_data, file)
@@ -503,7 +504,8 @@ class TradingSession:
             except json.JSONDecodeError:
                 spreads_data = {}
 
-        spreads_data[self.now_start] = self.spreads
+        timestamp = int(datetime.now(timezone.utc).timestamp())
+        spreads_data[timestamp] = self.spreads
 
         with open(spreads_path, 'w') as file:
             json.dump(spreads_data, file)
@@ -522,7 +524,7 @@ class TradingSession:
         self.current_max_spread = self.current_spreads.spread.max()
 
         # stats on historic spread data
-        self.spreads_df['timestamp'] = pd.to_datetime(self.spreads_df.index, format="%d/%m/%y %H:%M")
+        self.spreads_df['timestamp'] = pd.to_datetime(self.spreads_df.index, unit='s')
         self.spreads_df = self.spreads_df.set_index('timestamp', drop=True)
         self.spreads_df = self.spreads_df.sort_index()
         self.spreads_df = self.spreads_df.resample('h').agg('mean')
