@@ -180,6 +180,7 @@ if not archive_filepath.exists():
     df = df.reset_index()
     print(df.head())
     print(df.shape)
+    df['index'] = df['index'].astype('int32')
     df['time'] = pd.to_datetime(df['index'], unit='s')
     df['time'] = df['index']
     df['time_origin'] = pd.Timestamp("1970-01-01")
