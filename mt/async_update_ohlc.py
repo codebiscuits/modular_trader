@@ -178,22 +178,15 @@ if not archive_filepath.exists():
 
     df = pd.DataFrame().from_dict(data, orient='index')
     df = df.reset_index()
-    print(df.head())
-    print(df.shape)
     df['index'] = df['index'].astype('int32')
     df['time'] = pd.to_datetime(df['index'], unit='s')
-    df['time'] = df['index']
-    df['time_origin'] = pd.Timestamp("1970-01-01")
-    print(df.info())
-    print(df.head())
-    df['timestamp'] = ((df.time - df.time_origin) // pd.Timedelta("1s")).astype('int32')
-    df = df.set_index('time', drop=True).drop('index', axis=1).sort_index()
+    df = df.set_index('time', drop=True).sort_index()
     df = df.resample('h').agg('median')
 
     df_filtered = df.loc[df.index >= yesterday]
     df_filtered = df_filtered.loc[df_filtered.index < today]
 
-    df_filtered = df_filtered.set_index('timestamp', drop=True)
+    df_filtered = df_filtered.set_index('index', drop=True)
 
     with open(archive_filepath, 'w') as f:
         json.dump(df_filtered.to_dict(), f)
