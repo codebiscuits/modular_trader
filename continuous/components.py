@@ -877,9 +877,15 @@ class Trader:
                     self.asset_bals['USDT']['free'] -= spent
                     self.asset_bals['USDT']['net_asset'] -= spent
                     if pair[:-4] not in self.asset_bals:
-                        self.asset_bals[pair[:-4]] = {}
+                        self.asset_bals[pair[:-4]] = {'free': 0.0, 'borrowed': 0.0, 'interest': 0.0, 'net_asset': 0.0,
+                                                      'usdt_value': 0.0, 'pct': 0.0, 'adjusted_pct': 0.0}
                     self.asset_bals[pair[:-4]]['free'] += bought
                     self.asset_bals[pair[:-4]]['net_asset'] += bought
+                    self.asset_bals[pair[:-4]]['usdt_value'] += spent
+                    pct = spent / self.capital['usdt_net']
+                    adj_pct = pct / self.target_lev
+                    self.asset_bals[pair[:-4]]['pct'] += pct
+                    self.asset_bals[pair[:-4]]['adjusted_pct'] += adj_pct
 
                     self.num_trades += 1
                     if self.keep_records:
@@ -937,7 +943,8 @@ class Trader:
                     self.asset_bals['USDT']['free'] += take
                     self.asset_bals['USDT']['net_asset'] += take
                     if pair[:-4] not in self.asset_bals:
-                        self.asset_bals[pair[:-4]] = {}
+                        self.asset_bals[pair[:-4]] = {'free': 0.0, 'borrowed': 0.0, 'interest': 0.0, 'net_asset': 0.0,
+                                                      'usdt_value': 0.0, 'pct': 0.0, 'adjusted_pct': 0.0}
                     self.asset_bals[pair[:-4]]['free'] -= sold
                     self.asset_bals[pair[:-4]]['net_asset'] -= sold
 
