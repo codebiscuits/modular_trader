@@ -116,7 +116,8 @@ class Trader:
     def __init__(self, markets: list[str], dyn_weight_lb: str, fc_weighting: bool, port_weights: str,
                  strat_list: list, keep_records: bool = True, leverage: float | str = 1.0, live=False):
         self.now_start = datetime.now().timestamp()
-        print(f"\nTrader initialised at {datetime.fromtimestamp(self.now_start).strftime('%d/%m/%Y %H:%M:%S')}")
+        print(f"\nTrader initialised at "
+              f"{datetime.fromtimestamp(self.now_start, tz=timezone.utc).strftime('%d/%m/%Y %H:%M:%S')} UTC")
         self.markets = markets
         self.dyn_weight_lb = self.lookbacks[dyn_weight_lb]
         self.fc_weighting = fc_weighting
@@ -618,7 +619,6 @@ class Trader:
         return avg_spreads
 
     def save_spreads(self):
-
         spreads_path = self.mkt_data_path / 'spreads.json'
         spreads_path.touch(exist_ok=True)
 
@@ -628,7 +628,8 @@ class Trader:
             except json.JSONDecodeError:
                 spreads_data = {}
 
-        spreads_data[self.now_start] = self.spreads
+        timestamp = datetime.now(timezone.utc).strftime('%d/%m/%y %H:%M')
+        spreads_data[timestamp] = self.spreads
 
         with open(spreads_path, 'w') as file:
             json.dump(spreads_data, file)
@@ -1079,6 +1080,14 @@ class Coin:
     lookbacks = [2, 4, 8, 16, 32, 64, 128, 256]
 
 
+    rsi_reversals = [
+        # {'tf': '1h', 'lb': 2}, {'tf': '1h', 'lb': 4}, {'tf': '1h', 'lb': 8}, {'tf': '1h', 'lb': 16},
+        # {'tf': '4h', 'lb': 2}, {'tf': '4h', 'lb': 4}, {'tf': '4h', 'lb': 8}, {'tf': '4h', 'lb': 16},
+        # {'tf': '8h', 'lb': 2}, {'tf': '8h', 'lb': 4}, {'tf': '8h', 'lb': 8}, {'tf': '8h', 'lb': 16},
+        # {'tf': '1d', 'lb': 2}, {'tf': '1d', 'lb': 4}, {'tf': '1d', 'lb': 8}, {'tf': '1d', 'lb': 16},
+        {'tf': '1w', 'lb': 2}, {'tf': '1w', 'lb': 4}, {'tf': '1w', 'lb': 8}, {'tf': '1w', 'lb': 16},
+    ]
+
     chanbreaks = [
         {'tf': '1h', 'lb': 2}, {'tf': '1h', 'lb': 4}, {'tf': '1h', 'lb': 8}, {'tf': '1h', 'lb': 16},
         {'tf': '1h', 'lb': 32}, {'tf': '1h', 'lb': 64}, {'tf': '1h', 'lb': 128}, {'tf': '1h', 'lb': 256},
@@ -1126,6 +1135,14 @@ class Coin:
         self.strats = {}
 
     def add_strats(self):
+        rsirev_input_series = 'close'
+        if 'rsirev' in self.strat_list:
+            self.strats.update({
+                f"rsirev_{rr['tf']}_{rr['lb']}_{rsirev_input_series}":
+                    RSIReversal(self.data, rr['tf'], rr['lb'], rsirev_input_series)
+                for rr in self.rsi_reversals
+            })
+
         chanbreak_input_series = 'vwma_1h'
         if 'chanbreak' in self.strat_list:
             self.strats.update({
@@ -1801,7 +1818,44 @@ class SubStrat:
         return self.data.get_column(self.forecast_col).fill_null(0).ewm_mean(6)
 
 
+class RSIReversal(SubStrat):
+    """Mean reversion strategy which attempts to time reversals based on the rsi."""
+    def __init__(self, data, timeframe: str, lb: int, col: str= 'close'):
+        super().__init__(data, timeframe)
+        self.lb = lb
+        self.col = col
+        self.data = self.calc_forecast()
+        self.forecast = self.shift_and_resample()
+
+    def calc_forecast(self):
+        extr_hi = 75
+        extr_lo = 25
+
+        self.forecast_col = f"rsi_rev_{self.timeframe}_{self.lb}_{self.col}"
+
+        rsi_series = ind.rsi(self.data[self.col], self.lb)
+
+        self.data = self.data.with_columns(
+            pl.Series(rsi_series),
+            pl.Series(rsi_series).ewm_mean(span=5).alias('rsi_ema'),
+            pl.Series(rsi_series).pct_change(n=5).alias('rsi_roc')
+        )
+
+        self.data = self.data.with_columns(
+            pl.when(pl.col(f'rsi_{self.lb}').gt(extr_hi).or_(pl.col(f'rsi_{self.lb}').lt(extr_lo))).then(pl.lit(0))
+            .when(pl.col('rsi_ema').gt(extr_hi).and_(pl.col(f'rsi_{self.lb}').lt(extr_hi))).then(pl.lit(-1))
+            .when(pl.col('rsi_ema').lt(extr_lo).and_(pl.col(f'rsi_{self.lb}').gt(extr_lo))).then(pl.lit(1))
+            .fill_null(strategy='forward')
+            .fill_null(0)
+            .alias(self.forecast_col)
+        )
+
+        return self.data.select(['timestamp', 'dyn_std', self.forecast_col])
+
+
 class ChanBreak(SubStrat):
+    """Momentum strategy which is always long or short, never flat. The signal flips long when the recent price range is
+    broken to the upside and flips short when the recent price range is broken to the downside."""
     def __init__(self, data, timeframe: str, lb: int, col: str = 'close'):
         super().__init__(data, timeframe)
         self.lb = lb
@@ -1823,6 +1877,8 @@ class ChanBreak(SubStrat):
             pl.col(self.col).rolling_max(self.lb).shift(1).lt(pl.col(self.col)).cast(pl.Int64).diff().alias('above'),
             pl.col(self.col).rolling_min(self.lb).shift(1).gt(pl.col(self.col)).cast(pl.Int64).diff().alias('below'),
         )
+
+        # fill forecast_col with either 1 or -1 depending on which side of the channel was most recently broken
         self.data = self.data.with_columns(
             pl.when(pl.col('above') == 1).then(pl.lit(1))
             .when(pl.col('below') == 1).then(pl.lit(-1))

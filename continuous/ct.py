@@ -144,6 +144,8 @@ markets = [
     'YGGUSDT',
     'DOGEUSDT',
     'SHIBUSDT',
+    'PENDLEUSDT',
+    'TUSDT',
 ]
 
 strategies = [

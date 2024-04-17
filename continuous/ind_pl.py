@@ -1,5 +1,6 @@
 import polars as pl
 import math
+import plotly.express as px
 
 
 def hma(data, length):
@@ -35,10 +36,19 @@ def ichimoku(data, f=9, s=26):
 
     return data
 
-def rsi_clip(series: pl.Series, lookback: int=14) -> pl.Series:
+def rsi(series: pl.Series, lookback: int=14) -> pl.Series:
     """transforms input series into rsi of that series"""
 
-    ups = series.clip(lower_bound=0).ewm_mean(lookback)
-    downs = series.clip(upper_bound=0).abs().ewm_mean(lookback)
+    ups = series.pct_change().clip(lower_bound=0).ewm_mean(lookback)
+    downs = series.pct_change().clip(upper_bound=0).abs().ewm_mean(lookback)
 
-    return pl.Series(pl.when(downs > 0.0).then((ups - downs) / downs).otherwise(1.0))
+    df = pl.DataFrame({'ups': ups, 'downs': downs})
+
+    df = df.with_columns(
+        pl.when(pl.col("downs").gt(0.0))
+        .then(100 - (100 / (1.0 + pl.col("ups") / pl.col("downs"))))
+        .otherwise(0.5)
+        .alias(f"rsi_{lookback}")
+    )
+
+    return df[f"rsi_{lookback}"]

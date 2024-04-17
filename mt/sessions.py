@@ -895,6 +895,9 @@ class TradingSession:
             if e.code == -3015:
                 logger.exception(" Top up BNB caused an exception trying to repay interest")
                 return order
+            elif e.code == -3041:
+                print("Not enough BNB left to repay interest")
+                return order
             else:
                 raise e
         gh.stop()
