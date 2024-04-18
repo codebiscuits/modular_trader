@@ -25,6 +25,8 @@ all_start = perf_counter()
 # tos = datetime.now().hour
 
 pl.Config(tbl_cols=20, tbl_rows=50, tbl_width_chars=180)
+
+
 # client = Client_w(keys.woo_key, keys.woo_secret, keys.woo_app_id, testnet=True)
 # client = Client_b(keys.bPkey, keys.bSkey)
 
@@ -69,7 +71,7 @@ pl.Config(tbl_cols=20, tbl_rows=50, tbl_width_chars=180)
 #  rsi doing a similar job to minimise attempted trend-following behaviour during chop.
 
 # note: i think the forward feature selection is probably curve fitting, so i won't use it until i can forward test it
-def sqntl_fwd(markets, n, weighting: str='weighted_lin'):
+def sqntl_fwd(markets, n, weighting: str = 'weighted_lin'):
     """pick the best portfolio of n trading pairs from the list by adding one pair at a time and backtesting the
     combined sharpe ratio of each iteration"""
 
@@ -105,7 +107,8 @@ def sqntl_fwd(markets, n, weighting: str='weighted_lin'):
 
     return best
 
-def choose_by_length(minimum: int|str, maximum:int|str=420000):
+
+def choose_by_length(minimum: int | str, maximum: int | str = 420000):
     """checks the length of ohlc history of each trading pair, then makes a list of all pairs whos history length falls
     within the stated range"""
 
@@ -125,12 +128,14 @@ def choose_by_length(minimum: int|str, maximum:int|str=420000):
 
     return [p for p, v in info.items() if minimum < v <= maximum]
 
+
 def backtest_all():
     # load each pair's ohlc one by one and compile a dict of statistics about them (backtested sharpe,ohlc length,
     # current daily/weekly volume, htf overbought/oversold etc) then put all those stats into a dataframe and filter out
     # the worst examples for each factor, then sort the rest by sharpe and pick the best 10/15/20. run this once a week
     # or so.
     pass
+
 
 markets = [
     'BTCUSDT',
@@ -154,7 +159,7 @@ strategies = [
     'ichitrend',
     'emaroc',
     'hmaroc'
-    ]
+]
 # lookback window options: '4 years', '3 years', '2 years', '1 year', '6 months', '3 months', '1 month', '1 week'
 
 # markets = choose_by_length(0, 10000)
@@ -164,8 +169,26 @@ if len(markets) <= 10:
     print(markets)
 
 # lookback window options: '4 years', '3 years', '2 years', '1 year', '6 months', '3 months', '1 month', '1 week'
-trader = components.Trader(markets, dyn_weight_lb='1 week', fc_weighting=True, port_weights='flat', strat_list=strategies, keep_records=True, leverage=1, live=True)
-trader.run_backtests(window='1 year', show_stats=True, plot_rtns=False, plot_forecast=False, plot_sharpe=False, plot_pnls=False, inspect_substrats=False)
+in_production = True
+trader = components.Trader(
+    markets,
+    dyn_weight_lb='1 week',
+    fc_weighting=True,
+    port_weights='flat',
+    strat_list=strategies,
+    keep_records=in_production,
+    leverage=1,
+    live=in_production
+)
+trader.run_backtests(
+    window='1 year',
+    show_stats=True,
+    plot_rtns=False,
+    plot_forecast=False,
+    plot_sharpe=False,
+    plot_pnls=False,
+    inspect_substrats=False
+)
 trader.run_trading()
 
 all_end = perf_counter()

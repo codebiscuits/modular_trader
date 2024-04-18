@@ -198,6 +198,8 @@ class Trader:
         self.asset_bals = self.get_asset_bals()
         self.capital: dict = self.account_bal()
         self.actual_lev = (self.capital['usdt_debt'] / self.capital['usdt_net']) + 1
+        self.actual_exposure = (self.capital['usdt_gross'] /
+                                (self.asset_bals['USDT']['free'] - self.capital['usdt_debt'])) - 1
         if self.keep_records:
             self.log_info()
         self.print_info()
@@ -478,7 +480,8 @@ class Trader:
         pwm = {'flat': 'flat', 'lin': 'linear', 'perf': 'performance-based'}
         print(f"Portfolio weighting method: {pwm[self.port_weights]}")
         print(f"\n{self.target_lev = }")
-        print(f"Actual Leverage: {self.actual_lev:.2f}")
+        print(f"Actual Leverage: {self.actual_lev:.2f} (represents level of debt)")
+        print(f"Volatility Exposure: {self.actual_exposure:.1%} (how much of available capital is in trades)")
         print(f"Current Buffer: {self.buffer:.0%}")
         print(f"Maker Fee: {self.fees['maker'] * 10000:.1f}bps, Taker Fee: {self.fees['taker'] * 10000:.1f}bps")
         print("Capital stats:")
