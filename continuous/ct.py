@@ -154,11 +154,12 @@ markets = [
 ]
 
 strategies = [
+    'srsirev',
     # 'rsirev',
-    'chanbreak',
-    'ichitrend',
-    'emaroc',
-    'hmaroc'
+    # 'chanbreak',
+    # 'ichitrend',
+    # 'emaroc',
+    # 'hmaroc'
 ]
 # lookback window options: '4 years', '3 years', '2 years', '1 year', '6 months', '3 months', '1 month', '1 week'
 
@@ -177,7 +178,7 @@ trader = components.Trader(
     port_weights='flat',
     strat_list=strategies,
     keep_records=in_production,
-    leverage=1,
+    leverage=2,
     live=in_production
 )
 trader.run_backtests(

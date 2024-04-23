@@ -47,8 +47,27 @@ def rsi(series: pl.Series, lookback: int=14) -> pl.Series:
     df = df.with_columns(
         pl.when(pl.col("downs").gt(0.0))
         .then(100 - (100 / (1.0 + pl.col("ups") / pl.col("downs"))))
-        .otherwise(0.5)
+        .otherwise(50)
         .alias(f"rsi_{lookback}")
     )
 
     return df[f"rsi_{lookback}"]
+
+def stochastic(series: pl.Series, lookback: int=14) -> pl.Series:
+    """transforms input series into stochastic oscillator of that series"""
+
+    df = pl.DataFrame(
+        {'input': series,
+         'highs': series.rolling_max(lookback, min_periods=1),
+         'lows': series.rolling_min(lookback, min_periods=1)}
+    )
+
+    df = df.with_columns(
+        pl.col('input')
+        .sub(pl.col('lows'))
+        .truediv(pl.col('highs').sub(pl.col('lows')))
+        .mul(100)
+        .alias(f"stoch_{lookback}")
+    )
+
+    return df[f"stoch_{lookback}"]

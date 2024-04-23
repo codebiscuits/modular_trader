@@ -30,7 +30,7 @@ client = Client_b(keys.bPkey, keys.bSkey)
 def calc_perf(s: pl.Series, window: int = 8760) -> dict:
     """calculates 1 year rolling performance statistics on any cummulative pnl series"""
 
-    ann_mean = s.pct_change().median() * 8760
+    ann_mean = s.pct_change().mean() * 8760
     ann_std = s.pct_change().std() * 92
     if ann_std:
         ann_sharpe = ann_mean / ann_std
@@ -1087,28 +1087,97 @@ class Coin:
     #  correlated
 
     timeframes = ['1h', '4h', '8h', '1d', '1w']
-    lookbacks = [2, 4, 8, 16, 32, 64, 128, 256]
+    lookbacks = [4, 8, 16, 32, 64, 128, 256]
+    srsi_in = 'vwma_200h'
 
+    srsi_reversals = [
+        {'tf': '1h', 'lb': 4, 'input': srsi_in},
+        {'tf': '1h', 'lb': 8, 'input': srsi_in},
+        {'tf': '1h', 'lb': 16, 'input': srsi_in},
+        {'tf': '1h', 'lb': 32, 'input': srsi_in},
+        {'tf': '1h', 'lb': 64, 'input': srsi_in},
+        {'tf': '1h', 'lb': 128, 'input': srsi_in},
+        {'tf': '4h', 'lb': 4, 'input': srsi_in},
+        {'tf': '4h', 'lb': 8, 'input': srsi_in},
+        {'tf': '4h', 'lb': 16, 'input': srsi_in},
+        {'tf': '4h', 'lb': 32, 'input': srsi_in},
+        {'tf': '4h', 'lb': 64, 'input': srsi_in},
+        {'tf': '4h', 'lb': 128, 'input': srsi_in},
+        {'tf': '8h', 'lb': 4, 'input': srsi_in},
+        {'tf': '8h', 'lb': 8, 'input': srsi_in},
+        {'tf': '8h', 'lb': 16, 'input': srsi_in},
+        {'tf': '8h', 'lb': 32, 'input': srsi_in},
+        {'tf': '8h', 'lb': 64, 'input': srsi_in},
+        {'tf': '8h', 'lb': 128, 'input': srsi_in},
+    ]
 
     rsi_reversals = [
-        # {'tf': '1h', 'lb': 2}, {'tf': '1h', 'lb': 4}, {'tf': '1h', 'lb': 8}, {'tf': '1h', 'lb': 16},
-        # {'tf': '4h', 'lb': 2}, {'tf': '4h', 'lb': 4}, {'tf': '4h', 'lb': 8}, {'tf': '4h', 'lb': 16},
-        # {'tf': '8h', 'lb': 2}, {'tf': '8h', 'lb': 4}, {'tf': '8h', 'lb': 8}, {'tf': '8h', 'lb': 16},
-        # {'tf': '1d', 'lb': 2}, {'tf': '1d', 'lb': 4}, {'tf': '1d', 'lb': 8}, {'tf': '1d', 'lb': 16},
-        {'tf': '1w', 'lb': 2}, {'tf': '1w', 'lb': 4}, {'tf': '1w', 'lb': 8}, {'tf': '1w', 'lb': 16},
+        # {'tf': '1h', 'lb': 2, 'input': 'vwma_1h'},
+        # {'tf': '1h', 'lb': 4, 'input': 'vwma_1h'},
+        # {'tf': '1h', 'lb': 8, 'input': 'vwma_1h'},
+        # {'tf': '1h', 'lb': 16, 'input': 'vwma_1h'},
+        # {'tf': '4h', 'lb': 2, 'input': 'vwma_25h'},
+        # {'tf': '4h', 'lb': 4, 'input': 'vwma_25h'},
+        # {'tf': '4h', 'lb': 8, 'input': 'vwma_25h'},
+        # {'tf': '4h', 'lb': 16, 'input': 'vwma_25h'},
+        {'tf': '8h', 'lb': 2, 'input': 'vwma_50h'},
+        {'tf': '8h', 'lb': 4, 'input': 'vwma_50h'},
+        {'tf': '8h', 'lb': 8, 'input': 'vwma_50h'},
+        {'tf': '8h', 'lb': 16, 'input': 'vwma_50h'},
+        {'tf': '8h', 'lb': 32, 'input': 'vwma_50h'},
+        {'tf': '8h', 'lb': 64, 'input': 'vwma_50h'},
+        {'tf': '8h', 'lb': 128, 'input': 'vwma_50h'},
+        {'tf': '8h', 'lb': 256, 'input': 'vwma_50h'},
+        # {'tf': '1d', 'lb': 2, 'input': 'vwma_100h'},
+        # {'tf': '1d', 'lb': 4, 'input': 'vwma_100h'},
+        # {'tf': '1d', 'lb': 8, 'input': 'vwma_100h'},
+        # {'tf': '1d', 'lb': 16, 'input': 'vwma_100h'},
+        # {'tf': '1w', 'lb': 2, 'input': 'vwma_200h'},
+        # {'tf': '1w', 'lb': 4, 'input': 'vwma_200h'},
+        # {'tf': '1w', 'lb': 8, 'input': 'vwma_200h'},
+        # {'tf': '1w', 'lb': 16, 'input': 'vwma_200h'},
     ]
 
     chanbreaks = [
-        {'tf': '1h', 'lb': 2}, {'tf': '1h', 'lb': 4}, {'tf': '1h', 'lb': 8}, {'tf': '1h', 'lb': 16},
-        {'tf': '1h', 'lb': 32}, {'tf': '1h', 'lb': 64}, {'tf': '1h', 'lb': 128}, {'tf': '1h', 'lb': 256},
-        {'tf': '4h', 'lb': 2}, {'tf': '4h', 'lb': 4}, {'tf': '4h', 'lb': 8}, {'tf': '4h', 'lb': 16},
-        {'tf': '4h', 'lb': 32}, {'tf': '4h', 'lb': 64}, {'tf': '4h', 'lb': 128}, {'tf': '4h', 'lb': 256},
-        {'tf': '8h', 'lb': 2}, {'tf': '8h', 'lb': 4}, {'tf': '8h', 'lb': 8}, {'tf': '8h', 'lb': 16},
-        {'tf': '8h', 'lb': 32}, {'tf': '8h', 'lb': 64}, {'tf': '8h', 'lb': 128}, {'tf': '8h', 'lb': 256},
-        {'tf': '1d', 'lb': 2}, {'tf': '1d', 'lb': 4}, {'tf': '1d', 'lb': 8}, {'tf': '1d', 'lb': 16},
-        {'tf': '1d', 'lb': 32}, {'tf': '1d', 'lb': 64}, {'tf': '1d', 'lb': 128}, {'tf': '1d', 'lb': 256},
-        {'tf': '1w', 'lb': 2}, {'tf': '1w', 'lb': 4}, {'tf': '1w', 'lb': 8}, {'tf': '1w', 'lb': 16},
-        {'tf': '1w', 'lb': 32}, {'tf': '1w', 'lb': 64}, {'tf': '1w', 'lb': 128}, # {'tf': '1w', 'lb': 256},
+        # {'tf': '1h', 'lb': 2},
+        # {'tf': '1h', 'lb': 4},
+        # {'tf': '1h', 'lb': 8},
+        # {'tf': '1h', 'lb': 16},
+        # {'tf': '1h', 'lb': 32},
+        # {'tf': '1h', 'lb': 64},
+        # {'tf': '1h', 'lb': 128},
+        # {'tf': '1h', 'lb': 256},
+        # {'tf': '4h', 'lb': 2},
+        # {'tf': '4h', 'lb': 4},
+        # {'tf': '4h', 'lb': 8},
+        # {'tf': '4h', 'lb': 16},
+        # {'tf': '4h', 'lb': 32},
+        # {'tf': '4h', 'lb': 64},
+        # {'tf': '4h', 'lb': 128},
+        # {'tf': '4h', 'lb': 256},
+        # {'tf': '8h', 'lb': 2},
+        # {'tf': '8h', 'lb': 4},
+        # {'tf': '8h', 'lb': 8},
+        # {'tf': '8h', 'lb': 16},
+        {'tf': '8h', 'lb': 32},
+        # {'tf': '8h', 'lb': 64},
+        # {'tf': '8h', 'lb': 128},
+        # {'tf': '8h', 'lb': 256},
+        # {'tf': '1d', 'lb': 2},
+        # {'tf': '1d', 'lb': 4},
+        # {'tf': '1d', 'lb': 8},
+        # {'tf': '1d', 'lb': 16},
+        # {'tf': '1d', 'lb': 32},
+        # {'tf': '1d', 'lb': 64},
+        # {'tf': '1d', 'lb': 128},
+        # {'tf': '1d', 'lb': 256},
+        # {'tf': '1w', 'lb': 2},
+        # {'tf': '1w', 'lb': 4},
+        # {'tf': '1w', 'lb': 8},
+        # {'tf': '1w', 'lb': 16},
+        # {'tf': '1w', 'lb': 32},
+        # {'tf': '1w', 'lb': 64},
+        # {'tf': '1w', 'lb': 128},
     ]
 
     ichitrends = [
@@ -1145,11 +1214,18 @@ class Coin:
         self.strats = {}
 
     def add_strats(self):
-        rsirev_input_series = 'close'
+        if 'srsirev' in self.strat_list:
+            self.strats.update({
+                f"srsirev_{rr['tf']}_{rr['lb']}_{rr['input']}":
+                    StochRSIReversal(self.data, rr['tf'], rr['lb'], rr['input'])
+                for rr in self.srsi_reversals
+            })
+
+        rsirev_input_series = 'vwma_200h'
         if 'rsirev' in self.strat_list:
             self.strats.update({
-                f"rsirev_{rr['tf']}_{rr['lb']}_{rsirev_input_series}":
-                    RSIReversal(self.data, rr['tf'], rr['lb'], rsirev_input_series)
+                f"rsirev_{rr['tf']}_{rr['lb']}_{rr['input']}":
+                    RSIReversal(self.data, rr['tf'], rr['lb'], rr['input'])
                 for rr in self.rsi_reversals
             })
 
@@ -1827,6 +1903,67 @@ class SubStrat:
 
         return self.data.get_column(self.forecast_col).fill_null(0).ewm_mean(6)
 
+    def impulse_to_forecast(self, decay: float):
+        fc_list = self.data[self.forecast_col].to_list()
+        new_fc_list = []
+        for i, x in enumerate(fc_list):
+            if i == 0:
+                new_fc_list.append(0)
+            elif abs(fc_list[i]) < 1:
+                new_fc_list.append(new_fc_list[i-1] * decay)
+            else:
+                new_fc_list.append(fc_list[i])
+
+        return pl.Series(new_fc_list)
+
+
+class StochRSIReversal(SubStrat):
+    """Mean reversion strategy which attempts to time reversals based on the rsi."""
+    def __init__(self, data, timeframe: str, lb: int, col: str= 'close'):
+        super().__init__(data, timeframe)
+        self.lb = lb
+        self.col = col
+        self.data = self.calc_forecast()
+        self.forecast = self.shift_and_resample()
+
+    def calc_forecast(self):
+        extr_hi = 90
+        extr_lo = 10
+
+        self.forecast_col = f"stoch_rsi_rev_{self.timeframe}_{self.lb}_{self.col}"
+
+        rsi_series = ind.rsi(self.data[self.col], self.lb)
+        stoch_rsi_series = ind.stochastic(rsi_series, self.lb)
+
+        self.data = self.data.with_columns(
+            pl.Series(stoch_rsi_series).alias(f"stoch_rsi_{self.lb}"),
+        )
+        self.data = self.data.with_columns(
+            # using rolling mean because ewm mean didn't work for some reason
+            pl.col(f"stoch_rsi_{self.lb}").rolling_mean(5).alias('stoch_rsi_ema'),
+            pl.col(f"stoch_rsi_{self.lb}").pct_change(n=5).alias('stoch_rsi_roc')
+        )
+
+        # px.line(data_frame=self.data.select([f"stoch_rsi_{self.lb}", 'stoch_rsi_ema']), title=f'stoch_rsi_{self.lb}').show()
+
+        self.data = self.data.with_columns(
+            pl.when(pl.col(f'stoch_rsi_{self.lb}').gt(extr_hi).or_(pl.col(f'stoch_rsi_{self.lb}').lt(extr_lo))).then(pl.lit(0))
+            .when(pl.col('stoch_rsi_ema').gt(extr_hi).and_(pl.col(f'stoch_rsi_{self.lb}').lt(extr_hi))).then(pl.lit(-1))
+            .when(pl.col('stoch_rsi_ema').lt(extr_lo).and_(pl.col(f'stoch_rsi_{self.lb}').gt(extr_lo))).then(pl.lit(1))
+            # .fill_null(strategy='forward')
+            .fill_null(0)
+            .alias(self.forecast_col)
+        )
+
+        # px.line(data_frame=self.data.select(self.forecast_col), title=f'stoch_rsi_{self.lb} pre forecast').show()
+        # print(self.data.tail(20))
+
+        self.data = self.data.with_columns(
+            pl.Series(self.impulse_to_forecast(0.9)).alias(self.forecast_col),
+        )
+
+        return self.data.select(['timestamp', 'dyn_std', self.forecast_col])
+
 
 class RSIReversal(SubStrat):
     """Mean reversion strategy which attempts to time reversals based on the rsi."""
@@ -1855,9 +1992,13 @@ class RSIReversal(SubStrat):
             pl.when(pl.col(f'rsi_{self.lb}').gt(extr_hi).or_(pl.col(f'rsi_{self.lb}').lt(extr_lo))).then(pl.lit(0))
             .when(pl.col('rsi_ema').gt(extr_hi).and_(pl.col(f'rsi_{self.lb}').lt(extr_hi))).then(pl.lit(-1))
             .when(pl.col('rsi_ema').lt(extr_lo).and_(pl.col(f'rsi_{self.lb}').gt(extr_lo))).then(pl.lit(1))
-            .fill_null(strategy='forward')
+            # .fill_null(strategy='forward')
             .fill_null(0)
             .alias(self.forecast_col)
+        )
+
+        self.data = self.data.with_columns(
+            pl.Series(self.impulse_to_forecast(0.9)).alias(self.forecast_col),
         )
 
         return self.data.select(['timestamp', 'dyn_std', self.forecast_col])
@@ -1896,6 +2037,8 @@ class ChanBreak(SubStrat):
             .fill_null(0)
             .alias(self.forecast_col)
         )
+
+        print(self.data.tail(20))
 
         return self.data.select(['timestamp', 'dyn_std', self.forecast_col])
 
