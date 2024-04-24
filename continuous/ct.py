@@ -40,11 +40,6 @@ pl.Config(tbl_cols=20, tbl_rows=50, tbl_width_chars=180)
 #  it works. If so, start testing lots of different portfolios with flat portfolio weighting to see if i can do better
 #  than i currently am with a manually selected portfolio
 
-# TODO i need to work performance weightings into the portfolio backtests. i already have it working on the sub-strats,
-#  so it should be fairly easy to get it working on the coins too. then i can really decide which model to run.
-
-# TODO i need some more strategies to diversify what i currently have
-
 # TODO backtesting idea: to test which filters to use in portfolio construction, i could backtest jumbo portfolios with
 #  different filters to see if there is a useful differentiation. eg if i want to test weekly rsi, i could make the
 #  following jumbo portfolios and compare their backtests:
@@ -147,8 +142,6 @@ markets = [
     'OMUSDT',
     'AVAXUSDT',
     'YGGUSDT',
-    'DOGEUSDT',
-    'SHIBUSDT',
     'PENDLEUSDT',
     'TUSDT',
 ]
@@ -157,7 +150,7 @@ strategies = [
     'srsirev',
     # 'rsirev',
     # 'chanbreak',
-    # 'ichitrend',
+    'ichitrend',
     # 'emaroc',
     # 'hmaroc'
 ]
@@ -174,7 +167,7 @@ in_production = True
 trader = components.Trader(
     markets,
     dyn_weight_lb='1 week',
-    fc_weighting=True,
+    fc_weighting=False,
     port_weights='flat',
     strat_list=strategies,
     keep_records=in_production,

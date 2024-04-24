@@ -28,25 +28,38 @@ client = Client_b(keys.bPkey, keys.bSkey)
 
 
 def calc_perf(s: pl.Series, window: int = 8760) -> dict:
-    """calculates 1 year rolling performance statistics on any cummulative pnl series"""
+    """calculates 1 year rolling performance statistics on any cummulative pnl series.
+    since my pnl series are all in the form of pct changes already, i don't transform them with pct_change in the
+    calculations, just diff"""
 
-    ann_mean = s.pct_change().mean() * 8760
-    ann_std = s.pct_change().std() * 92
+    ann_mean = s.diff().mean() * 8760
+    ann_std = s.diff().std() * 92
     if ann_std:
         ann_sharpe = ann_mean / ann_std
     else:
         ann_sharpe = 0
 
-    dyn_mean = s.pct_change().ewm_mean(span=window, min_periods=100)[-1] * 8760
-    dyn_std = s.pct_change().ewm_std(span=window, min_periods=100)[-1] * 92
+    dyn_mean = s.diff().ewm_mean(span=window, min_periods=100)[-1] * 8760
+    dyn_std = s.diff().ewm_std(span=window, min_periods=100)[-1] * 92
     if dyn_std:
         dyn_sharpe = dyn_mean / dyn_std
     else:
         dyn_sharpe = 0
 
-    dd = (s.cum_max() - s) / s.cum_max()
-    max_dd = dd.rolling_max(window, min_periods=1)[-1]
-    mean_dd = dd.rolling_mean(window, min_periods=1)[-1]
+    dd = (s - s.cum_max()) / s.cum_max()
+    max_dd = dd.rolling_min(len(s), min_periods=1)#[-1]
+    mean_dd = dd.rolling_mean(len(s), min_periods=1)#[-1]
+
+    # px.line(
+    #     data_frame=pl.DataFrame(
+    #         data={
+    #             'drawdown': dd,
+    #             'max_drawdown': max_dd,
+    #             'mean_drawdown': mean_dd
+    #         }
+    #     ),
+    #     title='drawdown'
+    # ).show()
 
     return {
         'total_rtn': s[-1],
@@ -57,8 +70,8 @@ def calc_perf(s: pl.Series, window: int = 8760) -> dict:
         'dyn_mean_rtn': dyn_mean,
         'dyn_std_rtn': dyn_std,
         'skew': s.skew(),
-        'max_dd': max_dd,
-        'avg_dd': mean_dd
+        'max_dd': max_dd[-1],
+        'avg_dd': mean_dd[-1]
     }
 
 
@@ -116,7 +129,7 @@ class Trader:
     def __init__(self, markets: list[str], dyn_weight_lb: str, fc_weighting: bool, port_weights: str,
                  strat_list: list, keep_records: bool = True, leverage: float | str = 1.0, live=False):
         self.now_start = datetime.now().timestamp()
-        print(f"\nTrader initialised at "
+        print(f"Trader initialised at "
               f"{datetime.fromtimestamp(self.now_start, tz=timezone.utc).strftime('%d/%m/%Y %H:%M:%S')} UTC")
         self.markets = markets
         self.dyn_weight_lb = self.lookbacks[dyn_weight_lb]
@@ -127,7 +140,7 @@ class Trader:
         self.live = live
         self.buffer = 0.02  # this is the minimum position change for a trade to be triggered
         self.min_transaction = 10.0  # this is the minimum change in USDT for a trade to be triggered
-        self.coins = {m: Coin(m, self.dyn_weight_lb, strat_list) for m in self.markets}
+        self.coins = {m: Coin(m, self.dyn_weight_lb, self.fc_weighting, self.port_weights, strat_list) for m in self.markets}
         self.create_strats()
         self.mkt_data_path = Path('/home/ross/coding/modular_trader/market_data')
         self.mkt_data_path.mkdir(parents=True, exist_ok=True)
@@ -138,7 +151,7 @@ class Trader:
                       plot_sharpe: bool = False, plot_pnls: bool = False, inspect_substrats: bool = False):
         for coin in self.coins.values():
             coin.get_raw_forecasts()
-            coin.combine_forecasts(self.fc_weighting, inspect=inspect_substrats)
+            coin.combine_forecasts(inspect=inspect_substrats)
         self.stats = {}
         self.backtest_data = self.get_coin_data()
         self.pnl: pl.DataFrame = self.backtest_portfolio(self.lookbacks[window])
@@ -1188,7 +1201,7 @@ class Coin:
         {'tf': '1d', 'f': 10, 's': 30},
         {'tf': '1d', 'f': 20, 's': 60},
         {'tf': '1w', 'f': 10, 's': 30},
-        {'tf': '1w', 'f': 20, 's': 60},
+        # {'tf': '1w', 'f': 20, 's': 60},
     ]
 
     moving_avg_rocs = [
@@ -1204,9 +1217,11 @@ class Coin:
         {'tf': '1w', 'lb': 64}, {'tf': '1w', 'lb': 128}, {'tf': '1w', 'lb': 256},
     ]
 
-    def __init__(self, market, dyn_weight_lb: int, strat_list: list):
+    def __init__(self, market, dyn_weight_lb: int, fc_weighting, perf_weighting, strat_list: list):
         self.market = market
         self.dyn_weight_lb = dyn_weight_lb
+        self.fc_weighting = fc_weighting
+        self.perf_weighting = perf_weighting
         self.strat_list = strat_list
         self.data = self.load_data()
         self.pnls = pl.DataFrame()
@@ -1575,9 +1590,9 @@ class Coin:
         # return self.data.get_column(self.forecast_col).fill_null(0).ewm_mean(6)
         return forecast
 
-    def combine_forecasts(self, weighting: bool, inspect: bool = False):
+    def combine_forecasts(self, inspect: bool = False):
 
-        if weighting:
+        if self.fc_weighting:
             self.weighted_forecasts = self.get_weighted_forecasts(inspect)
             forecasts = self.weighted_forecasts
         else:
@@ -1592,7 +1607,10 @@ class Coin:
 
         # then, if i'm perf-weighting the portfolio, i would apply perf-weighting to the combined forecast here
         combined = self.perf_weight_forecast(combined_forecast)
-        self.pnls = self.forecast_to_returns(combined, 'dyn')
+        if self.perf_weighting:
+            self.pnls = self.forecast_to_returns(combined, 'dyn')
+        else:
+            self.pnls = self.forecast_to_returns(combined, 'raw')
         # print(f"{self.market} pnls df: {self.pnls.columns}")
         dyn_combined_forecast = self.pnls['dyn_forecast']
 
@@ -2080,19 +2098,22 @@ class IchiTrend(SubStrat):
 
         self.forecast_col = f'ichi_trend_{self.timeframe}_{self.f}_{self.s}'
 
-        return (
-            self.data.with_columns(
-                self.data.select(
-                    [f'tk_up_{self.f}_{self.s}',
-                     f'cloud_up_{self.f}_{self.s}',
-                     f'price_above_tenkan_{self.f}_{self.s}',
-                     f'price_above_kijun_{self.f}_{self.s}',
-                     f'price_above_cloud_{self.f}_{self.s}',
-                     f'chikou_above_price_{self.f}_{self.s}']
-                ).mean_horizontal().alias(self.forecast_col)
+        self.data = self.data.with_columns(
+            self.data.select(
+                [f'tk_up_{self.f}_{self.s}',
+                 f'cloud_up_{self.f}_{self.s}',
+                 f'price_above_tenkan_{self.f}_{self.s}',
+                 f'price_above_kijun_{self.f}_{self.s}',
+                 f'price_above_cloud_{self.f}_{self.s}',
+                 f'chikou_above_price_{self.f}_{self.s}']
             )
-            .select(['timestamp', 'dyn_std', self.forecast_col])
+            .mean_horizontal()
+            .alias(self.forecast_col)
         )
+
+        self.data = self.data.with_columns(pl.col(self.forecast_col).mul(2.0).sub(1.0).alias(self.forecast_col))
+
+        return self.data.select(['timestamp', 'dyn_std', self.forecast_col])
 
 
 class EmaRoc(SubStrat):
