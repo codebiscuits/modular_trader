@@ -758,6 +758,7 @@ class Trader:
         user_assets = {
             k: v for k, v in user_assets.items()
             if any([v['free'], v['borrowed'], v['interest'], v['net_asset']])
+            or f"{k}USDT" in self.markets
         }
 
         for asset in user_assets:
