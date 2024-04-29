@@ -51,7 +51,7 @@ def from_scratch(pair, tf):
 
 
 def iterations(n, pair, tf):
-    # print(f"{n} {pair} {tf}")
+    print(f"{n} {pair} {tf}")
     ohlc_r = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{tf}/{pair}.parquet')
     ohlc_w = Path(f'/home/ross/coding/modular_trader/bin_ohlc_{tf}/{pair}.parquet')
     # print(filepath)

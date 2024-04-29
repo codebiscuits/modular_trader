@@ -181,13 +181,13 @@ class LightSession:
         for sym in symbols:
             pair = sym.get('symbol')
             right_quote = sym.get('quoteAsset') == self.quote_asset
-            right_market = 'SPOT' in sym.get('permissions')
+            margin = sym.get('isMarginTradingAllowed')
             allowed = pair not in not_pairs
 
-            if right_quote and right_market and allowed:
+            if right_quote and margin and allowed:
                 base_asset = sym.get('baseAsset')
 
-                margin = 'MARGIN' in sym.get('permissions')
+
                 oco_allowed = sym['ocoAllowed']
                 quote_order_qty_allowed = sym['quoteOrderQtyMarketAllowed']
 
@@ -568,13 +568,11 @@ class TradingSession:
         for sym in symbols:
             pair = sym.get('symbol')
             right_quote = sym.get('quoteAsset') == self.quote_asset
-            right_market = 'SPOT' in sym.get('permissions')
+            margin = sym.get('isMarginTradingAllowed')
             allowed = pair not in not_pairs
 
-            if right_quote and right_market and allowed:
+            if right_quote and margin and allowed:
                 base_asset = sym.get('baseAsset')
-
-                margin = 'MARGIN' in sym.get('permissions')
                 oco_allowed = sym['ocoAllowed']
                 quote_order_qty_allowed = sym['quoteOrderQtyMarketAllowed']
 
