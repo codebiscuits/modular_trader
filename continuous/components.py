@@ -76,7 +76,7 @@ def calc_perf(s: pl.Series, window: int = 8760) -> dict:
 
 
 def print_stats(name: str, d: dict) -> None:
-    print(f"{name} Total Rtn: {d['total_rtn']:.0f}x, "
+    print(f"{name} Total Rtn: {d['total_rtn']:.1f}x, "
           f"Sharpe: {d['sharpe']:.2f}, "
           f"Mean Rtn: {d['mean_rtn']:.1%}, "
           f"Stdev: {d['std_rtn']:.2f}, "
@@ -557,13 +557,11 @@ class Trader:
         for sym in symbols:
             pair = sym.get('symbol')
             right_quote = sym.get('quoteAsset') == 'USDT'
-            right_market = 'SPOT' in sym.get('permissions')
             allowed = pair not in not_pairs
+            margin = sym.get('isMarginTradingAllowed')
 
-            if right_quote and right_market and allowed:
+            if right_quote and margin and allowed:
                 base_asset = sym.get('baseAsset')
-
-                margin = 'MARGIN' in sym.get('permissions')
                 oco_allowed = sym['ocoAllowed']
                 quote_order_qty_allowed = sym['quoteOrderQtyMarketAllowed']
 
@@ -1101,8 +1099,87 @@ class Coin:
 
     timeframes = ['1h', '4h', '8h', '1d', '1w']
     lookbacks = [4, 8, 16, 32, 64, 128, 256]
-    srsi_in = 'vwma_200h'
 
+    vb_mas = ['sma', 'ema', 'hma', 'vwma']
+    lbs = [25, 50, 100, 200]
+    fmas = [6, 9, 12, 15]
+    smas = [0.75]
+    v_bands = [
+        {'tf': '1h', 'ma_type': 'sma', 'lb': 25, 'fast_ma': 3, 'slow_ma': 13},
+        {'tf': '1h', 'ma_type': 'sma', 'lb': 50, 'fast_ma': 3, 'slow_ma': 25},
+        {'tf': '1h', 'ma_type': 'sma', 'lb': 100, 'fast_ma': 3, 'slow_ma': 50},
+        {'tf': '1h', 'ma_type': 'sma', 'lb': 200, 'fast_ma': 3, 'slow_ma': 100},
+        {'tf': '1h', 'ma_type': 'sma', 'lb': 25, 'fast_ma': 3, 'slow_ma': 20},
+        {'tf': '1h', 'ma_type': 'sma', 'lb': 50, 'fast_ma': 3, 'slow_ma': 40},
+        {'tf': '1h', 'ma_type': 'sma', 'lb': 100, 'fast_ma': 3, 'slow_ma': 80},
+        {'tf': '1h', 'ma_type': 'sma', 'lb': 200, 'fast_ma': 3, 'slow_ma': 160},
+        {'tf': '1h', 'ma_type': 'sma', 'lb': 25, 'fast_ma': 6, 'slow_ma': 13},
+        {'tf': '1h', 'ma_type': 'sma', 'lb': 50, 'fast_ma': 6, 'slow_ma': 25},
+        {'tf': '1h', 'ma_type': 'sma', 'lb': 100, 'fast_ma': 6, 'slow_ma': 50},
+        {'tf': '1h', 'ma_type': 'sma', 'lb': 200, 'fast_ma': 6, 'slow_ma': 100},
+        {'tf': '1h', 'ma_type': 'sma', 'lb': 25, 'fast_ma': 6, 'slow_ma': 20},
+        {'tf': '1h', 'ma_type': 'sma', 'lb': 50, 'fast_ma': 6, 'slow_ma': 40},
+        {'tf': '1h', 'ma_type': 'sma', 'lb': 100, 'fast_ma': 6, 'slow_ma': 80},
+        {'tf': '1h', 'ma_type': 'sma', 'lb': 200, 'fast_ma': 6, 'slow_ma': 160},
+        {'tf': '1h', 'ma_type': 'ema', 'lb': 25, 'fast_ma': 3, 'slow_ma': 13},
+        {'tf': '1h', 'ma_type': 'ema', 'lb': 50, 'fast_ma': 3, 'slow_ma': 25},
+        {'tf': '1h', 'ma_type': 'ema', 'lb': 100, 'fast_ma': 3, 'slow_ma': 50},
+        {'tf': '1h', 'ma_type': 'ema', 'lb': 200, 'fast_ma': 3, 'slow_ma': 100},
+        {'tf': '1h', 'ma_type': 'ema', 'lb': 25, 'fast_ma': 3, 'slow_ma': 20},
+        {'tf': '1h', 'ma_type': 'ema', 'lb': 50, 'fast_ma': 3, 'slow_ma': 40},
+        {'tf': '1h', 'ma_type': 'ema', 'lb': 100, 'fast_ma': 3, 'slow_ma': 80},
+        {'tf': '1h', 'ma_type': 'ema', 'lb': 200, 'fast_ma': 3, 'slow_ma': 160},
+        {'tf': '1h', 'ma_type': 'ema', 'lb': 25, 'fast_ma': 6, 'slow_ma': 13},
+        {'tf': '1h', 'ma_type': 'ema', 'lb': 50, 'fast_ma': 6, 'slow_ma': 25},
+        {'tf': '1h', 'ma_type': 'ema', 'lb': 100, 'fast_ma': 6, 'slow_ma': 50},
+        {'tf': '1h', 'ma_type': 'ema', 'lb': 200, 'fast_ma': 6, 'slow_ma': 100},
+        {'tf': '1h', 'ma_type': 'ema', 'lb': 25, 'fast_ma': 6, 'slow_ma': 20},
+        {'tf': '1h', 'ma_type': 'ema', 'lb': 50, 'fast_ma': 6, 'slow_ma': 40},
+        {'tf': '1h', 'ma_type': 'ema', 'lb': 100, 'fast_ma': 6, 'slow_ma': 80},
+        {'tf': '1h', 'ma_type': 'ema', 'lb': 200, 'fast_ma': 6, 'slow_ma': 160},
+        {'tf': '1h', 'ma_type': 'hma', 'lb': 25, 'fast_ma': 3, 'slow_ma': 13},
+        {'tf': '1h', 'ma_type': 'hma', 'lb': 50, 'fast_ma': 3, 'slow_ma': 25},
+        {'tf': '1h', 'ma_type': 'hma', 'lb': 100, 'fast_ma': 3, 'slow_ma': 50},
+        {'tf': '1h', 'ma_type': 'hma', 'lb': 200, 'fast_ma': 3, 'slow_ma': 100},
+        {'tf': '1h', 'ma_type': 'hma', 'lb': 25, 'fast_ma': 3, 'slow_ma': 20},
+        {'tf': '1h', 'ma_type': 'hma', 'lb': 50, 'fast_ma': 3, 'slow_ma': 40},
+        {'tf': '1h', 'ma_type': 'hma', 'lb': 100, 'fast_ma': 3, 'slow_ma': 80},
+        {'tf': '1h', 'ma_type': 'hma', 'lb': 200, 'fast_ma': 3, 'slow_ma': 160},
+        {'tf': '1h', 'ma_type': 'hma', 'lb': 25, 'fast_ma': 6, 'slow_ma': 13},
+        {'tf': '1h', 'ma_type': 'hma', 'lb': 50, 'fast_ma': 6, 'slow_ma': 25},
+        {'tf': '1h', 'ma_type': 'hma', 'lb': 100, 'fast_ma': 6, 'slow_ma': 50},
+        {'tf': '1h', 'ma_type': 'hma', 'lb': 200, 'fast_ma': 6, 'slow_ma': 100},
+        {'tf': '1h', 'ma_type': 'hma', 'lb': 25, 'fast_ma': 6, 'slow_ma': 20},
+        {'tf': '1h', 'ma_type': 'hma', 'lb': 50, 'fast_ma': 6, 'slow_ma': 40},
+        {'tf': '1h', 'ma_type': 'hma', 'lb': 100, 'fast_ma': 6, 'slow_ma': 80},
+        {'tf': '1h', 'ma_type': 'hma', 'lb': 200, 'fast_ma': 6, 'slow_ma': 160},
+        {'tf': '1h', 'ma_type': 'vwma', 'lb': 25, 'fast_ma': 3, 'slow_ma': 13},
+        {'tf': '1h', 'ma_type': 'vwma', 'lb': 50, 'fast_ma': 3, 'slow_ma': 25},
+        {'tf': '1h', 'ma_type': 'vwma', 'lb': 100, 'fast_ma': 3, 'slow_ma': 50},
+        {'tf': '1h', 'ma_type': 'vwma', 'lb': 200, 'fast_ma': 3, 'slow_ma': 100},
+        {'tf': '1h', 'ma_type': 'vwma', 'lb': 25, 'fast_ma': 3, 'slow_ma': 20},
+        {'tf': '1h', 'ma_type': 'vwma', 'lb': 50, 'fast_ma': 3, 'slow_ma': 40},
+        {'tf': '1h', 'ma_type': 'vwma', 'lb': 100, 'fast_ma': 3, 'slow_ma': 80},
+        {'tf': '1h', 'ma_type': 'vwma', 'lb': 200, 'fast_ma': 3, 'slow_ma': 160},
+        {'tf': '1h', 'ma_type': 'vwma', 'lb': 25, 'fast_ma': 6, 'slow_ma': 13},
+        {'tf': '1h', 'ma_type': 'vwma', 'lb': 50, 'fast_ma': 6, 'slow_ma': 25},
+        {'tf': '1h', 'ma_type': 'vwma', 'lb': 100, 'fast_ma': 6, 'slow_ma': 50},
+        {'tf': '1h', 'ma_type': 'vwma', 'lb': 200, 'fast_ma': 6, 'slow_ma': 100},
+        {'tf': '1h', 'ma_type': 'vwma', 'lb': 25, 'fast_ma': 6, 'slow_ma': 20},
+        {'tf': '1h', 'ma_type': 'vwma', 'lb': 50, 'fast_ma': 6, 'slow_ma': 40},
+        {'tf': '1h', 'ma_type': 'vwma', 'lb': 100, 'fast_ma': 6, 'slow_ma': 80},
+        {'tf': '1h', 'ma_type': 'vwma', 'lb': 200, 'fast_ma': 6, 'slow_ma': 160},
+    ]
+
+    prods = product(vb_mas, lbs, fmas, smas)
+    v_bands = [
+        {'tf': '1h', 'ma_type': m, 'lb': l, 'fast_ma': f, 'slow_ma': s}
+        for m, l, f, s in prods
+        # if ((l > s) and (s > f))
+    ]
+    print(f"v_bands length: {len(v_bands)}")
+
+    srsi_in = 'vwma_200h'
     srsi_reversals = [
         {'tf': '1h', 'lb': 4, 'input': srsi_in},
         {'tf': '1h', 'lb': 8, 'input': srsi_in},
@@ -1229,6 +1306,13 @@ class Coin:
         self.strats = {}
 
     def add_strats(self):
+        if 'vbands' in self.strat_list:
+            self.strats.update({
+                f"vbands_{vb['tf']}_{vb['ma_type']}_{vb['lb']}_{vb['fast_ma']}_{vb['slow_ma']}":
+                    VolatilityBands(self.data, vb['tf'], vb['ma_type'], vb['lb'], vb['fast_ma'], vb['slow_ma'])
+                for vb in self.v_bands
+            })
+
         if 'srsirev' in self.strat_list:
             self.strats.update({
                 f"srsirev_{rr['tf']}_{rr['lb']}_{rr['input']}":
@@ -1933,6 +2017,98 @@ class SubStrat:
                 new_fc_list.append(fc_list[i])
 
         return pl.Series(new_fc_list)
+
+
+class VolatilityBands(SubStrat):
+    """Calculates z-scores of price movements around a moving average, then applies two moving averages to the z-score
+    series. A buy signal is triggered when the fast ma crosses above the slower ma and a sell signal is triggered in the
+    opposite scenario. The magnitude of the signal is determined by the z-score at the moment the signal is triggered.
+
+    Possible values for ma_type include: sma, ema, hma or vwma.
+    Possible values for lb include: 25, 50, 100 or 200.
+    Fast ma must be less than slow ma.
+    Slow ma must be no greater than lb."""
+
+    def __init__(self, data, timeframe: str, ma_type: str, lb: int, fast_ma: int, slow_ma: int):
+        super().__init__(data, timeframe)
+        self.ma_type = ma_type
+        self.lb = lb
+        self.fast_ma = fast_ma
+        self.slow_ma = int(lb * slow_ma)
+        self.data = self.calc_forecast()
+        self.forecast = self.shift_and_resample()
+
+    def calc_forecast(self):
+        self.forecast_col = f"vol_bands_{self.timeframe}_{self.ma_type}_{self.lb}_{self.fast_ma}_{self.slow_ma}"
+
+        # create the main moving average
+        if self.ma_type == 'sma':
+            self.data = self.data.with_columns(
+                pl.col('close').rolling_mean(self.lb).alias('ma')
+            )
+        elif self.ma_type == 'ema':
+            self.data = self.data.with_columns(
+                pl.col('close').ewm_mean(self.lb).alias('ma')
+            )
+        elif self.ma_type == 'hma':
+            self.data = ind.hma(self.data, self.lb)
+            self.data = self.data.with_columns(
+                pl.col(f"hma_{self.lb}").alias('ma')
+            )
+        elif self.ma_type == 'vwma':
+            self.data = self.data.with_columns(
+                pl.col(f'vwma_{self.lb}h').alias('ma')
+            )
+        else:
+            raise TypeError('Not a valid ma_type')
+
+        # create the z-score series
+        self.data = self.data.with_columns(
+            pl.col('vwma_1h').sub(pl.col('ma'))
+            .truediv(
+                pl.col('vwma_1h').sub(pl.col('ma'))
+                .rolling_std(self.lb)
+            )
+            .alias('z_score')
+        )
+
+        # create the two moving averages of the z-score
+        self.data = self.data.with_columns(
+            pl.col('z_score').ewm_mean(self.fast_ma).alias('fast'),
+            pl.col('z_score').ewm_mean(self.slow_ma).alias('slow')
+        )
+
+        # calculate signals
+        self.data = self.data.with_columns(
+            pl.when(
+                pl.col('fast').gt(pl.col('slow'))
+                .and_(pl.col('fast').shift().lt(pl.col('slow').shift()))
+                .and_(pl.col('fast').lt(0.0))
+            ).then(pl.col('fast'))
+            .when(
+                pl.col('fast').lt(pl.col('slow'))
+                .and_(pl.col('fast').shift().gt(pl.col('slow').shift()))
+                .and_(pl.col('fast').gt(0.0))
+            ).then(pl.col('fast'))
+            .fill_null(0)
+            .alias(self.forecast_col)
+        )
+
+        # add decay to impulse signals
+        self.data = self.data.with_columns(
+            pl.Series(self.impulse_to_forecast(0.9))
+            .alias(self.forecast_col),
+        )
+
+        # normalise
+        self.data = self.data.with_columns(
+            pl.col(self.forecast_col)
+            .mul(2.0)
+            .clip(lower_bound=-1.0, upper_bound=1.0)
+            .alias(self.forecast_col),
+        )
+
+        return self.data.select(['timestamp', 'dyn_std', self.forecast_col])
 
 
 class StochRSIReversal(SubStrat):
