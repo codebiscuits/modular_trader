@@ -525,6 +525,7 @@ class Trader:
             btc_net=self.capital['btc_net'],
             max_leverage=self.target_lev,
             real_leverage=self.actual_lev,
+            volatility_exposure=self.actual_exposure,
             buffer=self.buffer,
             flat_allocations=self.flat_allocations,
             lin_allocations=self.lin_allocations,
