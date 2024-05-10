@@ -211,8 +211,10 @@ class Trader:
         self.asset_bals = self.get_asset_bals()
         self.capital: dict = self.account_bal()
         self.actual_lev = (self.capital['usdt_debt'] / self.capital['usdt_net']) + 1
-        self.actual_exposure = (self.capital['usdt_gross'] /
-                                (self.asset_bals['USDT']['free'] - self.capital['usdt_debt'])) - 1
+        self.actual_exposure = (
+                (self.capital['usdt_gross'] - (self.asset_bals['USDT']['free'] - self.capital['usdt_debt']))
+                / self.capital['usdt_gross']
+        )
         if self.keep_records:
             self.log_info()
         self.print_info()
