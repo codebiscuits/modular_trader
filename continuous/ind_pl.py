@@ -36,6 +36,7 @@ def ichimoku(data, f=9, s=26):
 
     return data
 
+
 def rsi(series: pl.Series, lookback: int=14) -> pl.Series:
     """transforms input series into rsi of that series"""
 
@@ -52,6 +53,7 @@ def rsi(series: pl.Series, lookback: int=14) -> pl.Series:
     )
 
     return df[f"rsi_{lookback}"]
+
 
 def stochastic(series: pl.Series, lookback: int=14) -> pl.Series:
     """transforms input series into stochastic oscillator of that series"""
@@ -71,3 +73,30 @@ def stochastic(series: pl.Series, lookback: int=14) -> pl.Series:
     )
 
     return df[f"stoch_{lookback}"]
+
+
+def ema_balance(input: pl.DataFrame, lookback: int=14) -> pl.Series:
+    """an oscillator that reperesents what proportion of recent price action or volume was above or below the moving
+    average. values close to 1 indicate a strong uptrend, values close to -1 indicate a strong downtrend, and values
+    close to 0 indicate choppy conditions with no trend"""
+
+    input = ema(input, lookback)
+
+    return input.with_columns(
+        pl.col('close')
+        .sub(pl.col(f"ema_{lookback}"))
+        .rolling_mean(lookback)
+        # .rolling_quantile(quantile=1.0, window_size=lookback)
+        .alias('ema_balance')
+    )
+
+def atr(df: pl.DataFrame, lookback: int) -> pl.DataFrame:
+    """calculates true range of the input data, then calculates a rolling average of the true range according to the
+    specified lookback period"""
+
+    return df.with_columns(
+        pl.col('high').sub(pl.col('low'))
+        .truediv(pl.col('high').add(pl.col('low')).truediv(pl.lit(2)))
+        .ewm_mean(span=lookback)
+        .alias(f'atr_{lookback}'),
+    )

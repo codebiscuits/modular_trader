@@ -135,24 +135,28 @@ def backtest_all():
 markets = [
     'BTCUSDT',
     'SOLUSDT',
-    'DUSKUSDT',
-    'ETHUSDT',
-    'ROSEUSDT',
-    'NEARUSDT',
-    'OMUSDT',
-    'AVAXUSDT',
-    'YGGUSDT',
     'PENDLEUSDT',
-    'TUSDT',
+    'PHBUSDT',
+    'MOVRUSDT',
+    'ARKMUSDT',
+    'JTOUSDT',
+    'HIGHUSDT',
+    'RNDRUSDT',
+    'UMAUSDT',
+    'PEOPLEUSDT',
+    'TRBUSDT',
+    'FTTUSDT',
+    'FRONTUSDT',
+    'KMDUSDT'
 ]
 
 strategies = [
     'srsirev',
     # 'rsirev',
-    # 'chanbreak',
+    'chanbreak',
     'ichitrend',
     # 'emaroc',
-    # 'hmaroc'
+    'hmaroc'
 ]
 # lookback window options: '4 years', '3 years', '2 years', '1 year', '6 months', '3 months', '1 month', '1 week'
 

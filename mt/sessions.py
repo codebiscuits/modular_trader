@@ -175,7 +175,7 @@ class LightSession:
 
         not_pairs = ['GBPUSDT', 'AUDUSDT', 'BUSDUSDT', 'EURUSDT', 'TUSDUSDT',
                      'USDCUSDT', 'PAXUSDT', 'COCOSUSDT', 'SUSDUSDT', 'USDPUSDT',
-                     'USTUSDT']
+                     'USTUSDT', 'FDUSDUSDT', 'AEURUSDT']
 
         symbols = self.info['symbols']
         for sym in symbols:
@@ -562,7 +562,7 @@ class TradingSession:
 
         not_pairs = ['GBPUSDT', 'AUDUSDT', 'BUSDUSDT', 'EURUSDT', 'TUSDUSDT',
                      'USDCUSDT', 'PAXUSDT', 'COCOSUSDT', 'SUSDUSDT', 'USDPUSDT',
-                     'USTUSDT']
+                     'USTUSDT', 'FDUSDUSDT', 'AEURUSDT']
 
         symbols = self.info['symbols']
         for sym in symbols:
