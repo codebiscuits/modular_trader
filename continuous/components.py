@@ -1181,7 +1181,7 @@ class Coin:
         for m, l, f, s in prods
         # if ((l > s) and (s > f))
     ]
-    print(f"v_bands length: {len(v_bands)}")
+    # print(f"v_bands length: {len(v_bands)}")
 
     srsi_in = 'vwma_200h'
     srsi_reversals = [
@@ -2236,7 +2236,7 @@ class ChanBreak(SubStrat):
             .alias(self.forecast_col)
         )
 
-        print(self.data.tail(20))
+        # print(self.data.tail(20))
 
         return self.data.select(['timestamp', 'dyn_std', self.forecast_col])
 

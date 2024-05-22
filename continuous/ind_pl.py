@@ -90,13 +90,27 @@ def ema_balance(input: pl.DataFrame, lookback: int=14) -> pl.Series:
         .alias('ema_balance')
     )
 
-def atr(df: pl.DataFrame, lookback: int) -> pl.DataFrame:
-    """calculates true range of the input data, then calculates a rolling average of the true range according to the
-    specified lookback period"""
+def atr(df: pl.DataFrame, lookback_1: int, lookback_2: int, mode: str) -> pl.DataFrame:
+    """calculates true range of the input data over a specified lookback, then calculates a rolling average of the true
+    range according to the second specified lookback period"""
 
-    return df.with_columns(
-        pl.col('high').sub(pl.col('low'))
-        .truediv(pl.col('high').add(pl.col('low')).truediv(pl.lit(2)))
-        .ewm_mean(span=lookback)
-        .alias(f'atr_{lookback}'),
-    )
+    if mode == 'pct':
+        return df.with_columns(
+            pl.col('high').rolling_max(lookback_1)
+            .sub(pl.col('low').rolling_min(lookback_1))
+            .truediv(
+                pl.col('high').rolling_max(lookback_1)
+                .add(pl.col('low').rolling_min(lookback_1))
+                .truediv(pl.lit(2))
+            )
+            .ewm_mean(span=lookback_2)
+            .alias(f'atr_{lookback_1}_{lookback_2}_pct'),
+        )
+
+    else:
+        return df.with_columns(
+            pl.col('high').rolling_max(lookback_1)
+            .sub(pl.col('low').rolling_min(lookback_1))
+            .ewm_mean(span=lookback_2)
+            .alias(f'atr_{lookback_1}_{lookback_2}_abs'),
+        )

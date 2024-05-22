@@ -133,21 +133,21 @@ def backtest_all():
 
 
 markets = [
-    'BTCUSDT',
-    'SOLUSDT',
-    'PENDLEUSDT',
-    'PHBUSDT',
-    'MOVRUSDT',
-    'ARKMUSDT',
-    'JTOUSDT',
-    'HIGHUSDT',
-    'RNDRUSDT',
-    'UMAUSDT',
-    'PEOPLEUSDT',
-    'TRBUSDT',
-    'FTTUSDT',
+    'PEPEUSDT',
+    'OPUSDT',
+    'RAYUSDT',
+    'JUPUSDT',
+    'CREAMUSDT',
+    'ARUSDT',
+    'UNFIUSDT',
     'FRONTUSDT',
-    'KMDUSDT'
+    'PENDLEUSDT',
+    'ENSUSDT',
+    'ARBUSDT',
+    'LDOUSDT',
+    'LTOUSDT',
+    'ACEUSDT',
+    'BLURUSDT'
 ]
 
 strategies = [
@@ -175,7 +175,7 @@ trader = components.Trader(
     port_weights='flat',
     strat_list=strategies,
     keep_records=in_production,
-    leverage=2,
+    leverage=1,
     live=in_production
 )
 trader.run_backtests(
