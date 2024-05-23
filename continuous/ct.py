@@ -134,20 +134,20 @@ def backtest_all():
 
 markets = [
     'PEPEUSDT',
-    'OPUSDT',
-    'RAYUSDT',
-    'JUPUSDT',
-    'CREAMUSDT',
+    'BNXUSDT',
+    'TRUUSDT',
+    'XAIUSDT',
+    'BAKEUSDT',
+    'API3USDT',
     'ARUSDT',
+    'MANTAUSDT',
     'UNFIUSDT',
     'FRONTUSDT',
     'PENDLEUSDT',
     'ENSUSDT',
-    'ARBUSDT',
-    'LDOUSDT',
-    'LTOUSDT',
     'ACEUSDT',
-    'BLURUSDT'
+    'BLURUSDT',
+    'MAVUSDT'
 ]
 
 strategies = [
@@ -175,7 +175,7 @@ trader = components.Trader(
     port_weights='flat',
     strat_list=strategies,
     keep_records=in_production,
-    leverage=1,
+    leverage=1.1,
     live=in_production
 )
 trader.run_backtests(

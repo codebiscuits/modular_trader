@@ -396,12 +396,11 @@ class Trader:
         for pos in all_pos:
             old = self.current_positions.get(pos, 0.0)
             new = target_pos.get(pos, 0.0)
+            min_diff = max(self.min_transaction, self.buffer * self.capital['usdt_gross'])
+
             real_difference = new - old
             proportional_difference = ((new - old) / old) if old else 1.0
-            min_diff = max(self.min_transaction, self.buffer * self.capital['usdt_net'])
-
             # print(f"pos_diffs: {pos} - {old = }, {new = }, {real_difference = }, {proportional_difference = }")
-
             if abs(real_difference) < min_diff:
                 continue
 
@@ -413,8 +412,6 @@ class Trader:
         return all_trades
 
     def execute_trades(self, diff):
-
-        # TODO execute all the borrows first, using the values in the diff
 
         print("\ndiff:")
         pprint(diff)
@@ -1483,10 +1480,14 @@ class Coin:
         fc_dict = {k: v.forecast for k, v in self.strats.items()}
         max_len = max([len(f) for f in fc_dict.values()])
 
+        pprint(fc_dict)
+
         self.raw_forecasts = pl.DataFrame()
         for k, v in fc_dict.items():
             self.raw_forecasts = self.raw_forecasts.with_columns(
-                pl.Series([0.0] * (max_len - len(v)), dtype=pl.Float64).extend(v).alias(k))
+                pl.Series([0.0] * (max_len - len(v)), dtype=pl.Float64)
+                .extend(v)
+                .alias(k))
         # px.line(self.forecasts.tail(35000), title='individual un-weighted forecast').show()
 
         # match length of forecasts to hourly ohlc data
