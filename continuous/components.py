@@ -138,7 +138,7 @@ class Trader:
         self.keep_records = keep_records
         self.target_lev = leverage
         self.live = live
-        self.buffer = 0.02  # this is the minimum position change for a trade to be triggered
+        self.buffer = 0.015  # this is the minimum position change for a trade to be triggered
         self.min_transaction = 10.0  # this is the minimum change in USDT for a trade to be triggered
         self.coins = {m: Coin(m, self.dyn_weight_lb, self.fc_weighting, self.port_weights, strat_list) for m in self.markets}
         self.create_strats()

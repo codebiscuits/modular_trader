@@ -1,44 +1,17 @@
 """this is the continuous trader equivalent of setup_scanner, the central script that puts everything together and runs
 it all"""
 
-# from wootrade import Client as Client_w
-from binance.client import Client as Client_b
-import binance.enums as be
-import mt.resources.keys as keys
-from datetime import datetime, timedelta, timezone
 import polars as pl
-import polars.selectors as cs
-import plotly.graph_objects as go
-import plotly.express as px
-import seaborn as sns
-import matplotlib.pyplot as plt
-import math
-import statistics as stats
 from pathlib import Path
 from continuous import components
 from time import perf_counter
-from pprint import pprint
-from itertools import permutations
 
 all_start = perf_counter()
-
-# tos = datetime.now().hour
-
 pl.Config(tbl_cols=20, tbl_rows=50, tbl_width_chars=180)
 
-
-# client = Client_w(keys.woo_key, keys.woo_secret, keys.woo_app_id, testnet=True)
-# client = Client_b(keys.bPkey, keys.bSkey)
-
 # TODO make a dashboard
-# TODO correlation analysis to find pairs that don't move with the rest of the market
-# TODO add drawdown to the pnl plots
 # TODO work out how to apply the buffer concept to the backtests in the same way it applies to live trading, then remove
 #  forecast quantisation and check how that changes things
-
-# TODO import a list of all binance pairs i have data for, then test the pairs with the shortest history just to see if
-#  it works. If so, start testing lots of different portfolios with flat portfolio weighting to see if i can do better
-#  than i currently am with a manually selected portfolio
 
 # TODO backtesting idea: to test which filters to use in portfolio construction, i could backtest jumbo portfolios with
 #  different filters to see if there is a useful differentiation. eg if i want to test weekly rsi, i could make the
@@ -61,7 +34,7 @@ pl.Config(tbl_cols=20, tbl_rows=50, tbl_width_chars=180)
 # TODO maybe i could engineer reversal indicators as temporary signals to reduce size. i don't know if this is a good
 #  idea or not but instead of thinking of reversal/mean reversion signals in the same way as trend-following signals (ie
 #  directional forecasts), i could instead think of them as a scalar from 1 down to 0 that shuts of all the directional
-#  forecasts at any point where its likely they will be wrong (changes in trend) and then gradually eases of as the
+#  forecasts at any point where its likely they will be wrong (changes in trend) and then gradually eases off as the
 #  trend-following forecasts gradually adjust to the new direction. I could also have something like adx or long-term
 #  rsi doing a similar job to minimise attempted trend-following behaviour during chop.
 
@@ -133,21 +106,21 @@ def backtest_all():
 
 
 markets = [
-    'PEPEUSDT',
-    'BNXUSDT',
     'TRUUSDT',
-    'XAIUSDT',
-    'BAKEUSDT',
+    'DYMUSDT',
+    'HIGHUSDT',
+    'JASMYUSDT',
+    'PEOPLEUSDT',
+    'CREAMUSDT',
     'API3USDT',
-    'ARUSDT',
-    'MANTAUSDT',
-    'UNFIUSDT',
-    'FRONTUSDT',
+    'FLOKIUSDT',
+    'XVGUSDT',
+    'VTHOUSDT',
+    'TRBUSDT',
+    'BONKUSDT',
     'PENDLEUSDT',
     'ENSUSDT',
-    'ACEUSDT',
-    'BLURUSDT',
-    'MAVUSDT'
+    'LDOUSDT'
 ]
 
 strategies = [
@@ -175,7 +148,7 @@ trader = components.Trader(
     port_weights='flat',
     strat_list=strategies,
     keep_records=in_production,
-    leverage=1.1,
+    leverage=1.2,
     live=in_production
 )
 trader.run_backtests(
