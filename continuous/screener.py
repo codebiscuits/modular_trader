@@ -90,7 +90,7 @@ info = {
 pairs = choose_by_length()
 
 for pair in pairs:
-    pair_path = Path(f"/home/ross/coding/pi_3/modular_trader/bin_ohlc_5m/{pair}.parquet")
+    pair_path = Path(f"/home/ross/coding/modular_trader/bin_ohlc_5m/{pair}.parquet")
     try:
         df = pl.read_parquet(pair_path)
     except FileNotFoundError:
@@ -127,7 +127,7 @@ lively_pairs = info_df.filter(
 # load ohlc, resample to 1h, then calculate correlation matrix for all pairs in lively pairs, and record avg correlation as a new stat for each pair
 all_closes = {}
 for pair in lively_pairs['pair']:
-    pair_path = Path(f"/home/ross/coding/pi_3/modular_trader/bin_ohlc_5m/{pair}.parquet")
+    pair_path = Path(f"/home/ross/coding/modular_trader/bin_ohlc_5m/{pair}.parquet")
     try:
         df = pl.read_parquet(pair_path)
     except FileNotFoundError:
