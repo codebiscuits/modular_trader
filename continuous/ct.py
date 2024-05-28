@@ -145,7 +145,7 @@ if len(markets) <= 10:
     print(markets)
 
 # lookback window options: '4 years', '3 years', '2 years', '1 year', '6 months', '3 months', '1 month', '1 week'
-in_production = False
+in_production = True
 trader = components.Trader(
     markets,
     dyn_weight_lb='1 week',
