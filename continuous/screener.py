@@ -1,6 +1,6 @@
 from pathlib import Path
 import polars as pl
-import ind_pl as ind
+from continuous import ind_pl as ind
 from binance import Client
 from mt.resources import keys
 from datetime import datetime

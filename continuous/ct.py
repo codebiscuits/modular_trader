@@ -5,6 +5,8 @@ import polars as pl
 from pathlib import Path
 from continuous import components
 from time import perf_counter
+from datetime import datetime
+import json
 
 all_start = perf_counter()
 pl.Config(tbl_cols=20, tbl_rows=50, tbl_width_chars=180)
@@ -105,23 +107,26 @@ def backtest_all():
     pass
 
 
-markets = [
-    'TRUUSDT',
-    'DYMUSDT',
-    'HIGHUSDT',
-    'JASMYUSDT',
-    'PEOPLEUSDT',
-    'CREAMUSDT',
-    'API3USDT',
-    'FLOKIUSDT',
-    'XVGUSDT',
-    'VTHOUSDT',
-    'TRBUSDT',
-    'BONKUSDT',
-    'PENDLEUSDT',
-    'ENSUSDT',
-    'LDOUSDT'
-]
+# markets = [
+#     'TRUUSDT',
+#     'DYMUSDT',
+#     'HIGHUSDT',
+#     'JASMYUSDT',
+#     'PEOPLEUSDT',
+#     'CREAMUSDT',
+#     'API3USDT',
+#     'FLOKIUSDT',
+#     'XVGUSDT',
+#     'VTHOUSDT',
+#     'TRBUSDT',
+#     'BONKUSDT',
+#     'PENDLEUSDT',
+#     'ENSUSDT',
+#     'LDOUSDT'
+# ]
+
+with open(f"records/pairs_{datetime.now().year}.json", 'r') as f:
+    markets = list(json.load(f)[-1].values())[0]
 
 strategies = [
     'srsirev',
@@ -140,7 +145,7 @@ if len(markets) <= 10:
     print(markets)
 
 # lookback window options: '4 years', '3 years', '2 years', '1 year', '6 months', '3 months', '1 month', '1 week'
-in_production = True
+in_production = False
 trader = components.Trader(
     markets,
     dyn_weight_lb='1 week',
@@ -148,7 +153,7 @@ trader = components.Trader(
     port_weights='flat',
     strat_list=strategies,
     keep_records=in_production,
-    leverage=1.2,
+    leverage=1.3,
     live=in_production
 )
 trader.run_backtests(
