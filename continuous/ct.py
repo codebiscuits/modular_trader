@@ -153,7 +153,7 @@ trader = components.Trader(
     port_weights='flat',
     strat_list=strategies,
     keep_records=in_production,
-    leverage=1.3,
+    leverage=1.5,
     live=in_production
 )
 trader.run_backtests(
