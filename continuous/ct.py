@@ -40,6 +40,12 @@ pl.Config(tbl_cols=20, tbl_rows=50, tbl_width_chars=180)
 #  trend-following forecasts gradually adjust to the new direction. I could also have something like adx or long-term
 #  rsi doing a similar job to minimise attempted trend-following behaviour during chop.
 
+# TODO if things keep going well, my size will increase to a point where execution gets more difficult. either there
+#  won't be enough borrow or there won't be enough book depth for low slippage. i can solve that problem by increasing
+#  the number of pairs in the list, but i don't want to do that unless it's necessary, so i need a way to monitor
+#  execution so i can see when the portfolio size needs to be adjusted, and maybe even a way to automate the adjustment
+#  so port size is always optimal.
+
 # note: i think the forward feature selection is probably curve fitting, so i won't use it until i can forward test it
 def sqntl_fwd(markets, n, weighting: str = 'weighted_lin'):
     """pick the best portfolio of n trading pairs from the list by adding one pair at a time and backtesting the
@@ -107,24 +113,6 @@ def backtest_all():
     pass
 
 
-# markets = [
-#     'TRUUSDT',
-#     'DYMUSDT',
-#     'HIGHUSDT',
-#     'JASMYUSDT',
-#     'PEOPLEUSDT',
-#     'CREAMUSDT',
-#     'API3USDT',
-#     'FLOKIUSDT',
-#     'XVGUSDT',
-#     'VTHOUSDT',
-#     'TRBUSDT',
-#     'BONKUSDT',
-#     'PENDLEUSDT',
-#     'ENSUSDT',
-#     'LDOUSDT'
-# ]
-
 with open(f"records/pairs_{datetime.now().year}.json", 'r') as f:
     markets = list(json.load(f)[-1].values())[0]
 
@@ -153,7 +141,7 @@ trader = components.Trader(
     port_weights='flat',
     strat_list=strategies,
     keep_records=in_production,
-    leverage=1.5,
+    leverage=2,
     live=in_production
 )
 trader.run_backtests(
