@@ -141,17 +141,17 @@ class SubStrat:
                 .interpolate().fill_null(strategy='forward')
             )
 
-        # self.data = pl.DataFrame(
-        #     {
-        #         "timestamp": pl.datetime_range(
-        #             start=self.data_start,
-        #             end=self.data_end,
-        #             interval="1h",
-        #             time_unit='ns',
-        #             eager=True,
-        #         )
-        #     }
-        # ).lazy().join(self.data.lazy(), on="timestamp", how="left").collect().fill_null(strategy='forward')
+        self.data = pl.DataFrame(
+            {
+                "timestamp": pl.datetime_range(
+                    start=self.data_start,
+                    end=self.data_end,
+                    interval="1h",
+                    time_unit='ns',
+                    eager=True,
+                )
+            }
+        ).lazy().join(self.data.lazy(), on="timestamp", how="left").collect().fill_null(strategy='forward')
 
         return self.data.get_column(self.forecast_col).fill_null(0).ewm_mean(6)
 

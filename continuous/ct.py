@@ -15,17 +15,6 @@ pl.Config(tbl_cols=20, tbl_rows=50, tbl_width_chars=180)
 # TODO work out how to apply the buffer concept to the backtests in the same way it applies to live trading, then remove
 #  forecast quantisation and check how that changes things
 
-# TODO backtesting idea: to test which filters to use in portfolio construction, i could backtest jumbo portfolios with
-#  different filters to see if there is a useful differentiation. eg if i want to test weekly rsi, i could make the
-#  following jumbo portfolios and compare their backtests:
-#  all pairs above 50 weekly rsi,
-#  all pairs below 50 weekly rsi,
-#  all pairs above 75 weekly rsi,
-#  all pairs below 25 weekly rsi,
-#  all pairs between 25 and 75 weekly rsi
-#  this would need to be done with walk-forward testing, where i use one window to choose the coins, then test their
-#  performance on the next window, then choose new coins and test them on the following window etc
-
 # TODO i could make an oscillator-based strategy using the same technique i used with chanbreak, where i set up a
 #  condition that looks at whether the oscilator is over or under a certain level eg 80% and 20%, and takes the diff of
 #  those conditions, then uses pl.when to separate out just the moments when the oscillator crossed back inside those
