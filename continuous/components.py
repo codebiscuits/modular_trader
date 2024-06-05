@@ -20,7 +20,7 @@ from json import JSONDecodeError
 import time
 from decimal import Decimal
 from itertools import product
-import strategies
+from continuous import strategies
 
 # client = Client_w(keys.woo_key, keys.woo_secret, keys.woo_app_id, testnet=True)
 client = Client_b(keys.bPkey, keys.bSkey)
