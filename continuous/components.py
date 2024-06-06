@@ -145,6 +145,7 @@ class Trader:
         self.mkt_data_path.mkdir(parents=True, exist_ok=True)
         self.records_path = Path('/home/ross/coding/modular_trader/continuous/records')
         self.records_path.mkdir(parents=True, exist_ok=True)
+        self.transfers = self.read_transfers()
 
     def run_backtests(self, window, show_stats: bool = False, plot_rtns: bool = False, plot_forecast: bool = False,
                       plot_sharpe: bool = False, plot_pnls: bool = False, inspect_substrats: bool = False):
@@ -530,6 +531,7 @@ class Trader:
             perf_allocations=self.perf_allocations,
             bt_sharpe=self.stats['sharpe'],
             trades=self.num_trades,
+            transfers=self.transfers,
         )
 
         try:
@@ -782,6 +784,43 @@ class Trader:
                 if e.code == -3045:
                     print(f"Can't borrow any {asset} at the moment.")
                 self.asset_bals[asset]['max_loan'] = 0
+
+    def read_transfers(self):
+        """retrieves transfer history from binance, adds any new ones to the records, and sums up the amounts to include
+        in the session records"""
+
+        # load old records as all_transfers
+        trans_records = Path("records/transfers.json")
+        try:
+            with open(trans_records, 'r') as f:
+                all_transfers = json.load(f)
+        except FileNotFoundError:
+            all_transfers = []
+
+        new_transfers = client.get_margin_transfer_history()['rows']
+
+        trans_total = 0
+        all_ids = [q['txId'] for q in all_transfers]
+        for n, i in enumerate(new_transfers):
+            mult = 1 if i['type'] == 'ROLL_IN' else -1
+            if i.get('txId') in all_ids:
+                continue
+            if i['asset'] == 'USDT':
+                usdt_value = float(i['amount']) * mult
+                new_transfers[n]['usdt_value'] = usdt_value
+            else:
+                filepath = f"/home/ross/coding/modular_trader/bin_ohlc_5m/{i['asset']}USDT.parquet"
+                ts = datetime.fromtimestamp(i['timestamp'] / 1000, tz=timezone.utc)
+                ohlc = pl.read_parquet(filepath).filter(pl.col('timestamp').lt(ts))
+                usdt_value = ohlc.item(-1, 'close') * float(i['amount']) * mult
+                new_transfers[n]['usdt_value'] = usdt_value
+            trans_total += usdt_value
+            all_transfers.append(i)
+
+        with open(trans_records, 'w') as f:
+            json.dump(all_transfers, f)
+
+        return trans_total
 
     def log_trade(self, trig_price, quote_size, response):
 
