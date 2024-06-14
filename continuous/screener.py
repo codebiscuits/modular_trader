@@ -1,3 +1,4 @@
+from continuous import components
 from pathlib import Path
 import polars as pl
 from continuous import ind_pl as ind
@@ -6,6 +7,7 @@ from mt.resources import keys
 from datetime import datetime
 import json
 import time
+from pprint import pprint
 
 all_start = time.perf_counter()
 client = Client(keys.mPkey, keys.mSkey)
@@ -66,6 +68,42 @@ def top_heavy(df: pl.DataFrame) -> pl.DataFrame:
 
     return above, below, above / below
 
+
+def backtest_pair(pair: str) -> float:
+    strategies = [
+        'srsirev',
+        # 'rsirev',
+        'chanbreak',
+        'ichitrend',
+        # 'emaroc',
+        'hmaroc'
+    ]
+
+    # lookback window options: '4 years', '3 years', '2 years', '1 year', '6 months', '3 months', '1 month', '1 week'
+    in_production = Path("/pi_3.txt").exists()
+    trader = components.Trader(
+        [pair],
+        dyn_weight_lb='1 week',
+        fc_weighting=False,
+        port_weights='flat',
+        strat_list=strategies,
+        keep_records=False,
+        leverage=2.5,
+        live=False
+    )
+    trader.run_backtests(
+        window='1 year',
+        show_stats=False,
+        plot_rtns=False,
+        plot_forecast=False,
+        plot_sharpe=False,
+        plot_pnls=False,
+        inspect_substrats=False
+    )
+
+    return trader.stats['sharpe']
+
+
 x_info = client.get_exchange_info()
 tick_sizes = {x['symbol']: float(x['filters'][0]['tickSize']) for x in x_info['symbols']}
 
@@ -109,8 +147,6 @@ for pair in pairs:
     info['daily_volume_change'].append(daily_volume_change)
     info['daily_atr'].append(daily_atr_pct)
     info['tick_size'].append(tick_sizes[pair])
-    # info['weekly_rsi'].append(weekly_df['close'])
-    # info['monthly_rsi'].append(monthly_df['close'])
     info['volume_above_pw'].append(top_heavy(df)[0] / seven_day_volume)
     info['volume_below_pw'].append(top_heavy(df)[1] / seven_day_volume)
     info['top_heavy'].append(top_heavy(df)[2])
@@ -124,9 +160,22 @@ lively_pairs = info_df.filter(
     pl.col('daily_atr').rank(descending=True).lt(50),
 )
 
-# load ohlc, resample to 1h, then calculate correlation matrix for all pairs in lively pairs, and record avg correlation as a new stat for each pair
-all_closes = {}
+# take the lively_pairs list, backtest each pair, and drop all pairs that don't trade well
+sharpes = {}
 for pair in lively_pairs['pair']:
+    sharpes[pair] = backtest_pair(pair)
+
+lp_dicts = lively_pairs.to_dicts()
+for lpd in lp_dicts:
+    lpd['sharpe'] = sharpes[lpd['pair']]
+
+tradeable_pairs = pl.from_records(lp_dicts).filter(pl.col('sharpe').gt(0))
+print(lively_pairs.describe())
+print(tradeable_pairs.describe())
+# load ohlc, resample to 1h, then calculate correlation matrix for all pairs in tradeable pairs, and record avg correlation
+# as a new stat for each pair
+all_closes = {}
+for pair in tradeable_pairs['pair']:
     pair_path = Path(f"/home/ross/coding/modular_trader/bin_ohlc_5m/{pair}.parquet")
     try:
         df = pl.read_parquet(pair_path)
@@ -140,7 +189,7 @@ all_closes = {k: v.tail(min_length) for k, v in all_closes.items()}
 closes_df = pl.DataFrame(all_closes)
 
 new_pairs = (
-    lively_pairs
+    tradeable_pairs
     .with_columns(
         pl.Series(closes_df.corr()
                   .mean()
@@ -152,11 +201,12 @@ new_pairs = (
     .filter(
         pl.col('avg_correlation')
         .rank()
-        .lt(16)
+        .lt(21)
     )
     ['pair']
     .to_list()
 )
+print(len(new_pairs))
 
 print(new_pairs)
 

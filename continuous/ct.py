@@ -73,27 +73,6 @@ def sqntl_fwd(markets, n, weighting: str = 'weighted_lin'):
     return best
 
 
-def choose_by_length(minimum: int | str, maximum: int | str = 420000):
-    """checks the length of ohlc history of each trading pair, then makes a list of all pairs whos history length falls
-    within the stated range"""
-
-    lengths = {'1 month': 8750, '2 months': 17500, '3 months': 26250, '6 months': 52500,
-               '1 year': 105000, '2 years': 210000, '3 years': 315000, '4 years': 420000}
-
-    if isinstance(minimum, str):
-        minimum = lengths[minimum]
-    if isinstance(maximum, str):
-        maximum = lengths[maximum]
-
-    info = {}
-    data_path = Path("/home/ross/coding/modular_trader/bin_ohlc_5m")
-    for pair_path in list(data_path.glob('*')):
-        df = pl.read_parquet(pair_path)
-        info[pair_path.stem] = len(df)
-
-    return [p for p, v in info.items() if minimum < v <= maximum]
-
-
 def backtest_all():
     # load each pair's ohlc one by one and compile a dict of statistics about them (backtested sharpe,ohlc length,
     # current daily/weekly volume, htf overbought/oversold etc) then put all those stats into a dataframe and filter out
@@ -122,7 +101,7 @@ if len(markets) <= 10:
     print(markets)
 
 # lookback window options: '4 years', '3 years', '2 years', '1 year', '6 months', '3 months', '1 month', '1 week'
-in_production = True
+in_production = Path("/pi_3.txt").exists()
 trader = components.Trader(
     markets,
     dyn_weight_lb='1 week',

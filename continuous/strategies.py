@@ -6,7 +6,7 @@ from datetime import datetime
 #  way so 2 or more successive signals make the allocation stronger. maybe i could allow them to sum together, then
 #  clip the magnitude of the resulting signal, so it becomes a truncated larger signal, and therefore longer but not
 #  taller. or maybe allow successive signals to make the peak slightly higher than a single signal would be, but not
-#  full double or triplle height.
+#  full double or triple height.
 
 class SubStrat:
     """this class contains one specific set of trading rules and a designated timeframe, and analyses the market data

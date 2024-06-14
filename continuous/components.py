@@ -60,7 +60,7 @@ def calc_perf(s: pl.Series, window: int = 8760) -> dict:
     #     title='drawdown'
     # ).show()
 
-    return {
+    return { # TODO use a dataclass for this so i can specify the type of each value
         'total_rtn': s[-1],
         'sharpe': ann_sharpe,
         'mean_rtn': ann_mean,
@@ -145,7 +145,7 @@ class Trader:
         self.mkt_data_path.mkdir(parents=True, exist_ok=True)
         self.records_path = Path('/home/ross/coding/modular_trader/continuous/records')
         self.records_path.mkdir(parents=True, exist_ok=True)
-        self.transfers = self.read_transfers()
+        self.usdt_transfers, self.btc_transfers = self.read_transfers()
 
     def run_backtests(self, window, show_stats: bool = False, plot_rtns: bool = False, plot_forecast: bool = False,
                       plot_sharpe: bool = False, plot_pnls: bool = False, inspect_substrats: bool = False):
@@ -496,6 +496,7 @@ class Trader:
         print(f"Volatility Exposure: {self.actual_exposure:.1%} (how much of available capital is in trades)")
         print(f"Current Buffer: {self.buffer:.0%}")
         print(f"Maker Fee: {self.fees['maker'] * 10000:.1f}bps, Taker Fee: {self.fees['taker'] * 10000:.1f}bps")
+        print(f"Value of transfers since last session: {self.usdt_transfers} USDT")
         print("Capital stats:")
         pprint(self.capital)
         print(f"Portfolio: {self.markets}")
@@ -531,7 +532,8 @@ class Trader:
             perf_allocations=self.perf_allocations,
             bt_sharpe=self.stats['sharpe'],
             trades=self.num_trades,
-            transfers=self.transfers,
+            usdt_transfers=self.usdt_transfers,
+            btc_transfers = self.btc_transfers
         )
 
         try:
@@ -774,6 +776,15 @@ class Trader:
             user_assets[asset]['pct'] = pct
             user_assets[asset]['adjusted_pct'] = adj_pct
 
+        user_assets = {
+            k: v for k, v in user_assets.items()
+            if any([
+                k == 'USDT',
+                f"{k}USDT" in self.markets,
+                v['usdt_value'] > 10,
+            ])
+        }
+
         return user_assets
 
     def max_loan(self):
@@ -799,7 +810,10 @@ class Trader:
 
         new_transfers = client.get_margin_transfer_history()['rows']
 
-        trans_total = 0
+        btc_price = float(client.get_ticker(symbol='BTCUSDT')['weightedAvgPrice'])
+
+        usdt_total = 0.0
+        btc_total = 0.0
         all_ids = [q['txId'] for q in all_transfers]
         for n, i in enumerate(new_transfers):
             mult = 1 if i['type'] == 'ROLL_IN' else -1
@@ -807,20 +821,22 @@ class Trader:
                 continue
             if i['asset'] == 'USDT':
                 usdt_value = float(i['amount']) * mult
-                new_transfers[n]['usdt_value'] = usdt_value
             else:
                 filepath = f"/home/ross/coding/modular_trader/bin_ohlc_5m/{i['asset']}USDT.parquet"
                 ts = datetime.fromtimestamp(i['timestamp'] / 1000, tz=timezone.utc)
                 ohlc = pl.read_parquet(filepath).filter(pl.col('timestamp').lt(ts))
                 usdt_value = ohlc.item(-1, 'close') * float(i['amount']) * mult
-                new_transfers[n]['usdt_value'] = usdt_value
-            trans_total += usdt_value
+            btc_value = usdt_value / btc_price
+            new_transfers[n]['usdt_value'] = usdt_value
+            new_transfers[n]['btc_value'] = btc_value
+            usdt_total += usdt_value
+            btc_total += btc_value
             all_transfers.append(i)
 
         with open(trans_records, 'w') as f:
             json.dump(all_transfers, f)
 
-        return trans_total
+        return usdt_total, btc_total
 
     def log_trade(self, trig_price, quote_size, response):
 
