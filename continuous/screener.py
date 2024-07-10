@@ -128,6 +128,8 @@ info = {
 pairs = choose_by_length()
 
 for pair in pairs:
+    if pair in ['DOCKUSDT', 'POLSUSDT', 'GALUSDT']:
+        continue #  after 17th july 2024 these will be delisted and this line will be redundant
     pair_path = Path(f"/home/ross/coding/modular_trader/bin_ohlc_5m/{pair}.parquet")
     try:
         df = pl.read_parquet(pair_path)
